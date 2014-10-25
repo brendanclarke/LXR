@@ -931,6 +931,8 @@ void preset_saveAll(uint8_t presetNr, uint8_t isAll)
 		f_write((FIL*)&preset_File, &parameter_values[PAR_BPM], 1, &bytesWritten);
 		// bar reset mode
 		f_write((FIL*)&preset_File, &parameter_values[PAR_BAR_RESET_MODE], 1, &bytesWritten);
+      // pattern change time
+      f_write((FIL*)&preset_File, &parameter_values[PAR_SEQ_PC_TIME], 1, &bytesWritten);
 
 		remain=	64 - (1+1);
 	}
@@ -1019,6 +1021,8 @@ void preset_loadAll(uint8_t presetNr, uint8_t isAll)
 		if(version>1) {
 			// read pat reset bit
 			f_read((FIL*)&preset_File,&parameter_values[PAR_BAR_RESET_MODE],1,&bytesRead);
+         // read seq time bit
+         f_read((FIL*)&preset_File,&parameter_values[PAR_SEQ_PC_TIME],1,&bytesRead);
 			if(!bytesRead)
 				goto closeFile;
 			remain=	64- (1+1);

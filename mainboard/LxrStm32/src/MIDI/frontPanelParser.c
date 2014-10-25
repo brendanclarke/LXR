@@ -918,6 +918,11 @@ static void frontParser_handleSeqCC()
       // to reset the bar counter when a manual pattern change occurs
          seq_resetBarOnPatternChange = frontParser_midiMsg.data2;
          break;
+      case FRONT_SEQ_PC_TIME_MODE:
+      // a setting of 0 is default (pattern changes at end of current bar
+      // a setting of 1 causes pattern to change on next step
+         switchOnNextStep = frontParser_midiMsg.data2;
+         break;
       case FRONT_SEQ_TRIGGER_IN_PPQ:
          switch(frontParser_midiMsg.data2)
          {

@@ -484,6 +484,7 @@ enum
 #define FRONT_SEQ_TRIGGER_GATE_MODE 	0x39
 
 #define FRONT_SEQ_COPY_TRACK_PATTERN   0x3a // added message for single track pattern copy
+#define FRONT_SEQ_PC_TIME_MODE         0x3b // setting for change pattern on bar or step
 
 //codec control messages
 #define EQ_ON_OFF						0x01

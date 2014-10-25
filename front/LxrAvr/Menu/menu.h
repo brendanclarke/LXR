@@ -188,6 +188,7 @@ enum NamesEnum
 	TEXT_TRIGGER_GATE_MODE,
 	TEXT_BAR_RESET_MODE,
 	TEXT_MIDI_CHAN_GLOBAL,
+   TEXT_SEQ_PC_TIME,
 	NUM_NAMES
 };
 //-----------------------------------------------------------------
@@ -276,7 +277,8 @@ enum shortNamesEnum
 	SHORT_TRIGGER_IN,
 	SHORT_TRIGGER_OUT1,
 	SHORT_TRIGGER_OUT2,
-	SHORT_BAR_RESET_MODE
+	SHORT_BAR_RESET_MODE,
+   SHORT_SEQ_PC_TIME,
 
 
 	
@@ -388,6 +390,7 @@ enum longNamesEnum
 	LONG_TRIGGER_OUT2,
 	LONG_TRIGGER_GATE_MODE,
 	LONG_BAR_RESET_MODE,
+   LONG_SEQ_PC_TIME,
 	
 };
 

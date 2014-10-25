@@ -57,6 +57,7 @@
 
 #define SEQ_PRESCALER_MASK 	0x03
 #define MIDI_PRESCALER_MASK	0x04
+
 static uint8_t seq_prescaleCounter = 0;
 
 uint8_t seq_masterStepCnt=0;				/** keeps track of the played steps between 0 and 127 independent from the track counters*/
@@ -102,15 +103,19 @@ uint8_t seq_eraseActive=0;					/**RECORD will be 1 if live erasing the active vo
 
 uint8_t seq_quantisation = QUANT_16;
 
+
+
 uint8_t seq_rndValue[NUM_TRACKS];			/**< random value for probability function*/
 
-uint8_t seq_barCounter;						/**< counts the absolute position in bars since the seq was started */
+int8_t seq_barCounter;						/**< counts the absolute position in bars since the seq was started */
 
 static uint8_t seq_loadPendigFlag = 0;
+static uint8_t seq_loadSeqNow=0;
 
 // --AS Allow it to be configured whether it keeps track of bar position in the song for
 // the purpose of pattern changes
-uint8_t seq_resetBarOnPatternChange=0;
+uint8_t seq_resetBarOnPatternChange = 0;
+uint8_t switchOnNextStep = 0; // globally option - 0 is normal pattern switching, 1 is 'instant' switch
 
 // --AS keep track of which midi notes are playing
 static uint8_t midi_chan_notes[16];		    /**< what note is playing on each channel */
@@ -304,6 +309,7 @@ void seq_setNextPattern(const uint8_t patNr)
 {
    seq_pendingPattern = patNr;
    seq_loadPendigFlag = 1;
+   seq_loadSeqNow = 1;
 }
 //------------------------------------------------------------------------------
 static void seq_sendMidi(MidiMsg msg)
@@ -372,7 +378,7 @@ void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
 static uint8_t seq_determineNextPattern()
 {
    const PatternSetting * const p=&seq_patternSet.seq_patternSettings[seq_activePattern];
-   if(seq_barCounter % (p->changeBar+1) == 0)
+   if( (seq_barCounter>0)&&(seq_barCounter % (p->changeBar+1) == 0) )
       return p->nextPattern;
    else
       return seq_activePattern;
@@ -409,8 +415,8 @@ static void seq_nextStep()
       masterStepPos = seq_stepIndex[0]+1;
    }
 
-	//-------- check if the master track has ended and check if a pattern switch is necessary --------
-   if(masterStepPos == 0)
+	//-------- check if a pattern switch is necessary --------
+   if(masterStepPos == 0||(switchOnNextStep && seq_loadSeqNow))
    {
       if(seq_activePattern == seq_pendingPattern)
       {
@@ -449,8 +455,13 @@ static void seq_nextStep()
          seq_activePattern = seq_pendingPattern;
       
       	//reset pattern position to pattern rotate starting position for the active pattern --AS **PATROT
-         seq_setStepIndexToStart();
-      
+         if (masterStepPos == 0){
+            seq_setStepIndexToStart();
+         }
+         else {
+            seq_loadSeqNow=0; // pattern switch was initiated as 'instant' from front panel, reset flag
+            seq_barCounter = -1;
+         }
       	//send the ack message to tell the front that a new pattern starts playing
          uart_sendFrontpanelByte(FRONT_SEQ_CC);
          uart_sendFrontpanelByte(FRONT_SEQ_CHANGE_PAT);

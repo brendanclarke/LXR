@@ -197,6 +197,7 @@ const Name valueNames[NUM_NAMES] PROGMEM =
 		{SHORT_MODE, CAT_TRIGGER, LONG_TRIGGER_GATE_MODE}, //TEXT_TRIGGER_GATE_MODE
 		{SHORT_BAR_RESET_MODE, CAT_SEQUENCER, LONG_BAR_RESET_MODE}, // TEXT_BAR_RESET_MODE
 		{SHORT_CHANNEL, CAT_MIDI, LONG_MIDI_CHANNEL}, // TEXT_MIDI_CHAN_GLOBAL
+      {SHORT_SEQ_PC_TIME, CAT_SEQUENCER, LONG_SEQ_PC_TIME}, // TEXT_SEQ_PC_TIME
 
 };
 
@@ -477,6 +478,7 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 		/*PAR_TRIGGER_GATE_MODE*/	DTYPE_ON_OFF,
 	    /*PAR_BAR_RESET_MODE*/  DTYPE_ON_OFF,
 	    /*PAR_MIDI_CHAN_GLOBAL*/DTYPE_1B16,		//--AS global midi channel
+       /*PAR_SEQ_PC_TIME*/  DTYPE_ON_OFF,
 };
 
 
@@ -2215,6 +2217,9 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 			break;
 	case PAR_BAR_RESET_MODE:
 		frontPanel_sendData(SEQ_CC, SEQ_BAR_RESET_MODE, value);
+		break;
+   case PAR_SEQ_PC_TIME:
+		frontPanel_sendData(SEQ_CC, SEQ_PC_TIME, value);
 		break;
 
 	}

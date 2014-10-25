@@ -36,6 +36,8 @@ const char menuText_fm[] PROGMEM = 	"fm ";
 const char menuText_dash[] PROGMEM ="---";
 const char menuText_blank[] PROGMEM="   ";
 const char menuText_any[] PROGMEM = "any";
+const char menuText_step[] PROGMEM = "stp";
+const char menuText_bar[] PROGMEM = "bar";
 //-----------------------------------------------------------------
 const char ppqNames[][4] PROGMEM  =
 {
@@ -311,6 +313,7 @@ const char shortNames[][4] PROGMEM  =
 	{"co1"},  // trigger clock out1 ppq
 	{"co2"},  // trigger clock out2 ppq
 	{"pcr"}, // pattern change resets bar counter
+   {"pci"}, // pattern change time is bar or step
 };
 //-----------------------------------------------------------------
 // These correspond with the catNamesEnum in menu.h
@@ -421,6 +424,7 @@ const char longNames[][16] PROGMEM =
 	{"Out2 PPQ"},
 	{"Gate Mode"},
 	{"PCReset" }, // reset bar counter on manual pattern change
+   {"PCInstnt" }, // pattern change occurs on bar or step
 };
 
 
