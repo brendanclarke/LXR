@@ -443,6 +443,13 @@ void frontPanel_parseData(uint8_t data)
 							break;
 					}
 				}
+            else if(frontParser_midiMsg.status == PARAM_CC)
+            {
+            parameter_values[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
+
+            menu_repaint();
+            
+            }
 				else if(frontParser_midiMsg.status == LED_CC)
 				{
 					switch(frontParser_midiMsg.data1)

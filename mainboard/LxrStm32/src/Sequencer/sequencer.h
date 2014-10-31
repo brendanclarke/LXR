@@ -124,6 +124,7 @@ typedef struct TempPatternStruct
 
 extern uint8_t seq_activePattern;
 extern uint8_t seq_newPatternAvailable;
+extern uint8_t seq_recordActive;				/**< set to 1 to activate the reording mode*/
 
 //extern PatternSet* seq_activePatternSetPtr;
 extern PatternSet seq_patternSet;

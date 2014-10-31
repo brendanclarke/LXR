@@ -94,10 +94,9 @@ uint8_t seq_running = 0;					/**< 1 if running, 0 if stopped*/
 
 uint8_t seq_activePattern = 0;				/**< the currently playing pattern*/
 uint8_t seq_pendingPattern = 0;				/**< next pattern to play*/
+uint8_t seq_recordActive = 0;				/**< set to 1 to activate the reording mode*/
 
 uint8_t seq_selectedStep = 0;
-
-uint8_t seq_recordActive = 0;				/**< set to 1 to activate the reording mode*/
 
 uint8_t seq_eraseActive=0;					/**RECORD will be 1 if live erasing the active voice  */
 
