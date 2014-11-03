@@ -102,12 +102,12 @@ void frontPanel_ccHandler()
 		}
 	DISABLE_SIGN_WARNING
 	if(parNr == NRPN_FINE) {
-			frontParser_nrpnNr &= ~0x7f;
+			frontParser_nrpnNr &= ~0x7f; //clear lower 7 bit
 			frontParser_nrpnNr |= frontParser_midiMsg.data2;
 		}
 		
 	if(parNr == NRPN_COARSE) {
-			frontParser_nrpnNr &= 0x7f;
+			frontParser_nrpnNr &= 0x7f; //clear upper 7 bit
 			frontParser_nrpnNr |= frontParser_midiMsg.data2<<7;
 		}
 	END_DISABLE_WARNING
@@ -443,6 +443,7 @@ void frontPanel_parseData(uint8_t data)
 							break;
 					}
 				}
+            /* -bc- additions to front interpreter start here*/
             else if(frontParser_midiMsg.status == PARAM_CC)
             {
             parameter_values[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
@@ -450,6 +451,15 @@ void frontPanel_parseData(uint8_t data)
             menu_repaint();
             
             }
+            
+            else if(frontParser_midiMsg.status == PARAM_CC2)
+            {
+            parameter_values[frontParser_midiMsg.data1+128]=frontParser_midiMsg.data2;
+
+            menu_repaint();
+            
+            }
+            
             else if(frontParser_midiMsg.status == BANK_CHANGE_CC)
             {
             if (frontParser_midiMsg.data1==6) // global bank change request

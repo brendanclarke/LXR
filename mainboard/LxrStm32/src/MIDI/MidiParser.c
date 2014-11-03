@@ -49,6 +49,9 @@
 #include "modulationNode.h"
 #include "frontPanelParser.h"
 #include "usb_manager.h"
+#define BANK_CHANGE_CC  0xad
+   #define PARAM_CC        0xae
+   #define PARAM_CC2       0xaf
 
 static uint16_t midiParser_activeNrpnNumber = 0;
 
@@ -1379,11 +1382,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                #else
             SVF_setDrive(&voiceArray[0].filter,msg.data2);
                #endif
-            LXRparamNr=CC2_FILTER_DRIVE_1;
+            LXRparamNr=128+CC2_FILTER_DRIVE_1;
             break;
          case GEN_CONTROLLER_19: // filter type 1-6
             voiceArray[0].filterType = msg.data2+1;
-            LXRparamNr=CC2_FILTER_TYPE_1;
+            LXRparamNr=128+CC2_FILTER_TYPE_1;
             break;
          case UNDEF_20: // snare mix - snare only
             break;
@@ -1391,31 +1394,31 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_22: // mix mod - DRUM voice 1-3 only
             voiceArray[0].mixOscs = msg.data2;
-            LXRparamNr=CC2_MIX_MOD_1;
+            LXRparamNr=128+CC2_MIX_MOD_1;
             break;
          case UNDEF_23: // volume mod 
             voiceArray[0].volumeMod = msg.data2;
-            LXRparamNr=CC2_VOLUME_MOD_ON_OFF1;
+            LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF1;
             break;
          case UNDEF_24: // velo mod amount, voice 1-6
             velocityModulators[0].amount = msg.data2/127.f;
-            LXRparamNr=CC2_VELO_MOD_AMT_1;
+            LXRparamNr=128+CC2_VELO_MOD_AMT_1;
             break;
          case UNDEF_25: // velocity mod destination 1-6
             // TODO - this isn't in the params, gets done elsewhere?
-            LXRparamNr=CC2_VEL_DEST_1;
+            LXRparamNr=128+CC2_VEL_DEST_1;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
             voiceArray[0].transGen.volume = msg.data2/127.f;
-            LXRparamNr=CC2_TRANS1_VOL;
+            LXRparamNr=128+CC2_TRANS1_VOL;
             break;
          case UNDEF_27: // transient wave select, voice 1-6
             voiceArray[0].transGen.waveform = msg.data2;
-            LXRparamNr=CC2_TRANS1_WAVE;
+            LXRparamNr=128+CC2_TRANS1_WAVE;
             break;
          case UNDEF_28: // transient wave frequency
             voiceArray[0].transGen.pitch = 1.f + ((msg.data2/33.9f)-0.75f) ;// range about  0.25 to 4 => 1/4 to 1*4
-            LXRparamNr=CC2_TRANS1_FREQ;
+            LXRparamNr=128+CC2_TRANS1_FREQ;
             break;
          case SOUND_VAR: // snare and cym repeat only
             break;
@@ -1441,29 +1444,29 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             voiceArray[0].lfo.modTarget.amount = msg.data2/127.f;
             LXRparamNr=AMOUNT_LFO1;
             break;
-         case SOUND_VIB_DELAY: // CC2_OFFSET_LFO* (1-6)
+         case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
             voiceArray[0].lfo.phaseOffset = msg.data2/127.f * 0xffffffff;
-            LXRparamNr=CC2_OFFSET_LFO1;
+            LXRparamNr=128+CC2_OFFSET_LFO1;
             break;
-         case SOUND_UNDEF: // CC2_WAVE_LFO* (1-6)
+         case SOUND_UNDEF: // 128+CC2_WAVE_LFO* (1-6)
             voiceArray[0].lfo.waveform = msg.data2;
-            LXRparamNr=CC2_WAVE_LFO1;
+            LXRparamNr=128+CC2_WAVE_LFO1;
             break;
-         case GEN_CONTROLLER_80: /*80*/	// CC2_VOICE_LFO* (1-6)
+         case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_VOICE_LFO1;
+            LXRparamNr=128+CC2_VOICE_LFO1;
             break;
-         case GEN_CONTROLLER_81: // CC2_TARGET_LFO* (1-6)
+         case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_TARGET_LFO1;
+            LXRparamNr=128+CC2_TARGET_LFO1;
             break;
-         case GEN_CONTROLLER_82: // CC2_RETRIGGER_LFO* (1-6)
+         case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
             voiceArray[0].lfo.retrigger = msg.data2;
-            LXRparamNr=CC2_RETRIGGER_LFO1;
+            LXRparamNr=128+CC2_RETRIGGER_LFO1;
             break;
-         case GEN_CONTROLLER_83: // CC2_SYNC_LFO* (1-6) (different param for snare etc)
+         case GEN_CONTROLLER_83: // 128+CC2_SYNC_LFO* (1-6) (different param for snare etc)
             lfo_setSync(&voiceArray[0].lfo, msg.data2);
-            LXRparamNr=CC2_SYNC_LFO1;
+            LXRparamNr=128+CC2_SYNC_LFO1;
             break;
          case PORT_CONTROL: // PITCHD* (1-4 for DRUM and SNARE)
             DecayEg_setDecay(&voiceArray[0].oscPitchEg,msg.data2);
@@ -1477,15 +1480,15 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             DecayEg_setSlope(&voiceArray[0].oscPitchEg,msg.data2);
             LXRparamNr=PITCH_SLOPE1;
             break;
-         case UNDEF_89: // CC2_AUDIO_OUT* (1-6)
+         case UNDEF_89: // 128+CC2_AUDIO_OUT* (1-6)
             mixer_audioRouting[0] = msg.data2;
-            LXRparamNr=CC2_AUDIO_OUT1;
+            LXRparamNr=128+CC2_AUDIO_OUT1;
             break;
-         case UNDEF_90: // CC2_MIDI_NOTE* (1-6)
+         case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
             //--AS set the note override for the voice. 0 means use the note value, anything else means
          	// that the note will always play with that note
             midi_NoteOverride[0] = msg.data2;
-            LXRparamNr=CC2_MIDI_NOTE1;
+            LXRparamNr=128+CC2_MIDI_NOTE1;
             break;
          case UNDEF_102: // MOD_WAVE_DRUM* (1-3 only)
             voiceArray[0].modOsc.waveform = msg.data2;
@@ -1515,7 +1518,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_110: // CYM_MOD_OSC_F2, MOD_OSC_F2 (voice 5,6)
             break;
-         case ALL_SOUND_OFF: /*120*/	//CC2_MUTE_* (1-6)
+         case ALL_SOUND_OFF: /*120*/	//128+CC2_MUTE_* (1-6)
             {
             
                if(msg.data2 == 0)
@@ -1528,7 +1531,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                }
             
             }
-            LXRparamNr=CC2_MUTE_1;
+            LXRparamNr=128+CC2_MUTE_1;
             break;
          default:
             break;
@@ -1551,9 +1554,17 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             //midi data goes to kit params
             //midiParser_ccHandler(msg,1);
             //we received a midi cc message forward it to the front panel
-               uart_sendFrontpanelByte(0xaf); // need to add a define for MIDI CC set parameter op code
-               uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
-               uart_sendFrontpanelByte(msg.data2);
+               if(LXRparamNr<128){
+                  uart_sendFrontpanelByte(PARAM_CC); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
+               else // higher than 127 params
+               {
+                  uart_sendFrontpanelByte(PARAM_CC2); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-128); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
             }
          }
       
@@ -1629,11 +1640,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                #else
             SVF_setDrive(&voiceArray[1].filter,msg.data2);
                #endif
-            LXRparamNr=CC2_FILTER_DRIVE_2;
+            LXRparamNr=128+CC2_FILTER_DRIVE_2;
             break;
          case GEN_CONTROLLER_19: // filter type 1-6
             voiceArray[1].filterType = msg.data2+1;
-            LXRparamNr=CC2_FILTER_TYPE_2;
+            LXRparamNr=128+CC2_FILTER_TYPE_2;
             break;
          case UNDEF_20: // snare mix - snare only
             break;
@@ -1641,31 +1652,31 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_22: // mix mod - DRUM voice 1-3 only
             voiceArray[1].mixOscs = msg.data2;
-            LXRparamNr=CC2_MIX_MOD_2;
+            LXRparamNr=128+CC2_MIX_MOD_2;
             break;
          case UNDEF_23: // volume mod 
             voiceArray[1].volumeMod = msg.data2;
-            LXRparamNr=CC2_VOLUME_MOD_ON_OFF2;
+            LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF2;
             break;
          case UNDEF_24: // velo mod amount, voice 1-6
             velocityModulators[1].amount = msg.data2/127.f;
-            LXRparamNr=CC2_VELO_MOD_AMT_2;
+            LXRparamNr=128+CC2_VELO_MOD_AMT_2;
             break;
          case UNDEF_25: // velocity mod destination 1-6
             // TODO - this isn't in the params, gets done elsewhere?
-            LXRparamNr=CC2_VEL_DEST_2;
+            LXRparamNr=128+CC2_VEL_DEST_2;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
             voiceArray[1].transGen.volume = msg.data2/127.f;
-            LXRparamNr=CC2_TRANS2_VOL;
+            LXRparamNr=128+CC2_TRANS2_VOL;
             break;
          case UNDEF_27: // transient wave select, voice 1-6
             voiceArray[1].transGen.waveform = msg.data2;
-            LXRparamNr=CC2_TRANS2_WAVE;
+            LXRparamNr=128+CC2_TRANS2_WAVE;
             break;
          case UNDEF_28: // transient wave frequency
             voiceArray[1].transGen.pitch = 1.f + ((msg.data2/33.9f)-0.75f) ;// range about  0.25 to 4 => 1/4 to 1*4
-            LXRparamNr=CC2_TRANS2_FREQ;
+            LXRparamNr=128+CC2_TRANS2_FREQ;
             break;
          case SOUND_VAR: // snare and cym repeat only
             break;
@@ -1691,29 +1702,29 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             voiceArray[1].lfo.modTarget.amount = msg.data2/127.f;
             LXRparamNr=AMOUNT_LFO2;
             break;
-         case SOUND_VIB_DELAY: // CC2_OFFSET_LFO* (1-6)
+         case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
             voiceArray[1].lfo.phaseOffset = msg.data2/127.f * 0xffffffff;
-            LXRparamNr=CC2_OFFSET_LFO2;
+            LXRparamNr=128+CC2_OFFSET_LFO2;
             break;
-         case SOUND_UNDEF: // CC2_WAVE_LFO* (1-6)
+         case SOUND_UNDEF: // 128+CC2_WAVE_LFO* (1-6)
             voiceArray[1].lfo.waveform = msg.data2;
-            LXRparamNr=CC2_WAVE_LFO2;
+            LXRparamNr=128+CC2_WAVE_LFO2;
             break;
-         case GEN_CONTROLLER_80: /*80*/	// CC2_VOICE_LFO* (1-6)
+         case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_VOICE_LFO2;
+            LXRparamNr=128+CC2_VOICE_LFO2;
             break;
-         case GEN_CONTROLLER_81: // CC2_TARGET_LFO* (1-6)
+         case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_TARGET_LFO2;
+            LXRparamNr=128+CC2_TARGET_LFO2;
             break;
-         case GEN_CONTROLLER_82: // CC2_RETRIGGER_LFO* (1-6)
+         case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
             voiceArray[1].lfo.retrigger = msg.data2;
-            LXRparamNr=CC2_RETRIGGER_LFO2;
+            LXRparamNr=128+CC2_RETRIGGER_LFO2;
             break;
-         case GEN_CONTROLLER_83: // CC2_SYNC_LFO* (1-6) (different param for snare etc)
+         case GEN_CONTROLLER_83: // 128+CC2_SYNC_LFO* (1-6) (different param for snare etc)
             lfo_setSync(&voiceArray[1].lfo, msg.data2);
-            LXRparamNr=CC2_SYNC_LFO2;
+            LXRparamNr=128+CC2_SYNC_LFO2;
             break;
          case PORT_CONTROL: // PITCHD* (1-4 for DRUM and SNARE)
             DecayEg_setDecay(&voiceArray[1].oscPitchEg,msg.data2);
@@ -1727,15 +1738,15 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             DecayEg_setSlope(&voiceArray[1].oscPitchEg,msg.data2);
             LXRparamNr=PITCH_SLOPE2;
             break;
-         case UNDEF_89: // CC2_AUDIO_OUT* (1-6)
+         case UNDEF_89: // 128+CC2_AUDIO_OUT* (1-6)
             mixer_audioRouting[1] = msg.data2;
-            LXRparamNr=CC2_AUDIO_OUT2;
+            LXRparamNr=128+CC2_AUDIO_OUT2;
             break;
-         case UNDEF_90: // CC2_MIDI_NOTE* (1-6)
+         case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
             //--AS set the note override for the voice. 0 means use the note value, anything else means
          	// that the note will always play with that note
             midi_NoteOverride[1] = msg.data2;
-            LXRparamNr=CC2_MIDI_NOTE2;
+            LXRparamNr=128+CC2_MIDI_NOTE2;
             break;
          case UNDEF_102: // MOD_WAVE_DRUM* (1-3 only)
             voiceArray[1].modOsc.waveform = msg.data2;
@@ -1765,7 +1776,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_110: // CYM_MOD_OSC_F2, MOD_OSC_F2 (voice 5,6)
             break;
-         case ALL_SOUND_OFF: /*120*/	//CC2_MUTE_* (1-6)
+         case ALL_SOUND_OFF: /*120*/	//128+CC2_MUTE_* (1-6)
             {
             
                if(msg.data2 == 0)
@@ -1778,7 +1789,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                }
             
             }
-            LXRparamNr=CC2_MUTE_2;
+            LXRparamNr=128+CC2_MUTE_2;
             break;
          default:
             break;
@@ -1801,9 +1812,17 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             //midi data goes to kit params
             //midiParser_ccHandler(msg,1);
             //we received a midi cc message forward it to the front panel
-               uart_sendFrontpanelByte(0xaf); // need to add a define for MIDI CC set parameter op code
-               uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
-               uart_sendFrontpanelByte(msg.data2);
+               if(LXRparamNr<128){
+                  uart_sendFrontpanelByte(PARAM_CC); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
+               else // higher than 127 params
+               {
+                  uart_sendFrontpanelByte(PARAM_CC2); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-128); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
             }
          }
       
@@ -1879,11 +1898,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                #else
             SVF_setDrive(&voiceArray[2].filter,msg.data2);
                #endif
-            LXRparamNr=CC2_FILTER_DRIVE_3;
+            LXRparamNr=128+CC2_FILTER_DRIVE_3;
             break;
          case GEN_CONTROLLER_19: // filter type 1-6
             voiceArray[2].filterType = msg.data2+1;
-            LXRparamNr=CC2_FILTER_TYPE_3;
+            LXRparamNr=128+CC2_FILTER_TYPE_3;
             break;
          case UNDEF_20: // snare mix - snare only
             break;
@@ -1891,31 +1910,31 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_22: // mix mod - DRUM voice 1-3 only
             voiceArray[2].mixOscs = msg.data2;
-            LXRparamNr=CC2_MIX_MOD_3;
+            LXRparamNr=128+CC2_MIX_MOD_3;
             break;
          case UNDEF_23: // volume mod 
             voiceArray[2].volumeMod = msg.data2;
-            LXRparamNr=CC2_VOLUME_MOD_ON_OFF3;
+            LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF3;
             break;
          case UNDEF_24: // velo mod amount, voice 1-6
             velocityModulators[2].amount = msg.data2/127.f;
-            LXRparamNr=CC2_VELO_MOD_AMT_3;
+            LXRparamNr=128+CC2_VELO_MOD_AMT_3;
             break;
          case UNDEF_25: // velocity mod destination 1-6
             // TODO - this isn't in the params, gets done elsewhere?
-            LXRparamNr=CC2_VEL_DEST_3;
+            LXRparamNr=128+CC2_VEL_DEST_3;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
             voiceArray[2].transGen.volume = msg.data2/127.f;
-            LXRparamNr=CC2_TRANS3_VOL;
+            LXRparamNr=128+CC2_TRANS3_VOL;
             break;
          case UNDEF_27: // transient wave select, voice 1-6
             voiceArray[2].transGen.waveform = msg.data2;
-            LXRparamNr=CC2_TRANS3_WAVE;
+            LXRparamNr=128+CC2_TRANS3_WAVE;
             break;
          case UNDEF_28: // transient wave frequency
             voiceArray[2].transGen.pitch = 1.f + ((msg.data2/33.9f)-0.75f) ;// range about  0.25 to 4 => 1/4 to 1*4
-            LXRparamNr=CC2_TRANS3_FREQ;
+            LXRparamNr=128+CC2_TRANS3_FREQ;
             break;
          case SOUND_VAR: // snare and cym repeat only
             break;
@@ -1941,29 +1960,29 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             voiceArray[2].lfo.modTarget.amount = msg.data2/127.f;
             LXRparamNr=AMOUNT_LFO3;
             break;
-         case SOUND_VIB_DELAY: // CC2_OFFSET_LFO* (1-6)
+         case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
             voiceArray[2].lfo.phaseOffset = msg.data2/127.f * 0xffffffff;
-            LXRparamNr=CC2_OFFSET_LFO3;
+            LXRparamNr=128+CC2_OFFSET_LFO3;
             break;
-         case SOUND_UNDEF: // CC2_WAVE_LFO* (1-6)
+         case SOUND_UNDEF: // 128+CC2_WAVE_LFO* (1-6)
             voiceArray[2].lfo.waveform = msg.data2;
-            LXRparamNr=CC2_WAVE_LFO3;
+            LXRparamNr=128+CC2_WAVE_LFO3;
             break;
-         case GEN_CONTROLLER_80: /*80*/	// CC2_VOICE_LFO* (1-6)
+         case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_VOICE_LFO3;
+            LXRparamNr=128+CC2_VOICE_LFO3;
             break;
-         case GEN_CONTROLLER_81: // CC2_TARGET_LFO* (1-6)
+         case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_TARGET_LFO3;
+            LXRparamNr=128+CC2_TARGET_LFO3;
             break;
-         case GEN_CONTROLLER_82: // CC2_RETRIGGER_LFO* (1-6)
+         case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
             voiceArray[2].lfo.retrigger = msg.data2;
-            LXRparamNr=CC2_RETRIGGER_LFO3;
+            LXRparamNr=128+CC2_RETRIGGER_LFO3;
             break;
-         case GEN_CONTROLLER_83: // CC2_SYNC_LFO* (1-6) (different param for snare etc)
+         case GEN_CONTROLLER_83: // 128+CC2_SYNC_LFO* (1-6) (different param for snare etc)
             lfo_setSync(&voiceArray[2].lfo, msg.data2);
-            LXRparamNr=CC2_SYNC_LFO3;
+            LXRparamNr=128+CC2_SYNC_LFO3;
             break;
          case PORT_CONTROL: // PITCHD* (1-4 for DRUM and SNARE)
             DecayEg_setDecay(&voiceArray[2].oscPitchEg,msg.data2);
@@ -1977,15 +1996,15 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             DecayEg_setSlope(&voiceArray[2].oscPitchEg,msg.data2);
             LXRparamNr=PITCH_SLOPE3;
             break;
-         case UNDEF_89: // CC2_AUDIO_OUT* (1-6)
+         case UNDEF_89: // 128+CC2_AUDIO_OUT* (1-6)
             mixer_audioRouting[2] = msg.data2;
-            LXRparamNr=CC2_AUDIO_OUT3;
+            LXRparamNr=128+CC2_AUDIO_OUT3;
             break;
-         case UNDEF_90: // CC2_MIDI_NOTE* (1-6)
+         case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
             //--AS set the note override for the voice. 0 means use the note value, anything else means
          	// that the note will always play with that note
             midi_NoteOverride[2] = msg.data2;
-            LXRparamNr=CC2_MIDI_NOTE3;
+            LXRparamNr=128+CC2_MIDI_NOTE3;
             break;
          case UNDEF_102: // MOD_WAVE_DRUM* (1-3 only)
             voiceArray[2].modOsc.waveform = msg.data2;
@@ -2015,7 +2034,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_110: // CYM_MOD_OSC_F2, MOD_OSC_F2 (voice 5,6)
             break;
-         case ALL_SOUND_OFF: /*120*/	//CC2_MUTE_* (1-6)
+         case ALL_SOUND_OFF: /*120*/	//128+CC2_MUTE_* (1-6)
             {
             
                if(msg.data2 == 0)
@@ -2028,7 +2047,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                }
             
             }
-            LXRparamNr=CC2_MUTE_3;
+            LXRparamNr=128+CC2_MUTE_3;
             break;
          default:
             break;
@@ -2051,9 +2070,17 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             //midi data goes to kit params
             //midiParser_ccHandler(msg,1);
             //we received a midi cc message forward it to the front panel
-               uart_sendFrontpanelByte(0xaf); // need to add a define for MIDI CC set parameter op code
-               uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
-               uart_sendFrontpanelByte(msg.data2);
+               if(LXRparamNr<128){
+                  uart_sendFrontpanelByte(PARAM_CC); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
+               else // higher than 127 params
+               {
+                  uart_sendFrontpanelByte(PARAM_CC2); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-128); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
             }
          }
       
@@ -2131,11 +2158,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             #else
             SVF_setDrive(&snareVoice.filter, msg.data2);
             #endif
-            LXRparamNr=CC2_FILTER_DRIVE_4;
+            LXRparamNr=128+CC2_FILTER_DRIVE_4;
             break;
          case GEN_CONTROLLER_19: // filter type 1-6
             snareVoice.filterType = msg.data2 + 1; // +1 because 0 is filter off which results in silence
-            LXRparamNr=CC2_FILTER_TYPE_4;
+            LXRparamNr=128+CC2_FILTER_TYPE_4;
             break;
          case UNDEF_20: // snare mix - snare only
             snareVoice.mix = msg.data2/127.f;
@@ -2149,27 +2176,27 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_23: // volume mod 
             snareVoice.volumeMod = msg.data2;
-            LXRparamNr=CC2_VOLUME_MOD_ON_OFF4;
+            LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF4;
             break;
          case UNDEF_24: // velo mod amount, voice 1-6
             velocityModulators[3].amount = msg.data2/127.f;
-            LXRparamNr=CC2_VELO_MOD_AMT_4;
+            LXRparamNr=128+CC2_VELO_MOD_AMT_4;
             break;
          case UNDEF_25: // velocity mod destination 1-6
             // TODO - this isn't in the params, gets done elsewhere?
-            LXRparamNr=CC2_VEL_DEST_4;
+            LXRparamNr=128+CC2_VEL_DEST_4;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
             snareVoice.transGen.volume = msg.data2/127.f;
-            LXRparamNr=CC2_TRANS4_VOL;
+            LXRparamNr=128+CC2_TRANS4_VOL;
             break;
          case UNDEF_27: // transient wave select, voice 1-6
             snareVoice.transGen.waveform = msg.data2;
-            LXRparamNr=CC2_TRANS4_WAVE;
+            LXRparamNr=128+CC2_TRANS4_WAVE;
             break;
          case UNDEF_28: // transient wave frequency
             snareVoice.transGen.pitch = 1.f + ((msg.data2/33.9f)-0.75f) ;
-            LXRparamNr=CC2_TRANS4_FREQ;
+            LXRparamNr=128+CC2_TRANS4_FREQ;
             break;
          case SOUND_VAR: // snare and cym repeat only
             snareVoice.oscVolEg.repeat = msg.data2;
@@ -2201,29 +2228,29 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             snareVoice.lfo.modTarget.amount = msg.data2/127.f;
             LXRparamNr=AMOUNT_LFO4;
             break;
-         case SOUND_VIB_DELAY: // CC2_OFFSET_LFO* (1-6)
+         case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
             snareVoice.lfo.phaseOffset = msg.data2/127.f * 0xffffffff;
-            LXRparamNr=CC2_OFFSET_LFO4;
+            LXRparamNr=128+CC2_OFFSET_LFO4;
             break;
-         case SOUND_UNDEF: // CC2_WAVE_LFO* (1-6)
+         case SOUND_UNDEF: // 128+CC2_WAVE_LFO* (1-6)
             snareVoice.lfo.waveform = msg.data2;
-            LXRparamNr=CC2_WAVE_LFO4;
+            LXRparamNr=128+CC2_WAVE_LFO4;
             break;
-         case GEN_CONTROLLER_80: /*80*/	// CC2_VOICE_LFO* (1-6)
+         case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_VOICE_LFO4;
+            LXRparamNr=128+CC2_VOICE_LFO4;
             break;
-         case GEN_CONTROLLER_81: // CC2_TARGET_LFO* (1-6)
+         case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_TARGET_LFO4;
+            LXRparamNr=128+CC2_TARGET_LFO4;
             break;
-         case GEN_CONTROLLER_82: // CC2_RETRIGGER_LFO* (1-6)
+         case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
             snareVoice.lfo.retrigger = msg.data2;
-            LXRparamNr=CC2_RETRIGGER_LFO4;
+            LXRparamNr=128+CC2_RETRIGGER_LFO4;
             break;
-         case GEN_CONTROLLER_83: // CC2_SYNC_LFO* (1-6) (different param for snare etc)
+         case GEN_CONTROLLER_83: // 128+CC2_SYNC_LFO* (1-6) (different param for snare etc)
             lfo_setSync(&snareVoice.lfo, msg.data2);
-            LXRparamNr=CC2_SYNC_LFO4;
+            LXRparamNr=128+CC2_SYNC_LFO4;
             break;
          case PORT_CONTROL: // PITCHD* (1-4 for DRUM and SNARE)
             {
@@ -2239,15 +2266,15 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             DecayEg_setSlope(&snareVoice.oscPitchEg,msg.data2);
             LXRparamNr=PITCH_SLOPE4;
             break;
-         case UNDEF_89: // CC2_AUDIO_OUT* (1-6)
+         case UNDEF_89: // 128+CC2_AUDIO_OUT* (1-6)
             mixer_audioRouting[3] = msg.data2;
-            LXRparamNr=CC2_AUDIO_OUT4;
+            LXRparamNr=128+CC2_AUDIO_OUT4;
             break;
-         case UNDEF_90: // CC2_MIDI_NOTE* (1-6)
+         case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
             //--AS set the note override for the voice. 0 means use the note value, anything else means
          	// that the note will always play with that note
             midi_NoteOverride[3] = msg.data2;
-            LXRparamNr=CC2_MIDI_NOTE4;
+            LXRparamNr=128+CC2_MIDI_NOTE4;
             break;
          case UNDEF_102: // MOD_WAVE_DRUM* (1-3 only)
             break;
@@ -2267,7 +2294,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_110: // CYM_MOD_OSC_F2, MOD_OSC_F2 (voice 5,6)
             break;
-         case ALL_SOUND_OFF: /*120*/	//CC2_MUTE_* (1-6)
+         case ALL_SOUND_OFF: /*120*/	//128+CC2_MUTE_* (1-6)
             {
             
                if(msg.data2 == 0)
@@ -2280,7 +2307,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                }
             
             }
-            LXRparamNr=CC2_MUTE_4;
+            LXRparamNr=128+CC2_MUTE_4;
             break;
          default:
             break;
@@ -2303,9 +2330,17 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             //midi data goes to kit params
             //midiParser_ccHandler(msg,1);
             //we received a midi cc message forward it to the front panel
-               uart_sendFrontpanelByte(0xaf); // need to add a define for MIDI CC set parameter op code
-               uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
-               uart_sendFrontpanelByte(msg.data2);
+               if(LXRparamNr<128){
+                  uart_sendFrontpanelByte(PARAM_CC); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
+               else // higher than 127 params
+               {
+                  uart_sendFrontpanelByte(PARAM_CC2); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-128); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
             }
          }
       
@@ -2375,11 +2410,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             #else
             SVF_setDrive(&cymbalVoice.filter, msg.data2);
             #endif
-            LXRparamNr=CC2_FILTER_DRIVE_5;
+            LXRparamNr=128+CC2_FILTER_DRIVE_5;
             break;
          case GEN_CONTROLLER_19: // filter type 1-6
             cymbalVoice.filterType = msg.data2+1; // +1 because 0 is filter off which results in silence
-            LXRparamNr=CC2_FILTER_TYPE_5;
+            LXRparamNr=128+CC2_FILTER_TYPE_5;
             break;
          case UNDEF_20: // snare mix - snare only
             break;
@@ -2389,27 +2424,27 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_23: // volume mod 
             cymbalVoice.volumeMod = msg.data2;
-            LXRparamNr=CC2_VOLUME_MOD_ON_OFF5;
+            LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF5;
             break;
          case UNDEF_24: // velo mod amount, voice 1-6
             velocityModulators[4].amount = msg.data2/127.f;
-            LXRparamNr=CC2_VELO_MOD_AMT_5;
+            LXRparamNr=128+CC2_VELO_MOD_AMT_5;
             break;
          case UNDEF_25: // velocity mod destination 1-6
             // TODO - this isn't in the params, gets done elsewhere?
-            LXRparamNr=CC2_VEL_DEST_5;
+            LXRparamNr=128+CC2_VEL_DEST_5;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
             cymbalVoice.transGen.volume = msg.data2/127.f;
-            LXRparamNr=CC2_TRANS5_VOL;
+            LXRparamNr=128+CC2_TRANS5_VOL;
             break;
          case UNDEF_27: // transient wave select, voice 1-6
             cymbalVoice.transGen.waveform = msg.data2;
-            LXRparamNr=CC2_TRANS5_WAVE;
+            LXRparamNr=128+CC2_TRANS5_WAVE;
             break;
          case UNDEF_28: // transient wave frequency
             cymbalVoice.transGen.pitch = 1.f + ((msg.data2/33.9f)-0.75f) ;
-            LXRparamNr=CC2_TRANS5_FREQ;
+            LXRparamNr=128+CC2_TRANS5_FREQ;
             break;
          case SOUND_VAR: // snare and cym repeat only
             cymbalVoice.oscVolEg.repeat = msg.data2;
@@ -2441,29 +2476,29 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             cymbalVoice.lfo.modTarget.amount = msg.data2/127.f;
             LXRparamNr=AMOUNT_LFO5;
             break;
-         case SOUND_VIB_DELAY: // CC2_OFFSET_LFO* (1-6)
+         case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
             cymbalVoice.lfo.phaseOffset = msg.data2/127.f * 0xffffffff;
-            LXRparamNr=CC2_OFFSET_LFO5;
+            LXRparamNr=128+CC2_OFFSET_LFO5;
             break;
-         case SOUND_UNDEF: // CC2_WAVE_LFO* (1-6)
+         case SOUND_UNDEF: // 128+CC2_WAVE_LFO* (1-6)
             cymbalVoice.lfo.waveform = msg.data2;
-            LXRparamNr=CC2_WAVE_LFO5;
+            LXRparamNr=128+CC2_WAVE_LFO5;
             break;
-         case GEN_CONTROLLER_80: /*80*/	// CC2_VOICE_LFO* (1-6)
+         case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_VOICE_LFO5;
+            LXRparamNr=128+CC2_VOICE_LFO5;
             break;
-         case GEN_CONTROLLER_81: // CC2_TARGET_LFO* (1-6)
+         case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_TARGET_LFO5;
+            LXRparamNr=128+CC2_TARGET_LFO5;
             break;
-         case GEN_CONTROLLER_82: // CC2_RETRIGGER_LFO* (1-6)
+         case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
             cymbalVoice.lfo.retrigger = msg.data2;
-            LXRparamNr=CC2_RETRIGGER_LFO5;
+            LXRparamNr=128+CC2_RETRIGGER_LFO5;
             break;
-         case GEN_CONTROLLER_83: // CC2_SYNC_LFO* (1-6) (different param for snare etc)
+         case GEN_CONTROLLER_83: // 128+CC2_SYNC_LFO* (1-6) (different param for snare etc)
             lfo_setSync(&cymbalVoice.lfo, msg.data2);
-            LXRparamNr=CC2_SYNC_LFO5;
+            LXRparamNr=128+CC2_SYNC_LFO5;
             break;
          case PORT_CONTROL: // PITCHD* (1-4 for DRUM and SNARE)
             break;
@@ -2471,15 +2506,15 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_86: // pitch slope for DRUM and SNARE only
             break;
-         case UNDEF_89: // CC2_AUDIO_OUT* (1-6)
+         case UNDEF_89: // 128+CC2_AUDIO_OUT* (1-6)
             mixer_audioRouting[4] = msg.data2;
-            LXRparamNr=CC2_AUDIO_OUT5;
+            LXRparamNr=128+CC2_AUDIO_OUT5;
             break;
-         case UNDEF_90: // CC2_MIDI_NOTE* (1-6)
+         case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
             //--AS set the note override for the voice. 0 means use the note value, anything else means
          	// that the note will always play with that note
             midi_NoteOverride[4] = msg.data2;
-            LXRparamNr=CC2_MIDI_NOTE5;
+            LXRparamNr=128+CC2_MIDI_NOTE5;
             break;
          case UNDEF_102: // MOD_WAVE_DRUM* (1-3 only)
             break;
@@ -2520,7 +2555,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             osc_recalcFreq(&cymbalVoice.modOsc2);
             LXRparamNr=CYM_MOD_OSC_F2;
             break;
-         case ALL_SOUND_OFF: /*120*/	//CC2_MUTE_* (1-6)
+         case ALL_SOUND_OFF: /*120*/	//128+CC2_MUTE_* (1-6)
             {
             
                if(msg.data2 == 0)
@@ -2533,7 +2568,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                }
             
             }
-            LXRparamNr=CC2_MUTE_5;
+            LXRparamNr=128+CC2_MUTE_5;
             break;
          default:
             break;
@@ -2556,9 +2591,17 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             //midi data goes to kit params
             //midiParser_ccHandler(msg,1);
             //we received a midi cc message forward it to the front panel
-               uart_sendFrontpanelByte(0xaf); // need to add a define for MIDI CC set parameter op code
-               uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
-               uart_sendFrontpanelByte(msg.data2);
+               if(LXRparamNr<128){
+                  uart_sendFrontpanelByte(PARAM_CC); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
+               else // higher than 127 params
+               {
+                  uart_sendFrontpanelByte(PARAM_CC2); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-128); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
             }
          }
       
@@ -2628,11 +2671,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          #else
             SVF_setDrive(&hatVoice.filter, msg.data2);
          #endif
-            LXRparamNr=CC2_FILTER_DRIVE_6;
+            LXRparamNr=128+CC2_FILTER_DRIVE_6;
             break;
          case GEN_CONTROLLER_19: // filter type 1-6
             hatVoice.filterType = msg.data2+1; // +1 because 0 is filter off which results in silence
-            LXRparamNr=CC2_FILTER_TYPE_6;
+            LXRparamNr=128+CC2_FILTER_TYPE_6;
             break;
          case UNDEF_20: // snare mix - snare only
             break;
@@ -2642,27 +2685,27 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_23: // volume mod 
             hatVoice.volumeMod = msg.data2;
-            LXRparamNr=CC2_VOLUME_MOD_ON_OFF6;
+            LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF6;
             break;
          case UNDEF_24: // velo mod amount, voice 1-6
             velocityModulators[5].amount = msg.data2/127.f;
-            LXRparamNr=CC2_VELO_MOD_AMT_6;
+            LXRparamNr=128+CC2_VELO_MOD_AMT_6;
             break;
          case UNDEF_25: // velocity mod destination 1-6
             // TODO - this isn't in the params, gets done elsewhere?
-            LXRparamNr=CC2_VEL_DEST_6;
+            LXRparamNr=128+CC2_VEL_DEST_6;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
             hatVoice.transGen.volume = msg.data2/127.f;
-            LXRparamNr=CC2_TRANS6_VOL;
+            LXRparamNr=128+CC2_TRANS6_VOL;
             break;
          case UNDEF_27: // transient wave select, voice 1-6
             hatVoice.transGen.waveform = msg.data2;
-            LXRparamNr=CC2_TRANS6_WAVE;
+            LXRparamNr=128+CC2_TRANS6_WAVE;
             break;
          case UNDEF_28: // transient wave frequency
             hatVoice.transGen.pitch = 1.f + ((msg.data2/33.9f)-0.75f) ;
-            LXRparamNr=CC2_TRANS6_FREQ;
+            LXRparamNr=128+CC2_TRANS6_FREQ;
             break;
          case SOUND_VAR: // snare and cym repeat only
             break;
@@ -2690,29 +2733,29 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             hatVoice.lfo.modTarget.amount = msg.data2/127.f;
             LXRparamNr=AMOUNT_LFO6;
             break;
-         case SOUND_VIB_DELAY: // CC2_OFFSET_LFO* (1-6)
+         case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
             hatVoice.lfo.phaseOffset = msg.data2/127.f * 0xffffffff;
-            LXRparamNr=CC2_OFFSET_LFO6;
+            LXRparamNr=128+CC2_OFFSET_LFO6;
             break;
-         case SOUND_UNDEF: // CC2_WAVE_LFO* (1-6)
+         case SOUND_UNDEF: // 128+CC2_WAVE_LFO* (1-6)
             hatVoice.lfo.waveform = msg.data2;
-            LXRparamNr=CC2_WAVE_LFO6;
+            LXRparamNr=128+CC2_WAVE_LFO6;
             break;
-         case GEN_CONTROLLER_80: /*80*/	// CC2_VOICE_LFO* (1-6)
+         case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_VOICE_LFO6;
+            LXRparamNr=128+CC2_VOICE_LFO6;
             break;
-         case GEN_CONTROLLER_81: // CC2_TARGET_LFO* (1-6)
+         case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_TARGET_LFO6;
+            LXRparamNr=128+CC2_TARGET_LFO6;
             break;
-         case GEN_CONTROLLER_82: // CC2_RETRIGGER_LFO* (1-6)
+         case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
             hatVoice.lfo.retrigger = msg.data2;
-            LXRparamNr=CC2_RETRIGGER_LFO6;
+            LXRparamNr=128+CC2_RETRIGGER_LFO6;
             break;
-         case GEN_CONTROLLER_83: // CC2_SYNC_LFO* (1-6) (different param for snare etc)
+         case GEN_CONTROLLER_83: // 128+CC2_SYNC_LFO* (1-6) (different param for snare etc)
             lfo_setSync(&hatVoice.lfo, msg.data2);
-            LXRparamNr=CC2_SYNC_LFO5;
+            LXRparamNr=128+CC2_SYNC_LFO5;
             break;
          case PORT_CONTROL: // PITCHD* (1-4 for DRUM and SNARE)
             break;
@@ -2720,15 +2763,15 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_86: // pitch slope for DRUM and SNARE only
             break;
-         case UNDEF_89: // CC2_AUDIO_OUT* (1-6)
+         case UNDEF_89: // 128+CC2_AUDIO_OUT* (1-6)
             mixer_audioRouting[5] = msg.data2;
-            LXRparamNr=CC2_AUDIO_OUT6;
+            LXRparamNr=128+CC2_AUDIO_OUT6;
             break;
-         case UNDEF_90: // CC2_MIDI_NOTE* (1-6)
+         case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
             //--AS set the note override for the voice. 0 means use the note value, anything else means
          	// that the note will always play with that note
             midi_NoteOverride[5] = msg.data2;
-            LXRparamNr=CC2_MIDI_NOTE6;
+            LXRparamNr=128+CC2_MIDI_NOTE6;
             break;
          case UNDEF_102: // MOD_WAVE_DRUM* (1-3 only)
             break;
@@ -2768,7 +2811,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             osc_recalcFreq(&hatVoice.modOsc2);
             LXRparamNr=MOD_OSC_F2;
             break;
-         case ALL_SOUND_OFF: /*120*/	//CC2_MUTE_* (1-6)
+         case ALL_SOUND_OFF: /*120*/	//128+CC2_MUTE_* (1-6)
             {
             
                if(msg.data2 == 0)
@@ -2781,7 +2824,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                }
             
             }
-            LXRparamNr=CC2_MUTE_6;
+            LXRparamNr=128+CC2_MUTE_6;
             break;
          default:
             break;
@@ -2804,9 +2847,17 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             //midi data goes to kit params
             //midiParser_ccHandler(msg,1);
             //we received a midi cc message forward it to the front panel
-               uart_sendFrontpanelByte(0xaf); // need to add a define for MIDI CC set parameter op code
-               uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
-               uart_sendFrontpanelByte(msg.data2);
+               if(LXRparamNr<128){
+                  uart_sendFrontpanelByte(PARAM_CC); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
+               else // higher than 127 params
+               {
+                  uart_sendFrontpanelByte(PARAM_CC2); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-128); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
             }
          }
       
@@ -2876,11 +2927,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          #else
             SVF_setDrive(&hatVoice.filter, msg.data2);
          #endif
-            LXRparamNr=CC2_FILTER_DRIVE_6;
+            LXRparamNr=128+CC2_FILTER_DRIVE_6;
             break;
          case GEN_CONTROLLER_19: // filter type 1-6
             hatVoice.filterType = msg.data2+1; // +1 because 0 is filter off which results in silence
-            LXRparamNr=CC2_FILTER_TYPE_6;
+            LXRparamNr=128+CC2_FILTER_TYPE_6;
             break;
          case UNDEF_20: // snare mix - snare only
             break;
@@ -2890,27 +2941,27 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_23: // volume mod 
             hatVoice.volumeMod = msg.data2;
-            LXRparamNr=CC2_VOLUME_MOD_ON_OFF6;
+            LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF6;
             break;
          case UNDEF_24: // velo mod amount, voice 1-6
             velocityModulators[5].amount = msg.data2/127.f;
-            LXRparamNr=CC2_VELO_MOD_AMT_6;
+            LXRparamNr=128+CC2_VELO_MOD_AMT_6;
             break;
          case UNDEF_25: // velocity mod destination 1-6
             // TODO - this isn't in the params, gets done elsewhere?
-            LXRparamNr=CC2_VEL_DEST_6;
+            LXRparamNr=128+CC2_VEL_DEST_6;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
             hatVoice.transGen.volume = msg.data2/127.f;
-            LXRparamNr=CC2_TRANS6_VOL;
+            LXRparamNr=128+CC2_TRANS6_VOL;
             break;
          case UNDEF_27: // transient wave select, voice 1-6
             hatVoice.transGen.waveform = msg.data2;
-            LXRparamNr=CC2_TRANS6_WAVE;
+            LXRparamNr=128+CC2_TRANS6_WAVE;
             break;
          case UNDEF_28: // transient wave frequency
             hatVoice.transGen.pitch = 1.f + ((msg.data2/33.9f)-0.75f) ;
-            LXRparamNr=CC2_TRANS6_FREQ;
+            LXRparamNr=128+CC2_TRANS6_FREQ;
             break;
          case SOUND_VAR: // snare and cym repeat only
             break;
@@ -2938,29 +2989,29 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             hatVoice.lfo.modTarget.amount = msg.data2/127.f;
             LXRparamNr=AMOUNT_LFO6;
             break;
-         case SOUND_VIB_DELAY: // CC2_OFFSET_LFO* (1-6)
+         case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
             hatVoice.lfo.phaseOffset = msg.data2/127.f * 0xffffffff;
-            LXRparamNr=CC2_OFFSET_LFO6;
+            LXRparamNr=128+CC2_OFFSET_LFO6;
             break;
-         case SOUND_UNDEF: // CC2_WAVE_LFO* (1-6)
+         case SOUND_UNDEF: // 128+CC2_WAVE_LFO* (1-6)
             hatVoice.lfo.waveform = msg.data2;
-            LXRparamNr=CC2_WAVE_LFO6;
+            LXRparamNr=128+CC2_WAVE_LFO6;
             break;
-         case GEN_CONTROLLER_80: /*80*/	// CC2_VOICE_LFO* (1-6)
+         case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_VOICE_LFO6;
+            LXRparamNr=128+CC2_VOICE_LFO6;
             break;
-         case GEN_CONTROLLER_81: // CC2_TARGET_LFO* (1-6)
+         case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
             // this is just a break in the cc params?
-            LXRparamNr=CC2_TARGET_LFO6;
+            LXRparamNr=128+CC2_TARGET_LFO6;
             break;
-         case GEN_CONTROLLER_82: // CC2_RETRIGGER_LFO* (1-6)
+         case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
             hatVoice.lfo.retrigger = msg.data2;
-            LXRparamNr=CC2_RETRIGGER_LFO6;
+            LXRparamNr=128+CC2_RETRIGGER_LFO6;
             break;
-         case GEN_CONTROLLER_83: // CC2_SYNC_LFO* (1-6) (different param for snare etc)
+         case GEN_CONTROLLER_83: // 128+CC2_SYNC_LFO* (1-6) (different param for snare etc)
             lfo_setSync(&hatVoice.lfo, msg.data2);
-            LXRparamNr=CC2_SYNC_LFO5;
+            LXRparamNr=128+CC2_SYNC_LFO5;
             break;
          case PORT_CONTROL: // PITCHD* (1-4 for DRUM and SNARE)
             break;
@@ -2968,15 +3019,15 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_86: // pitch slope for DRUM and SNARE only
             break;
-         case UNDEF_89: // CC2_AUDIO_OUT* (1-6)
+         case UNDEF_89: // 128+CC2_AUDIO_OUT* (1-6)
             mixer_audioRouting[5] = msg.data2;
-            LXRparamNr=CC2_AUDIO_OUT6;
+            LXRparamNr=128+CC2_AUDIO_OUT6;
             break;
-         case UNDEF_90: // CC2_MIDI_NOTE* (1-6)
+         case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
             //--AS set the note override for the voice. 0 means use the note value, anything else means
          	// that the note will always play with that note
             midi_NoteOverride[5] = msg.data2;
-            LXRparamNr=CC2_MIDI_NOTE6;
+            LXRparamNr=128+CC2_MIDI_NOTE6;
             break;
          case UNDEF_102: // MOD_WAVE_DRUM* (1-3 only)
             break;
@@ -3016,7 +3067,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             osc_recalcFreq(&hatVoice.modOsc2);
             LXRparamNr=MOD_OSC_F2;
             break;
-         case ALL_SOUND_OFF: /*120*/	//CC2_MUTE_* (1-6)
+         case ALL_SOUND_OFF: /*120*/	//128+CC2_MUTE_* (1-6)
             {
             
                if(msg.data2 == 0)
@@ -3029,7 +3080,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                }
             
             }
-            LXRparamNr=CC2_MUTE_6;
+            LXRparamNr=128+CC2_MUTE_6;
             break;
          default:
             break;
@@ -3052,9 +3103,17 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             //midi data goes to kit params
             //midiParser_ccHandler(msg,1);
             //we received a midi cc message forward it to the front panel
-               uart_sendFrontpanelByte(0xaf); // need to add a define for MIDI CC set parameter op code
-               uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
-               uart_sendFrontpanelByte(msg.data2);
+               if(LXRparamNr<128){
+                  uart_sendFrontpanelByte(PARAM_CC); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
+               else // higher than 127 params
+               {
+                  uart_sendFrontpanelByte(PARAM_CC2); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-128); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
             }
          }
       
@@ -3069,7 +3128,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    {
       switch(MIDIparamNr){
          case BANK:
-            uart_sendFrontpanelByte(0xae); // need to add a define for MIDI CC set parameter op code
+            uart_sendFrontpanelByte(BANK_CHANGE_CC); // need to add a define for MIDI CC set parameter op code
             uart_sendFrontpanelByte(6); // BS offset goes here NB: also for above 127 params?
             uart_sendFrontpanelByte(msg.data2);
             break; // -bc- todo: individual voice change
@@ -3131,17 +3190,17 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case SOUND_VIB_DEPTH: // AMOUNT_LFO* (1-6)
             break;
-         case SOUND_VIB_DELAY: // CC2_OFFSET_LFO* (1-6)
+         case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
             break;
-         case SOUND_UNDEF: // CC2_WAVE_LFO* (1-6)
+         case SOUND_UNDEF: // 128+CC2_WAVE_LFO* (1-6)
             break;
-         case GEN_CONTROLLER_80: /*80*/	// CC2_VOICE_LFO* (1-6)
+         case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
             break;
-         case GEN_CONTROLLER_81: // CC2_TARGET_LFO* (1-6)
+         case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
             break;
-         case GEN_CONTROLLER_82: // CC2_RETRIGGER_LFO* (1-6)
+         case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
             break;
-         case GEN_CONTROLLER_83: // CC2_SYNC_LFO* (1-6) (different param for snare etc)
+         case GEN_CONTROLLER_83: // 128+CC2_SYNC_LFO* (1-6) (different param for snare etc)
             break;
          case PORT_CONTROL: // PITCHD* (1-4 for DRUM and SNARE)
             break;
@@ -3149,13 +3208,13 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_86: // pitch slope for DRUM and SNARE only
             break;
-         case UNDEF_89: // CC2_AUDIO_OUT* (1-6)
+         case UNDEF_89: // 128+CC2_AUDIO_OUT* (1-6)
             break;
-         case UNDEF_90: // CC2_MIDI_NOTE* (1-6)
+         case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
             //--AS set the note override for the voice. 0 means use the note value, anything else means
          	// that the note will always play with that note
             midi_NoteOverride[6] = msg.data2;
-            LXRparamNr=CC2_MIDI_NOTE7;
+            LXRparamNr=128+CC2_MIDI_NOTE7;
             break;
          case UNDEF_102: // MOD_WAVE_DRUM* (1-3 only)
             break;
@@ -3175,7 +3234,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_110: // CYM_MOD_OSC_F2, MOD_OSC_F2 (voice 5,6)
             break;
-         case ALL_SOUND_OFF: /*120*/	//CC2_MUTE_* (1-6)
+         case ALL_SOUND_OFF: /*120*/	//128+CC2_MUTE_* (1-6)
             {
             
                if(msg.data2 == 0)
@@ -3188,7 +3247,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                }
             
             }
-            LXRparamNr=CC2_MUTE_7;
+            LXRparamNr=128+CC2_MUTE_7;
             break;
          default:
             break;
@@ -3211,9 +3270,17 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             //midi data goes to kit params
             //midiParser_ccHandler(msg,1);
             //we received a midi cc message forward it to the front panel
-               uart_sendFrontpanelByte(0xaf); // need to add a define for MIDI CC set parameter op code
-               uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
-               uart_sendFrontpanelByte(msg.data2);
+               if(LXRparamNr<128){
+                  uart_sendFrontpanelByte(PARAM_CC); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
+               else // higher than 127 params
+               {
+                  uart_sendFrontpanelByte(PARAM_CC2); // need to add a define for MIDI CC set parameter op code
+                  uart_sendFrontpanelByte(LXRparamNr-128); // BS offset goes here NB: also for above 127 params?
+                  uart_sendFrontpanelByte(msg.data2);
+               }
             }
          }
       

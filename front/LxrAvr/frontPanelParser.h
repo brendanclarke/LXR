@@ -33,8 +33,9 @@ extern uint8_t frontPanel_sysexMode;
 
 //control messages from cortex for leds
 //status, param changes
-#define BANK_CHANGE_CC         0xae
-#define PARAM_CC        0xaf
+#define BANK_CHANGE_CC  0xad
+#define PARAM_CC        0xae
+#define PARAM_CC2       0xaf
 #define LED_CC				0xb1
 #define SEQ_CC				0xb2
 #define CODEC_CC			0xb3
