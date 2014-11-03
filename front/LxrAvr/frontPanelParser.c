@@ -450,6 +450,17 @@ void frontPanel_parseData(uint8_t data)
             menu_repaint();
             
             }
+            else if(frontParser_midiMsg.status == BANK_CHANGE_CC)
+            {
+            if (frontParser_midiMsg.data1==6) // global bank change request
+            {
+            
+            preset_loadDrumset(frontParser_midiMsg.data2,0);
+
+            menu_repaint();
+            }
+            
+            }
 				else if(frontParser_midiMsg.status == LED_CC)
 				{
 					switch(frontParser_midiMsg.data1)

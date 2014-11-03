@@ -45,19 +45,19 @@ enum MidiSource {
 };
 
 struct MidiBits {
-	enum MidiSource source:1; // 0 for midi, 1 for usb
-	unsigned sysxbyte:1; // 1 if this message is a sysex payload only
-	unsigned length:2; // how many data bytes have been filled
-	unsigned :4;
+   enum MidiSource source:1; // 0 for midi, 1 for usb
+   unsigned sysxbyte:1; // 1 if this message is a sysex payload only
+   unsigned length:2; // how many data bytes have been filled
+   unsigned :4;
 };
 
 //-----------------------------------------------------------
 /** a struct defining a standard midi message*/
 typedef struct MidiStruct {
-	uint8_t status;
-	uint8_t data1;
-	uint8_t data2;
-	struct MidiBits bits;
+   uint8_t status;
+   uint8_t data1;
+   uint8_t data2;
+   struct MidiBits bits;
 } MidiMsg;
 
 
@@ -106,32 +106,32 @@ UNDEF_4,
 FOOT_CONTROLLER,
 PORT_TIME,
 DATA,
-CHANNEL_VOL, // VOL* (1-6)
-BALANCE, /*8*/	// SNARE_MIX
-UNDEF_9, // OSC_WAVE_DRUM* (1-3) OSC_WAVE_SNARE, CYM_WAVE1, WAVE1_HH
-PAN, // PAN* (1-6)
+CHANNEL_VOL, 		// VOL* (1-6)
+BALANCE, 		/*8*/
+UNDEF_9, 		// OSC_WAVE_DRUM* (1-3) OSC_WAVE_SNARE, CYM_WAVE1, WAVE1_HH
+PAN, 			// PAN* (1-6)
 EXP_CONTROLLER,
-EFFECT_1, // VOICE_DECIMATION*(1-6), VOICE_DECIMATION_ALL
-EFFECT_2, // OSC*_DIST (1-3) SNARE_DISTORTION CYMBAL_DISTORTION HAT_DISTORTION
-UNDEF_14, // F_OSC*_COARSE (1-6)
-UNDEF_15, // SNARE_NOISE_F
-GEN_CONTROLLER_16, /*16*/	// FILTER_FREQ_DRUM* (1-3), SNARE_FILTER_F, CYM_FIL_FREQ, HAT_FILTER_F,
-GEN_CONTROLLER_17, // RESO_DRUM*, SNARE_RESO, CYM_RESO, HAT_RESO
-GEN_CONTROLLER_18, // CC2_FILTER_DRIVE_* (1-6)
-GEN_CONTROLLER_19, // CC2_FILTER_TYPE_* (1-6)
-UNDEF_20, // CC2_MIX_MOD* (1-3)
-UNDEF_21, // CC2_VOLUME_MOD_ON_OFF* (1-6)
-UNDEF_22, // CC2_VELO_MOD_AMT_* (1-6)
-UNDEF_23, // CC2_VEL_DEST_* (1-6)
-UNDEF_24, /*24*/	// CC2_TRANS*_VOL (1-6)
-UNDEF_25, // CC2_TRANS*_WAVE (1-6)
-UNDEF_26, // CC2_TRANS*_FREQ (1-6)
-UNDEF_27,
-UNDEF_28,
+EFFECT_1, 		// VOICE_DECIMATION*(1-6), VOICE_DECIMATION_ALL
+EFFECT_2, 		// OSC*_DIST (1-3) SNARE_DISTORTION CYMBAL_DISTORTION HAT_DISTORTION
+UNDEF_14, 		// F_OSC*_COARSE (1-6)
+UNDEF_15, 		
+GEN_CONTROLLER_16, 	/*16*/	// FILTER_FREQ_DRUM* (1-3), SNARE_FILTER_F, CYM_FIL_FREQ, HAT_FILTER_F,
+GEN_CONTROLLER_17, 	// SNARE_RESO, CYM_RESO, HAT_RESO
+GEN_CONTROLLER_18, 	// CC2_FILTER_DRIVE_* (1-6)
+GEN_CONTROLLER_19, 	// CC2_FILTER_TYPE_* (1-6)
+UNDEF_20, 		// SNARE_MIX
+UNDEF_21, 		// SNARE_NOISE_F
+UNDEF_22, 		// CC2_MIX_MOD* (1-3)
+UNDEF_23, 		// CC2_VOLUME_MOD_ON_OFF* (1-6)
+UNDEF_24, 		/*24*/	// CC2_VELO_MOD_AMT_* (1-6)
+UNDEF_25, 		// CC2_VEL_DEST_* (1-6)
+UNDEF_26, 		// CC2_TRANS*_VOL (1-6)
+UNDEF_27,		// CC2_TRANS*_WAVE (1-6)
+UNDEF_28,		// CC2_TRANS*_FREQ (1-6)
 UNDEF_29,
 UNDEF_30,
 UNDEF_31,
-BANK_LSB, /*32*/
+BANK_LSB, 		/*32*/
 MOD_WHEEL_LSB,
 BREATH_CONTROLLER_LSB,
 UNDEF_4_LSB,
@@ -208,8 +208,8 @@ UNDEF_105, // CYM_WAVE2, WAVE2_HH (voice 5,6)
 UNDEF_106, // CYM_MOD_OSC_GAIN1, MOD_OSC_GAIN1 (voice 5,6)
 UNDEF_107, // CYM_MOD_OSC_F1, MOD_OSC_F1 (voice 5,6)
 UNDEF_108, // CYM_WAVE3, WAVE3_HH (voice 5,6)
-UNDEF_109, // CYM_MOD_OSC_F2, MOD_OSC_F2 (voice 5,6)
-UNDEF_110,
+UNDEF_109, // CYM_MOD_OSC_GAIN1, MOD_OSC_GAIN2 (voice 5,6)
+UNDEF_110, // CYM_MOD_OSC_F2, MOD_OSC_F2 (voice 5,6)
 UNDEF_111,
 UNDEF_112, /*112*/
 UNDEF_113,
