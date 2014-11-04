@@ -222,7 +222,7 @@ uint8_t buttonHandler_getShift() {
 
 		if (thisShift>lastShift) // 
 		{
-			shiftState=(shiftState+1)%2;
+			shiftState=(shiftState+1)&0x01;
 		}
 		lastShift=thisShift;
 		return shiftState;
