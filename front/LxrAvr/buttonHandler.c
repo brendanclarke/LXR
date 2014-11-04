@@ -37,7 +37,6 @@ uint8_t buttonHandler_resetLock = 0;
 
 uint8_t shiftMode=0;
 uint8_t shiftState=0;
-uint8_t lastShift=0;
 
 volatile struct {
    unsigned selectButtonMode :3; // 0-3 for unshifted, 4-7 for shifted
@@ -211,29 +210,18 @@ static void buttonHandler_enterSeqModeStepMode() {
 //--------------------------------------------------------
 /**returns 1 if the shift button is pressed*/
 uint8_t buttonHandler_getShift() {
-   const uint8_t arrayPos = BUT_SHIFT / 8;
-   const uint8_t bitPos = BUT_SHIFT & 7;
-   uint8_t thisShift = 0;
-   if (din_inputData[arrayPos] & (1 << bitPos)) {
-      thisShift = 0;
-   }
-   else
-   {
-      thisShift = 1;
-   }	
-   if (shiftMode) // shift is set as toggle
-   {
-   
-      if (thisShift>lastShift) // 
+  if (!shiftMode) // shift is set to momentary (default)
+  {
+      const uint8_t arrayPos = BUT_SHIFT / 8;
+      const uint8_t bitPos = BUT_SHIFT & 7;
+      if (din_inputData[arrayPos] & (1 << bitPos)) 
       {
-         shiftState=!(shiftState);
+         return 0;
       }
-      lastShift=thisShift;
-      return shiftState;
+      return 1;	
    }
-   
-   else  // shift is set as momentary
-      return thisShift;
+   // toggle - button presses alter state
+   return shiftState;
 	
 }
 //--------------------------------------------------------
@@ -993,9 +981,11 @@ void buttonHandler_buttonPressed(uint8_t buttonNr) {
       
        ->shows muted steps on voice leds while pressed
        */
-      
-         led_setValue(1, LED_SHIFT);
-         switch(buttonHandler_stateMemory.selectButtonMode) {
+         shiftState=!(shiftMode&shiftState);
+         if (shiftState)
+         {
+            led_setValue(1, LED_SHIFT);
+            switch(buttonHandler_stateMemory.selectButtonMode) {
             case SELECT_MODE_VOICE:
                buttonHandler_enterSeqMode();
                break;
@@ -1043,8 +1033,9 @@ void buttonHandler_buttonPressed(uint8_t buttonNr) {
                break;
          }
       
-      //show muted voices if pressed
+         //show muted voices if pressed
          buttonHandler_showMuteLEDs();
+         }
       
          break;
       default:
@@ -1085,7 +1076,9 @@ void buttonHandler_buttonReleased(uint8_t buttonNr) {
          break;
    
       case BUT_SHIFT: // when this button is released, revert back to normal operating mode
-      
+        shiftState=(shiftMode&shiftState);
+        if (!shiftState)
+        {
          if(buttonHandler_stateMemory.seqErasing) {
          // --AS **RECORD if we are in erase mode, exit that mode
             buttonHandler_stateMemory.seqErasing=0;
@@ -1130,7 +1123,7 @@ void buttonHandler_buttonReleased(uint8_t buttonNr) {
          // --AS TODO this code is never reached (see return above) ???
             buttonHandler_showMuteLEDs();
          }
-      
+      }
          break;
       default:
          break;

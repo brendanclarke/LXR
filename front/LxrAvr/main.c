@@ -159,7 +159,7 @@ sei();
 	//request number of samples
 	frontPanel_sendData(SAMPLE_CC,SAMPLE_COUNT,0x00);
 
-
+   void led_clearSequencerLeds();
 
 	//main loop
 	for(;;) // this usually results in less instructions than while(1)
