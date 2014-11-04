@@ -1321,6 +1321,9 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    {
       switch(MIDIparamNr){
          case BANK:
+            uart_sendFrontpanelByte(BANK_CHANGE_CC); // need to add a define for MIDI CC set parameter op code
+            uart_sendFrontpanelByte(0); // BS offset goes here NB: also for above 127 params?
+            uart_sendFrontpanelByte(msg.data2);
             break; // -bc- todo: individual voice change
          case MOD_WHEEL:
             break; // -bc- todo: assignable mod wheel?

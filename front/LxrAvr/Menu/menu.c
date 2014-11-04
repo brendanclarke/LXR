@@ -519,6 +519,7 @@ static uint8_t parameterFetch = 0b00011111;	/**< the lower 4 bits define a lock 
 
 /** array holding all the available parameter values*/
 uint8_t parameter_values[NUM_PARAMS];
+uint8_t temp_params[NUM_PARAMS];
 uint8_t parameters2[END_OF_SOUND_PARAMETERS];/**< a second array for sound x-fade to another preset*/
 //-----------------------------------------------------------------
 
