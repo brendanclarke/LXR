@@ -35,6 +35,10 @@ uint16_t buttonHandler_originalParameter = 0;//saves parameter number for step a
 uint8_t buttonHandler_originalValue = 0;//saves the parameter value for reset
 uint8_t buttonHandler_resetLock = 0;
 
+uint8_t shiftMode=0;
+uint8_t shiftState=0;
+uint8_t lastShift=0;
+
 volatile struct {
 	unsigned selectButtonMode :3; // 0-3 for unshifted, 4-7 for shifted
 	unsigned seqRunning :1;
@@ -201,15 +205,32 @@ static void buttonHandler_enterSeqModeStepMode() {
 }
 
 //--------------------------------------------------------
-/**returns 1 is the shift button is pressed*/
+/**returns 1 if the shift button is pressed*/
 uint8_t buttonHandler_getShift() {
 	const uint8_t arrayPos = BUT_SHIFT / 8;
 	const uint8_t bitPos = BUT_SHIFT & 7;
-
+	uint8_t thisShift = 0;
 	if (din_inputData[arrayPos] & (1 << bitPos)) {
-		return 0;
+		thisShift = 0;
 	}
-	return 1;
+	else
+	{
+		thisShift = 1;
+	}	
+	if (shiftMode) // shift is set as toggle
+	{
+
+		if (thisShift>lastShift) // 
+		{
+			shiftState=(shiftState+1)&0x01;
+		}
+		lastShift=thisShift;
+		return shiftState;
+	}
+	
+	else // shift is set as momentary
+	return thisShift;
+	
 }
 //--------------------------------------------------------
 static void buttonHandler_handleModeButtons(uint8_t mode) 
