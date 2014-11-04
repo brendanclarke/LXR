@@ -375,8 +375,9 @@ enum ParamEnums
 
 	PAR_BAR_RESET_MODE,					// bool --AS 0 or 1   /*270*/
 	PAR_MIDI_CHAN_GLOBAL,				// --AS global midi channel
-   PAR_SEQ_PC_TIME,                 // bool, 0 for bar sequence change, 1 for step change
-	NUM_PARAMS	
+   	PAR_SEQ_PC_TIME,                 // bool, 0 for bar sequence change, 1 for step change
+	PAR_BUT_SHIFT_MODE,
+	NUM_PARAMS
 };
 
 
