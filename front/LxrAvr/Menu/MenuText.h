@@ -313,7 +313,8 @@ const char shortNames[][4] PROGMEM  =
 	{"co1"},  // trigger clock out1 ppq
 	{"co2"},  // trigger clock out2 ppq
 	{"pcr"}, // pattern change resets bar counter
-   {"pci"}, // pattern change time is bar or step
+   	{"pci"}, // pattern change time is bar or step
+   	{"stg"}, // shift is toggle instead of momentary
 };
 //-----------------------------------------------------------------
 // These correspond with the catNamesEnum in menu.h
@@ -424,7 +425,8 @@ const char longNames[][16] PROGMEM =
 	{"Out2 PPQ"},
 	{"Gate Mode"},
 	{"PCReset" }, // reset bar counter on manual pattern change
-   {"PCInstnt" }, // pattern change occurs on bar or step
+   	{"PCInstnt" }, // pattern change occurs on bar or step
+   	{"ShiftTog" }, // shift is toggle instead of momentary
 };
 
 
