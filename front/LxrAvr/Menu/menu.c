@@ -2218,8 +2218,11 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 	case PAR_BAR_RESET_MODE:
 		frontPanel_sendData(SEQ_CC, SEQ_BAR_RESET_MODE, value);
 		break;
-   case PAR_SEQ_PC_TIME:
+	case PAR_SEQ_PC_TIME:
 		frontPanel_sendData(SEQ_CC, SEQ_PC_TIME, value);
+		break;
+	case PAR_BUT_SHIFT_MODE:
+		shiftMode=value;
 		break;
 
 	}
