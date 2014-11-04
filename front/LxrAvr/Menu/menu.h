@@ -49,7 +49,7 @@ enum PageNames
 	LOAD_PAGE,
 	SAVE_PAGE,
 	/*
-	LFO1_PAGE, //TODO load und savepage verschwenken speicher... nicht gefüllt. ans ende und aus dem array nehmen?
+	LFO1_PAGE, //TODO load und savepage verschwenken speicher... nicht gefÃ¼llt. ans ende und aus dem array nehmen?
 	LFO2_PAGE,
 	LFO3_PAGE,
 	LFO4_PAGE,
@@ -188,7 +188,8 @@ enum NamesEnum
 	TEXT_TRIGGER_GATE_MODE,
 	TEXT_BAR_RESET_MODE,
 	TEXT_MIDI_CHAN_GLOBAL,
-   TEXT_SEQ_PC_TIME,
+	TEXT_SEQ_PC_TIME,
+	TEXT_BUT_SHIFT_MODE,
 	NUM_NAMES
 };
 //-----------------------------------------------------------------
