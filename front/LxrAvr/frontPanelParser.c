@@ -464,7 +464,7 @@ void frontPanel_parseData(uint8_t data)
             {
                if (frontParser_midiMsg.data1<6){
             
-               import_drumPart(frontParser_midiMsg.data1,frontParser_midiMsg.data2);
+               preset_loadVoice(frontParser_midiMsg.data2,frontParser_midiMsg.data1,0);
 
                menu_repaint();
                }

@@ -35,12 +35,12 @@ static uint8_t voice5presetMask[37]={6,16,17,23,24,29,30,31,32,43,47,57,58,66,69
 static uint8_t voice6presetMask[37]={7,18,19,25,26,33,34,35,36,42,48,59,60,61,67,93,101,107,113,120,126,133,142,148,154,160,166,172,178,184,190,196,202,208,214,220,226};         
 */
 
-static uint8_t voice1presetMask[37]={1,8,9,20,      37,43,49,50,   62,70,74,78,  82,83,88,94,   102,108,115,121,     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}; 
-static uint8_t voice2presetMask[37]={2,10,11,21,    38,44,51,52,   63,71,75,79,  84,85,89,95,   103,109,116,122,     2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2}; 
-static uint8_t voice3presetMask[37]={3,12,13,22,    39,45,53,54,   64,72,76,80,  86,87,90,96,   104,110,117,123,     3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3}; 
-static uint8_t voice4presetMask[37]={4,14,15,27,28, 40,46,55,      56,65,68,73,  77,81,91,99,   105,111,118,124,     4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4}; 
-static uint8_t voice5presetMask[37]={6,16,17,23,    24,29,30,31,   32,41,47,57,  58,66,69,92,   100,106,112,119,125, 6,6,6,6,6,6,6,6,6,6,6,6,6,6,6}; 
-static uint8_t voice6presetMask[37]={7,18,19,25,    26,33,34,35,   36,42,48,59,  60,61,67,93,   101,107,113,120,126, 7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7};         
+static uint8_t voice1presetMask[37]={1,8,9,20,      37,43,49,50,   62,70,74,78,  82,83,88,94,   102,108,115,121,     128,134,137,143,    149,155,161,167,    173,179,185,191,    197,203,209,215,221}; 
+static uint8_t voice2presetMask[37]={2,10,11,21,    38,44,51,52,   63,71,75,79,  84,85,89,95,   103,109,116,122,     129,135,138,144,    150,156,162,168,    174,180,186,192,    198,204,210,216,222}; 
+static uint8_t voice3presetMask[37]={3,12,13,22,    39,45,53,54,   64,72,76,80,  86,87,90,96,   104,110,117,123,     130,136,139,145,    151,157,163,169,    175,181,187,193,    199,205,211,217,223}; 
+static uint8_t voice4presetMask[37]={4,14,15,27,28, 40,46,55,      56,65,68,73,  77,81,91,99,   105,111,118,124,     131,140,146,152,        158,164,170,    176,182,188,194,    200,206,212,218,224}; 
+static uint8_t voice5presetMask[37]={6,16,17,23,    24,29,30,31,   32,41,47,57,  58,66,69,92,   100,106,112,119,125, 132,141,147,153,        159,165,171,    177,183,189,195,    201,207,213,219,225}; 
+static uint8_t voice6presetMask[37]={7,18,19,25,    26,33,34,35,   36,42,48,59,  60,61,67,93,   101,107,113,120,126, 133,142,148,154,        160,166,172,    178,184,190,196,    202,208,214,220,226};         
 
 #define FILE_VERSION 2
 
@@ -171,6 +171,8 @@ static uint8_t preset_readGlobalData()
    return 1;
 #endif
 }
+
+
 //----------------------------------------------------
 void preset_loadGlobals()
 {
@@ -187,9 +189,13 @@ void preset_loadGlobals()
 	
 #endif	
 }
+
+
 //----------------------------------------------------
 // read the data into either the main parameters or the morph parameters.
 // fix some values, and set values to 0 that were not read in
+
+
 static FRESULT preset_readDrumsetData(uint8_t isMorph)
 {
 	
@@ -204,6 +210,48 @@ static FRESULT preset_readDrumsetData(uint8_t isMorph)
       para=parameters2;
    else
       para=parameter_values;
+
+   FRESULT res=f_read((FIL*)&preset_File, para,END_OF_SOUND_PARAMETERS, &bytesRead);
+   if(res==FR_OK) {
+   	// set to 0 for any that were not read from the file
+      if(END_OF_SOUND_PARAMETERS-bytesRead)
+         memset(para+bytesRead,0,END_OF_SOUND_PARAMETERS-bytesRead);
+   	
+   	//special case mod targets. normalize.
+      const uint8_t nmt=getNumModTargets();
+      for(i=0;i<6;i++) {
+      	// --AS since I've changed the meaning of these, I'll ensure that it's valid for kits saved prior to the
+      	// change
+         if(para[PAR_VEL_DEST_1+i] >= nmt )
+            para[PAR_VEL_DEST_1+i] = 0;
+         if(para[PAR_TARGET_LFO1+i] >= nmt )
+            para[PAR_TARGET_LFO1+i] = 0;
+      }
+   }
+
+   return res;
+
+#endif
+}
+
+
+static FRESULT preset_readVoiceData(uint8_t voiceNr, uint8_t isMorph)
+{
+   if (voiceNr>5)
+   {
+      return 0;
+   }
+#if USE_SD_CARD		
+	//read the file content
+   unsigned int bytesRead=1;
+   int16_t i;
+   uint8_t *para;
+   bytesRead = 0;
+	
+   if(isMorph)
+      para=parameters2;
+   else
+      para=parameter_values_temp;
 
    FRESULT res=f_read((FIL*)&preset_File, para,END_OF_SOUND_PARAMETERS, &bytesRead);
    if(res==FR_OK) {
@@ -270,81 +318,14 @@ error:
 #endif
 }
 
-//----------------------------------------------------
-
-static FRESULT preset_readDrumPart(uint8_t voiceNr)
-{
-	
-#if USE_SD_CARD		
-	//read the file content
-   unsigned int bytesRead=1;
-   int16_t i;
-   uint8_t *para;
-   bytesRead = 0;
-   para=temp_params;
-
-   FRESULT res=f_read((FIL*)&preset_File, para,END_OF_SOUND_PARAMETERS, &bytesRead);
-   if(res==FR_OK) {
-   	// set to 0 for any that were not read from the file
-      if(END_OF_SOUND_PARAMETERS-bytesRead)
-         memset(para+bytesRead,0,END_OF_SOUND_PARAMETERS-bytesRead);
-   	
-   	//special case mod targets. normalize.
-      const uint8_t nmt=getNumModTargets();
-      for(i=0;i<6;i++) {
-      	// --AS since I've changed the meaning of these, I'll ensure that it's valid for kits saved prior to the
-      	// change
-         if(para[PAR_VEL_DEST_1+i] >= nmt )
-            para[PAR_VEL_DEST_1+i] = 0;
-         if(para[PAR_TARGET_LFO1+i] >= nmt )
-            para[PAR_TARGET_LFO1+i] = 0;
-      }
-   }
-   if (voiceNr==0){
-      for(i=0;i<37;i++){
-         parameter_values[voice1presetMask[i]] = temp_params[voice1presetMask[i]];
-      }
-   }
-   if (voiceNr==1){
-      for(i=0;i<37;i++){
-         parameter_values[voice2presetMask[i]] = temp_params[voice1presetMask[i]];
-      }
-   }
-   if (voiceNr==2){
-      for(i=0;i<37;i++){
-         parameter_values[voice3presetMask[i]] = temp_params[voice1presetMask[i]];
-      }
-   }
-   if (voiceNr==3){
-      for(i=0;i<37;i++){
-         parameter_values[voice4presetMask[i]] = temp_params[voice1presetMask[i]];
-      }
-   }
-   if (voiceNr==4){
-      for(i=0;i<37;i++){
-         parameter_values[voice5presetMask[i]] = temp_params[voice1presetMask[i]];
-      }
-   }
-   if (voiceNr==5){
-      for(i=0;i<37;i++){
-         parameter_values[voice6presetMask[i]] = temp_params[voice1presetMask[i]];
-      }
-   }
-   return res;
-
-#endif
-}
-
-
-//----------------------------------------------------
-
-
-uint8_t import_drumPart(uint8_t voiceNr, uint8_t presetNr)
+   //----------------------------------------------------
+uint8_t preset_loadVoice(uint8_t presetNr, uint8_t voiceNr, uint8_t isMorph)
 {
 #if USE_SD_CARD
 	//filename in 8.3  format
    char filename[9];
    unsigned int bytesRead;
+   uint16_t i;
 
 	//sprintf(filename,"p%03d.snd",presetNr);
    preset_makeFileName(filename,presetNr,FEXT_SOUND);
@@ -355,15 +336,14 @@ uint8_t import_drumPart(uint8_t voiceNr, uint8_t presetNr)
       goto error; //file open error... maybe the file does not exist?
 
 	//first the preset name
-  
    res=f_read((FIL*)&preset_File,(void*)preset_currentName,8,&bytesRead);
    if(bytesRead != 8) {
       res=FR_DISK_ERR;
       goto closeFile;
    }
-   
+
 	//then the data
-   res=preset_readDrumPart(voiceNr);
+   res=preset_readVoiceData(voiceNr, isMorph);
 	
 closeFile:
 	//close the file handle
@@ -371,6 +351,42 @@ closeFile:
 
 	// update the back with the new parameters
    if(res==FR_OK) {
+      if (voiceNr==0){
+         for (i=0;i<37;i++)
+         {
+            parameter_values[voice1presetMask[i]]=parameter_values_temp[voice1presetMask[i]];
+         }
+      }
+      else if (voiceNr==1){
+         for (i=0;i<37;i++)
+         {
+            parameter_values[voice2presetMask[i]]=parameter_values_temp[voice2presetMask[i]];
+         }
+      }
+      else if (voiceNr==2){
+         for (i=0;i<37;i++)
+         {
+            parameter_values[voice3presetMask[i]]=parameter_values_temp[voice3presetMask[i]];
+         }
+      }
+      else if (voiceNr==3){
+         for (i=0;i<37;i++)
+         {
+            parameter_values[voice4presetMask[i]]=parameter_values_temp[voice4presetMask[i]];
+         }
+      }
+      else if (voiceNr==4){
+         for (i=0;i<37;i++)
+         {
+            parameter_values[voice5presetMask[i]]=parameter_values_temp[voice5presetMask[i]];
+         }
+      }
+      else if (voiceNr==5){
+         for (i=0;i<37;i++)
+         {
+            parameter_values[voice6presetMask[i]]=parameter_values_temp[voice6presetMask[i]];
+         }
+      }
       preset_sendDrumsetParameters();
       return 1;
    }
@@ -380,6 +396,8 @@ error:
 	frontPanel_sendData(PRESET,PRESET_LOAD,presetNr);
 #endif
 }
+
+
 
 //----------------------------------------------------
 
@@ -418,6 +436,8 @@ void preset_sendDrumsetParameters()
 
 
 }
+
+
 //----------------------------------------------------
 char* preset_loadName(uint8_t presetNr, uint8_t what)
 {

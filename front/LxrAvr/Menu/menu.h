@@ -493,7 +493,7 @@ enum Datatypes
 //-----------------------------------------------------------------
 extern const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS];
 extern uint8_t parameter_values[NUM_PARAMS];
-extern uint8_t temp_params[NUM_PARAMS];
+extern uint8_t parameter_values_temp[END_OF_SOUND_PARAMETERS];
 extern uint8_t parameters2[END_OF_SOUND_PARAMETERS];
 
 extern const Page PROGMEM menuPages[NUM_PAGES][NUM_SUB_PAGES];
