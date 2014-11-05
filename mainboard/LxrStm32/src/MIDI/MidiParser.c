@@ -1321,10 +1321,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    {
       switch(MIDIparamNr){
          case BANK:
-            uart_sendFrontpanelByte(BANK_CHANGE_CC); // need to add a define for MIDI CC set parameter op code
-            uart_sendFrontpanelByte(0); // BS offset goes here NB: also for above 127 params?
+            uart_sendFrontpanelByte(BANK_CHANGE_CC); 
+            uart_sendFrontpanelByte(0); // voice number
             uart_sendFrontpanelByte(msg.data2);
-            break; // -bc- todo: individual voice change
+            break;
          case MOD_WHEEL:
             break; // -bc- todo: assignable mod wheel?
          case CHANNEL_VOL: // voice 1-6
@@ -1582,7 +1582,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    {
       switch(MIDIparamNr){
          case BANK:
-            break; // -bc- todo: individual voice change
+            uart_sendFrontpanelByte(BANK_CHANGE_CC); 
+            uart_sendFrontpanelByte(1); // voice number
+            uart_sendFrontpanelByte(msg.data2);
+            break; 
          case MOD_WHEEL:
             break; // -bc- todo: assignable mod wheel?
          case CHANNEL_VOL: // voice 1-6
@@ -1840,7 +1843,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    {
       switch(MIDIparamNr){
          case BANK:
-            break; // -bc- todo: individual voice change
+            uart_sendFrontpanelByte(BANK_CHANGE_CC); 
+            uart_sendFrontpanelByte(2); // voice number
+            uart_sendFrontpanelByte(msg.data2);
+            break; 
          case MOD_WHEEL:
             break; // -bc- todo: assignable mod wheel?
          case CHANNEL_VOL: // voice 1-6
@@ -2098,7 +2104,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    {
       switch(MIDIparamNr){
          case BANK:
-            break; // -bc- todo: individual voice change
+            uart_sendFrontpanelByte(BANK_CHANGE_CC); 
+            uart_sendFrontpanelByte(3); // voice number
+            uart_sendFrontpanelByte(msg.data2);
+            break; 
          case MOD_WHEEL:
             break; // -bc- todo: assignable mod wheel?
          case CHANNEL_VOL: // voice 1-6
@@ -2358,7 +2367,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    {
       switch(MIDIparamNr){
          case BANK:
-            break; // -bc- todo: individual voice change
+            uart_sendFrontpanelByte(BANK_CHANGE_CC); 
+            uart_sendFrontpanelByte(4); // voice number
+            uart_sendFrontpanelByte(msg.data2);
+            break; 
          case MOD_WHEEL:
             break; // -bc- todo: assignable mod wheel?
          case CHANNEL_VOL: // voice 1-6
@@ -2619,7 +2631,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    {
       switch(MIDIparamNr){
          case BANK:
-            break; // -bc- todo: individual voice change
+            uart_sendFrontpanelByte(BANK_CHANGE_CC); 
+            uart_sendFrontpanelByte(5); // voice number
+            uart_sendFrontpanelByte(msg.data2);
+            break; 
          case MOD_WHEEL:
             break; // -bc- todo: assignable mod wheel?
          case CHANNEL_VOL: // voice 1-6
@@ -2875,7 +2890,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    {
       switch(MIDIparamNr){
          case BANK:
-            break; // -bc- todo: individual voice change
+            uart_sendFrontpanelByte(BANK_CHANGE_CC); 
+            uart_sendFrontpanelByte(5); // voice number
+            uart_sendFrontpanelByte(msg.data2);
+            break; 
          case MOD_WHEEL:
             break; // -bc- todo: assignable mod wheel?
          case CHANNEL_VOL: // voice 1-6
