@@ -42,7 +42,6 @@
 #include "MidiMessages.h"
 #include "MidiVoiceControl.h"
 
-
 void midiParser_parseUartData(unsigned char data);
 void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue);
 void midiParser_parseMidiMessage(MidiMsg msg);

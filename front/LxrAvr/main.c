@@ -184,6 +184,10 @@ sei();
 		uart_checkAndParse();
 		uart_checkAndParse();
 		
+      midiMsg_checkLongOps(); // resolve any long MIDI ops that need to happen
+                              // for now, these include automated bank and pattern
+                              // change, and midi morph
+      
 		//check the poti values
 		adc_checkPots();
 

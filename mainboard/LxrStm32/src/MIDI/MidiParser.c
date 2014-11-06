@@ -49,9 +49,10 @@
 #include "modulationNode.h"
 #include "frontPanelParser.h"
 #include "usb_manager.h"
+#define MORPH_CC        0xac
 #define BANK_CHANGE_CC  0xad
-   #define PARAM_CC        0xae
-   #define PARAM_CC2       0xaf
+#define PARAM_CC        0xae
+#define PARAM_CC2       0xaf
 
 static uint16_t midiParser_activeNrpnNumber = 0;
 
@@ -77,11 +78,11 @@ uint8_t midiParser_txRxFilter = 0xFF;
 
 enum State
 {
-	MIDI_STATUS,  		// waiting for status byte
-	MIDI_DATA1,  		// waiting for data byte1
-	MIDI_DATA2,  		// waiting for data byte2
-	SYSEX_DATA,  		// read sysex data byte
-	IGNORE				// set when unknown status byte received, stays in ignore mode until next known status byte
+MIDI_STATUS,  		// waiting for status byte
+MIDI_DATA1,  		// waiting for data byte1
+MIDI_DATA2,  		// waiting for data byte2
+SYSEX_DATA,  		// read sysex data byte
+IGNORE				// set when unknown status byte received, stays in ignore mode until next known status byte
 };
 
 // 2^(1/12) factor for 1 semitone
@@ -95,9 +96,9 @@ uint8_t midiParser_selectedLfoVoice[NUM_LFO] = {0,0,0,0,0,0};
 // -- AS for debugging
 void midiDebugSend(uint8_t b1, uint8_t b2)
 {
-	uart_sendMidiByte(0xF2);
-	uart_sendMidiByte(b1&0x7F);
-	uart_sendMidiByte(b2&0x7F);
+uart_sendMidiByte(0xF2);
+uart_sendMidiByte(b1&0x7F);
+uart_sendMidiByte(b2&0x7F);
 }
 #endif
 
@@ -105,8 +106,8 @@ void midiDebugSend(uint8_t b1, uint8_t b2)
 #if 0
 inline uint16_t calcSlopeEgTime(uint8_t data2)
 {
-	float val = (data2+1)/128.f;
-	return data2>0?val*val*data2*128:1;
+float val = (data2+1)/128.f;
+return data2>0?val*val*data2*128:1;
 }
 #endif
 //-----------------------------------------------------------
@@ -128,14 +129,14 @@ MidiMsg midiMsg_tmp;				// buffer message where the incoming data is stored
 // these two are used only when building up a midi message
 //static uint8_t msgLength;					// number of following data bytes expected for current status
 static uint8_t parserState = IGNORE;	// state of the parser state machine. Set to what it's expecting next
-										// we set it to ignore initially so that any random data we get before
-										// a valid msg header is ignored
+									// we set it to ignore initially so that any random data we get before
+									// a valid msg header is ignored
 
 //-----------------------------------------------------------
 //takes a midi value from 0 to 127 and return +/- 50 cent detune factor
 float midiParser_calcDetune(uint8_t value)
 {
-	//linear interpolation between 1(no change) and semitone up/down)
+//linear interpolation between 1(no change) and semitone up/down)
    float frac = (value/127.f -0.5f);
    float cent = 1;
    if(cent>=0)
@@ -433,9 +434,9 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
       
          case FMDTN2:
-         	//clear upper nibble
+         //clear upper nibble
             voiceArray[1].modOsc.midiFreq &= 0x00ff;
-         	//set upper nibble
+         //set upper nibble
             voiceArray[1].modOsc.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&voiceArray[1].modOsc);
             break;
@@ -476,9 +477,9 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
       
          case FMDTN3:
-         		//clear upper nibble
+         	//clear upper nibble
             voiceArray[2].modOsc.midiFreq &= 0x00ff;
-         		//set upper nibble
+         	//set upper nibble
             voiceArray[2].modOsc.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&voiceArray[2].modOsc);
             break;
@@ -491,7 +492,7 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             setPan(2,msg.data2);
             break;
       
-      		//snare
+      	//snare
          case VOL4:
             snareVoice.vol = msg.data2/127.f;
             break;
@@ -503,7 +504,7 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       
          case SNARE_NOISE_F:
             snareVoice.noiseOsc.freq = msg.data2/127.f*22000;
-         		//TODO respond to midi note
+         	//TODO respond to midi note
             break;
          case VELOA4:
             {
@@ -528,10 +529,10 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          case SNARE_FILTER_F:
             {
             #if USE_PEAK
-            			peak_setFreq(&snareVoice.filter, msg.data2/127.f*20000.f);
+            		peak_setFreq(&snareVoice.filter, msg.data2/127.f*20000.f);
             #else
                const float f = msg.data2/127.f;
-            			//exponential full range freq
+            		//exponential full range freq
                SVF_directSetFilterValue(&snareVoice.filter,valueShaperF2F(f,FILTER_SHAPER) );
             #endif
             }
@@ -539,7 +540,7 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       
          case SNARE_RESO:
          #if USE_PEAK
-         		peak_setGain(&snareVoice.filter, msg.data2/127.f);
+         	peak_setGain(&snareVoice.filter, msg.data2/127.f);
          #else
             SVF_setReso(&snareVoice.filter, msg.data2/127.f);
          #endif
@@ -549,7 +550,7 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             snareVoice.mix = msg.data2/127.f;
             break;
       
-      		//snare 2
+      	//snare 2
          case VOL5:
             cymbalVoice.vol = msg.data2/127.f;
             break;
@@ -585,18 +586,18 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
       
          case CYM_MOD_OSC_F1:
-         		//cymbalVoice.modOsc.freq = MidiNoteFrequencies[msg.data2];
-         		//clear upper nibble
+         	//cymbalVoice.modOsc.freq = MidiNoteFrequencies[msg.data2];
+         	//clear upper nibble
             cymbalVoice.modOsc.midiFreq &= 0x00ff;
-         		//set upper nibble
+         	//set upper nibble
             cymbalVoice.modOsc.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&cymbalVoice.modOsc);
          
             break;
          case CYM_MOD_OSC_F2:
-         		//clear upper nibble
+         	//clear upper nibble
             cymbalVoice.modOsc2.midiFreq &= 0x00ff;
-         		//set upper nibble
+         	//set upper nibble
             cymbalVoice.modOsc2.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&cymbalVoice.modOsc2);
             break;
@@ -610,7 +611,7 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          case CYM_FIL_FREQ:
             {
                const float f = msg.data2/127.f;
-            	//exponential full range freq
+            //exponential full range freq
                SVF_directSetFilterValue(&cymbalVoice.filter,valueShaperF2F(f,FILTER_SHAPER) );
             }
             break;
@@ -626,7 +627,7 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             slopeEg2_setSlope(&cymbalVoice.oscVolEg,msg.data2);
             break;
       
-      		// hat
+      	// hat
          case WAVE1_HH:
             hatVoice.osc.waveform = msg.data2;
             break;
@@ -648,7 +649,7 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          case HAT_FILTER_F:
             {
                const float f = msg.data2/127.f;
-            	//exponential full range freq
+            //exponential full range freq
                SVF_directSetFilterValue(&hatVoice.filter,valueShaperF2F(f,FILTER_SHAPER) );
             }
             break;
@@ -667,26 +668,26 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       
          case F_OSC6_COARSE:
             {
-            	//clear upper nibble
+            //clear upper nibble
                hatVoice.osc.midiFreq &= 0x00ff;
-            	//set upper nibble
+            //set upper nibble
                hatVoice.osc.midiFreq |= msg.data2 << 8;
                osc_recalcFreq(&hatVoice.osc);
             }
             break;
       
          case MOD_OSC_F1:
-         		//clear upper nibble
+         	//clear upper nibble
             hatVoice.modOsc.midiFreq &= 0x00ff;
-         		//set upper nibble
+         	//set upper nibble
             hatVoice.modOsc.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&hatVoice.modOsc);
             break;
       
          case MOD_OSC_F2:
-         		//clear upper nibble
+         	//clear upper nibble
             hatVoice.modOsc2.midiFreq &= 0x00ff;
-         		//set upper nibble
+         	//set upper nibble
             hatVoice.modOsc2.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&hatVoice.modOsc2);
             break;
@@ -725,8 +726,8 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
       
          case FREQ_LFO1:
-         	case FREQ_LFO2:
-         	case FREQ_LFO3:
+         case FREQ_LFO2:
+         case FREQ_LFO3:
             lfo_setFreq(&voiceArray[msg.data1-FREQ_LFO1].lfo,msg.data2);
             break;
          case FREQ_LFO4:
@@ -740,8 +741,8 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
       
          case AMOUNT_LFO1:
-         	case AMOUNT_LFO2:
-         	case AMOUNT_LFO3:
+         case AMOUNT_LFO2:
+         case AMOUNT_LFO3:
             voiceArray[msg.data1-AMOUNT_LFO1].lfo.modTarget.amount = msg.data2/127.f;
             break;
          case AMOUNT_LFO4:
@@ -755,12 +756,12 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
       
          case VOICE_DECIMATION1:
-         	case VOICE_DECIMATION2:
-         	case VOICE_DECIMATION3:
-         	case VOICE_DECIMATION4:
-         	case VOICE_DECIMATION5:
-         	case VOICE_DECIMATION6:
-         	case VOICE_DECIMATION_ALL:
+         case VOICE_DECIMATION2:
+         case VOICE_DECIMATION3:
+         case VOICE_DECIMATION4:
+         case VOICE_DECIMATION5:
+         case VOICE_DECIMATION6:
+         case VOICE_DECIMATION_ALL:
             mixer_decimation_rate[msg.data1-VOICE_DECIMATION1] = valueShaperI2F(msg.data2,-0.7f);
             break;
       
@@ -858,11 +859,11 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             snareVoice.filterType = msg.data2 + 1; // +1 because 0 is filter off which results in silence
             break;
          case CC2_FILTER_TYPE_5:
-         	//cymbal filter
+         //cymbal filter
             cymbalVoice.filterType = msg.data2+1;
             break;
          case CC2_FILTER_TYPE_6:
-         	//Hihat filter
+         //Hihat filter
             hatVoice.filterType = msg.data2+1;
             break;
       
@@ -870,14 +871,14 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          case CC2_FILTER_DRIVE_2:
          case CC2_FILTER_DRIVE_3:
          #if UNIT_GAIN_DRIVE
-         	voiceArray[msg.data1-CC2_FILTER_DRIVE_1].filter.drive = (msg.data2/127.f);
+         voiceArray[msg.data1-CC2_FILTER_DRIVE_1].filter.drive = (msg.data2/127.f);
          #else
             SVF_setDrive(&voiceArray[msg.data1-CC2_FILTER_DRIVE_1].filter,msg.data2);
          #endif
             break;
          case CC2_FILTER_DRIVE_4:
          #if UNIT_GAIN_DRIVE
-         	snareVoice.filter.drive = (msg.data2/127.f);
+         snareVoice.filter.drive = (msg.data2/127.f);
          #else
             SVF_setDrive(&snareVoice.filter, msg.data2);
          #endif
@@ -885,7 +886,7 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case CC2_FILTER_DRIVE_5:
          #if UNIT_GAIN_DRIVE
-         	cymbalVoice.filter.drive = (msg.data2/127.f);
+         cymbalVoice.filter.drive = (msg.data2/127.f);
          #else
             SVF_setDrive(&cymbalVoice.filter, msg.data2);
          #endif
@@ -893,7 +894,7 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case CC2_FILTER_DRIVE_6:
          #if UNIT_GAIN_DRIVE
-         	hatVoice.filter.drive = (msg.data2/127.f);
+         hatVoice.filter.drive = (msg.data2/127.f);
          #else
             SVF_setDrive(&hatVoice.filter, msg.data2);
          #endif
@@ -1017,7 +1018,7 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             mixer_audioRouting[msg.data1-CC2_AUDIO_OUT1] = msg.data2;
             break;
       
-      	//--AS
+      //--AS
          case CC2_MIDI_NOTE1:
          case CC2_MIDI_NOTE2:
          case CC2_MIDI_NOTE3:
@@ -1025,8 +1026,8 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          case CC2_MIDI_NOTE5:
          case CC2_MIDI_NOTE6:
          case CC2_MIDI_NOTE7:
-         	//--AS set the note override for the voice. 0 means use the note value, anything else means
-         	// that the note will always play with that note
+         //--AS set the note override for the voice. 0 means use the note value, anything else means
+         // that the note will always play with that note
             midi_NoteOverride[msg.data1-CC2_MIDI_NOTE1] = msg.data2;
             break;
       
@@ -1070,21 +1071,21 @@ void midiParser_checkMtc()
       return;
 
    if(!seq_isRunning()) {
-   	// inform mtc that his services are no longer needed
+   // inform mtc that his services are no longer needed
       midiParser_mtcIsRunning=0;
       return;
    }
 
-	// at a 24fps framerate (the lowest) we should receive a completed message (we receive one every 2 frames)
-	// every 83 ms. our tick counter is .25 ms resolution
+// at a 24fps framerate (the lowest) we should receive a completed message (we receive one every 2 frames)
+// every 83 ms. our tick counter is .25 ms resolution
    if(systick_ticks-midiParser_lastMtcReceived > 100 * 4) { // overestimate, just in case something untoward should happen
-   	// too much time has elapsed since our last message. mtc has gone away.
+   // too much time has elapsed since our last message. mtc has gone away.
       midiParser_mtcIsRunning=0;
    
       uart_sendFrontpanelByte(FRONT_SEQ_CC);
       uart_sendFrontpanelByte(FRONT_SEQ_RUN_STOP);
       uart_sendFrontpanelByte(0);
-   	// stop the sequencer
+   // stop the sequencer
       seq_setRunning(0);
    }
 }
@@ -1099,12 +1100,12 @@ static void midiParser_noteOn(uint8_t voice, uint8_t note, uint8_t vel, uint8_t 
    if(seq_isTrackMuted(voice))
       return;
 
-	// --AS check the midi mode for the voice. If it's "any", trigger that note.
-	// if it's some other note, trigger the drum voice only if it matches, and in this case
-	// trigger the default note
+// --AS check the midi mode for the voice. If it's "any", trigger that note.
+// if it's some other note, trigger the drum voice only if it matches, and in this case
+// trigger the default note
 
    if(midi_NoteOverride[voice] != 0) {
-   	// looking for specific note
+   // looking for specific note
       if(note==midi_NoteOverride[voice])
          note=SEQ_DEFAULT_NOTE; // match found. Play default note
       else
@@ -1113,20 +1114,20 @@ static void midiParser_noteOn(uint8_t voice, uint8_t note, uint8_t vel, uint8_t 
 
    voiceControl_noteOn(voice,note,vel);
 
-	//Recording Mode - record the note to sequencer and echo to channel of that voice
-	// (we'd want to hear what's being recorded)
+//Recording Mode - record the note to sequencer and echo to channel of that voice
+// (we'd want to hear what's being recorded)
    if(do_rec) {
       const uint8_t chan=midi_MidiChannels[voice];
    
-   	// record note if rec is on
+   // record note if rec is on
       seq_addNote(voice,vel, note);
    
-   	//if a note is on for that channel send note-off first
+   //if a note is on for that channel send note-off first
       seq_midiNoteOff(chan);
-   	//send the new note to midi/usb out
-   	// --AS todo a user played note will end up being turned off if a pattern switch happens.
-   	//           to fix this we'd have to differentiate between a user played note and a
-   	//           note triggered from sequencer, and also recognize note off on user played note and send it.
+   //send the new note to midi/usb out
+   // --AS todo a user played note will end up being turned off if a pattern switch happens.
+   //           to fix this we'd have to differentiate between a user played note and a
+   //           note triggered from sequencer, and also recognize note off on user played note and send it.
       seq_sendMidiNoteOn(chan, note, vel);
    }
 
@@ -1136,7 +1137,7 @@ static void midiParser_noteOn(uint8_t voice, uint8_t note, uint8_t vel, uint8_t 
 //------------------------------------------------------
 //static void midiParser_noteOff(uint8_t voice, uint8_t note, uint8_t vel)
 //{
-	// in case we ever need it
+// in case we ever need it
 //}
 
 
@@ -1145,21 +1146,21 @@ static void midiParser_noteOn(uint8_t voice, uint8_t note, uint8_t vel, uint8_t 
  */
 void midiParser_parseMidiMessage(MidiMsg msg)
 {
-	// route message if needed
+// route message if needed
    if(midiParser_routing.value) {
       if(msg.bits.source==midiSourceUSB) {
          if(midiParser_routing.route.usb2midi){
-         	// route to midi out port
+         // route to midi out port
             uart_sendMidi(msg);
          }
       } 
       else if(msg.bits.source==midiSourceMIDI) {
          if(midiParser_routing.route.midi2midi) {
-         	// route to midi out port
+         // route to midi out port
             uart_sendMidi(msg);
          }
          if(midiParser_routing.route.midi2usb) {
-         	// route to usb out port
+         // route to usb out port
             usb_sendMidi(msg);
          }
       }
@@ -1168,12 +1169,12 @@ void midiParser_parseMidiMessage(MidiMsg msg)
    if(msg.bits.sysxbyte)
       return; // no further action needed. we don't interpret sysex data right now
 
-	// --AS FILT filter messages here. Filter inline below to be more optimal
-	// we are interested in the low nibble since we are Rx here
+// --AS FILT filter messages here. Filter inline below to be more optimal
+// we are interested in the low nibble since we are Rx here
 
 
    if((msg.status & 0xF0) == 0XF0) {
-   	// non-channel specific messages (system messages)
+   // non-channel specific messages (system messages)
       switch(msg.status) {
          case MIDI_CLOCK:
             if((midiParser_txRxFilter & 0x02) && seq_getExtSync())
@@ -1193,12 +1194,12 @@ void midiParser_parseMidiMessage(MidiMsg msg)
       
          case MIDI_MTC_QFRAME:
          /* --AS Strategy:
-          * If we get through all 8 of the mtc messages with a value of 0, it means that
-          * the song has just started playing. That is the only time we will start the
-          * sequencer. so we will not start it if they start the tape recorder playing half way
-          * through the song. Also, if the sequencer is running, or we are in external sync mode
-          * we will ignore mtc messages as well
-          */
+         * If we get through all 8 of the mtc messages with a value of 0, it means that
+         * the song has just started playing. That is the only time we will start the
+         * sequencer. so we will not start it if they start the tape recorder playing half way
+         * through the song. Also, if the sequencer is running, or we are in external sync mode
+         * we will ignore mtc messages as well
+         */
             if ((midiParser_txRxFilter & 0x02) == 0)
                break; // ignore filtered
          
@@ -1252,31 +1253,31 @@ void midiParser_parseMidiMessage(MidiMsg msg)
       const uint8_t chanonly=msg.status & 0x0F;
    
       if((msgonly & 0xE0) == 0x80) {
-      	// note on or note off message (one of these two only)
+      // note on or note off message (one of these two only)
          if(midiParser_txRxFilter & 0x01) {
             int8_t v, q=-1;
-         	// --AS if a note message comes in on global channel, then send that note to
-         	// the voice that is currently active on the front.
+         // --AS if a note message comes in on global channel, then send that note to
+         // the voice that is currently active on the front.
             if(midi_MidiChannels[7]==chanonly) {
                q=frontParser_activeTrack; // avoid sending it again later if the active track happens to have the same channel set
-            							   // (this might not really matter. does sending a note on twice do any harm?)
+            						   // (this might not really matter. does sending a note on twice do any harm?)
                if(msgonly==NOTE_ON && msg.data2) {
                   midiParser_noteOn(frontParser_activeTrack, msg.data1, msg.data2, 1);
                } 
                else { // NOTE_OFF or zero velocity note
-               	//midiParser_noteOff(v, msg.data1, msg.data2);
+               //midiParser_noteOff(v, msg.data1, msg.data2);
                }
             }
          
-         	// check each voice to see if it cares about this message
+         // check each voice to see if it cares about this message
             for(v=0;v<7;v++) {
                if(midi_MidiChannels[v]==chanonly && v != q) { // if channel match and we haven't sent it already for the voice
                   if(msgonly==NOTE_ON && msg.data2) {
                      midiParser_noteOn(v, msg.data1, msg.data2, 0);
-                  	//Also used in sequencer trigger note function
+                  //Also used in sequencer trigger note function
                   } 
                   else { // NOTE_OFF or zero velocity note
-                  	//midiParser_noteOff(v, msg.data1, msg.data2);
+                  //midiParser_noteOff(v, msg.data1, msg.data2);
                   }
                } // if channel matches
             } // for each voice
@@ -1284,19 +1285,19 @@ void midiParser_parseMidiMessage(MidiMsg msg)
       
       } 
       else if(msgonly==PROG_CHANGE) {
-      	// --AS respond to prog change and change patterns. This responds only when global channel matches the PC message's channel.
+      // --AS respond to prog change and change patterns. This responds only when global channel matches the PC message's channel.
          if((midiParser_txRxFilter & 0x08) && (chanonly == midi_MidiChannels[7]))
             seq_setNextPattern(msg.data1 & 0x07);
       
       } 
       else if(msgonly==MIDI_CC){
-      	// respond to CC message. 
+      // respond to CC message. 
          midiParser_MIDIccHandler(msg,1); // send with 1 to record value to either 
-                                          // automation or kit param, 0 for DSP only
+                                       // automation or kit param, 0 for DSP only
       } 
       else {
-      	// anything else
-      	// TODO MIDI_PITCH_WHEEL ?
+      // anything else
+      // TODO MIDI_PITCH_WHEEL ?
       }
    } // channel specific vs non channel specific
 
@@ -1306,17 +1307,17 @@ void midiParser_parseMidiMessage(MidiMsg msg)
 
 
 void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
-/* patch for interpreting midi cc values by voice channel assignments 
+/* patch for interpreting external midi cc values by voice channel assignments 
   updateOriginalValue with 1 to record value to either automation or kit param, 0 for DSP only*/
 {
-   
-   // const uint8_t msgonly = msg.status & 0xF0;
+
+// const uint8_t msgonly = msg.status & 0xF0;
    const uint8_t chanonly = msg.status & 0x0F;
    const uint16_t MIDIparamNr = msg.data1;
-   // const uint16_t msgVal = msg.data2;
-      
+// const uint16_t msgVal = msg.data2;
+   
    uint16_t LXRparamNr = I_DUNNO; // zero is undefined in LXR param numbers
-      
+ 
    if (chanonly == midi_MidiChannels[0]) // DRUM1 voice is a target
    {
       switch(MIDIparamNr){
@@ -1344,25 +1345,25 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=VOICE_DECIMATION1;
             break;
          case EFFECT_2: // distortion, 1-3, SNARE_DISTORTION CYMBAL_DISTORTION HAT_DISTORTION
-            #if USE_FILTER_DRIVE
-            voiceArray[0].filter.drive = 0.5f + (msg.data2/127.f) *6;
-            #else
+         #if USE_FILTER_DRIVE
+         voiceArray[0].filter.drive = 0.5f + (msg.data2/127.f) *6;
+         #else
             setDistortionShape(&voiceArray[0].distortion,msg.data2);
-            #endif
+         #endif
             LXRparamNr=OSC1_DIST;
             break;
          case UNDEF_14: // osc coarse tune, voice 1-6
-            //clear upper nibble
+         //clear upper nibble
             voiceArray[0].osc.midiFreq &= 0x00ff;
-            //set upper nibble
+         //set upper nibble
             voiceArray[0].osc.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&voiceArray[0].osc);
             LXRparamNr=F_OSC1_COARSE;
             break;
          case UNDEF_14_LSB: // osc fine tune, voice 1-6
-            //clear lower nibble
+         //clear lower nibble
             voiceArray[0].osc.midiFreq &= 0xff00;
-            //set lower nibble
+         //set lower nibble
             voiceArray[0].osc.midiFreq |= msg.data2;
             osc_recalcFreq(&voiceArray[0].osc);
             LXRparamNr=F_OSC1_FINE;
@@ -1370,7 +1371,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          case GEN_CONTROLLER_16:
             {
                const float f = msg.data2/127.f;
-               //exponential full range freq
+            //exponential full range freq
                SVF_directSetFilterValue(&voiceArray[0].filter,valueShaperF2F(f,FILTER_SHAPER) );
             }
             LXRparamNr=FILTER_FREQ_DRUM1; // SNARE_FILTER_F, CYM_FIL_FREQ, HAT_FILTER_F
@@ -1380,11 +1381,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=RESO_DRUM1; // SNARE_RESO, CYM_RESO, HAT_RESO
             break;
          case GEN_CONTROLLER_18: // filter drive, 1-6
-            #if UNIT_GAIN_DRIVE
-         	   voiceArray[0].filter.drive = (msg.data2/127.f);
-               #else
+         #if UNIT_GAIN_DRIVE
+            voiceArray[0].filter.drive = (msg.data2/127.f);
+            #else
             SVF_setDrive(&voiceArray[0].filter,msg.data2);
-               #endif
+            #endif
             LXRparamNr=128+CC2_FILTER_DRIVE_1;
             break;
          case GEN_CONTROLLER_19: // filter type 1-6
@@ -1408,7 +1409,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_VELO_MOD_AMT_1;
             break;
          case UNDEF_25: // velocity mod destination 1-6
-            // TODO - this isn't in the params, gets done elsewhere?
+         // TODO - this isn't in the params, gets done elsewhere?
             LXRparamNr=128+CC2_VEL_DEST_1;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
@@ -1456,11 +1457,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_WAVE_LFO1;
             break;
          case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_VOICE_LFO1;
             break;
          case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_TARGET_LFO1;
             break;
          case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
@@ -1488,8 +1489,8 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_AUDIO_OUT1;
             break;
          case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
-            //--AS set the note override for the voice. 0 means use the note value, anything else means
-         	// that the note will always play with that note
+         //--AS set the note override for the voice. 0 means use the note value, anything else means
+         // that the note will always play with that note
             midi_NoteOverride[0] = msg.data2;
             LXRparamNr=128+CC2_MIDI_NOTE1;
             break;
@@ -1498,9 +1499,9 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=MOD_WAVE_DRUM1;
             break;
          case UNDEF_103: // FMDTN* (1-3 only)
-            //clear upper nibble
+         //clear upper nibble
             voiceArray[0].modOsc.midiFreq &= 0x00ff;
-               //set upper nibble
+            //set upper nibble
             voiceArray[0].modOsc.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&voiceArray[0].modOsc);
             LXRparamNr=FMDTN1;
@@ -1539,7 +1540,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          default:
             break;
       }
-         
+      
       if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
       {
          midiParser_originalCcValues[LXRparamNr] = msg.data2;
@@ -1574,10 +1575,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
    
-      
-   }
    
-       
+   }
+
+    
    if (chanonly == midi_MidiChannels[1]) // DRUM2 voice is a target
    {
       switch(MIDIparamNr){
@@ -1605,25 +1606,25 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=VOICE_DECIMATION2;
             break;
          case EFFECT_2: // distortion, 1-3, SNARE_DISTORTION CYMBAL_DISTORTION HAT_DISTORTION
-            #if USE_FILTER_DRIVE
-            voiceArray[1].filter.drive = 0.5f + (msg.data2/127.f) *6;
-            #else
+         #if USE_FILTER_DRIVE
+         voiceArray[1].filter.drive = 0.5f + (msg.data2/127.f) *6;
+         #else
             setDistortionShape(&voiceArray[1].distortion,msg.data2);
-            #endif
+         #endif
             LXRparamNr=OSC2_DIST;
             break;
          case UNDEF_14: // osc coarse tune, voice 1-6
-            //clear upper nibble
+         //clear upper nibble
             voiceArray[1].osc.midiFreq &= 0x00ff;
-            //set upper nibble
+         //set upper nibble
             voiceArray[1].osc.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&voiceArray[1].osc);
             LXRparamNr=F_OSC2_COARSE;
             break;
          case UNDEF_14_LSB: // osc fine tune, voice 1-6
-            //clear lower nibble
+         //clear lower nibble
             voiceArray[1].osc.midiFreq &= 0xff00;
-            //set lower nibble
+         //set lower nibble
             voiceArray[1].osc.midiFreq |= msg.data2;
             osc_recalcFreq(&voiceArray[1].osc);
             LXRparamNr=F_OSC2_FINE;
@@ -1631,7 +1632,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          case GEN_CONTROLLER_16:
             {
                const float f = msg.data2/127.f;
-               //exponential full range freq
+            //exponential full range freq
                SVF_directSetFilterValue(&voiceArray[1].filter,valueShaperF2F(f,FILTER_SHAPER) );
             }
             LXRparamNr=FILTER_FREQ_DRUM2; // SNARE_FILTER_F, CYM_FIL_FREQ, HAT_FILTER_F
@@ -1641,11 +1642,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=RESO_DRUM2; // SNARE_RESO, CYM_RESO, HAT_RESO
             break;
          case GEN_CONTROLLER_18: // filter drive, 1-6
-            #if UNIT_GAIN_DRIVE
-         	   voiceArray[1].filter.drive = (msg.data2/127.f);
-               #else
+         #if UNIT_GAIN_DRIVE
+            voiceArray[1].filter.drive = (msg.data2/127.f);
+            #else
             SVF_setDrive(&voiceArray[1].filter,msg.data2);
-               #endif
+            #endif
             LXRparamNr=128+CC2_FILTER_DRIVE_2;
             break;
          case GEN_CONTROLLER_19: // filter type 1-6
@@ -1669,7 +1670,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_VELO_MOD_AMT_2;
             break;
          case UNDEF_25: // velocity mod destination 1-6
-            // TODO - this isn't in the params, gets done elsewhere?
+         // TODO - this isn't in the params, gets done elsewhere?
             LXRparamNr=128+CC2_VEL_DEST_2;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
@@ -1717,11 +1718,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_WAVE_LFO2;
             break;
          case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_VOICE_LFO2;
             break;
          case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_TARGET_LFO2;
             break;
          case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
@@ -1749,8 +1750,8 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_AUDIO_OUT2;
             break;
          case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
-            //--AS set the note override for the voice. 0 means use the note value, anything else means
-         	// that the note will always play with that note
+         //--AS set the note override for the voice. 0 means use the note value, anything else means
+         // that the note will always play with that note
             midi_NoteOverride[1] = msg.data2;
             LXRparamNr=128+CC2_MIDI_NOTE2;
             break;
@@ -1759,9 +1760,9 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=MOD_WAVE_DRUM2;
             break;
          case UNDEF_103: // FMDTN* (1-3 only)
-            //clear upper nibble
+         //clear upper nibble
             voiceArray[1].modOsc.midiFreq &= 0x00ff;
-               //set upper nibble
+            //set upper nibble
             voiceArray[1].modOsc.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&voiceArray[1].modOsc);
             LXRparamNr=FMDTN2;
@@ -1800,7 +1801,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          default:
             break;
       }
-         
+      
       if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
       {
          midiParser_originalCcValues[LXRparamNr] = msg.data2;
@@ -1835,10 +1836,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
    
-      
+   
    }
+  
      
-        
    if (chanonly == midi_MidiChannels[2]) // DRUM3 voice is a target
    {
       switch(MIDIparamNr){
@@ -1866,25 +1867,25 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=VOICE_DECIMATION3;
             break;
          case EFFECT_2: // distortion, 1-3, SNARE_DISTORTION CYMBAL_DISTORTION HAT_DISTORTION
-            #if USE_FILTER_DRIVE
-            voiceArray[2].filter.drive = 0.5f + (msg.data2/127.f) *6;
-            #else
+         #if USE_FILTER_DRIVE
+         voiceArray[2].filter.drive = 0.5f + (msg.data2/127.f) *6;
+         #else
             setDistortionShape(&voiceArray[2].distortion,msg.data2);
-            #endif
+         #endif
             LXRparamNr=OSC3_DIST;
             break;
          case UNDEF_14: // osc coarse tune, voice 1-6
-            //clear upper nibble
+         //clear upper nibble
             voiceArray[2].osc.midiFreq &= 0x00ff;
-            //set upper nibble
+         //set upper nibble
             voiceArray[2].osc.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&voiceArray[2].osc);
             LXRparamNr=F_OSC3_COARSE;
             break;
          case UNDEF_14_LSB: // osc fine tune, voice 1-6
-            //clear lower nibble
+         //clear lower nibble
             voiceArray[2].osc.midiFreq &= 0xff00;
-            //set lower nibble
+         //set lower nibble
             voiceArray[2].osc.midiFreq |= msg.data2;
             osc_recalcFreq(&voiceArray[2].osc);
             LXRparamNr=F_OSC3_FINE;
@@ -1892,7 +1893,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          case GEN_CONTROLLER_16:
             {
                const float f = msg.data2/127.f;
-               //exponential full range freq
+            //exponential full range freq
                SVF_directSetFilterValue(&voiceArray[2].filter,valueShaperF2F(f,FILTER_SHAPER) );
             }
             LXRparamNr=FILTER_FREQ_DRUM3; // SNARE_FILTER_F, CYM_FIL_FREQ, HAT_FILTER_F
@@ -1902,11 +1903,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=RESO_DRUM3; // SNARE_RESO, CYM_RESO, HAT_RESO
             break;
          case GEN_CONTROLLER_18: // filter drive, 1-6
-            #if UNIT_GAIN_DRIVE
-         	   voiceArray[2].filter.drive = (msg.data2/127.f);
-               #else
+         #if UNIT_GAIN_DRIVE
+            voiceArray[2].filter.drive = (msg.data2/127.f);
+            #else
             SVF_setDrive(&voiceArray[2].filter,msg.data2);
-               #endif
+            #endif
             LXRparamNr=128+CC2_FILTER_DRIVE_3;
             break;
          case GEN_CONTROLLER_19: // filter type 1-6
@@ -1930,7 +1931,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_VELO_MOD_AMT_3;
             break;
          case UNDEF_25: // velocity mod destination 1-6
-            // TODO - this isn't in the params, gets done elsewhere?
+         // TODO - this isn't in the params, gets done elsewhere?
             LXRparamNr=128+CC2_VEL_DEST_3;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
@@ -1978,11 +1979,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_WAVE_LFO3;
             break;
          case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_VOICE_LFO3;
             break;
          case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_TARGET_LFO3;
             break;
          case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
@@ -2010,8 +2011,8 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_AUDIO_OUT3;
             break;
          case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
-            //--AS set the note override for the voice. 0 means use the note value, anything else means
-         	// that the note will always play with that note
+         //--AS set the note override for the voice. 0 means use the note value, anything else means
+         // that the note will always play with that note
             midi_NoteOverride[2] = msg.data2;
             LXRparamNr=128+CC2_MIDI_NOTE3;
             break;
@@ -2020,9 +2021,9 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=MOD_WAVE_DRUM3;
             break;
          case UNDEF_103: // FMDTN* (1-3 only)
-            //clear upper nibble
+         //clear upper nibble
             voiceArray[2].modOsc.midiFreq &= 0x00ff;
-               //set upper nibble
+            //set upper nibble
             voiceArray[2].modOsc.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&voiceArray[2].modOsc);
             LXRparamNr=FMDTN3;
@@ -2061,7 +2062,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          default:
             break;
       }
-         
+      
       if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
       {
          midiParser_originalCcValues[LXRparamNr] = msg.data2;
@@ -2096,10 +2097,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
    
-      
+   
    }
-   
-   
+
+
    if (chanonly == midi_MidiChannels[3]) // SNARE voice is a target
    {
       switch(MIDIparamNr){
@@ -2141,35 +2142,35 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=F_OSC4_COARSE;
             break;
          case UNDEF_14_LSB: // osc fine tune, voice 1-6
-            // -bc- TODO - no midi function for snare fine tune set, need to look this up.
+         // -bc- TODO - no midi function for snare fine tune set, need to look this up.
             LXRparamNr=F_OSC4_FINE;
             break;
          case GEN_CONTROLLER_16:
             {
-               #if USE_PEAK
-                  peak_setFreq(&snareVoice.filter, msg.data2/127.f*20000.f);
-               #else
+            #if USE_PEAK
+               peak_setFreq(&snareVoice.filter, msg.data2/127.f*20000.f);
+            #else
                const float f = msg.data2/127.f;
-            	//exponential full range freq
+            //exponential full range freq
                SVF_directSetFilterValue(&snareVoice.filter,valueShaperF2F(f,FILTER_SHAPER) );
-                  #endif
+               #endif
             }
             LXRparamNr=SNARE_FILTER_F; // SNARE_FILTER_F, CYM_FIL_FREQ, HAT_FILTER_F
             break;
          case GEN_CONTROLLER_17:
-            #if USE_PEAK
-         		peak_setGain(&snareVoice.filter, msg.data2/127.f);
-               #else
+         #if USE_PEAK
+         	peak_setGain(&snareVoice.filter, msg.data2/127.f);
+            #else
             SVF_setReso(&snareVoice.filter, msg.data2/127.f);
-               #endif
+            #endif
             LXRparamNr=SNARE_RESO; // SNARE_RESO, CYM_RESO, HAT_RESO
             break;
          case GEN_CONTROLLER_18: // filter drive, 1-6
-            #if UNIT_GAIN_DRIVE
-         	snareVoice.filter.drive = (msg.data2/127.f);
-            #else
+         #if UNIT_GAIN_DRIVE
+         snareVoice.filter.drive = (msg.data2/127.f);
+         #else
             SVF_setDrive(&snareVoice.filter, msg.data2);
-            #endif
+         #endif
             LXRparamNr=128+CC2_FILTER_DRIVE_4;
             break;
          case GEN_CONTROLLER_19: // filter type 1-6
@@ -2195,7 +2196,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_VELO_MOD_AMT_4;
             break;
          case UNDEF_25: // velocity mod destination 1-6
-            // TODO - this isn't in the params, gets done elsewhere?
+         // TODO - this isn't in the params, gets done elsewhere?
             LXRparamNr=128+CC2_VEL_DEST_4;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
@@ -2249,11 +2250,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_WAVE_LFO4;
             break;
          case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_VOICE_LFO4;
             break;
          case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_TARGET_LFO4;
             break;
          case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
@@ -2283,8 +2284,8 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_AUDIO_OUT4;
             break;
          case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
-            //--AS set the note override for the voice. 0 means use the note value, anything else means
-         	// that the note will always play with that note
+         //--AS set the note override for the voice. 0 means use the note value, anything else means
+         // that the note will always play with that note
             midi_NoteOverride[3] = msg.data2;
             LXRparamNr=128+CC2_MIDI_NOTE4;
             break;
@@ -2324,7 +2325,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          default:
             break;
       }
-         
+      
       if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
       {
          midiParser_originalCcValues[LXRparamNr] = msg.data2;
@@ -2359,10 +2360,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
    
-      
-   }
    
-    
+   }
+
+ 
    if (chanonly == midi_MidiChannels[4]) // CYMBAL voice is a target
    {
       switch(MIDIparamNr){
@@ -2404,13 +2405,13 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=F_OSC5_COARSE;
             break;
          case UNDEF_14_LSB: // osc fine tune, voice 1-6
-            // -bc- TODO - no midi function for cymbal fine tune set, need to look this up?
+         // -bc- TODO - no midi function for cymbal fine tune set, need to look this up?
             LXRparamNr=F_OSC5_FINE;
             break;
          case GEN_CONTROLLER_16:
             {
                const float f = msg.data2/127.f;
-            	//exponential full range freq
+            //exponential full range freq
                SVF_directSetFilterValue(&cymbalVoice.filter,valueShaperF2F(f,FILTER_SHAPER) );
             }
             LXRparamNr=CYM_FIL_FREQ; // SNARE_FILTER_F, CYM_FIL_FREQ, HAT_FILTER_F
@@ -2420,11 +2421,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=CYM_RESO; // SNARE_RESO, CYM_RESO, HAT_RESO
             break;
          case GEN_CONTROLLER_18: // filter drive, 1-6
-            #if UNIT_GAIN_DRIVE
-         	cymbalVoice.filter.drive = (msg.data2/127.f);
-            #else
+         #if UNIT_GAIN_DRIVE
+         cymbalVoice.filter.drive = (msg.data2/127.f);
+         #else
             SVF_setDrive(&cymbalVoice.filter, msg.data2);
-            #endif
+         #endif
             LXRparamNr=128+CC2_FILTER_DRIVE_5;
             break;
          case GEN_CONTROLLER_19: // filter type 1-6
@@ -2446,7 +2447,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_VELO_MOD_AMT_5;
             break;
          case UNDEF_25: // velocity mod destination 1-6
-            // TODO - this isn't in the params, gets done elsewhere?
+         // TODO - this isn't in the params, gets done elsewhere?
             LXRparamNr=128+CC2_VEL_DEST_5;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
@@ -2500,11 +2501,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_WAVE_LFO5;
             break;
          case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_VOICE_LFO5;
             break;
          case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_TARGET_LFO5;
             break;
          case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
@@ -2526,8 +2527,8 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_AUDIO_OUT5;
             break;
          case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
-            //--AS set the note override for the voice. 0 means use the note value, anything else means
-         	// that the note will always play with that note
+         //--AS set the note override for the voice. 0 means use the note value, anything else means
+         // that the note will always play with that note
             midi_NoteOverride[4] = msg.data2;
             LXRparamNr=128+CC2_MIDI_NOTE5;
             break;
@@ -2546,10 +2547,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=CYM_MOD_OSC_GAIN1;
             break;
          case UNDEF_107: // CYM_MOD_OSC_F1, MOD_OSC_F1 (voice 5,6)
-            //cymbalVoice.modOsc.freq = MidiNoteFrequencies[msg.data2];
-            //clear upper nibble
+         //cymbalVoice.modOsc.freq = MidiNoteFrequencies[msg.data2];
+         //clear upper nibble
             cymbalVoice.modOsc.midiFreq &= 0x00ff;
-         	//set upper nibble
+         //set upper nibble
             cymbalVoice.modOsc.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&cymbalVoice.modOsc);
             LXRparamNr=CYM_MOD_OSC_F1;
@@ -2563,9 +2564,9 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=CYM_MOD_OSC_GAIN2;
             break;
          case UNDEF_110: // CYM_MOD_OSC_F2, MOD_OSC_F2 (voice 5,6)
-            //clear upper nibble
+         //clear upper nibble
             cymbalVoice.modOsc2.midiFreq &= 0x00ff;
-         	//set upper nibble
+         //set upper nibble
             cymbalVoice.modOsc2.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&cymbalVoice.modOsc2);
             LXRparamNr=CYM_MOD_OSC_F2;
@@ -2588,7 +2589,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          default:
             break;
       }
-         
+      
       if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
       {
          midiParser_originalCcValues[LXRparamNr] = msg.data2;
@@ -2623,10 +2624,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
    
-      
-   }
    
-    
+   }
+
+ 
    if (chanonly == midi_MidiChannels[5]) // HAT CLOSED voice is a target
    {
       switch(MIDIparamNr){
@@ -2659,22 +2660,22 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_14: // osc coarse tune, voice 1-6
             {
-            	//clear upper nibble
+            //clear upper nibble
                hatVoice.osc.midiFreq &= 0x00ff;
-            	//set upper nibble
+            //set upper nibble
                hatVoice.osc.midiFreq |= msg.data2 << 8;
                osc_recalcFreq(&hatVoice.osc);
             }
             LXRparamNr=F_OSC6_COARSE;
             break;
          case UNDEF_14_LSB: // osc fine tune, voice 1-6
-            // -bc- TODO - no midi function for hat fine tune set, need to look this up?
+         // -bc- TODO - no midi function for hat fine tune set, need to look this up?
             LXRparamNr=F_OSC6_FINE;
             break;
          case GEN_CONTROLLER_16:
             {
                const float f = msg.data2/127.f;
-            	//exponential full range freq
+            //exponential full range freq
                SVF_directSetFilterValue(&hatVoice.filter,valueShaperF2F(f,FILTER_SHAPER) );
             }
             LXRparamNr=HAT_FILTER_F; // SNARE_FILTER_F, CYM_FIL_FREQ, HAT_FILTER_F
@@ -2684,8 +2685,8 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=HAT_RESO; // SNARE_RESO, CYM_RESO, HAT_RESO
             break;
          case GEN_CONTROLLER_18: // filter drive, 1-6
-            #if UNIT_GAIN_DRIVE
-         	hatVoice.filter.drive = (msg.data2/127.f);
+         #if UNIT_GAIN_DRIVE
+         hatVoice.filter.drive = (msg.data2/127.f);
          #else
             SVF_setDrive(&hatVoice.filter, msg.data2);
          #endif
@@ -2710,7 +2711,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_VELO_MOD_AMT_6;
             break;
          case UNDEF_25: // velocity mod destination 1-6
-            // TODO - this isn't in the params, gets done elsewhere?
+         // TODO - this isn't in the params, gets done elsewhere?
             LXRparamNr=128+CC2_VEL_DEST_6;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
@@ -2760,11 +2761,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_WAVE_LFO6;
             break;
          case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_VOICE_LFO6;
             break;
          case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_TARGET_LFO6;
             break;
          case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
@@ -2786,8 +2787,8 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_AUDIO_OUT6;
             break;
          case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
-            //--AS set the note override for the voice. 0 means use the note value, anything else means
-         	// that the note will always play with that note
+         //--AS set the note override for the voice. 0 means use the note value, anything else means
+         // that the note will always play with that note
             midi_NoteOverride[5] = msg.data2;
             LXRparamNr=128+CC2_MIDI_NOTE6;
             break;
@@ -2806,9 +2807,9 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=MOD_OSC_GAIN1;
             break;
          case UNDEF_107: // CYM_MOD_OSC_F1, MOD_OSC_F1 (voice 5,6)
-            //clear upper nibble
+         //clear upper nibble
             hatVoice.modOsc.midiFreq &= 0x00ff;
-         		//set upper nibble
+         	//set upper nibble
             hatVoice.modOsc.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&hatVoice.modOsc);
             LXRparamNr=MOD_OSC_F1;
@@ -2822,9 +2823,9 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=MOD_OSC_GAIN2;
             break;
          case UNDEF_110: // CYM_MOD_OSC_F2, MOD_OSC_F2 (voice 5,6)
-            //clear upper nibble
+         //clear upper nibble
             hatVoice.modOsc2.midiFreq &= 0x00ff;
-         	//set upper nibble
+         //set upper nibble
             hatVoice.modOsc2.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&hatVoice.modOsc2);
             LXRparamNr=MOD_OSC_F2;
@@ -2847,7 +2848,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          default:
             break;
       }
-         
+      
       if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
       {
          midiParser_originalCcValues[LXRparamNr] = msg.data2;
@@ -2882,10 +2883,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
    
-      
-   }
    
-        
+   }
+
+     
    if (chanonly == midi_MidiChannels[6]) // HAT OPEN voice is a target - same as before
    {
       switch(MIDIparamNr){
@@ -2918,22 +2919,22 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             break;
          case UNDEF_14: // osc coarse tune, voice 1-6
             {
-            	//clear upper nibble
+            //clear upper nibble
                hatVoice.osc.midiFreq &= 0x00ff;
-            	//set upper nibble
+            //set upper nibble
                hatVoice.osc.midiFreq |= msg.data2 << 8;
                osc_recalcFreq(&hatVoice.osc);
             }
             LXRparamNr=F_OSC6_COARSE;
             break;
          case UNDEF_14_LSB: // osc fine tune, voice 1-6
-            // -bc- TODO - no midi function for hat fine tune set, need to look this up?
+         // -bc- TODO - no midi function for hat fine tune set, need to look this up?
             LXRparamNr=F_OSC6_FINE;
             break;
          case GEN_CONTROLLER_16:
             {
                const float f = msg.data2/127.f;
-            	//exponential full range freq
+            //exponential full range freq
                SVF_directSetFilterValue(&hatVoice.filter,valueShaperF2F(f,FILTER_SHAPER) );
             }
             LXRparamNr=HAT_FILTER_F; // SNARE_FILTER_F, CYM_FIL_FREQ, HAT_FILTER_F
@@ -2943,8 +2944,8 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=HAT_RESO; // SNARE_RESO, CYM_RESO, HAT_RESO
             break;
          case GEN_CONTROLLER_18: // filter drive, 1-6
-            #if UNIT_GAIN_DRIVE
-         	hatVoice.filter.drive = (msg.data2/127.f);
+         #if UNIT_GAIN_DRIVE
+         hatVoice.filter.drive = (msg.data2/127.f);
          #else
             SVF_setDrive(&hatVoice.filter, msg.data2);
          #endif
@@ -2969,7 +2970,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_VELO_MOD_AMT_6;
             break;
          case UNDEF_25: // velocity mod destination 1-6
-            // TODO - this isn't in the params, gets done elsewhere?
+         // TODO - this isn't in the params, gets done elsewhere?
             LXRparamNr=128+CC2_VEL_DEST_6;
             break;
          case UNDEF_26: // transient wave volume, voice 1-6
@@ -3019,11 +3020,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_WAVE_LFO6;
             break;
          case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_VOICE_LFO6;
             break;
          case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
-            // this is just a break in the cc params?
+         // this is just a break in the cc params?
             LXRparamNr=128+CC2_TARGET_LFO6;
             break;
          case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
@@ -3045,8 +3046,8 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=128+CC2_AUDIO_OUT6;
             break;
          case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
-            //--AS set the note override for the voice. 0 means use the note value, anything else means
-         	// that the note will always play with that note
+         //--AS set the note override for the voice. 0 means use the note value, anything else means
+         // that the note will always play with that note
             midi_NoteOverride[5] = msg.data2;
             LXRparamNr=128+CC2_MIDI_NOTE6;
             break;
@@ -3065,9 +3066,9 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=MOD_OSC_GAIN1;
             break;
          case UNDEF_107: // CYM_MOD_OSC_F1, MOD_OSC_F1 (voice 5,6)
-            //clear upper nibble
+         //clear upper nibble
             hatVoice.modOsc.midiFreq &= 0x00ff;
-         		//set upper nibble
+         	//set upper nibble
             hatVoice.modOsc.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&hatVoice.modOsc);
             LXRparamNr=MOD_OSC_F1;
@@ -3081,9 +3082,9 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             LXRparamNr=MOD_OSC_GAIN2;
             break;
          case UNDEF_110: // CYM_MOD_OSC_F2, MOD_OSC_F2 (voice 5,6)
-            //clear upper nibble
+         //clear upper nibble
             hatVoice.modOsc2.midiFreq &= 0x00ff;
-         	//set upper nibble
+         //set upper nibble
             hatVoice.modOsc2.midiFreq |= msg.data2 << 8;
             osc_recalcFreq(&hatVoice.modOsc2);
             LXRparamNr=MOD_OSC_F2;
@@ -3106,7 +3107,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          default:
             break;
       }
-         
+      
       if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
       {
          midiParser_originalCcValues[LXRparamNr] = msg.data2;
@@ -3141,10 +3142,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
    
-      
-   }
    
-            
+   }
+
+         
    if (chanonly == midi_MidiChannels[7]) // GLOBAL is a target
    {
       switch(MIDIparamNr){
@@ -3154,7 +3155,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             uart_sendFrontpanelByte(msg.data2);
             break; // -bc- todo: individual voice change
          case MOD_WHEEL:
-            break; // -bc- todo: morph
+            uart_sendFrontpanelByte(MORPH_CC); // global mod wheel = morph
+            uart_sendFrontpanelByte(0); // doesn't get used
+            uart_sendFrontpanelByte(msg.data2); // bit shift from 0-127 to 0-255 happens on frontpanel
+            break;
          case CHANNEL_VOL: // voice 1-6
             break;
          case UNDEF_9: // voice 1-6
@@ -3232,8 +3236,8 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          case UNDEF_89: // 128+CC2_AUDIO_OUT* (1-6)
             break;
          case UNDEF_90: // 128+CC2_MIDI_NOTE* (1-6)
-            //--AS set the note override for the voice. 0 means use the note value, anything else means
-         	// that the note will always play with that note
+         //--AS set the note override for the voice. 0 means use the note value, anything else means
+         // that the note will always play with that note
             midi_NoteOverride[6] = msg.data2;
             LXRparamNr=128+CC2_MIDI_NOTE7;
             break;
@@ -3273,7 +3277,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          default:
             break;
       }
-         
+      
       if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
       {
          midiParser_originalCcValues[LXRparamNr] = msg.data2;
@@ -3308,14 +3312,14 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
    
-      
+   
    }
-   
-   
 
-      
-  
+
+
    
+  
+
 }
  
 
@@ -3323,7 +3327,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
 
 void midiParser_handleStatusByte(unsigned char data)
 {
-	// we received a channel voice/mode byte. set the status as appropriate
+// we received a channel voice/mode byte. set the status as appropriate
    switch(data&0xF0) {
    // 2 databyte messages
       case NOTE_OFF:
@@ -3359,13 +3363,13 @@ void midiParser_parseUartData(unsigned char data)
 {
 
    if(data&0x80) { // High bit is set -  its either a status or a system message.
-   	// regardless of current state, we blindly start a new message without questioning it
+   // regardless of current state, we blindly start a new message without questioning it
       midiMsg_tmp.bits.sysxbyte=0;
       if( (data&0xf0) == 0xf0) { // system message
          midiMsg_tmp.status = data;
          switch(data) {
             case SYSEX_START: // get into sysex receive mode. any more bytes received until this status changes are considered
-            			  // to be sysex data. we still need to parse this sysex start, in case we are routing it
+            		  // to be sysex data. we still need to parse this sysex start, in case we are routing it
                parserState = SYSEX_DATA;
                midiMsg_tmp.bits.length=0;
                goto parseMsg; // we will still parse it in case we are doing a passthru
@@ -3442,7 +3446,7 @@ void midiParser_parseUartData(unsigned char data)
    return;
 
 parseMsg:
-	// we get here if we have proudly received a message that we want to do something with
+// we get here if we have proudly received a message that we want to do something with
    if(parserState != SYSEX_DATA) // we are still in sysex receive mode
       parserState = MIDI_STATUS; // next byte should be a new message, or we don't care about it
    midiMsg_tmp.bits.source=midiSourceMIDI;

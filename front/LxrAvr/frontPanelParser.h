@@ -18,6 +18,8 @@ extern volatile uint8_t frontParser_newSeqDataAvailable;
 //a step instance to buffer the data received from the sequencer
 extern volatile StepData frontParser_stepData;
 extern uint8_t frontPanel_sysexMode;
+extern uint8_t frontPanel_longOp;
+extern uint8_t frontPanel_longData;
 
 
 
@@ -33,6 +35,7 @@ extern uint8_t frontPanel_sysexMode;
 
 //control messages from cortex for leds
 //status, param changes
+#define MORPH_CC        0xac
 #define BANK_CHANGE_CC  0xad
 #define PARAM_CC        0xae
 #define PARAM_CC2       0xaf
@@ -169,5 +172,7 @@ void frontPanel_sendData(uint8_t status, uint8_t data1, uint8_t data2);
 void frontPanel_sendByte(uint8_t data);
 
 extern volatile MidiMsg frontParser_midiMsg;
+
+extern void midiMsg_checkLongOps();
 
 #endif /* FRONTPANELPARSER_H_ */

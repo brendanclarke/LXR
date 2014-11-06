@@ -31,6 +31,20 @@ volatile StepData frontParser_stepData;
 volatile uint8_t frontParser_sysexBuffer[7];
 
 uint8_t frontParser_nameIndex = 0;
+uint8_t frontPanel_longOp;
+// case definitions for long ops that get dealt with once per main() loop
+#define BANK_1 0
+#define BANK_2 1
+#define BANK_3 2
+#define BANK_4 3
+#define BANK_5 4
+#define BANK_6 5
+#define BANK_GLOBAL 6
+#define MORPH_OP 7
+#define PATTERN_CHANGE_OP 8
+#define NULL_OP 10
+uint8_t frontPanel_longData;
+
 
 
 //------------------------------------------------------------
@@ -443,7 +457,9 @@ void frontPanel_parseData(uint8_t data)
 							break;
 					}
 				}
+            
             /* -bc- additions to front interpreter start here*/
+            //-------------------------------------------------
             else if(frontParser_midiMsg.status == PARAM_CC)
             {
             parameter_values[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
@@ -463,21 +479,39 @@ void frontPanel_parseData(uint8_t data)
             else if(frontParser_midiMsg.status == BANK_CHANGE_CC)
             {
                if (frontParser_midiMsg.data1<6){
-            
-               preset_loadVoice(frontParser_midiMsg.data2,frontParser_midiMsg.data1,0);
-
-               menu_repaint();
+                  // this is a time-consuming operation, cache it and deal
+                  // with only one per loop of main()
+                  frontPanel_longOp=frontParser_midiMsg.data1;
+                  frontPanel_longData=frontParser_midiMsg.data2;
+               
+               
                }
             
                else if (frontParser_midiMsg.data1==6) // global bank change request
                {
+                  // this is a time-consuming operation, cache it and deal
+                  // with only one per loop of main()
+                  frontPanel_longOp=BANK_GLOBAL;
+                  frontPanel_longData=frontParser_midiMsg.data2;
             
-               preset_loadDrumset(frontParser_midiMsg.data2,0);
-
-               menu_repaint();
                }
             
             }
+            
+            else if(frontParser_midiMsg.status == MORPH_CC)
+            {  
+               // this is a time-consuming operation, cache it and deal
+               // with only one per loop of main()
+               frontPanel_longOp=MORPH_OP;
+               frontPanel_longData=(uint8_t)(frontParser_midiMsg.data2<<1);
+            }
+            
+            
+            //-------------------------------------------------
+            /* -bc- additions to front interpreter end here*/
+            
+            
+            
 				else if(frontParser_midiMsg.status == LED_CC)
 				{
 					switch(frontParser_midiMsg.data1)
@@ -558,6 +592,44 @@ void frontPanel_parseData(uint8_t data)
 			}				
 		}
 	}
+};
+
+void midiMsg_checkLongOps()
+{
+   
+   switch (frontPanel_longOp)
+   {
+   case BANK_1:
+   case BANK_2:
+   case BANK_3:
+   case BANK_4:
+   case BANK_5:
+   case BANK_6:
+      preset_loadVoice(frontPanel_longData,frontPanel_longOp,0);
+      menu_repaint();
+      frontPanel_longOp=NULL_OP;
+      break;
+   case BANK_GLOBAL:
+      preset_loadDrumset(frontPanel_longData,0);
+      menu_repaint();
+      frontPanel_longOp=NULL_OP;
+      break;
+   case MORPH_OP:
+      parameter_values[PAR_MORPH]=frontPanel_longData;
+      preset_morph(frontPanel_longData);
+      menu_repaint();
+      frontPanel_longOp=NULL_OP;
+      break;
+   case PATTERN_CHANGE_OP:
+      
+      frontPanel_longOp=NULL_OP;
+      break;
+   default:
+      frontPanel_longOp=NULL_OP;
+      break;
+
+   }
+   
 };
 //------------------------------------------------------------
 void frontPanel_sendMidiMsg(MidiMsg msg)

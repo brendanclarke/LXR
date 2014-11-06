@@ -635,6 +635,7 @@ enum
 
 //preset messages
 
+
 //SysEx
 #define SYSEX_INACTIVE					0x00	/**< SysEx mode is deactivated*/
 #define SYSEX_REQUEST_STEP_DATA		 	0x01
