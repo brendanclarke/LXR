@@ -1,0 +1,85 @@
+BRENDAN CLARKE
+LXR PER-VOICE MIDI TABLE
+LXR by Julian Schmidt (www.sonic-potions.com)
+
+The LXR can be assigned a global channel as well as 7 'track' channels for the parts: drum 1-3, snare, cymbal, hi-hat closed, and hi-hat open. Previously, all MIDI commands had to be sent on the global channel. The updated firmware (in this 'LXR' folder) assigns MIDI commands on a per-track basis. To send a MIDI CC command to a voice, first ensure that you are sending on the MIDI channel that the voice is set to. Then, consult the table below to determine the MIDI CC parameter number you should use.
+
+Where possible, these parameter numbers are in keeping with the General MIDI Specifications provided by the MIDI Manufacturer's Association here: http://www.midi.org/techspecs/midimessages.php
+
+Where specific controls are not specified, parameters have been grouped together as much as possible. 
+
+If more than one voice is assigned to the same MIDI channel, these voices will all respond to an incoming message. In the case of the hi-hat tracks, voice parameters will be updated for messages arriving on either channel, with the exception of the envelope decay, which has been assigned a different CC value so that HH open and closed can be assigned the same channel, if desired.
+
+For parameters that are 'on/off', have menu select items, or have less than 127 values, literal CC values are used, without scaling. For example, to turn 'Velocity > Vol' on or off, a 1 or 0 should be sent. The exception to this is the Global Morph MIDI CC, which has been scaled up to range from 0 to 254 in increments of 2.
+
+Bank Change			000 (kit-change on global or instrument-change on part channels)
+
+(global) Morph			001 (Mod Wheel)
+(global) Sample Rate		012
+
+OSC
+Oscillator Coarse		014
+Oscillator Fine			046
+Oscillator Wave			009
+(snare) Noise Freq		021
+(snare) Noise Mix		020
+
+AEG
+Env Attack			073
+Env Decay			075
+(hh open) Decay			072
+Env Slope			074
+(snare/cym) Repeat		070
+
+MOD
+(drum/snare) Mod Decay		084	
+(drum/snare) Mod Slope		086
+(drum/snare) Mod Amount		085	
+Velocity Dest			025
+Velocity Amount			024
+Velocity > Vol			023
+
+FM
+(drum)FM Waveform		102
+(drum)FM Amount			104
+(drum)FM Freq			103
+(drum)FM/Mix Select		022
+
+(cym/hat)FM1 Waveform		105
+(cym/hat)FM1 Amount		106
+(cym/hat)FM1 Freq		107
+(cym/hat)FM2 Waveform		108
+(cym/hat)FM2 Amount		109
+(cym/hat)FM2 Freq		110
+
+CLICK
+Transient Vol			026
+Transient Wave			027
+Transient Freq			028
+
+FILTER
+Filter Freq			016
+Filter Resonance		017
+Filter Drive			018
+Filter Type			019
+
+
+LFO
+LFO Rate			076
+LFO Amount			077
+LFO Offset			078
+LFO Wave			079
+LFO Voice Dest			080
+LFO Param Dest			081
+LFO Retrig			082
+LFO Sync			083
+
+MIX
+Volume				007
+Pan				010
+Sample Rate			012
+Voice Drive			013
+Audio Output			089
+MIDI Note			090
+Mute				120
+
