@@ -1255,34 +1255,46 @@ void midiParser_parseMidiMessage(MidiMsg msg)
       if((msgonly & 0xE0) == 0x80) {
       // note on or note off message (one of these two only)
          if(midiParser_txRxFilter & 0x01) {
-            int8_t v, q=-1;
+            int8_t v;
          // --AS if a note message comes in on global channel, then send that note to
          // the voice that is currently active on the front.
             if(midi_MidiChannels[7]==chanonly) {
-               q=frontParser_activeTrack; // avoid sending it again later if the active track happens to have the same channel set
-            						   // (this might not really matter. does sending a note on twice do any harm?)
-               if(msgonly==NOTE_ON && msg.data2) {
+            
+                                          // -bc- first, check to see if active track is set to 'any' - use chromatic mode if it is
+               if( (msgonly==NOTE_ON && msg.data2) && !midi_NoteOverride[frontParser_activeTrack] ) {
                   midiParser_noteOn(frontParser_activeTrack, msg.data1, msg.data2, 1);
                } 
+               // current active track is not set to 'any' - user wants to assign voices to global notes
+               else if (msgonly==NOTE_ON && msg.data2){
+                  for(v=0;v<7;v++){
+                     if (midi_NoteOverride[v]==msg.data1){
+                        midiParser_noteOn(v, msg.data1, msg.data2, 1);
+                     }
+                  }
+               
+               }
                else { // NOTE_OFF or zero velocity note
                //midiParser_noteOff(v, msg.data1, msg.data2);
                }
             }
-         
-         // check each voice to see if it cares about this message
-            for(v=0;v<7;v++) {
-               if(midi_MidiChannels[v]==chanonly && v != q) { // if channel match and we haven't sent it already for the voice
+           
+            // additionally, check each voice channel to see if it cares about this message
+            for(v=0;v<6;v++) {
+               if(midi_MidiChannels[v]==chanonly) { // if channel match and we haven't sent it already for the voice
                   if(msgonly==NOTE_ON && msg.data2) {
                      midiParser_noteOn(v, msg.data1, msg.data2, 0);
-                  //Also used in sequencer trigger note function
+                     //Also used in sequencer trigger note function
                   } 
                   else { // NOTE_OFF or zero velocity note
-                  //midiParser_noteOff(v, msg.data1, msg.data2);
+                     //midiParser_noteOff(v, msg.data1, msg.data2);
                   }
                } // if channel matches
             } // for each voice
+               
+            
+            
          } // check midi filter
-      
+         
       } 
       else if(msgonly==PROG_CHANGE) {
       // --AS respond to prog change and change patterns. This responds only when global channel matches the PC message's channel.
