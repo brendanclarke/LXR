@@ -1,3 +1,28 @@
+Additions to .34 Firmware:
+====================================
+1. Copy individual tracks between patterns.
+	- select (view) the source pattern
+	- press and hold 'copy'
+	- press the source track (voice) button
+	- press the destination pattern button
+
+2. New global menu option for instant pattern switching
+	- when enabled, switching patterns with the buttons or a program change MIDI message happens on the next sub-step (keeping the current sequencer position) rather than at the end of the bar
+
+3. MIDI CC assignments are by voice channel rather than all on the global channel - see document in this folder for new assignments
+	- this includes a morph assignment to Mod Wheel on the global channel
+	- MIDI CC's also get recorded to automation slots (rather than updating voice parameters) when record is on
+
+4. Drumkit can be changed by sending a 'Bank MSB' (CC0) signal on the global MIDI channel
+
+5. Individual drum voices can be changed by sending a 'Bank MSB' (CC0) signal on their individual MIDI channels
+
+6. New global menu option to make the 'shift' button a toggle rather than momentary
+
+7. Multiple voices can be set to respond (and record) note-ons on the global channel. When the currently active track has a 'note' assignment other than 'any', note-ons to the global channel will be matched to ALL tracks that have a note assignment other than 'any', rather than just the active one.
+
+
+
 Sonic Potions LXR Drumsynth Firmware
 ====================================
 The LXR is a digital drum synthesizer based on the 32-bit Cortex-M4 processor and an Atmega644 8-bit CPU. Developed by Julian Schmidt.
