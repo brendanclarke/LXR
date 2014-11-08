@@ -33,16 +33,24 @@ volatile uint8_t frontParser_sysexBuffer[7];
 uint8_t frontParser_nameIndex = 0;
 uint8_t frontPanel_longOp;
 // case definitions for long ops that get dealt with once per main() loop
-#define BANK_1 0
-#define BANK_2 1
-#define BANK_3 2
-#define BANK_4 3
-#define BANK_5 4
-#define BANK_6 5
-#define BANK_GLOBAL 6
-#define MORPH_OP 7
-#define PATTERN_CHANGE_OP 8
-#define NULL_OP 10
+// bitwise definitions to decide what to do for multiple ops
+#define BANK_1 0x01
+#define BANK_2 0x02
+#define BANK_3 0x04
+#define BANK_4 0x08
+#define BANK_5 0x10
+#define BANK_6 0x20
+#define BANK_7 0x40
+#define BANK_GLOBAL 0x80
+// banks 1-6 plus global stack to allow for multiple voices stacked on the same
+// MIDI channel to respond to the same bank change command
+
+// above BANK_GLOBAL it doesn't matter - we reset the command anyway
+#define MORPH_OP 0x81
+// there is space in here to add more long operations - pattern change
+// must have the highest priority
+#define PATTERN_CHANGE_OP 0xAF
+#define NULL_OP 0x00
 uint8_t frontPanel_longData;
 
 
@@ -478,31 +486,52 @@ void frontPanel_parseData(uint8_t data)
             
             else if(frontParser_midiMsg.status == BANK_CHANGE_CC)
             {
-               if (frontParser_midiMsg.data1<6){
-                  // this is a time-consuming operation, cache it and deal
-                  // with only one per loop of main()
-                  frontPanel_longOp=frontParser_midiMsg.data1;
-                  frontPanel_longData=frontParser_midiMsg.data2;
-               
-               
-               }
-            
-               else if (frontParser_midiMsg.data1==6) // global bank change request
+               if (frontParser_midiMsg.data1&&(frontPanel_longOp<PATTERN_CHANGE_OP) )
                {
-                  // this is a time-consuming operation, cache it and deal
-                  // with only one per loop of main()
-                  frontPanel_longOp=BANK_GLOBAL;
-                  frontPanel_longData=frontParser_midiMsg.data2;
+                  // we have a valid message and we're not waiting for a pattern change to finish
+                  // global bank change operation
+                  if ( !(frontParser_midiMsg.data1^0x3F) ) 
+                  // global bank change request or, all voice channels set the same
+                  {
+                     // this is a time-consuming operation, cache it and deal
+                     // with only one per loop of main()
+                     /*
+                     preset_loadDrumset(frontParser_midiMsg.data2,0);
+                     menu_repaint();
+                     frontPanel_longOp=NULL_OP;
+                     */
+                     
+                     frontPanel_longOp=BANK_GLOBAL;
+                     frontPanel_longData=frontParser_midiMsg.data2;
+                     
             
+                  }
+                  // individual voice bank-change
+                  
+                  else if (frontPanel_longOp!=BANK_GLOBAL)
+                  // don't override global bank changes
+                  {
+                     // stack the operations so multiple voice bank changes can take place
+                     
+                     frontPanel_longOp=frontParser_midiMsg.data1;
+                     frontPanel_longData=frontParser_midiMsg.data2;
+           
+                  }
                }
             
             }
             
-            else if(frontParser_midiMsg.status == MORPH_CC)
+            // morph operation
+            else if(frontParser_midiMsg.status == MORPH_CC&&!frontPanel_longOp)
             {  
+               // morph is a low-priority opertaion (because we might be getting a LOT
+               // from the Mod Wheel) - if we get a bank change or program change, 
+               // we ignore Morph while those happen
+               
                // this is a time-consuming operation, cache it and deal
                // with only one per loop of main()
                frontPanel_longOp=MORPH_OP;
+               // bit shift from MIDI CC values
                frontPanel_longData=(uint8_t)(frontParser_midiMsg.data2<<1);
             }
             
@@ -596,38 +625,44 @@ void frontPanel_parseData(uint8_t data)
 
 void midiMsg_checkLongOps()
 {
+   if (frontPanel_longOp){
    
-   switch (frontPanel_longOp)
-   {
-   case BANK_1:
-   case BANK_2:
-   case BANK_3:
-   case BANK_4:
-   case BANK_5:
-   case BANK_6:
-      preset_loadVoice(frontPanel_longData,frontPanel_longOp,0);
-      menu_repaint();
-      frontPanel_longOp=NULL_OP;
-      break;
-   case BANK_GLOBAL:
-      preset_loadDrumset(frontPanel_longData,0);
-      menu_repaint();
-      frontPanel_longOp=NULL_OP;
-      break;
-   case MORPH_OP:
-      parameter_values[PAR_MORPH]=frontPanel_longData;
-      preset_morph(frontPanel_longData);
-      menu_repaint();
-      frontPanel_longOp=NULL_OP;
-      break;
-   case PATTERN_CHANGE_OP:
+      if (frontPanel_longOp==BANK_GLOBAL)
+      {
+         preset_loadDrumset(frontPanel_longData,0);
+         menu_repaint();
+         frontPanel_longOp=NULL_OP;
+      }
+      else if (frontPanel_longOp==PATTERN_CHANGE_OP)
+      {
       
-      frontPanel_longOp=NULL_OP;
-      break;
-   default:
-      frontPanel_longOp=NULL_OP;
-      break;
-
+         frontPanel_longOp=NULL_OP;
+      }
+         
+      else if (frontPanel_longOp<BANK_GLOBAL)
+      // we have (possibly multiple) voice bank changes
+      {
+         preset_loadVoice(frontPanel_longData,frontPanel_longOp,0);
+         menu_repaint();
+         frontPanel_longOp=NULL_OP; 
+      }
+      
+      
+      else if (frontPanel_longOp==MORPH_OP)
+      {
+         parameter_values[PAR_MORPH]=frontPanel_longData;
+         preset_morph(frontPanel_longData);
+         menu_repaint();
+         frontPanel_longOp=NULL_OP;
+      }
+      
+      else
+      {
+      
+         frontPanel_longOp=NULL_OP;
+      }
+      
+      
    }
    
 };

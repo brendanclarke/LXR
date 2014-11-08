@@ -22,7 +22,7 @@ if isMorph==1 the sound will be loaded into the morph buffer
 */
 void preset_saveDrumset(uint8_t presetNr, uint8_t isMorph);
 uint8_t preset_loadDrumset(uint8_t presetNr, uint8_t isMorph);
-uint8_t preset_loadVoice(uint8_t presetNr, uint8_t voiceNr, uint8_t isMorph);
+uint8_t preset_loadVoice(uint8_t presetNr, uint8_t voiceArray, uint8_t isMorph);
 
 void preset_saveGlobals();
 void preset_loadGlobals();

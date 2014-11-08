@@ -55,6 +55,17 @@ static uint8_t voice6presetMask[37]={7,18,19,25,    26,33,34,35,   36,42,48,59, 
 #define FEXT_PERF 	3
 // fill buffer (length 9 total) with a filename. type is one of above
 // eg p001.snd
+
+// defines for sorting out multiple voice change signals
+   #define BANK_1 0x01
+   #define BANK_2 0x02
+   #define BANK_3 0x04
+   #define BANK_4 0x08
+   #define BANK_5 0x10
+   #define BANK_6 0x20
+   #define BANK_7 0x40
+   #define BANK_GLOBAL 0x80
+
 static void preset_makeFileName(char *buf, uint8_t num, uint8_t type);
 
 
@@ -235,9 +246,9 @@ static FRESULT preset_readDrumsetData(uint8_t isMorph)
 }
 
 
-static FRESULT preset_readVoiceData(uint8_t voiceNr, uint8_t isMorph)
+static FRESULT preset_readVoiceData(uint8_t voiceArray, uint8_t isMorph)
 {
-   if (voiceNr>5)
+   if (voiceArray>BANK_GLOBAL)
    {
       return 0;
    }
@@ -319,7 +330,7 @@ error:
 }
 
    //----------------------------------------------------
-uint8_t preset_loadVoice(uint8_t presetNr, uint8_t voiceNr, uint8_t isMorph)
+uint8_t preset_loadVoice(uint8_t presetNr, uint8_t voiceArray, uint8_t isMorph)
 {
 #if USE_SD_CARD
 	//filename in 8.3  format
@@ -343,7 +354,7 @@ uint8_t preset_loadVoice(uint8_t presetNr, uint8_t voiceNr, uint8_t isMorph)
    }
 
 	//then the data
-   res=preset_readVoiceData(voiceNr, isMorph);
+   res=preset_readVoiceData(voiceArray, isMorph);
 	
 closeFile:
 	//close the file handle
@@ -351,42 +362,45 @@ closeFile:
 
 	// update the back with the new parameters
    if(res==FR_OK) {
-      if (voiceNr==0){
+      
+      if (voiceArray&BANK_1){
          for (i=0;i<37;i++)
          {
             parameter_values[voice1presetMask[i]]=parameter_values_temp[voice1presetMask[i]];
          }
       }
-      else if (voiceNr==1){
+      if (voiceArray&BANK_2){
          for (i=0;i<37;i++)
          {
             parameter_values[voice2presetMask[i]]=parameter_values_temp[voice2presetMask[i]];
          }
       }
-      else if (voiceNr==2){
+      if (voiceArray&BANK_3){
          for (i=0;i<37;i++)
          {
             parameter_values[voice3presetMask[i]]=parameter_values_temp[voice3presetMask[i]];
          }
       }
-      else if (voiceNr==3){
+      if (voiceArray&BANK_4){
          for (i=0;i<37;i++)
          {
             parameter_values[voice4presetMask[i]]=parameter_values_temp[voice4presetMask[i]];
          }
       }
-      else if (voiceNr==4){
+      if (voiceArray&BANK_5){
          for (i=0;i<37;i++)
          {
             parameter_values[voice5presetMask[i]]=parameter_values_temp[voice5presetMask[i]];
          }
       }
-      else if (voiceNr==5){
+      if ((voiceArray&BANK_6)||(voiceArray&BANK_7)){
          for (i=0;i<37;i++)
          {
             parameter_values[voice6presetMask[i]]=parameter_values_temp[voice6presetMask[i]];
          }
       }
+      
+      
       preset_sendDrumsetParameters();
       return 1;
    }
