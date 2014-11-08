@@ -458,18 +458,18 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	    /*PAR_SOM_FREQ*/ 		DTYPE_0B127,
 	    /*PAR_TRACK_ROTATION*/  DTYPE_1B16,  //**PATROT this is not shown in menu, but if it were it would really be 0 to 15
 	    /*PAR_BPM*/ 			DTYPE_0B255,							//251
-	    /*PAR_MIDI_CHAN_1*/ 	DTYPE_1B16,
-	    /*PAR_MIDI_CHAN_2*/ 	DTYPE_1B16,
-	    /*PAR_MIDI_CHAN_3*/ 	DTYPE_1B16,
-	    /*PAR_MIDI_CHAN_4*/ 	DTYPE_1B16,
-	    /*PAR_MIDI_CHAN_5*/ 	DTYPE_1B16,
-	    /*PAR_MIDI_CHAN_6*/ 	DTYPE_1B16,
+	    /*PAR_MIDI_CHAN_1*/ 	DTYPE_0B16,
+	    /*PAR_MIDI_CHAN_2*/ 	DTYPE_0B16,
+	    /*PAR_MIDI_CHAN_3*/ 	DTYPE_0B16,
+	    /*PAR_MIDI_CHAN_4*/ 	DTYPE_0B16,
+	    /*PAR_MIDI_CHAN_5*/ 	DTYPE_0B16,
+	    /*PAR_MIDI_CHAN_6*/ 	DTYPE_0B16,
 	    /*PAR_FETCH*/ 			DTYPE_ON_OFF,
 	    /*PAR_FOLLOW*/ 			DTYPE_ON_OFF,
 	    /*PAR_QUANTISATION*/ 	DTYPE_MENU | (MENU_SEQ_QUANT<<4),
 	    /*PAR_SCREENSAVER_ON_OFF*/ DTYPE_ON_OFF,						//261
 	    /*PAR_MIDI_MODE*/ 		DTYPE_MENU | (MENU_MIDI<<4),			  //--AS This is now unused.
-	    /*PAR_MIDI_CHAN_7*/ 	DTYPE_1B16,
+	    /*PAR_MIDI_CHAN_7*/ 	DTYPE_0B16,
 	    /*PAR_MIDI_ROUTING*/	DTYPE_MENU | (MENU_MIDI_ROUTING<<4),
 	    /*PAR_MIDI_FILT_TX*/    DTYPE_MENU | (MENU_MIDI_FILTERING<<4),
 	    /*PAR_MIDI_FILT_RX*/    DTYPE_MENU | (MENU_MIDI_FILTERING<<4),
@@ -478,9 +478,9 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 		/*PAR_PRESCALER_CLOCK_OUT2*/	DTYPE_MENU | (MENU_PPQ<<4),
 		/*PAR_TRIGGER_GATE_MODE*/	DTYPE_ON_OFF,
 	    /*PAR_BAR_RESET_MODE*/  DTYPE_ON_OFF,
-	    /*PAR_MIDI_CHAN_GLOBAL*/DTYPE_1B16,		//--AS global midi channel
-	 /*PAR_SEQ_PC_TIME*/  DTYPE_ON_OFF,
-	 /*PAR_BUT_SHIFT_MODE*/ DTYPE_ON_OFF,
+	    /*PAR_MIDI_CHAN_GLOBAL*/DTYPE_0B16,		//--AS global midi channel
+	   /*PAR_SEQ_PC_TIME*/  DTYPE_ON_OFF, // -bc- change patterns on sub-step instead of bar
+	   /*PAR_BUT_SHIFT_MODE*/ DTYPE_ON_OFF, // -bc- make shift a toggle
 };
 
 
@@ -932,6 +932,7 @@ void menu_repaintGeneric()
 			case DTYPE_0B127:
 			case DTYPE_0B255:
 			case DTYPE_1B16:
+         case DTYPE_0B16:
 			case DTYPE_0B15:
 			case DTYPE_VOICE_LFO:
 				numtostrpu(&editDisplayBuffer[1][13],(uint8_t)(curParmVal),' ');
@@ -1032,6 +1033,7 @@ void menu_repaintGeneric()
 				case DTYPE_0B127:
 				case DTYPE_0B255:
 				case DTYPE_1B16:
+            case DTYPE_0B16:
 				case DTYPE_0B15:
 				case DTYPE_VOICE_LFO:
 					// fallthrough for the rest of the unsigned values
@@ -1639,7 +1641,11 @@ static void menu_encoderChangeParameter(int8_t inc)
 		//	*paramValue = 255;
 		break;
 
-
+   case DTYPE_0B16://parameter_dtypes[paramNr] & 0x0F
+	   if(*paramValue > 16)
+			*paramValue = 16;
+		break;
+   
 	case DTYPE_1B16://parameter_dtypes[paramNr] & 0x0F
 		if(*paramValue < 1)
 			*paramValue = 1;
@@ -2289,6 +2295,9 @@ static uint8_t getDtypeValue(uint8_t value, uint16_t paramNr)
 	case DTYPE_VOICE_LFO:
 		// the LFO target voice number is stored and displayed as 1 based
 		return (uint8_t)(1 + 5*frac);
+		break;
+   case DTYPE_0B16:
+		return (uint8_t)(16*frac);
 		break;
 	case DTYPE_1B16:
 		return (uint8_t)(1 + 15*frac);

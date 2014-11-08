@@ -485,7 +485,7 @@ enum Datatypes
 	DTYPE_0b1,
 	DTYPE_NOTE_NAME, // --AS eg C#0, D 1 for note name
 	DTYPE_0B15,		//0-15
-	/*15*/
+	DTYPE_0B16,    //0-16 for MIDI channel off /*15*/
 	/*16*/
 	// --AS warning, we can only have 16 on this list the way things are laid out
 };
