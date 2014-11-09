@@ -1439,6 +1439,9 @@ void menu_handleLoadScreenKnobValue(uint8_t potNr, uint8_t value)
             case SAVE_TYPE_KIT:
                menu_saveOptions.what=SAVE_TYPE_KIT;
                break;
+            case SAVE_TYPE_MORPH:
+               menu_saveOptions.what=SAVE_TYPE_MORPH;
+               break;
             case SAVE_TYPE_DRUM1:
                menu_saveOptions.what=SAVE_TYPE_DRUM1;
                break;
