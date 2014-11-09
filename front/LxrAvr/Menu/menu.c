@@ -777,6 +777,8 @@ static void menu_repaintSavePage()
    switch(menu_saveOptions.what) {
       case SAVE_TYPE_KIT: toptxt=PSTR("Kit "); 
          break;
+      case SAVE_TYPE_MORPH: toptxt=PSTR("MorphMix "); 
+         break;
       case SAVE_TYPE_PATTERN: toptxt=PSTR("Pattern "); 
          break;
       case SAVE_TYPE_GLO: toptxt=PSTR("Settings"); 
@@ -1243,7 +1245,12 @@ void menu_handleSaveScreenKnobValue(uint8_t potNr, uint8_t value)
                preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
                END_DISABLE_CONV_WARNING
                break;
-
+            case SAVE_TYPE_MORPH:
+               menu_saveOptions.what=SAVE_TYPE_MORPH;
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+               break;
             case SAVE_TYPE_PATTERN:
                menu_saveOptions.what=SAVE_TYPE_PATTERN;
                DISABLE_CONV_WARNING
@@ -1275,7 +1282,8 @@ void menu_handleSaveScreenKnobValue(uint8_t potNr, uint8_t value)
       case 1: // knob 2 actions // selects menu_saveOptions.state
                     // choose to edit type, preset number, alphanums
          switch(menu_saveOptions.what) {
-            case SAVE_TYPE_KIT:
+                  case SAVE_TYPE_KIT:
+                  case SAVE_TYPE_MORPH:
                   case SAVE_TYPE_PERFORMANCE:
                   case SAVE_TYPE_ALL:
                   case SAVE_TYPE_PATTERN:
@@ -1306,7 +1314,7 @@ void menu_handleSaveScreenKnobValue(uint8_t potNr, uint8_t value)
             case SAVE_STATE_EDIT_TYPE:
                   // type is kit, pattern, perf, all, settings
                editModeActive=1;
-               x=value/(256/5); // there are 5 options for save type
+               x=value/(256/6); // there are 6 options for save type
                switch(x){
                   case 0:
                      menu_saveOptions.what=SAVE_TYPE_KIT;
@@ -1315,24 +1323,30 @@ void menu_handleSaveScreenKnobValue(uint8_t potNr, uint8_t value)
                END_DISABLE_CONV_WARNING
                      break;
                   case 1:
-                     menu_saveOptions.what=SAVE_TYPE_PATTERN;
+                     menu_saveOptions.what=SAVE_TYPE_MORPH;
                      DISABLE_CONV_WARNING
                preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
                END_DISABLE_CONV_WARNING
                      break;
                   case 2:
-                     menu_saveOptions.what=SAVE_TYPE_PERFORMANCE;
+                     menu_saveOptions.what=SAVE_TYPE_PATTERN;
                      DISABLE_CONV_WARNING
                preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
                END_DISABLE_CONV_WARNING
                      break;
                   case 3:
-                     menu_saveOptions.what=SAVE_TYPE_ALL;
+                     menu_saveOptions.what=SAVE_TYPE_PERFORMANCE;
                      DISABLE_CONV_WARNING
                preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
                END_DISABLE_CONV_WARNING
                      break;
                   case 4:
+                     menu_saveOptions.what=SAVE_TYPE_ALL;
+                     DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+                     break;
+                  case 5:
                      menu_saveOptions.what=SAVE_TYPE_GLO;
                      break;
                }
@@ -1355,7 +1369,7 @@ void menu_handleSaveScreenKnobValue(uint8_t potNr, uint8_t value)
                   menu_saveOptions.state=SAVE_STATE_EDIT_TYPE;
                }
                break;
-            case SAVE_STATE_EDIT_NAME1:
+                  case SAVE_STATE_EDIT_NAME1:
                   case SAVE_STATE_EDIT_NAME2:
                   case SAVE_STATE_EDIT_NAME3:
                   case SAVE_STATE_EDIT_NAME4:
@@ -1386,9 +1400,9 @@ void menu_handleSaveScreenKnobValue(uint8_t potNr, uint8_t value)
          }
          break;
                
-      case 3: // knob 3 actions  // for alphanums only - second bank 
+      case 3: // knob 4 actions  // for alphanums only - second bank 
          switch(menu_saveOptions.state) {
-            case SAVE_STATE_EDIT_NAME1:
+                  case SAVE_STATE_EDIT_NAME1:
                   case SAVE_STATE_EDIT_NAME2:
                   case SAVE_STATE_EDIT_NAME3:
                   case SAVE_STATE_EDIT_NAME4:
@@ -1818,6 +1832,10 @@ void menu_handleSaveMenu(int8_t inc, uint8_t btnClicked)
             case SAVE_TYPE_KIT:
                preset_saveDrumset(menu_currentPresetNr[SAVE_TYPE_KIT],0);
                break;
+               
+            case SAVE_TYPE_MORPH:
+               preset_saveDrumset(menu_currentPresetNr[SAVE_TYPE_MORPH],1);
+               break;
             
             case SAVE_TYPE_GLO:
                preset_saveGlobals();
@@ -1845,8 +1863,8 @@ void menu_handleSaveMenu(int8_t inc, uint8_t btnClicked)
             if(inc<0) {
                if(menu_saveOptions.what!=0) {
                   switch (menu_saveOptions.what){
-                     case SAVE_TYPE_PATTERN:
-                        // -bc- save for later
+                     case SAVE_TYPE_MORPH:
+                        
                         /*menu_saveOptions.what=SAVE_TYPE_MORPH;*/
                         // skip instruments- can't save, go straight to kit
                         menu_saveOptions.what=SAVE_TYPE_KIT;
@@ -1864,7 +1882,7 @@ void menu_handleSaveMenu(int8_t inc, uint8_t btnClicked)
                         // -bc- save for later
                         /*menu_saveOptions.what=SAVE_TYPE_MORPH;*/
                         // skip instruments- can't save, go straight to pat
-                        menu_saveOptions.what=SAVE_TYPE_PATTERN;
+                        menu_saveOptions.what=SAVE_TYPE_MORPH;
                         break;
                      case SAVE_TYPE_GLO:
                         // can't save samples, don't go above global settings
