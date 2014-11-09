@@ -12,7 +12,7 @@
 #include <avr/io.h>
 
 extern char preset_currentName[8];
-
+extern char preset_currentSaveMenuName[8];
 
 void preset_init();
 
@@ -30,7 +30,7 @@ void preset_loadGlobals();
 void preset_saveAll(uint8_t presetNr, uint8_t isAll);
 void preset_loadAll(uint8_t presetNr, uint8_t isAll);
 
-char* preset_loadName(uint8_t presetNr, uint8_t what);
+char* preset_loadName(uint8_t presetNr, uint8_t what, uint8_t loadSave);
 
 /** save a pattern set to the sd card */
 void preset_savePattern(uint8_t presetNr);

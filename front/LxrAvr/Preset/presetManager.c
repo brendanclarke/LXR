@@ -26,14 +26,7 @@ FATFS preset_Fatfs;		/* File system object for the logical drive */
 FIL preset_File;		/* place to hold 1 file*/
 
 char preset_currentName[8];
-/*
-static uint8_t voice1presetMask[37]={1,8,9,20,37,43,49,50,62,70,74,78,82,83,88,94,102,108,115,121,128,134,137,143,149,155,161,167,173,179,185,191,197,203,209,215,221}; 
-static uint8_t voice2presetMask[37]={2,10,11,21,38,44,51,52,63,71,75,79,84,85,89,95,103,109,116,122,129,135,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222}; 
-static uint8_t voice3presetMask[37]={3,12,13,22,39,45,53,54,64,73,76,80,86,87,90,96,104,110,117,123,130,136,139,145,151,157,163,169,175,181,187,193,199,205,211,217,223}; 
-static uint8_t voice4presetMask[37]={4,14,15,27,28,40,46,55,56,65,68,73,77,81,91,99,105,111,118,124,131,140,146,152,158,164,170,170,176,182,188,194,200,206,212,218,224}; 
-static uint8_t voice5presetMask[37]={6,16,17,23,24,29,30,31,32,43,47,57,58,66,69,92,100,106,112,119,125,132,141,147,153,159,165,171,177,183,189,195,201,207,213,219,225}; 
-static uint8_t voice6presetMask[37]={7,18,19,25,26,33,34,35,36,42,48,59,60,61,67,93,101,107,113,120,126,133,142,148,154,160,166,172,178,184,190,196,202,208,214,220,226};         
-*/
+char preset_currentSaveMenuName[8];
 
 static uint8_t voice1presetMask[37]={1,8,9,20,      37,43,49,50,   62,70,74,78,  82,83,88,94,   102,108,115,121,     128,134,137,143,    149,155,161,167,    173,179,185,191,    197,203,209,215,221}; 
 static uint8_t voice2presetMask[37]={2,10,11,21,    38,44,51,52,   63,71,75,79,  84,85,89,95,   103,109,116,122,     129,135,138,144,    150,156,162,168,    174,180,186,192,    198,204,210,216,222}; 
@@ -65,6 +58,7 @@ static uint8_t voice6presetMask[37]={7,18,19,25,    26,33,34,35,   36,42,48,59, 
    #define BANK_6 0x20
    #define BANK_7 0x40
    #define BANK_GLOBAL 0x80
+   
 
 static void preset_makeFileName(char *buf, uint8_t num, uint8_t type);
 
@@ -132,7 +126,7 @@ void preset_saveDrumset(uint8_t presetNr, uint8_t isMorph)
    f_open((FIL*)&preset_File,filename,FA_CREATE_ALWAYS | FA_WRITE);
 	
 	//write preset name to file
-   f_write((FIL*)&preset_File,(void*)preset_currentName,8,&bytesWritten);
+   f_write((FIL*)&preset_File,(void*)preset_currentSaveMenuName,8,&bytesWritten);
 	//write the preset data
    preset_writeDrumsetData(isMorph);
 	
@@ -320,7 +314,19 @@ closeFile:
 	// update the back with the new parameters
    if(res==FR_OK) {
       preset_sendDrumsetParameters();
+      // update preset numbers of kit and voices for save/load menu
+     
+      menu_currentPresetNr[0]=presetNr;
+      menu_currentPresetNr[1]=presetNr;
+      menu_currentPresetNr[2]=presetNr;
+      menu_currentPresetNr[3]=presetNr;
+      menu_currentPresetNr[4]=presetNr;
+      menu_currentPresetNr[5]=presetNr;
+      menu_currentPresetNr[6]=presetNr;
+      
+   
       return 1;
+      
    }
 error:
    return 0;
@@ -368,36 +374,54 @@ closeFile:
          {
             parameter_values[voice1presetMask[i]]=parameter_values_temp[voice1presetMask[i]];
          }
+         // update for load/save menu
+         
+         menu_currentPresetNr[1]=presetNr;         
       }
       if (voiceArray&BANK_2){
          for (i=0;i<37;i++)
          {
             parameter_values[voice2presetMask[i]]=parameter_values_temp[voice2presetMask[i]];
          }
+      // update for load/save menu
+         
+         menu_currentPresetNr[2]=presetNr; 
       }
       if (voiceArray&BANK_3){
          for (i=0;i<37;i++)
          {
             parameter_values[voice3presetMask[i]]=parameter_values_temp[voice3presetMask[i]];
          }
+      // update for load/save menu
+         
+         menu_currentPresetNr[3]=presetNr; 
       }
       if (voiceArray&BANK_4){
          for (i=0;i<37;i++)
          {
             parameter_values[voice4presetMask[i]]=parameter_values_temp[voice4presetMask[i]];
          }
+      // update for load/save menu
+         
+         menu_currentPresetNr[4]=presetNr; 
       }
       if (voiceArray&BANK_5){
          for (i=0;i<37;i++)
          {
             parameter_values[voice5presetMask[i]]=parameter_values_temp[voice5presetMask[i]];
          }
+      // update for load/save menu
+         
+         menu_currentPresetNr[5]=presetNr; 
       }
       if ((voiceArray&BANK_6)||(voiceArray&BANK_7)){
          for (i=0;i<37;i++)
          {
             parameter_values[voice6presetMask[i]]=parameter_values_temp[voice6presetMask[i]];
          }
+      // update for load/save menu
+         
+         menu_currentPresetNr[6]=presetNr; 
       }
       
       
@@ -453,17 +477,27 @@ void preset_sendDrumsetParameters()
 
 
 //----------------------------------------------------
-char* preset_loadName(uint8_t presetNr, uint8_t what)
+char* preset_loadName(uint8_t presetNr, uint8_t what, uint8_t loadSave)
 {
+// loadSave - 0 is load, send name to standard preset slot
+//             1 is save, send to separate save name slot to prevent it being
+//                updated by bank and instrument changes that might arrive
    uint8_t type;
-
+// DO ME NOW - MAKE LOAD SAVE CASES FOR ALL RETURNS
    switch(what) {
-      case SAVE_TYPE_PATTERN:
-         type=FEXT_PAT;
-         break;
+      
       case SAVE_TYPE_KIT:
       case SAVE_TYPE_MORPH:
+      case SAVE_TYPE_DRUM1:
+      case SAVE_TYPE_DRUM2:
+      case SAVE_TYPE_DRUM3:
+      case SAVE_TYPE_SNARE:
+      case SAVE_TYPE_CYM:
+      case SAVE_TYPE_HIHAT:
          type=FEXT_SOUND;
+         break;
+      case SAVE_TYPE_PATTERN:
+         type=FEXT_PAT;
          break;
       case SAVE_TYPE_ALL:
          type=FEXT_ALL;
@@ -472,6 +506,15 @@ char* preset_loadName(uint8_t presetNr, uint8_t what)
          type=FEXT_PERF;
          break;
       default:
+      // 
+      if (loadSave==0)
+         {
+         memcpy_P((void*)preset_currentName,PSTR("Empty   "),8);
+         }
+      else
+         {
+         memcpy_P((void*)preset_currentSaveMenuName,PSTR("Empty   "),8);
+         }   
          return NULL; // for glo and sample we don't load a name
    }
 	
@@ -487,19 +530,40 @@ char* preset_loadName(uint8_t presetNr, uint8_t what)
    if(res!=FR_OK)
    {
    	//error opening the file
-      memcpy_P((void*)preset_currentName,PSTR("Empty   "),8);
-      return NULL;	
+      if (loadSave==0)
+         {
+         memcpy_P((void*)preset_currentName,PSTR("Empty   "),8);
+         return (char*)preset_currentName;
+         }
+      else
+         {
+         memcpy_P((void*)preset_currentSaveMenuName,PSTR("Empty   "),8);
+         return (char*)preset_currentSaveMenuName;
+         } 
+      
+      	
    }
 	
 	//file opened correctly -> extract name (first 8 bytes)
    unsigned int bytesRead;
-   f_read((FIL*)&preset_File,(void*)preset_currentName,8,&bytesRead);
-	
-	
-	//close the file handle
-   f_close((FIL*)&preset_File);
-	
-   return (char*)preset_currentName;
+   if (loadSave==0)
+   {
+      f_read((FIL*)&preset_File,(void*)preset_currentName,8,&bytesRead);
+            //close the file handle
+      f_close((FIL*)&preset_File);
+   
+      return (char*)preset_currentName;
+   }
+   else
+   {
+      f_read((FIL*)&preset_File,(void*)preset_currentSaveMenuName,8,&bytesRead);
+            //close the file handle
+      f_close((FIL*)&preset_File);
+   
+      return (char*)preset_currentSaveMenuName;
+   }
+   
+
 #else
 
 return "ToDo";
@@ -776,7 +840,7 @@ void preset_savePattern(uint8_t presetNr)
    f_open((FIL*)&preset_File,filename,FA_CREATE_ALWAYS | FA_WRITE);
 
 	//write preset name to file
-   f_write((FIL*)&preset_File,(void*)preset_currentName,8,&bytesWritten);
+   f_write((FIL*)&preset_File,(void*)preset_currentSaveMenuName,8,&bytesWritten);
 
    preset_writePatternData();
 
@@ -1076,7 +1140,7 @@ void preset_saveAll(uint8_t presetNr, uint8_t isAll)
 
    unsigned int bytesWritten;
 	//write preset name to file
-   f_write((FIL*)&preset_File,(void*)preset_currentName,8,&bytesWritten);
+   f_write((FIL*)&preset_File,(void*)preset_currentSaveMenuName,8,&bytesWritten);
 
 	//write the version
    filename[0]=FILE_VERSION;

@@ -31,7 +31,9 @@ extern uint8_t menu_activeVoice;
 extern uint8_t menu_playedPattern;
 extern uint8_t menu_shownPattern;
 extern uint8_t menu_muteModeActive;
-
+#define NUM_PRESET_LOCATIONS 11 
+//kit, drum1, drum2, drum3, snare, cym, hh, morph sound, pattern, performance, all
+extern uint8_t menu_currentPresetNr[NUM_PRESET_LOCATIONS];
 void menu_setShownPattern(uint8_t patternNr);
 uint8_t menu_getViewedPattern();
 
@@ -401,8 +403,16 @@ enum longNamesEnum
 enum loadSaveEnum
 {
 	SAVE_TYPE_KIT = 0,
+   
+   SAVE_TYPE_DRUM1,
+   SAVE_TYPE_DRUM2,
+   SAVE_TYPE_DRUM3,
+   SAVE_TYPE_SNARE,
+   SAVE_TYPE_CYM,
+   SAVE_TYPE_HIHAT,
+   
+   SAVE_TYPE_MORPH,
 	SAVE_TYPE_PATTERN,
-	SAVE_TYPE_MORPH,
 	SAVE_TYPE_PERFORMANCE,	// kit data, pattern data and BPM
 	SAVE_TYPE_ALL,			// all global settings, kit data and pattern data
 	SAVE_TYPE_GLO,

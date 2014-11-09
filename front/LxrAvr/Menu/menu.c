@@ -54,8 +54,8 @@ enum saveStateEnum
 };
 
 /** a struct for some save page parameters.*/
-static volatile struct {
-	unsigned what:3;		/**< 0= save kit, 1 = save pattern, 2 = morph sound, etc */
+struct {
+	unsigned what:9;		/**< 0= save kit, 1 = save pattern, 2 = morph sound, etc */
 	unsigned state:4;		/**< 0=edit kit/pat, 1=edit preset nr, 2-9 = edit name, 10=ok*/
 
 } menu_saveOptions;
@@ -498,8 +498,10 @@ static uint8_t menu_TargetVoiceGapIndex = 0xFF;
 uint8_t menu_numSamples = 0;
 
 //preset vars
-#define NUM_PRESET_LOCATIONS 5 //kit, pattern, morph sound, performance, all
-static uint8_t menu_currentPresetNr[NUM_PRESET_LOCATIONS];
+#define NUM_PRESET_LOCATIONS 11 
+//kit, drum1, drum2, drum3, snare, cym, hh, morph sound, pattern, performance, all
+
+uint8_t menu_currentPresetNr[NUM_PRESET_LOCATIONS];
 
 uint8_t menu_shownPattern = 0;
 uint8_t menu_muteModeActive = 0;
@@ -633,100 +635,241 @@ void menu_repaintAll()
 }
 
 //-----------------------------------------------------------------
-static void menu_repaintLoadSavePage()
+static void menu_repaintLoadPage()
 {
-	const char *toptxt=0;
-	//Top row
-	strcpy_P(&editDisplayBuffer[0][0],
-			menu_activePage == SAVE_PAGE ?
-					PSTR("Save:") :
-					PSTR("Load:"));
+// deals with encoder actions for load menu
+// NB, the KNOB (shortcut actions) get dealt with in
+// another function
+   const char *toptxt=0;
+   
+//skip items that don't appear in load menu
+//(there aren't any yet)
+   switch(menu_saveOptions.what) {
+      default:
+         break;
+   }
+   
+//Top row
+   strcpy_P(&editDisplayBuffer[0][0],PSTR("Load:"));
+//add menu option text to top line
+   switch(menu_saveOptions.what) {
+      case SAVE_TYPE_KIT: 
+         toptxt=PSTR("Kit ");
+         break;
+      case SAVE_TYPE_DRUM1:		
+         toptxt=PSTR("Drum 1  "); 
+         break;
+      case SAVE_TYPE_DRUM2:		
+         toptxt=PSTR("Drum 2  "); 
+         break;
+      case SAVE_TYPE_DRUM3:		
+         toptxt=PSTR("Drum 3  "); 
+         break;
+      case SAVE_TYPE_SNARE:		
+         toptxt=PSTR("Snare   "); 
+         break;
+      case SAVE_TYPE_CYM:		   
+         toptxt=PSTR("Clap/Cym"); 
+         break;
+      case SAVE_TYPE_HIHAT:		
+         toptxt=PSTR("HiHat   ");
+         break;
+      case SAVE_TYPE_PATTERN: 
+         toptxt=PSTR("Pattern "); 
+         break;
+      case SAVE_TYPE_MORPH: 
+         toptxt=PSTR("MorphKit"); 
+         break;
+      case SAVE_TYPE_GLO: 
+         toptxt=PSTR("Settings"); 
+         break;
+      case SAVE_TYPE_PERFORMANCE: 
+         toptxt=PSTR("Perform "); 
+         break;
+      case SAVE_TYPE_ALL: 
+         toptxt=PSTR("All "); 
+         break;
+      case SAVE_TYPE_SAMPLES: 
+         toptxt=PSTR("Samples "); 
+         break;
+   }
+   // send concatenated top text to display
+   strcpy_P(&editDisplayBuffer[0][6],toptxt);
+   
+   // if a save option has been selected, put it
+   // in brackets, otherwise put an '>' next to 
+   // the selected menu item
+   if(menu_saveOptions.state == SAVE_STATE_EDIT_TYPE) {
+      if(editModeActive) {
+         editDisplayBuffer[0][5]='[';
+         editDisplayBuffer[0][14]=']';
+      } 
+      // 
+      else {
+      //arrow before parameter
+         editDisplayBuffer[0][5]= ARROW_SIGN;
+      }
+   }
 
-	switch(menu_saveOptions.what) {
-	case SAVE_TYPE_KIT:			toptxt=PSTR("Kit     "); break;
-	case SAVE_TYPE_PATTERN:		toptxt=PSTR("Pattern "); break;
-	case SAVE_TYPE_MORPH:		toptxt=PSTR("MorphKit"); break;
-	case SAVE_TYPE_GLO:			toptxt=PSTR("Settings"); break;
-	case SAVE_TYPE_PERFORMANCE:	toptxt=PSTR("Perform "); break;
-	case SAVE_TYPE_ALL:			toptxt=PSTR("All     "); break;
-	case SAVE_TYPE_SAMPLES:     toptxt=PSTR("Samples "); break;
-	}
-
-	strcpy_P(&editDisplayBuffer[0][6],toptxt);
-	if(menu_saveOptions.state == SAVE_STATE_EDIT_TYPE) {
-		if(editModeActive) {
-			editDisplayBuffer[0][5]='[';
-			editDisplayBuffer[0][14]=']';
-		} else {
-			//arrow before parameter
-			editDisplayBuffer[0][5]= ARROW_SIGN;
-		}
-	}
-
-	//Bottom row - name and number if applicable
-	if( menu_saveOptions.what < SAVE_TYPE_GLO) { //no name and number for global settings or samples
-		//the preset number
-		numtostrpu(&editDisplayBuffer[1][1], menu_currentPresetNr[menu_saveOptions.what],' ');
-
-		if(menu_saveOptions.state == SAVE_STATE_EDIT_PRESET_NR)
-		{
-			if(editModeActive) {
-				editDisplayBuffer[1][0]='[';
-				editDisplayBuffer[1][4]=']';
-			} else {
-				//arrow before parameter
-				editDisplayBuffer[1][0]= ARROW_SIGN;
-				//visibleCursor = VIS_CURS(1,1,1);
-			}
-		}
-		// write the full preset name
-		memcpy(&editDisplayBuffer[1][5],(const void*)preset_currentName,8);
-	}
-
-	// bottom row - for save page, we show editing box or underline cursor as applicable
-	if(menu_activePage == SAVE_PAGE){
-		//the preset number
-		if( menu_saveOptions.what < SAVE_TYPE_GLO) //not saving global settings, so print name and number
-		{
-			// if we are editing the name
-			if( (menu_saveOptions.state >= SAVE_STATE_EDIT_NAME1) && (menu_saveOptions.state <= SAVE_STATE_EDIT_NAME8) )
-			{			
-				if(editModeActive) { // draw a box around active character (encoder changes value)
-					editDisplayBuffer[1][4+menu_saveOptions.state-SAVE_STATE_EDIT_NAME1]='[';
-					editDisplayBuffer[1][6+menu_saveOptions.state-SAVE_STATE_EDIT_NAME1]=']';	
-				} else { // using encoder to move left and right, using knob to change letter
-					//underline under current char
-					visibleCursor =(uint8_t)( VIS_CURS(1,5+menu_saveOptions.state-SAVE_STATE_EDIT_NAME1,1));
-				}
-			}
-		} // not saving global settings
-
-		//ok button - shown in all cases
-		memcpy_P(&editDisplayBuffer[1][14],menuText_ok,2);
-		if((menu_saveOptions.state==SAVE_STATE_OK) ||
-				(menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE))
-		{	
-			//arrow before parameter
-			editDisplayBuffer[1][13]= ARROW_SIGN;
-			//visibleCursor = VIS_CURS(1,14,1);
-		}	
-	} else { // bottom row - Load page is active
-		//ok button shown for loading everything except kit and morph - which are loaded instantaneously
-		if(menu_saveOptions.what != SAVE_TYPE_KIT && menu_saveOptions.what != SAVE_TYPE_MORPH) {
-			memcpy_P(&editDisplayBuffer[1][14],menuText_ok,2);
-
-			if((menu_saveOptions.state==SAVE_STATE_OK) ||
-					(menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE)) {
-				//arrow before parameter
-				editDisplayBuffer[1][13]= ARROW_SIGN;
-				//visibleCursor = VIS_CURS(1,14,1);
-			}	
-		} else { //clear ok text
-			editDisplayBuffer[1][14] = 0;
-			editDisplayBuffer[1][15] = 0;
-		}			
-	}	
+//Display Bottom row for load page - name and number if applicable
+   if( menu_saveOptions.what < SAVE_TYPE_GLO) { 
+   //no name and number for global settings or samples
+   
+      numtostrpu(&editDisplayBuffer[1][1], menu_currentPresetNr[menu_saveOptions.what],' ');
+      if(menu_saveOptions.state == SAVE_STATE_EDIT_PRESET_NR)
+      // user has selected a load type that has a preset number
+      // and is on the preset number selection item
+      {
+         if(editModeActive) {
+         // user has clicked into the preset number, bracket it
+            editDisplayBuffer[1][0]='[';
+            editDisplayBuffer[1][4]=']';
+         } 
+         else {
+         //arrow before parameter
+            editDisplayBuffer[1][0]= ARROW_SIGN;
+         //visibleCursor = VIS_CURS(1,1,1);
+         }
+      }
+   // write the full preset name
+      //strcpy_P(&preset_currentName,preset_loadName(menu_currentPresetNr[menu_saveOptions.what],menu_saveOptions.what));
+      DISABLE_CONV_WARNING
+      memcpy(&editDisplayBuffer[1][5],(const void*)preset_loadName(menu_currentPresetNr[menu_saveOptions.what],menu_saveOptions.what,0),8);
+      END_DISABLE_CONV_WARNING
+   }
+   
+   // bottom row - Load page is active
+   //ok button shown for loading everything except kit and morph - which are loaded instantaneously
+   
+   if(menu_saveOptions.what<SAVE_TYPE_PATTERN) 
+   { //clear ok text
+      editDisplayBuffer[1][14] = 0;
+      editDisplayBuffer[1][15] = 0;
+   }
+   
+   else
+   {
+      memcpy_P(&editDisplayBuffer[1][14],menuText_ok,2);
+      if((menu_saveOptions.state==SAVE_STATE_OK) ||
+         (menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE)) {
+         //arrow before parameter
+         editDisplayBuffer[1][13]= ARROW_SIGN;
+         //visibleCursor = VIS_CURS(1,14,1);
+      }
+   } 
+   
 }
+
+
+//-----------------------------------------------------------------
+
+
+static void menu_repaintSavePage()
+{
+// deals with encoder actions for 
+   const char *toptxt=0;
+   
+//Top row
+   strcpy_P(&editDisplayBuffer[0][0],
+      menu_activePage == SAVE_PAGE ?
+      PSTR("Save:") :
+      PSTR("Load:"));
+   switch(menu_saveOptions.what) {
+      case SAVE_TYPE_KIT: toptxt=PSTR("Kit "); 
+         break;
+      case SAVE_TYPE_PATTERN: toptxt=PSTR("Pattern "); 
+         break;
+      case SAVE_TYPE_GLO: toptxt=PSTR("Settings"); 
+         break;
+      case SAVE_TYPE_PERFORMANCE: toptxt=PSTR("Perform "); 
+         break;
+      case SAVE_TYPE_ALL: toptxt=PSTR("All "); 
+         break;
+     default: // we are on a page that the save screen doesn't
+              // recognise, return to 'kit' page
+         toptxt=PSTR("Kit ");
+         menu_saveOptions.what=SAVE_TYPE_KIT;
+         break;
+   }
+   strcpy_P(&editDisplayBuffer[0][6],toptxt);
+   
+   
+   if(menu_saveOptions.state == SAVE_STATE_EDIT_TYPE) {
+      if(editModeActive) {
+         editDisplayBuffer[0][5]='[';
+         editDisplayBuffer[0][14]=']';
+      } 
+      else {
+      //arrow before parameter
+         editDisplayBuffer[0][5]= ARROW_SIGN;
+      }
+   }
+//Bottom row - name and number if applicable
+   if( menu_saveOptions.what < SAVE_TYPE_GLO) { //no name and number for global settings or samples
+   //the preset number
+      numtostrpu(&editDisplayBuffer[1][1], menu_currentPresetNr[menu_saveOptions.what],' ');
+      if(menu_saveOptions.state == SAVE_STATE_EDIT_PRESET_NR)
+      {
+         if(editModeActive) {
+            editDisplayBuffer[1][0]='[';
+            editDisplayBuffer[1][4]=']';
+         } 
+         else {
+         //arrow before parameter
+            editDisplayBuffer[1][0]= ARROW_SIGN;
+         //visibleCursor = VIS_CURS(1,1,1);
+         }
+      }
+   // write the full preset name
+      //strcpy_P(&preset_currentName,preset_loadName(menu_currentPresetNr[menu_saveOptions.what],menu_saveOptions.what));
+      memcpy(&editDisplayBuffer[1][5],(const void*)preset_currentSaveMenuName,8);
+   }
+// bottom row - for save page, we show editing box or underline cursor as applicable
+   if(menu_activePage == SAVE_PAGE){
+   //the preset number
+      if( menu_saveOptions.what < SAVE_TYPE_GLO) //not saving global settings, so print name and number
+      {
+      // if we are editing the name
+         if( (menu_saveOptions.state >= SAVE_STATE_EDIT_NAME1) && (menu_saveOptions.state <= SAVE_STATE_EDIT_NAME8) )
+         {
+            if(editModeActive) { // draw a box around active character (encoder changes value)
+               editDisplayBuffer[1][4+menu_saveOptions.state-SAVE_STATE_EDIT_NAME1]='[';
+               editDisplayBuffer[1][6+menu_saveOptions.state-SAVE_STATE_EDIT_NAME1]=']';
+            } 
+            else { // using encoder to move left and right, using knob to change letter
+            //underline under current char
+               visibleCursor =(uint8_t)( VIS_CURS(1,5+menu_saveOptions.state-SAVE_STATE_EDIT_NAME1,1));
+            }
+         }
+      } // not saving global settings
+   //ok button - shown in all cases
+      memcpy_P(&editDisplayBuffer[1][14],menuText_ok,2);
+      if((menu_saveOptions.state==SAVE_STATE_OK) ||
+      (menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE))
+      {
+      //arrow before parameter
+         editDisplayBuffer[1][13]= ARROW_SIGN;
+      //visibleCursor = VIS_CURS(1,14,1);
+      }
+   } 
+   else { // bottom row 
+   //ok button shown for loading everything except kit and morph - which are loaded instantaneously
+      if(menu_saveOptions.what != SAVE_TYPE_KIT && menu_saveOptions.what != SAVE_TYPE_MORPH) {
+         memcpy_P(&editDisplayBuffer[1][14],menuText_ok,2);
+         if((menu_saveOptions.state==SAVE_STATE_OK) ||
+         (menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE)) {
+         //arrow before parameter
+            editDisplayBuffer[1][13]= ARROW_SIGN;
+         //visibleCursor = VIS_CURS(1,14,1);
+         }
+      } 
+      else { //clear ok text
+         editDisplayBuffer[1][14] = 0;
+         editDisplayBuffer[1][15] = 0;
+      }
+   }
+}
+
 //-----------------------------------------------------------------
 static uint8_t has2ndPage(uint8_t menuPage)
 {
@@ -1055,12 +1198,19 @@ void menu_repaint()
 {
 
 	visibleCursor = 0;
-	if(menu_activePage >= LOAD_PAGE && menu_activePage<=SAVE_PAGE)
+	if(menu_activePage == LOAD_PAGE)
 	{
 		//this is a special case because the load/save page differs from all the other pages
-		menu_repaintLoadSavePage();
+		menu_repaintLoadPage();
 
-	} else {
+	} 
+   else if(menu_activePage == SAVE_PAGE)
+   {
+   
+      menu_repaintSavePage();
+   }
+   
+   else {
 		menu_repaintGeneric();
 	}
 
@@ -1068,296 +1218,723 @@ void menu_repaint()
 	sendDisplayBuffer();
 };
 //-----------------------------------------------------------------
+//save screen knob shortcuts
+
+
+
 void menu_handleSaveScreenKnobValue(uint8_t potNr, uint8_t value)
 {
-	uint8_t x;
+   uint8_t x=value;
+   switch(potNr)
+   {       
+      case 0: // knob 1 actions // selects menu_saveOptions.what
+            // kit, pattern, perform, all, settings
+         x = value/(256/NUM_SAVE_TYPES);
+         switch(x){
+            case SAVE_TYPE_DRUM1:
+            case SAVE_TYPE_DRUM2:
+            case SAVE_TYPE_DRUM3:
+            case SAVE_TYPE_SNARE:
+            case SAVE_TYPE_CYM:
+            case SAVE_TYPE_HIHAT:
+            case SAVE_TYPE_KIT:
+               menu_saveOptions.what=SAVE_TYPE_KIT;
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+               break;
 
-	if(menu_saveOptions.state >=SAVE_STATE_EDIT_TYPE && menu_saveOptions.state <=SAVE_STATE_EDIT_PRESET_NR)
-	{
-		if(potNr==0) {
-			// change type  to be loaded/saved
-			x = value/(255/NUM_SAVE_TYPES);
-			if(menu_activePage == SAVE_PAGE) {
-				// can't save samples
-				if(x>SAVE_TYPE_GLO) x=SAVE_TYPE_GLO;
-			} else {
-				if(x>SAVE_TYPE_SAMPLES) x=SAVE_TYPE_SAMPLES;
-			}
+            case SAVE_TYPE_PATTERN:
+               menu_saveOptions.what=SAVE_TYPE_PATTERN;
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+               break;
+            case SAVE_TYPE_SAMPLES:
+            case SAVE_TYPE_GLO:
+               menu_saveOptions.what=SAVE_TYPE_GLO;
+               break;
+            case SAVE_TYPE_PERFORMANCE:
+               menu_saveOptions.what=SAVE_TYPE_PERFORMANCE;
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+               break;
+            case SAVE_TYPE_ALL:
+               menu_saveOptions.what=SAVE_TYPE_ALL;
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+               break;
+            default:
+               break;
+         }
+         break;
+         
+            
+      case 1: // knob 2 actions // selects menu_saveOptions.state
+                    // choose to edit type, preset number, alphanums
+         switch(menu_saveOptions.what) {
+            case SAVE_TYPE_KIT:
+                  case SAVE_TYPE_PERFORMANCE:
+                  case SAVE_TYPE_ALL:
+                  case SAVE_TYPE_PATTERN:
+               x=value/(256/SAVE_STATE_OK);
+               break;
+            case SAVE_TYPE_GLO: // global doesn't have a name
+               if(value<127)
+               {
+                  x=SAVE_STATE_EDIT_TYPE;
+               }
+               else
+               {
+                  x=SAVE_STATE_OK;
+               }
+               break;
+            default:
+               break;
+                     
+         }
+         DISABLE_CONV_WARNING
+         menu_saveOptions.state=x;
+         END_DISABLE_CONV_WARNING
+         break;
+               
+         
+      case 2: // knob 3 actions  // edit the .state
+         switch(menu_saveOptions.state) {
+            case SAVE_STATE_EDIT_TYPE:
+                  // type is kit, pattern, perf, all, settings
+               editModeActive=1;
+               x=value/(256/5); // there are 5 options for save type
+               switch(x){
+                  case 0:
+                     menu_saveOptions.what=SAVE_TYPE_KIT;
+                     DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+                     break;
+                  case 1:
+                     menu_saveOptions.what=SAVE_TYPE_PATTERN;
+                     DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+                     break;
+                  case 2:
+                     menu_saveOptions.what=SAVE_TYPE_PERFORMANCE;
+                     DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+                     break;
+                  case 3:
+                     menu_saveOptions.what=SAVE_TYPE_ALL;
+                     DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+                     break;
+                  case 4:
+                     menu_saveOptions.what=SAVE_TYPE_GLO;
+                     break;
+               }
+               break;
+            case SAVE_STATE_EDIT_PRESET_NR:
+                     // global has no preset number
+               if(menu_saveOptions.what!=SAVE_TYPE_GLO)
+               {
+                  x=value/2;
+                  editModeActive=1;
+                  menu_currentPresetNr[menu_saveOptions.what]=x;
+                  DISABLE_CONV_WARNING
+                  preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+                  END_DISABLE_CONV_WARNING
+               }
+               else // if it is global, how did we get here?
+                          // put the cursor back on type, please
+               {
+                  editModeActive=0;
+                  menu_saveOptions.state=SAVE_STATE_EDIT_TYPE;
+               }
+               break;
+            case SAVE_STATE_EDIT_NAME1:
+                  case SAVE_STATE_EDIT_NAME2:
+                  case SAVE_STATE_EDIT_NAME3:
+                  case SAVE_STATE_EDIT_NAME4:
+                  case SAVE_STATE_EDIT_NAME5:
+                  case SAVE_STATE_EDIT_NAME6:
+                  case SAVE_STATE_EDIT_NAME7:
+                  case SAVE_STATE_EDIT_NAME8:
+               editModeActive=1;
+               //x=(uint8_t)((value/(256/128))+128);
+               
+               x=(uint8_t)(value/(256/128));
+               if(x<32) // put upper case letters at the front of the list
+               x=(uint8_t)(x+65);
+               else if(x<65) // put common characters, then numbers next
+               x=(uint8_t)(x-32+32);
+               else if(x<95)
+               x=(uint8_t)(x-64);// the weird characters from the start of the list
+               else
+               x=(uint8_t)(x-95+224);
+               
+               DISABLE_CONV_WARNING
+               preset_currentSaveMenuName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] = x;
+               END_DISABLE_CONV_WARNING
+               break;
+            default:
+               break; // does nothing on 'ok' - you have to click the encoder
+                     
+         }
+         break;
+               
+      case 3: // knob 3 actions  // for alphanums only - second bank 
+         switch(menu_saveOptions.state) {
+            case SAVE_STATE_EDIT_NAME1:
+                  case SAVE_STATE_EDIT_NAME2:
+                  case SAVE_STATE_EDIT_NAME3:
+                  case SAVE_STATE_EDIT_NAME4:
+                  case SAVE_STATE_EDIT_NAME5:
+                  case SAVE_STATE_EDIT_NAME6:
+                  case SAVE_STATE_EDIT_NAME7:
+                  case SAVE_STATE_EDIT_NAME8:
+               editModeActive=1;
+               //x=(uint8_t)(value/(256/128));
+               
+               x=(uint8_t)(value/(256/128));
+               if (x<127)//(x<26) // put lower case letters at the front of the list
+               x=(uint8_t)(x+97);
+               else
+               x=x;
+               
+               
+               DISABLE_CONV_WARNING
+               preset_currentSaveMenuName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] = x;
+               END_DISABLE_CONV_WARNING
+               break;
+            default:
+                     
+               break; // does nothing otherwise
+                     
+         }
+         break;
+   }	
+   
+}
 
-			menu_saveOptions.what = (uint8_t)(x & 0x07); // avoid compiler warning
 
-			// load preset name for applicable types
-			if(menu_saveOptions.what < SAVE_TYPE_GLO) {
-				preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what);
-			}
+   
+//-----------------------------------------------------------------  
 
-			//force complete repaint
-			menu_repaintAll();
-		}			
-	}
-	else if(menu_saveOptions.state >=SAVE_STATE_EDIT_NAME1 && menu_saveOptions.state <=SAVE_STATE_EDIT_NAME8)
-	{
-		switch(potNr) {
-		// move cursor
-		case 0: //switch(potNr)
-			x = value/(256/7); //0-7
-			menu_saveOptions.state = (uint8_t)((2 + x) & 0x0F);
-			//force complete repaint
-			menu_repaintAll();
-			break;
+// load screen knob shortcuts
 
-			// select lower,upper,number
-		case 1://switch(potNr)
-			x = value/(256/2); //0-2
-			switch(x)
-			{
-			case 0: //Upper Case
-				preset_currentName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] =
-					(char)toupper(preset_currentName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1]);
-				break;
 
-			case 1: //lower case
-				preset_currentName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] =
-					(char)tolower(preset_currentName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1]);
-				break;
-
-			case 2: //numbers
-				//don't know how to do this without loosing selected character
-				break;
-
-			}
-			break;
-
-			// scroll through letters
-		case 2: //switch(potNr)
-			    //32 to 127 => default ascii range numbers/letters
-				x = (uint8_t)(value/(256/(127-32.f)) + 32); //32 - 127
-				preset_currentName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] = x;
-				break;
-
-				//nothing
-		case 3: //switch(potNr)
-		default://switch(potNr)
-			break;
-		} //switch(potNr)
-	}		
+void menu_handleLoadScreenKnobValue(uint8_t potNr, uint8_t value)
+{
+   uint8_t x=value;
+   switch(potNr)
+   {
+      case 0: // selects menu_saveOptions.what
+           // kit, pattern, perform, all, settings
+         x = value/(256/NUM_SAVE_TYPES);
+         switch(x){
+            case SAVE_TYPE_KIT:
+               menu_saveOptions.what=SAVE_TYPE_KIT;
+               break;
+            case SAVE_TYPE_DRUM1:
+               menu_saveOptions.what=SAVE_TYPE_DRUM1;
+               break;
+            case SAVE_TYPE_DRUM2:
+               menu_saveOptions.what=SAVE_TYPE_DRUM2;
+               break;
+            case SAVE_TYPE_DRUM3:
+               menu_saveOptions.what=SAVE_TYPE_DRUM3;
+               break;
+            case SAVE_TYPE_SNARE:
+               menu_saveOptions.what=SAVE_TYPE_SNARE;
+               break;
+            case SAVE_TYPE_CYM:
+               menu_saveOptions.what=SAVE_TYPE_CYM;
+               break;
+            case SAVE_TYPE_HIHAT:
+               menu_saveOptions.what=SAVE_TYPE_HIHAT;
+               break;
+            case SAVE_TYPE_PATTERN:
+               menu_saveOptions.what=SAVE_TYPE_PATTERN;
+               break;
+            case SAVE_TYPE_GLO:
+               menu_saveOptions.what=SAVE_TYPE_GLO;
+               break;
+            case SAVE_TYPE_PERFORMANCE:
+               menu_saveOptions.what=SAVE_TYPE_PERFORMANCE;
+               break;
+            case SAVE_TYPE_ALL:
+               menu_saveOptions.what=SAVE_TYPE_ALL;
+               break;
+            case SAVE_TYPE_SAMPLES:
+               menu_saveOptions.what=SAVE_TYPE_SAMPLES;
+               break;
+            default:
+               break;
+         }
+         break;
+      case 1: // on load screen, always selects preset number
+              // if this is an option, auto-load if a voice thing
+              // and the preset number is bracketed
+         x=value/2;
+         switch(menu_saveOptions.what) {
+            case SAVE_TYPE_KIT:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0);
+                  menu_TargetVoiceGapIndex = getModTargetGapIndex(parameter_values[PAR_TARGET_LFO1 + menu_activeVoice]);
+               }
+               break;
+            case SAVE_TYPE_DRUM1:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadVoice(menu_currentPresetNr[menu_saveOptions.what],0x01,0);
+               }
+               break;
+            case SAVE_TYPE_DRUM2:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadVoice(menu_currentPresetNr[menu_saveOptions.what],0x02,0);
+               }
+               break;
+            case SAVE_TYPE_DRUM3:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadVoice(menu_currentPresetNr[menu_saveOptions.what],0x04,0);
+               }
+               break;
+            case SAVE_TYPE_SNARE:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadVoice(menu_currentPresetNr[menu_saveOptions.what],0x08,0);
+               }
+               break;
+            case SAVE_TYPE_CYM:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadVoice(menu_currentPresetNr[menu_saveOptions.what],0x10,0);
+               }
+               break;
+            case SAVE_TYPE_HIHAT:
+                     // special case - instead of a bank we send literal bits to change both
+                     // closed and open hi-hat voices
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadVoice(menu_currentPresetNr[menu_saveOptions.what],0x60,0);
+               }
+               break;
+            case SAVE_TYPE_MORPH:
+                     //load to morph buffer
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],1);
+               }
+               break;
+            case SAVE_TYPE_PERFORMANCE:
+            case SAVE_TYPE_ALL:
+            case SAVE_TYPE_PATTERN:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+         }
+               
+         switch(menu_saveOptions.what){
+            case SAVE_TYPE_KIT:
+            case SAVE_TYPE_DRUM1:
+            case SAVE_TYPE_DRUM2:
+            case SAVE_TYPE_DRUM3:
+            case SAVE_TYPE_SNARE:
+            case SAVE_TYPE_CYM:
+            case SAVE_TYPE_HIHAT:
+            case SAVE_TYPE_PERFORMANCE:
+            case SAVE_TYPE_ALL:
+            case SAVE_TYPE_PATTERN:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               break;
+            default:
+               break;
+         }
+         break;
+      case 2: // this does nothing but disable quickload on the load screen
+         editModeActive=0;
+         break;
+      case 3: // this jumps between .what and 'ok' if it exists
+         editModeActive=0;
+         x=value/127;
+         switch(menu_saveOptions.what) {
+            case SAVE_TYPE_PATTERN:
+            case SAVE_TYPE_PERFORMANCE:
+            case SAVE_TYPE_ALL:
+            case SAVE_TYPE_GLO:
+            case SAVE_TYPE_SAMPLES:
+               if (x){
+                  menu_saveOptions.state=SAVE_STATE_OK;
+               }
+               else{
+                  menu_saveOptions.state=SAVE_STATE_EDIT_TYPE;
+               }
+               break;
+            default:
+               menu_saveOptions.state=SAVE_STATE_EDIT_TYPE;
+               break;   
+         }
+         break;
+   }	
 
 }
+
+
+
+
 //-----------------------------------------------------------------
-void menu_handleLoadSaveMenu(int8_t inc, uint8_t btnClicked)
+void menu_handleLoadMenu(int8_t inc, uint8_t btnClicked)
 {
 	//this is a special case because the load/save page differs from all the other pages
 	// when this is called, edit mode will have already been set or cleared. this is only
 	// called when something has changed
 
 	//---- handle the button ----
-	if(btnClicked) {
-		//if the ok button is active or we are in global save and ok is active, save/load the preset on click
-		if( (editModeActive && menu_saveOptions.state == SAVE_STATE_OK) ||
-			(menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE) ) {
-
-			if(menu_activePage == SAVE_PAGE) {
-
-				switch(menu_saveOptions.what) {
-				case SAVE_TYPE_PATTERN:
-					preset_savePattern(menu_currentPresetNr[SAVE_TYPE_PATTERN]);
-					break;
-
-				case SAVE_TYPE_KIT:
-					preset_saveDrumset(menu_currentPresetNr[SAVE_TYPE_KIT],0);
-					break;
-
-				case SAVE_TYPE_MORPH:
-					preset_saveDrumset(menu_currentPresetNr[SAVE_TYPE_MORPH],1);
-					break;
-
-				case SAVE_TYPE_GLO:
-					preset_saveGlobals();
-					break;
-
-				case SAVE_TYPE_PERFORMANCE:
-					preset_saveAll(menu_currentPresetNr[SAVE_TYPE_PERFORMANCE],0);
-					break;
-
-				case SAVE_TYPE_ALL:
-					preset_saveAll(menu_currentPresetNr[SAVE_TYPE_ALL],1);
-					break;
-				}
-				menu_resetSaveParameters();						
-
-			} else { //menu_activePage != SAVE_PAGE
-
-				//load page 
-				switch(menu_saveOptions.what) {
-				case SAVE_TYPE_PATTERN:
-					if(preset_loadPattern(menu_currentPresetNr[SAVE_TYPE_PATTERN]))
-						menu_resetSaveParameters();
-					break;
-
-				case SAVE_TYPE_PERFORMANCE:
-					preset_loadAll(menu_currentPresetNr[SAVE_TYPE_PERFORMANCE],0);
-					menu_resetSaveParameters();
-					break;
-
-				case SAVE_TYPE_ALL:
-					preset_loadAll(menu_currentPresetNr[SAVE_TYPE_ALL],1);
-					menu_resetSaveParameters();
-					break;
-
-				case SAVE_TYPE_GLO:
-					preset_loadGlobals();
-					menu_resetSaveParameters();						
-					break;
-
-				case SAVE_TYPE_SAMPLES:
-					spi_deInit();
-					//send load sample command to mainboard
-					frontPanel_sendData(SAMPLE_CC,SAMPLE_START_UPLOAD,0x00);
-
-					//Display load message
-					lcd_clear();
-					lcd_home();
-					lcd_string_F(PSTR("Sample upload"));
-					lcd_setcursor(0,2);
-					lcd_string_F(PSTR("Started"));
-					//wait for ack
-					{
-						uint8_t ret = uart_waitAck();
-						if(ret == ACK)
-						{
-
-						}
-						else
-						{
-
-						}
-					}
-					//re-initialize SD-Card
-					preset_init();
-					//redraw screen
-					// menu_repaintAll(); --AS screen will be repainted later, relax!
-
-					frontPanel_sendData(SAMPLE_CC,SAMPLE_COUNT,0x00);
-					break;
-
-
-				default:
-					break;
-				}
-			} // menu_activePage == or != SAVE_PAGE
-		} // if ok button active
-	} // btnClicked
+   if(btnClicked) {
+   	//if the ok button is active or we are in global save and ok is active, 
+      // save/load the preset on click
+      if( (editModeActive && menu_saveOptions.state == SAVE_STATE_OK) ||
+      	(menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE) ) {
+      	//load page 
+         switch(menu_saveOptions.what) {
+            
+            
+            case SAVE_TYPE_PATTERN:
+               preset_loadPattern(menu_currentPresetNr[SAVE_TYPE_PATTERN]);
+               menu_resetSaveParameters();
+               break;
+            
+            case SAVE_TYPE_PERFORMANCE:
+               preset_loadAll(menu_currentPresetNr[SAVE_TYPE_PERFORMANCE],0);
+               menu_resetSaveParameters();
+               break;
+            
+            case SAVE_TYPE_ALL:
+               preset_loadAll(menu_currentPresetNr[SAVE_TYPE_ALL],1);
+               menu_resetSaveParameters();
+               break;
+            
+            case SAVE_TYPE_GLO:
+               preset_loadGlobals();
+               menu_resetSaveParameters();						
+               break;
+            
+            case SAVE_TYPE_SAMPLES:
+               spi_deInit();
+               
+               //Display load message
+               lcd_clear();
+               lcd_home();
+               lcd_string_F(PSTR("Sample upload"));
+               lcd_setcursor(0,2);
+               lcd_string_F(PSTR("Started"));
+               //send load sample command to mainboard
+               frontPanel_sendData(SAMPLE_CC,SAMPLE_START_UPLOAD,0x00);
+               //wait for ack
+               {
+                  uint8_t ret = uart_waitAck();
+                  if(ret == ACK)
+                  {
+                     
+                  }
+                  else
+                  {
+                     
+                  }
+               }
+               //re-initialize SD-Card
+               preset_init();
+               //redraw screen
+               // menu_repaintAll(); --AS screen will be repainted later, relax!
+               
+               frontPanel_sendData(SAMPLE_CC,SAMPLE_COUNT,0x00);
+               break;
+            
+            
+            default:
+               break;
+         }
+      
+      } // if ok button active
+   } // btnClicked
 
 	//---- handle the encoder ----
-	if(editModeActive) {
-		//encoder changes value
-		///**< 0=edit kit/pat, 1=edit preset nr, 2 = edit name*/
-		switch(menu_saveOptions.state) {
-		case 0: //switch(menu_saveOptions.state) - edit kit/Pat
-			if(inc<0) {
-				if(menu_saveOptions.what!=0) {
-					menu_saveOptions.what--;
-				}
-			} else if(inc>0) {
-				if(menu_saveOptions.what < SAVE_TYPE_SAMPLES) {
-					menu_saveOptions.what++;
-				}
-			}
+   if(editModeActive) {
+   	//encoder changes value
+   	///**< 0=edit kit/pat, 1=edit preset nr, 2 = edit name*/
+      switch(menu_saveOptions.state) {
+      
+         case 0: //switch(menu_saveOptions.state) - edit kit/Pat
+          // all the items are active on the load menu, don't have to exclude any
+            if(inc<0) {
+               if(menu_saveOptions.what!=0) {
+                  menu_saveOptions.what--;
+               }
+            } 
+            else if(inc>0) {
+               if(menu_saveOptions.what < SAVE_TYPE_SAMPLES) {
+                  menu_saveOptions.what++;
+               }
+            }
+            DISABLE_CONV_WARNING
+            preset_loadName(menu_currentPresetNr[menu_saveOptions.what],menu_saveOptions.what,0);
+            END_DISABLE_CONV_WARNING
+            break;
+      
+         case 1: //switch(menu_saveOptions.state) - edit preset nr
+            if(inc<0) {
+               if(menu_currentPresetNr[menu_saveOptions.what]+inc>=0)	{
+               DISABLE_CONV_WARNING
+                  menu_currentPresetNr[menu_saveOptions.what] += inc;
+               END_DISABLE_CONV_WARNING
+               }
+            } 
+            else if(inc>0) {
+               if(menu_currentPresetNr[menu_saveOptions.what]<=125) {
+               DISABLE_CONV_WARNING
+                  menu_currentPresetNr[menu_saveOptions.what] += inc;
+               END_DISABLE_CONV_WARNING
+               }
+            }
+         //if on load page, load the new preset when the preset number is changed
+            if((inc!=0)) {
+            
+            // always load the name regardless of what else
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,0);
+               END_DISABLE_CONV_WARNING
+            
+          
+               // if loading and type is kit and morph do an insta-load
+                  switch(menu_saveOptions.what) {
+                     case SAVE_TYPE_KIT:
+                        preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0);
+                        menu_TargetVoiceGapIndex = getModTargetGapIndex(parameter_values[PAR_TARGET_LFO1 + menu_activeVoice]);
+                        break;
+                     case SAVE_TYPE_DRUM1:
+                        preset_loadVoice(menu_currentPresetNr[menu_saveOptions.what],0x01,0);
+                        break;
+                     case SAVE_TYPE_DRUM2:
+                        preset_loadVoice(menu_currentPresetNr[menu_saveOptions.what],0x02,0);
+                        break;
+                     case SAVE_TYPE_DRUM3:
+                        preset_loadVoice(menu_currentPresetNr[menu_saveOptions.what],0x04,0);
+                        break;
+                     case SAVE_TYPE_SNARE:
+                        preset_loadVoice(menu_currentPresetNr[menu_saveOptions.what],0x08,0);
+                        break;
+                     case SAVE_TYPE_CYM:
+                        preset_loadVoice(menu_currentPresetNr[menu_saveOptions.what],0x10,0);
+                        break;
+                     case SAVE_TYPE_HIHAT:
+                     // special case - instead of a bank we send literal bits to change both
+                     // closed and open hi-hat voices
+                        preset_loadVoice(menu_currentPresetNr[menu_saveOptions.what],0x60,0);
+                        break;
+                     case SAVE_TYPE_MORPH:
+                     //load to morph buffer
+                        preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],1);
+                        break;
+                  }
+               
+            }
+            break; //switch(menu_saveOptions.state) - edit preset nr
+    
+      
+         default: //switch(menu_saveOptions.state)
+            break;
+      } //switch(menu_saveOptions.state)
+   } 
+   else { //editModeActive is false
+   	//encoder selects value to change
+      if(inc<0) {
+         if(menu_saveOptions.state != SAVE_STATE_EDIT_TYPE) {
+            menu_saveOptions.state --;
+         	//no name edit on load page
+            if(menu_saveOptions.state >= SAVE_STATE_EDIT_NAME1) {
+               menu_saveOptions.state = SAVE_STATE_EDIT_PRESET_NR;
+            }
+         }
+      } 
+      else if(inc>0) {
+         if(menu_saveOptions.state < SAVE_STATE_OK) {
+            menu_saveOptions.state ++;
+            	//no name edit on load page
+            if(menu_saveOptions.state >= SAVE_STATE_EDIT_NAME1 ) {
+               menu_saveOptions.state = SAVE_STATE_OK;
+            }
+            
+            	// ok button doesnt exist on kit and morph
+            if(menu_saveOptions.state == SAVE_STATE_OK ) {
+               if(menu_saveOptions.what == SAVE_TYPE_KIT ||
+                  	menu_saveOptions.what == SAVE_TYPE_DRUM1||
+                  	menu_saveOptions.what == SAVE_TYPE_DRUM2||
+                  	menu_saveOptions.what == SAVE_TYPE_DRUM3||
+                  	menu_saveOptions.what == SAVE_TYPE_SNARE||
+                  	menu_saveOptions.what == SAVE_TYPE_CYM||
+                  	menu_saveOptions.what == SAVE_TYPE_HIHAT||
+                  	menu_saveOptions.what == SAVE_TYPE_MORPH)
+                  menu_saveOptions.state = SAVE_STATE_EDIT_PRESET_NR;
+            }
+            
+            	//ok button only for load pattern
+            	//if( (menu_saveOptions.what != SAVE_TYPE_PATTERN) &&
+            	//	(menu_saveOptions.what >= SAVE_TYPE_GLO)  && menu_saveOptions.state == SAVE_STATE_OK ) {
+            	//	menu_saveOptions.state = SAVE_STATE_EDIT_PRESET_NR;
+            	//}
+            
+         }
+      } // inc<0
+   } //editModeActive
+}
 
-			preset_loadName(menu_currentPresetNr[menu_saveOptions.what],menu_saveOptions.what);
-			break;
 
-		case 1: //switch(menu_saveOptions.state) - edit preset nr
-			if(inc<0) {
-				if(menu_currentPresetNr[menu_saveOptions.what]+inc>=0)	{
-					DISABLE_CONV_WARNING
-					menu_currentPresetNr[menu_saveOptions.what] += inc;
-					END_DISABLE_CONV_WARNING
-				}
-			} else if(inc>0) {
-				if(menu_currentPresetNr[menu_saveOptions.what]<=125) {
-					DISABLE_CONV_WARNING
-					menu_currentPresetNr[menu_saveOptions.what] += inc;
-					END_DISABLE_CONV_WARNING
-				}
-			}
-			//if on load page, load the new preset when the preset number is changed
-			if((inc!=0)) {
+void menu_handleSaveMenu(int8_t inc, uint8_t btnClicked)
+{
+	//this is a special case because the load/save page differs from all the other pages
+	// when this is called, edit mode will have already been set or cleared. this is only
+	// called when something has changed
 
-				// always load the name regardless of what else
-				preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what);
+	//---- handle the button ----
+   if(btnClicked) {
+   	//if the ok button is active or we are in global save and ok is active, save/load the preset on click
+      if( (editModeActive && menu_saveOptions.state == SAVE_STATE_OK) ||
+      	(menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE) ) {
+      
+         
+         switch(menu_saveOptions.what) {
+            case SAVE_TYPE_PATTERN:
+               preset_savePattern(menu_currentPresetNr[SAVE_TYPE_PATTERN]);
+               break;
+            
+            case SAVE_TYPE_KIT:
+               preset_saveDrumset(menu_currentPresetNr[SAVE_TYPE_KIT],0);
+               break;
+            
+            case SAVE_TYPE_GLO:
+               preset_saveGlobals();
+               break;
+            
+            case SAVE_TYPE_PERFORMANCE:
+               preset_saveAll(menu_currentPresetNr[SAVE_TYPE_PERFORMANCE],0);
+               break;
+            
+            case SAVE_TYPE_ALL:
+               preset_saveAll(menu_currentPresetNr[SAVE_TYPE_ALL],1);
+               break;
+         }
+         menu_resetSaveParameters();						
+      } // if ok button active
+      
+   } // btnClicked
 
-				if(menu_activePage == LOAD_PAGE) {
-					// if loading and type is kit and morph do an insta-load
-					switch(menu_saveOptions.what) {
-					case SAVE_TYPE_KIT:
-						preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0);
-						// **LFOTARGFIX - save the gap index
-						menu_TargetVoiceGapIndex = getModTargetGapIndex(parameter_values[PAR_TARGET_LFO1 + menu_activeVoice]);
-						break;
-					case SAVE_TYPE_MORPH:
-						//load to morph buffer
-						preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],1);
-						break;
-					}
-				}
-			}
-			break; //switch(menu_saveOptions.state) - edit preset nr
+	//---- handle the encoder ----
+   if(editModeActive) {
+   	//encoder changes value
+   	///**< 0=edit kit/pat, 1=edit preset nr, 2 = edit name*/
+      switch(menu_saveOptions.state) {
+         case 0: //switch(menu_saveOptions.state) - edit kit/Pat
+            if(inc<0) {
+               if(menu_saveOptions.what!=0) {
+                  switch (menu_saveOptions.what){
+                     case SAVE_TYPE_PATTERN:
+                        // -bc- save for later
+                        /*menu_saveOptions.what=SAVE_TYPE_MORPH;*/
+                        // skip instruments- can't save, go straight to kit
+                        menu_saveOptions.what=SAVE_TYPE_KIT;
+                        break;
+                     default:
+                        menu_saveOptions.what--;
+                        break;
+                  }
+               }
+            } 
+            else if(inc>0) {
+               if(menu_saveOptions.what < SAVE_TYPE_SAMPLES) {
+                  switch (menu_saveOptions.what){
+                     case SAVE_TYPE_KIT:
+                        // -bc- save for later
+                        /*menu_saveOptions.what=SAVE_TYPE_MORPH;*/
+                        // skip instruments- can't save, go straight to pat
+                        menu_saveOptions.what=SAVE_TYPE_PATTERN;
+                        break;
+                     case SAVE_TYPE_GLO:
+                        // can't save samples, don't go above global settings
+                        break;
+                     default:
+                        menu_saveOptions.what++;
+                        break;
+                  }
+               }
+            }
+         
+            preset_loadName(menu_currentPresetNr[menu_saveOptions.what],(uint8_t)menu_saveOptions.what,1);
+            break;
+      
+         case 1:
+         //user is on the preset (number) item 
+         //switch(menu_saveOptions.state) - edit preset nr
+            if(inc<0) {
+               if(menu_currentPresetNr[menu_saveOptions.what]+inc>=0)	{
+               DISABLE_CONV_WARNING
+                  menu_currentPresetNr[menu_saveOptions.what] += inc;
+               END_DISABLE_CONV_WARNING
+               }
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+            } 
+            else if(inc>0) {
+               if(menu_currentPresetNr[menu_saveOptions.what]<=125) {
+               DISABLE_CONV_WARNING
+                  menu_currentPresetNr[menu_saveOptions.what] += inc;
+               END_DISABLE_CONV_WARNING
+               }
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+            }
 
-		//edit name
-		case 2: // switch(menu_saveOptions.state) char 1
-		case 3: // switch(menu_saveOptions.state) char 2
-		case 4: // switch(menu_saveOptions.state) char 3
-		case 5: // switch(menu_saveOptions.state) char 4
-		case 6: // switch(menu_saveOptions.state) char 5
-		case 7: // switch(menu_saveOptions.state) char 6
-		case 8: // switch(menu_saveOptions.state) char 7
-		case 9: // switch(menu_saveOptions.state) char 8
-			DISABLE_CONV_WARNING
-			preset_currentName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] += inc;
-			END_DISABLE_CONV_WARNING
-			break;
-
-		default: //switch(menu_saveOptions.state)
-			break;
-		} //switch(menu_saveOptions.state)
-	} else { //editModeActive is false
-		//encoder selects value to change
-		if(inc<0) {
-			if(menu_saveOptions.state != SAVE_STATE_EDIT_TYPE) {
-				menu_saveOptions.state --;
-				//no name edit on load page
-				if(menu_activePage == LOAD_PAGE && menu_saveOptions.state >= SAVE_STATE_EDIT_NAME1) {
-					menu_saveOptions.state = SAVE_STATE_EDIT_PRESET_NR;
-				}
-			}
-		} else if(inc>0) {
-			if(menu_saveOptions.state < SAVE_STATE_OK) {
-				menu_saveOptions.state ++;
-
-				if(menu_activePage == LOAD_PAGE)
-				{
-					//no name edit on load page
-					if(menu_saveOptions.state >= SAVE_STATE_EDIT_NAME1 ) {
-						menu_saveOptions.state = SAVE_STATE_OK;
-					}
-
-					// ok button doesnt exist on kit and morph
-					if(menu_saveOptions.state == SAVE_STATE_OK ) {
-						if(menu_saveOptions.what == SAVE_TYPE_KIT ||
-							menu_saveOptions.what == SAVE_TYPE_MORPH)
-							menu_saveOptions.state = SAVE_STATE_EDIT_PRESET_NR;
-					}
-
-					//ok button only for load pattern
-					//if( (menu_saveOptions.what != SAVE_TYPE_PATTERN) &&
-					//	(menu_saveOptions.what >= SAVE_TYPE_GLO)  && menu_saveOptions.state == SAVE_STATE_OK ) {
-					//	menu_saveOptions.state = SAVE_STATE_EDIT_PRESET_NR;
-					//}
-				}
-			}
-		} // inc<0
-	} //editModeActive
+            break; //switch(menu_saveOptions.state) - edit preset nr
+      
+      //edit name
+         case 2: // switch(menu_saveOptions.state) char 1
+         case 3: // switch(menu_saveOptions.state) char 2
+         case 4: // switch(menu_saveOptions.state) char 3
+         case 5: // switch(menu_saveOptions.state) char 4
+         case 6: // switch(menu_saveOptions.state) char 5
+         case 7: // switch(menu_saveOptions.state) char 6
+         case 8: // switch(menu_saveOptions.state) char 7
+         case 9: // switch(menu_saveOptions.state) char 8
+         DISABLE_CONV_WARNING
+            preset_currentSaveMenuName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] += inc;
+         END_DISABLE_CONV_WARNING
+            break;
+      
+         default: //switch(menu_saveOptions.state)
+            break;
+      } //switch(menu_saveOptions.state)
+   } 
+   else { //editModeActive is false
+   	//encoder selects value to change
+      if(inc<0) {
+         if(menu_saveOptions.state != SAVE_STATE_EDIT_TYPE) {
+            menu_saveOptions.state --;
+         }
+      } 
+      else if(inc>0) {
+         if (menu_saveOptions.state < SAVE_STATE_OK)
+         {
+         menu_saveOptions.state ++;
+         }
+         
+      } // inc<0
+   } //editModeActive
 }
 
 // given a menu id returns the number of entries
@@ -1483,9 +2060,15 @@ void menu_parseEncoder(int8_t inc, uint8_t button)
 
 	inc = (int8_t)(inc * -1);
 
-	if(menu_activePage == LOAD_PAGE || menu_activePage == SAVE_PAGE) {
-		menu_handleLoadSaveMenu(inc, btnClicked);
-	} else if(inc!=0) {
+	if(menu_activePage == LOAD_PAGE)
+   {
+		menu_handleLoadMenu(inc, btnClicked);
+   }
+   else if (menu_activePage == SAVE_PAGE)
+   {
+      menu_handleSaveMenu(inc, btnClicked);
+   }
+	else if(inc!=0) {
 		//============================= handle encoder change ==============================
 		if(copyClear_isClearModeActive()) {
 			//encoder selects clear target
@@ -1900,7 +2483,13 @@ void menu_switchPage(uint8_t pageNr)
 		//if we are already on the load page, toggle to save page
 		// otherwise go to load page (because we were somewhere else or we were on the save page)
 		if(menu_activePage == LOAD_PAGE)
+      {
 			menu_activePage = SAVE_PAGE;
+         // re-load name in case name no longer matches
+         DISABLE_CONV_WARNING
+      preset_loadName(menu_currentPresetNr[menu_saveOptions.what],menu_saveOptions.what,1);
+      END_DISABLE_CONV_WARNING
+      }
 		else
 			menu_activePage = LOAD_PAGE;
 
@@ -1908,7 +2497,9 @@ void menu_switchPage(uint8_t pageNr)
 		//editModeActive = 0;
 
 		// load the name of the current preset from disk
-		preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what);
+      DISABLE_CONV_WARNING
+		preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,0);
+      END_DISABLE_CONV_WARNING
 	}
 		break;
 
@@ -2338,13 +2929,21 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
 	screensaver_touch();
 
 	//leave edit mode if active
-	editModeActive = 0;
+	
 
-	if( (menu_activePage == SAVE_PAGE) || (menu_activePage == LOAD_PAGE)) {
+	if(menu_activePage == SAVE_PAGE) 
+      {
+      editModeActive = 0;
 		menu_handleSaveScreenKnobValue(potNr, potValue);
 		return;
-	}
-
+	   }
+   else if (menu_activePage == LOAD_PAGE)
+      {
+      menu_handleLoadScreenKnobValue(potNr, potValue);
+      return;
+      }
+   editModeActive = 0;
+   
 	const uint8_t activePage		= (menuIndex&MASK_PAGE)>>PAGE_SHIFT;
 	const uint8_t activeParameter	= menuIndex & MASK_PARAMETER;
 	const uint8_t isOn2ndPage		= ( activeParameter > 3) * 4;
