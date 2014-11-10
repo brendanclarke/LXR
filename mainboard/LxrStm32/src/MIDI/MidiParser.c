@@ -1367,10 +1367,11 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
             midiChannelCode|=BANK_4;
          if (chanonly==midi_MidiChannels[4])
             midiChannelCode|=BANK_5;
-         if (chanonly==midi_MidiChannels[5])
+         if ( (chanonly==midi_MidiChannels[5])||(chanonly==midi_MidiChannels[6]) )
+            {
             midiChannelCode|=BANK_6;
-         if (chanonly==midi_MidiChannels[6])
-            midiChannelCode|=BANK_6;
+            midiChannelCode|=BANK_7;
+            }
       }
            
          
