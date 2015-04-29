@@ -204,8 +204,20 @@ void seq_setTrackLength(uint8_t trackNr, uint8_t length)
    if(length == 16)
       length=0;
 	// --AS **PATROT this was changed from setting length on seq_activePattern to shown (or edited) pattern
-   seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].length=length;
+   // --bc this gets changed to store scale - length is now bitmasked to use only the first 5 bits since it is 1-16
+   seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].length = length;
 
+}
+//------------------------------------------------------------------------------
+void seq_setTrackScale(uint8_t trackNr, uint8_t scale)
+{
+   //set the scaling of the track - in powers of 2 from 0 to 7 ie we set a scale divisor of 1 to 128
+   //this is stored as the upper 3 bits of length
+   if(scale > 7)
+      scale=0;
+      
+   seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].scale = scale;
+   
 }
 
 //------------------------------------------------------------------------------
@@ -215,6 +227,14 @@ uint8_t seq_getTrackLength(uint8_t trackNr)
    uint8_t r=seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].length;
    if(r==0)
       return 16;
+   return r;
+}
+
+//------------------------------------------------------------------------------
+uint8_t seq_getTrackScale(uint8_t trackNr)
+{
+	// --AS **PATROT this was changed from getting seq_activePattern to shown (or edited) pattern
+   uint8_t r=seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].scale;
    return r;
 }
 //------------------------------------------------------------------------------
@@ -230,7 +250,7 @@ void seq_setTrackRotation(uint8_t trackNr, const uint8_t newRot)
 
 	// if sequencer is running, move the current step position to compensate for the rotation
    if(seq_running) {
-      int8_t len = lr->length;
+      int8_t len = 0x1f & (lr->length);
       if(len==0)
          len=16;
    
@@ -395,10 +415,15 @@ static void seq_nextStep()
 	// track 0 determines the master step position
    uint8_t masterStepPos;
    uint8_t seqlen;
+   uint8_t seqscale;
+   uint8_t seqdivisor;
 	//if( (((seq_stepIndex[0]+1) &0x7f) == 0) ||
 	//    (((seq_patternSet.seq_subStepPattern[seq_activePattern][0][seq_stepIndex[0]+1]).note & PATTERN_END_MASK)>=PATTERN_END_MASK) )
 
+   // get length for 0, ie the master sequence length
    seqlen=seq_patternSet.seq_patternLengthRotate[seq_activePattern][0].length;
+   seqscale=seq_patternSet.seq_patternLengthRotate[seq_activePattern][0].scale;
+   seqdivisor=0x01 << seqscale;
    if(!seqlen)
       seqlen=16;
 
@@ -459,7 +484,9 @@ static void seq_nextStep()
          }
          else {
             seq_loadSeqNow=0; // pattern switch was initiated as 'instant' from front panel, reset flag
-            seq_barCounter = -1;
+            if(seq_resetBarOnPatternChange)
+               seq_barCounter = -1; // bar counter needs to be -1 to get set to 0 on first bar change
+                                    // after 'instant' switch
          }
       	//send the ack message to tell the front that a new pattern starts playing
          uart_sendFrontpanelByte(FRONT_SEQ_CC);
@@ -496,19 +523,26 @@ static void seq_nextStep()
 
 	//--------- Time to process the single tracks -------------------------
    trigger_clockTick(seq_stepIndex[0]+1);
-
+   
    int i;
    for(i=0;i<NUM_TRACKS;i++)
    {
-   	//increment the step index
-      seq_stepIndex[i]++;
-   	//check if track end is reached
    
+            
    	// --AS **PATROT we now use this for length
       seqlen=seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].length;
+      seqscale=seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].scale;
+      seqdivisor=0x01 << seqscale;
+   
+   	//increment the step index
+      if (!(masterStepPos & (0xff >> (8-seqscale) ) ) )
+         seq_stepIndex[i]++;
+   
+      
       if(!seqlen)
          seqlen=16;
-   
+      
+      
       if((seq_stepIndex[i] / 8) == seqlen || (seq_stepIndex[i] & 0x7f) == 0)
       {
       	//if end is reached reset track to step 0
@@ -636,7 +670,7 @@ void seq_triggerNextMasterStep(uint8_t stepSize)
 {
    uint8_t i, sn, len;
    for(i=0;i<NUM_TRACKS;i++) {
-      len = seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].length;
+      len = 0x1f & seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].length;
       if(!len) // length of 0 means length of 16 (since we are using 4 bits)
          len=16;
       len *= 8; // need length in steps
@@ -932,7 +966,7 @@ void seq_sendMainStepInfoToFront(uint16_t stepNr)
    uart_sendFrontpanelSysExByte( (dataToSend>>14)& 0x7f); //last 2 bit
 
 	// send the track length
-   uart_sendFrontpanelSysExByte( seq_patternSet.seq_patternLengthRotate[currentPattern][currentTrack].length);
+   uart_sendFrontpanelSysExByte( 0x1f & seq_patternSet.seq_patternLengthRotate[currentPattern][currentTrack].length);
 
 }
 //--------------------------------------------------------------------
@@ -1526,7 +1560,7 @@ static void seq_setStepIndexToStart()
    	// adjust rot in case the pattern length is less than the rotated amount
    	// len is 0-15 where a value of 0 means 16
       rot=seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].rotate;
-      len=seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].length;
+      len=0x1f & seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].length;
       if(len && (rot > len))
          rot = rot % len;
    
