@@ -26,12 +26,14 @@ Additions to .34 Firmware:
 9. 'Load' menu now includes entries to load individual drum voices. This includes a number of load/save menu changes to deal with this:
 	- The name and number of drum voices will reflect the drum kit the voice was derived from, even if this was changed via a MIDI bank change request.
 	- The shortcut functions of the knobs has changed (knobs 1-4, from left to right):
+
 	LOAD MENU
 
 		- knob 1: change load type (kit, drum 1, pattern, etc)
 		- knob 2: change preset number NB: auto-loads for all kit and voice types
 		- knob 3: no function, except disables auto-load if turned
 		- knob 4: disables auto-load, moves cursor between load type and 'ok' if it exists
+
 	SAVE MENU
 
 		- knob 1: change save type (same as for load menu)
