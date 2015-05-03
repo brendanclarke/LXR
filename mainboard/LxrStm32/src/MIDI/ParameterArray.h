@@ -357,6 +357,7 @@ enum ParamEnums
 	PAR_PATTERN_BEAT,
 	PAR_PATTERN_NEXT,
 	PAR_TRACK_LENGTH,
+   PAR_TRACK_SCALE,
 
 
 	//#########################################

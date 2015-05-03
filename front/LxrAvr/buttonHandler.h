@@ -16,6 +16,7 @@ extern uint16_t buttonHandler_originalParameter;	//saves parameter number for st
 extern uint8_t buttonHandler_originalValue; 
 extern uint8_t buttonHandler_resetLock;
 extern uint8_t shiftMode;
+extern uint8_t shiftState;
 
 #define BUTTON_TIMEOUT (38) //~500[ms]
 #define NO_STEP_SELECTED -1

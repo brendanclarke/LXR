@@ -838,16 +838,24 @@ static void buttonHandler_voiceButtonPressed(uint8_t voiceNr)
       
       } 
       else { // mute mode is not active. regular handling
-         if (buttonHandler_stateMemory.selectButtonMode == SELECT_MODE_PERF) {
+         if (buttonHandler_stateMemory.selectButtonMode == SELECT_MODE_PERF) 
+         {
          	//shift-voice in perf mode -> unmute all tracks up to and including selected voice which are muted
             for (uint8_t i = 0; i <= voiceNr; i++) {
-               if (buttonHandler_mutedVoices & (1 << i)) {
+               if (buttonHandler_mutedVoices & (1 << i)) 
+               {
                   frontPanel_sendData(SEQ_CC, SEQ_UNMUTE_TRACK, i);
                	DISABLE_CONV_WARNING
                   buttonHandler_mutedVoices &= ~(1<<i);
                	END_DISABLE_CONV_WARNING
                }
             }
+            // -bc- addition: shift-voice in perf mode selects as well as unmutes
+            menu_setActiveVoice(voiceNr);
+            frontPanel_sendData(SEQ_CC, SEQ_SET_ACTIVE_TRACK, voiceNr);
+            menu_setActiveVoice(voiceNr);
+            frontPanel_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS, voiceNr);
+            
             buttonHandler_showMuteLEDs();
          
          } 
@@ -987,7 +995,10 @@ void buttonHandler_buttonPressed(uint8_t buttonNr) {
             led_setValue(1, LED_SHIFT);
             switch(buttonHandler_stateMemory.selectButtonMode) {
             case SELECT_MODE_VOICE:
-               buttonHandler_enterSeqMode();
+               if ((menu_activePage<=VOICE7_PAGE)&&(editModeActive))
+                  menu_repaintAll();
+               else
+                  buttonHandler_enterSeqMode();
                break;
             case SELECT_MODE_PERF:
             case SELECT_MODE_PAT_GEN:
@@ -998,7 +1009,7 @@ void buttonHandler_buttonPressed(uint8_t buttonNr) {
             
                if (buttonHandler_stateMemory.selectButtonMode == SELECT_MODE_PAT_GEN)
                   led_setBlinkLed(LED_MODE2, 1);
-               else {
+          else {
                //**PATROT The step led's are repurposed here to have the current track rotation
                // represented by a blinking led. The leftmost LED blinking means rotation is off (0)
                // and each one represents a different rotation
@@ -1019,7 +1030,7 @@ void buttonHandler_buttonPressed(uint8_t buttonNr) {
                      uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x7));
                      frontPanel_sendData(LED_CC, LED_QUERY_SEQ_TRACK, value);
                      frontPanel_sendData(SEQ_CC, SEQ_REQUEST_PATTERN_PARAMS,
-                        frontParser_midiMsg.data2);
+                     frontParser_midiMsg.data2);
                   }
                }
             
@@ -1094,7 +1105,10 @@ void buttonHandler_buttonReleased(uint8_t buttonNr) {
       
          switch(buttonHandler_stateMemory.selectButtonMode) {
             case SELECT_MODE_VOICE:
-               buttonHandler_leaveSeqMode();
+               if ((menu_activePage<=VOICE7_PAGE)&&(editModeActive))
+                  menu_repaintAll();
+               else
+                  buttonHandler_leaveSeqMode();
                break;
             case SELECT_MODE_PERF:
                led_clearAllBlinkLeds();

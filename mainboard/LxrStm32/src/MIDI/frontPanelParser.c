@@ -299,6 +299,37 @@ static void frontParser_handleSysexData(unsigned char data)
          break;
    
    
+         case SYSEX_RECEIVE_PAT_SCALE_DATA:
+      // --BC same as above but we are receiving length scale data for each pattern
+         {
+         //calculate the step pattern and track indices
+            const uint8_t currentPattern	= frontParser_sysexSeqStepNr / 7;
+            const uint8_t currentTrack  	= frontParser_sysexSeqStepNr - currentPattern*7;
+         
+         //first load into inactive track
+            PatternSet* patternSet = &seq_patternSet;
+         
+            if( (currentPattern == seq_activePattern) && seq_isRunning() )
+            {
+               seq_tmpPattern.seq_patternLengthRotate[currentTrack].scale = data;
+            } 
+            else {
+               patternSet->seq_patternLengthRotate[currentPattern][currentTrack].scale = data;
+            }
+         
+         
+         //inc the step counter
+            frontParser_sysexSeqStepNr++;
+            frontParser_rxCnt = 0;
+         
+         // signal new pattern after receiving all the data
+            if( seq_isRunning() && (frontParser_sysexSeqStepNr == NUM_TRACKS*NUM_PATTERN)) {
+               seq_newPatternAvailable = 1;
+            }
+         }
+         break;
+   
+   
       case SYSEX_RECEIVE_STEP_DATA:
       // we expect a bunch of 8 byte sysex message containing new step data for the sequencer
       // beginning with step 0 up to NUMBER_STEPS*NUM_TRACKS*NUM_PATTERN = 128*7*8 = 7168 steps
@@ -768,6 +799,10 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_TRACK_LENGTH:
          seq_setTrackLength(frontParser_activeTrack,frontParser_midiMsg.data2);
          break;
+         
+      case FRONT_SEQ_TRACK_SCALE:
+         seq_setTrackScale(frontParser_activeTrack,frontParser_midiMsg.data2);
+         break;
    
       case FRONT_SEQ_TRACK_ROTATION: //**PATROT handle incoming track rotation. apply to active track
          seq_setTrackRotation(frontParser_activeTrack,frontParser_midiMsg.data2);
@@ -804,10 +839,16 @@ static void frontParser_handleSeqCC()
          break;
    
       case FRONT_SEQ_SET_SHOWN_PATTERN:
-         frontParser_shownPattern = frontParser_midiMsg.data2;
-         break;
+         if (frontParser_midiMsg.data2==frontParser_shownPattern)
+            seq_realign();
+         else
+            frontParser_shownPattern = frontParser_midiMsg.data2;
+         break;   
       case FRONT_SEQ_SET_ACTIVE_TRACK:
          frontParser_activeTrack = frontParser_midiMsg.data2;
+         uart_sendFrontpanelByte(FRONT_SEQ_CC);
+         uart_sendFrontpanelByte(FRONT_SEQ_TRACK_ROTATION);
+         uart_sendFrontpanelByte(seq_getTrackRotation(frontParser_activeTrack));
          break;
    
       case FRONT_SEQ_REQUEST_STEP_PARAMS:

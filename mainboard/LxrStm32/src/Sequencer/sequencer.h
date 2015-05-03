@@ -166,6 +166,8 @@ void seq_armAutomationStep(uint8_t stepNr, uint8_t track,uint8_t isArmed);
 //------------------------------------------------------------------------------
 void seq_resetDeltaAndTick();
 //------------------------------------------------------------------------------
+void seq_realign();
+//------------------------------------------------------------------------------
 void seq_setDeltaT(float delta);
 //------------------------------------------------------------------------------
 void seq_triggerNextMasterStep(uint8_t stepSize);

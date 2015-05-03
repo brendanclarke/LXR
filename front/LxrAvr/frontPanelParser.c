@@ -234,7 +234,7 @@ void frontPanel_parseData(uint8_t data)
 					frontParser_stepData.volume = next;
 					frontParser_stepData.prob = repeat;
 					
-					//signal that a ne data chunk is available
+					//signal that a new data chunk is available
 					frontParser_newSeqDataAvailable = 1;
 					//reset receive counter for next chunk
 					frontParser_rxCnt = 0;
@@ -243,22 +243,26 @@ void frontPanel_parseData(uint8_t data)
 			}
 			else if(frontPanel_sysexMode == SYSEX_REQUEST_MAIN_STEP_DATA)
 			{
-				if(frontParser_rxCnt<3)
+				if(frontParser_rxCnt<4)
 				{
 					//1st 2 nibbles + last 2 bit
-					frontParser_sysexBuffer[frontParser_rxCnt++] = data;
-				} else {
-					// length information
-					frontParser_sysexBuffer[frontParser_rxCnt++] = data;
+					frontParser_sysexBuffer[frontParser_rxCnt++] = data;             
+			   } else {
+               // scale information
+					frontParser_sysexBuffer[frontParser_rxCnt++] = data;               
 					
+               // package the main step data so we know what to do with
+               
 					uint16_t mainStepData = frontParser_sysexBuffer[0] |
 							(uint16_t)(frontParser_sysexBuffer[1]<<7) |
 							(uint16_t)(frontParser_sysexBuffer[2]<<14);
-					//we abuse the stepData struct to store the main step data and the length
+					//we abuse the stepData struct to store the main step data and the scale
 					frontParser_stepData.volume = (uint8_t)(mainStepData>>8);
 					frontParser_stepData.prob = (uint8_t)(mainStepData&0xff);
-					frontParser_stepData.note = frontParser_sysexBuffer[3];
-					
+					frontParser_stepData.note = frontParser_sysexBuffer[3]; // this is the length data from uart
+               frontParser_stepData.param1Nr = frontParser_sysexBuffer[4]; // this is the scale data from uart
+
+               
 					//signal that a new data chunk is available
 					frontParser_newSeqDataAvailable = 1;
 					//reset receive counter for next chunk
@@ -351,10 +355,20 @@ void frontPanel_parseData(uint8_t data)
 							parameter_values[PAR_TRACK_LENGTH] = frontParser_midiMsg.data2;
 							menu_repaint();
 							break;
+                  case SEQ_TRACK_SCALE:
+                     parameter_values[PAR_TRACK_SCALE] = frontParser_midiMsg.data2;
+                     menu_repaint();
+                     break;
+
 						// **PATROT - receive rotation value from back for active track
 						case SEQ_TRACK_ROTATION:
 							parameter_values[PAR_TRACK_ROTATION] = frontParser_midiMsg.data2;
-							menu_repaint(); // --AS TODO we might not need this
+							menu_repaint();
+                     if ((buttonHandler_getMode() == SELECT_MODE_PERF)&&shiftState)
+                     {  // rotation amount updated while viewing rotation - update the display
+                        led_clearAllBlinkLeds();
+                        led_setBlinkLed((uint8_t) (LED_STEP1 + parameter_values[PAR_TRACK_ROTATION]), 1);
+                     }
 							break;
 						
 						case SEQ_EUKLID_LENGTH:
@@ -629,13 +643,22 @@ void midiMsg_checkLongOps()
    
       if (frontPanel_longOp==BANK_GLOBAL)
       {
-         preset_loadDrumset(frontPanel_longData,0);
-         menu_repaint();
-         frontPanel_longOp=NULL_OP;
+         if (parameter_values[PAR_LOAD_PERF_ON_BANK]){
+            preset_loadAll(frontPanel_longData,0);
+            menu_repaint();
+            frontPanel_longOp=NULL_OP;            
+         }
+         else {
+            preset_loadDrumset(frontPanel_longData,0);
+            menu_repaint();
+            frontPanel_longOp=NULL_OP;
+         }
+         
+         
       }
       else if (frontPanel_longOp==PATTERN_CHANGE_OP)
       {
-      
+         // nothing to see here yet
          frontPanel_longOp=NULL_OP;
       }
          
@@ -652,6 +675,7 @@ void midiMsg_checkLongOps()
       {
          parameter_values[PAR_MORPH]=frontPanel_longData;
          preset_morph(frontPanel_longData);
+         morphValue=frontPanel_longData;
          menu_repaint();
          frontPanel_longOp=NULL_OP;
       }

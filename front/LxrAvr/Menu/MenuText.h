@@ -123,7 +123,7 @@ const char retriggerNames[][4] PROGMEM  =
 //-----------------------------------------------------------------
 const char lfoWaveNames[][4] PROGMEM  = 
 {
-	{8},		//number of entries
+	{18},		//number of entries
 	{"sin"},
 	{"tri"},
 	{"sup"},
@@ -132,6 +132,16 @@ const char lfoWaveNames[][4] PROGMEM  =
 	{"rnd"},
 	{"xup"},
 	{"xdn"},
+   {"xtr"},
+   {"si1"},
+	{"tr1"},
+	{"su1"},
+	{"sd1"},
+	{"sq1"},
+	{"rn1"},
+	{"xu1"},
+	{"xd1"},
+   {"xt1"},
 };
 //-----------------------------------------------------------------
 const char rollRateNames[][4] PROGMEM  = 
@@ -287,6 +297,7 @@ const char shortNames[][4] PROGMEM  =
 	{"prb"},
 	{"stp"},
 	{"len"},
+   {"sca"},
 	{"rot"},
 	{"bpm"},
 	{"ch"},
@@ -315,6 +326,7 @@ const char shortNames[][4] PROGMEM  =
 	{"pcr"}, // pattern change resets bar counter
    	{"pci"}, // pattern change time is bar or step
    	{"stg"}, // shift is toggle instead of momentary
+      {"b2p"}, // bank changes change perfs
 };
 //-----------------------------------------------------------------
 // These correspond with the catNamesEnum in menu.h
@@ -391,6 +403,7 @@ const char longNames[][16] PROGMEM =
 	{"Prbablty"},
 	{"Number"},
 	{"Length"},
+   {"Scale"},
 	{"Steps"},
 	{"Rotation"},
 	{"Tempo"},
@@ -425,8 +438,9 @@ const char longNames[][16] PROGMEM =
 	{"Out2 PPQ"},
 	{"Gate Mode"},
 	{"PCReset" }, // reset bar counter on manual pattern change
-   	{"PCInstnt" }, // pattern change occurs on bar or step
-   	{"ShiftTog" }, // shift is toggle instead of momentary
+   {"PCInstnt" }, // pattern change occurs on bar or step
+   {"ShiftTog" }, // shift is toggle instead of momentary
+   {"BnkToPrf" }, // Bank changes change perfs
 };
 
 

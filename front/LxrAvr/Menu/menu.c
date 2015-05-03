@@ -35,6 +35,7 @@ static void setNoteName(uint8_t num, char *buf);
 
 static void menu_moveToMenuItem(int8_t inc);
 static void menu_encoderChangeParameter(int8_t inc);
+static void menu_encoderChangeShiftParameter(int8_t inc);
 
 #define ARROW_SIGN '>'
 
@@ -146,6 +147,7 @@ const Name valueNames[NUM_NAMES] PROGMEM =
 		{SHORT_STEP,CAT_STEP,LONG_NUMBER},					//TEXT_ACTIVE_STEP
 
 		{SHORT_LENGTH,CAT_PATTERN,LONG_LENGTH},				//TEXT_PAT_LENGTH,
+      {SHORT_SCALE,CAT_PATTERN,LONG_SCALE},				//TEXT_PAT_SCALE,
 		{SHORT_STEP,CAT_EUKLID,LONG_STEPS},					//TEXT_NUM_STEPS,
 		{SHORT_ROTATION, CAT_EUKLID, LONG_ROTATION}, 		//TEXT_ROTATION
 
@@ -197,8 +199,9 @@ const Name valueNames[NUM_NAMES] PROGMEM =
 		{SHORT_MODE, CAT_TRIGGER, LONG_TRIGGER_GATE_MODE}, //TEXT_TRIGGER_GATE_MODE
 		{SHORT_BAR_RESET_MODE, CAT_SEQUENCER, LONG_BAR_RESET_MODE}, // TEXT_BAR_RESET_MODE
 		{SHORT_CHANNEL, CAT_MIDI, LONG_MIDI_CHANNEL}, // TEXT_MIDI_CHAN_GLOBAL
-      		{SHORT_SEQ_PC_TIME, CAT_SEQUENCER, LONG_SEQ_PC_TIME}, // TEXT_SEQ_PC_TIME
-      		{SHORT_BUT_SHIFT_MODE, CAT_GLOBAL, LONG_BUT_SHIFT_MODE}, // TEXT_BUT_SHIFT_MODE
+      {SHORT_SEQ_PC_TIME, CAT_SEQUENCER, LONG_SEQ_PC_TIME}, // TEXT_SEQ_PC_TIME
+      {SHORT_BUT_SHIFT_MODE, CAT_GLOBAL, LONG_BUT_SHIFT_MODE}, // TEXT_BUT_SHIFT_MODE
+      {SHORT_LOAD_PERF_ON_BANK, CAT_GLOBAL, LONG_LOAD_PERF_ON_BANK}, // TEXT_LOAD_PERF_ON_BANK
 
 };
 
@@ -452,6 +455,7 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	    /*PAR_PATTERN_BEAT*/ 	DTYPE_0B127,
 	    /*PAR_PATTERN_NEXT*/ 	DTYPE_MENU | (MENU_NEXT_PATTERN<<4),
 	    /*PAR_TRACK_LENGTH*/ 	DTYPE_1B16,
+       /*PAR_TRACK_SCALE*/ 	DTYPE_0B15,
 	    /*PAR_POS_X*/ 			DTYPE_0B127,
 	    /*PAR_POS_Y*/ 			DTYPE_0B127,
 	    /*PAR_FLUX*/ 			DTYPE_0B127,
@@ -481,6 +485,7 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	    /*PAR_MIDI_CHAN_GLOBAL*/DTYPE_0B16,		//--AS global midi channel
 	   /*PAR_SEQ_PC_TIME*/  DTYPE_ON_OFF, // -bc- change patterns on sub-step instead of bar
 	   /*PAR_BUT_SHIFT_MODE*/ DTYPE_ON_OFF, // -bc- make shift a toggle
+      /*PAR_LOAD_PERF_ON_BANK*/  DTYPE_ON_OFF, // -bc- load perfs instead of kits on bank change cc
 };
 
 
@@ -505,6 +510,7 @@ uint8_t menu_currentPresetNr[NUM_PRESET_LOCATIONS];
 
 uint8_t menu_shownPattern = 0;
 uint8_t menu_muteModeActive = 0;
+uint8_t morphValue=0;
 
 /** buffer to minimize the display configuration.
 It holds a representation of the display content so only the changed cells have to be updated*/
@@ -516,7 +522,7 @@ uint8_t visibleCursor=0;	/* cursor position and whether it's visible rightmost=v
 uint8_t menu_activePage = 0;				/**< indicates which menu page is currently shown*/
 uint8_t menu_activeVoice = 0;
 uint8_t menu_playedPattern = 0;
-static uint8_t editModeActive = 0;			/**< when edit mode is active, only the currently active parameter is shown with full name*/
+uint8_t editModeActive = 0;			/**< when edit mode is active, only the currently active parameter is shown with full name*/
 static uint8_t lastEncoderButton = 0;		/**< stores the state of the encoder button so the edit mode is only switched once when the button is pressed*/
 
 static uint8_t parameterFetch = 0b00011111;	/**< the lower 4 bits define a lock for each pot, the 5 bit turns he lock on and off*/
@@ -987,7 +993,10 @@ void menu_repaintGeneric()
 		//get address from top1-4 from activeParameter (base adress top1 + offset)
 		uint8_t parName = pgm_read_byte(&ap->top1 + activeParameter);
 		uint16_t parNr = pgm_read_word(&ap->bot1 + activeParameter);
-		curParmVal = parameter_values[parNr];
+      if (shiftState)
+         curParmVal = parameters2[parNr];
+      else    
+		   curParmVal = parameter_values[parNr];
 
 		// just clear the whole thing
 		memset(&editDisplayBuffer[0][0],' ',16);
@@ -1087,6 +1096,11 @@ void menu_repaintGeneric()
 		} // parameter type is not automation target
 
 	} // if editmode active
+   
+   
+   
+   
+   
 	else
 	{ // editmode not active - show regular menu parameters
 
@@ -2108,7 +2122,10 @@ void menu_parseEncoder(int8_t inc, uint8_t button)
 
 		} else if(editModeActive) {
 			// edit mode is active so change the value of the current parameter
-			menu_encoderChangeParameter(inc);
+         if (buttonHandler_getShift())
+            menu_encoderChangeShiftParameter(inc);
+         else
+			   menu_encoderChangeParameter(inc);
 		} else {
 			//edit mode not active so encoder selects active parameter
 			menu_moveToMenuItem(inc);
@@ -2130,6 +2147,12 @@ static void menu_encoderChangeParameter(int8_t inc)
 	//get address from top1-8 from activeParameter (base adress top1 + offset)
 	uint16_t paramNr		= pgm_read_word(&menuPages[menu_activePage][activePage].bot1 + activeParameter);
 	uint8_t *paramValue = &parameter_values[paramNr];
+   uint8_t isMorphParam = (paramNr<END_OF_SOUND_PARAMETERS&&buttonHandler_getShift());
+   
+   if (isMorphParam)
+   {
+      paramValue = &parameters2[paramNr];
+   }
 
 	//increase parameter value
 	if(inc>0) //positive increase
@@ -2173,6 +2196,7 @@ static void menu_encoderChangeParameter(int8_t inc)
 		 */
 		upper = (uint8_t)( (uint8_t)((value&0x80)>>7) | ((voiceNr&0x3f)<<1) );
 		lower = value&0x7f;
+      if (!isMorphParam)
 		frontPanel_sendData(CC_VELO_TARGET,upper,lower);
 		//return;
 	}
@@ -2202,6 +2226,7 @@ static void menu_encoderChangeParameter(int8_t inc)
 		uint8_t upper,lower;
 		upper = (uint8_t)(((value&0x80)>>7) | ((((uint8_t)(paramNr - PAR_VOICE_LFO1))&0x3f)<<1));
 		lower = value&0x7f;
+      if (!isMorphParam)
 		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
 		//return;
 	}
@@ -2227,6 +2252,7 @@ static void menu_encoderChangeParameter(int8_t inc)
 		uint8_t upper,lower;
 		upper = (uint8_t)((uint8_t)((value&0x80)>>7) | (((paramNr - PAR_TARGET_LFO1)&0x3f)<<1));
 		lower = value&0x7f;
+      if (!isMorphParam)
 		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
 		//--AS fall thru to update display
 	}
@@ -2292,14 +2318,261 @@ static void menu_encoderChangeParameter(int8_t inc)
 	// --AS TODO this will also send MIDI_CC or CC_2 for the above items that have already been sent. is this desired?
 	//send parameter change to uart tx
 	if(paramNr < 128) // => Sound Parameter
-		frontPanel_sendData(MIDI_CC,(uint8_t)paramNr,*paramValue);
+   {
+      if (!isMorphParam)
+      {
+		   frontPanel_sendData(MIDI_CC,(uint8_t)paramNr,*paramValue);
+      }
+   }
 	else if(paramNr > 127 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
-		frontPanel_sendData(CC_2,(uint8_t)(paramNr-128),*paramValue);
+   {
+      if (!isMorphParam)
+      {
+		   frontPanel_sendData(CC_2,(uint8_t)(paramNr-128),*paramValue);
+      }
+   }
 	else // non sound parameters (ie current step data, etc)
 		menu_parseGlobalParam(paramNr,parameter_values[paramNr]);
 
 	//frontPanel_sendData(0xb0,paramNr,*paramValue);
 }
+
+
+//-----------------------------------------------------------------
+// -bc- called when edit mode is active
+// and shift is pressed - we can add some
+// special functions here, primarily
+// i wanted to add shift+encoder changes morph parameters
+
+static void menu_encoderChangeShiftParameter(int8_t inc)
+{
+	const uint8_t activeParameter	= menuIndex & MASK_PARAMETER;
+	const uint8_t activePage		= (menuIndex&MASK_PAGE)>>PAGE_SHIFT;
+
+	//get address from top1-8 from activeParameter (base adress top1 + offset)
+	uint16_t paramNr		= pgm_read_word(&menuPages[menu_activePage][activePage].bot1 + activeParameter);
+   uint8_t *paramValue;
+   uint8_t isMorphParam = (paramNr<END_OF_SOUND_PARAMETERS&&buttonHandler_getShift());
+   
+   if( (paramNr >= PAR_VEL_DEST_1) && (paramNr <= PAR_VEL_DEST_6) )
+   {
+      isMorphParam = 0;
+   } 
+   else if( (paramNr >= PAR_TARGET_LFO1) && (paramNr <= PAR_TARGET_LFO6) )
+   {
+      isMorphParam = 0;
+   } 
+   else if( (paramNr >= PAR_VOICE_LFO1) && (paramNr <= PAR_VOICE_LFO6) )
+   {
+      isMorphParam = 0;
+   } 
+   else if (paramNr>=END_OF_SOUND_PARAMETERS)
+   {
+      isMorphParam = 0;
+   }	
+   else
+   {
+      isMorphParam = 1;
+   }
+      
+   if (isMorphParam)
+   {
+      paramValue = &parameters2[paramNr];
+   }
+   else
+   {
+      paramValue = &parameter_values[paramNr];
+   }
+   
+	//increase parameter value
+	if(inc>0) //positive increase
+	{
+		if(*paramValue != 255) //omit wrap for 0B255 dtypes
+			*paramValue = (uint8_t)(*paramValue + inc);
+	}
+	else if (inc<0) //neg increase
+	{
+		if(*paramValue >= abs(inc)) //omit negative wrap. inc can also be -2 or -3 depending on turn speed!
+		{
+			DISABLE_CONV_WARNING
+			*paramValue += inc;
+			END_DISABLE_CONV_WARNING
+		}
+	}
+
+	switch(pgm_read_byte(&parameter_dtypes[paramNr]) & 0x0F)
+	{
+	case DTYPE_TARGET_SELECTION_VELO: //parameter_dtypes[paramNr] & 0x0F
+	{
+		//**VELO encoder value limit to start and end of range for this voice
+		// get voice, and figure valid range, translate to param number before sending
+		uint8_t voiceNr=(uint8_t)(paramNr - PAR_VEL_DEST_1);
+		if(*paramValue < pgm_read_byte(&modTargetVoiceOffsets[voiceNr].start)) {
+			if(inc < 0) // going down, allow 0
+				*paramValue=0;
+			else // going up fix to start
+				*paramValue = pgm_read_byte(&modTargetVoiceOffsets[voiceNr].start);
+		} else if (*paramValue > pgm_read_byte(&modTargetVoiceOffsets[voiceNr].end)) {
+			*paramValue = pgm_read_byte(&modTargetVoiceOffsets[voiceNr].end);
+		}
+
+		// determine the parameter id to send across
+		uint8_t value = (uint8_t)pgm_read_word(&modTargets[*paramValue].param);
+		uint8_t upper,lower;
+		/*
+		 *  upper: rightmost bit is 1 if the parameter we are targeting is in the "above 127" range
+		 *         next 6 bits are the voice number (0 to 5) of which voice is being dealt with here
+		 *  lower: the (0-127) value representing which parameter is being modulated
+		 */
+		upper = (uint8_t)( (uint8_t)((value&0x80)>>7) | ((voiceNr&0x3f)<<1) );
+		lower = value&0x7f;
+      if (!isMorphParam)
+		   frontPanel_sendData(CC_VELO_TARGET,upper,lower);
+      else
+         preset_morph(morphValue);
+		//return;
+	}
+		break;
+
+	case DTYPE_VOICE_LFO://parameter_dtypes[paramNr] & 0x0F
+	{
+		//**LFO - limit voice number to 1-6 range. determine target selection so we can send it with voice #
+		if(*paramValue < 1)
+			*paramValue = 1;
+		else if(*paramValue > 6)
+			*paramValue = 6;
+
+		// **LFOTARGFIX - ensure that the lfo mod target is pointing to the same type of modulation
+		// on the new voice
+		const uint8_t newTargVal=getModTargetIdxFromGapIdx((uint8_t)(*paramValue-1),menu_TargetVoiceGapIndex);
+		// update the lfo mod target
+		parameter_values[PAR_TARGET_LFO1 + (paramNr - PAR_VOICE_LFO1)] = newTargVal;
+
+		// determine the real param value given the index into modTargets
+		uint8_t value =  (uint8_t)pgm_read_word(&modTargets[newTargVal].param);
+
+		/*  upper: rightmost bit is 1 if the parameter we are targeting is in the "above 127" range
+		 *         next 6 bits are the voice number (0 to 5) of which voice is being dealt with here
+		 *  lower: the (0-127) value representing which parameter is being modulated
+		 */
+		uint8_t upper,lower;
+		upper = (uint8_t)(((value&0x80)>>7) | ((((uint8_t)(paramNr - PAR_VOICE_LFO1))&0x3f)<<1));
+		lower = value&0x7f;
+      if (!isMorphParam)
+		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
+      else
+         preset_morph(morphValue);
+		//return;
+	}
+		break;
+	case DTYPE_TARGET_SELECTION_LFO://parameter_dtypes[paramNr] & 0x0F
+	{
+		//**LFO - limit encoder start and end to range for the target voice (not the lfo number)
+		// this is a value from 1 to 6, so we adjust to be 0 based
+		uint8_t voiceNr =  (uint8_t)(parameter_values[PAR_VOICE_LFO1+(paramNr - PAR_TARGET_LFO1)]-1);
+		if(*paramValue < pgm_read_byte(&modTargetVoiceOffsets[voiceNr].start)) {
+			if(inc < 0) // going down, allow 0
+				*paramValue=0;
+			else // going up fix to start
+				*paramValue = pgm_read_byte(&modTargetVoiceOffsets[voiceNr].start);
+		} else if (*paramValue > pgm_read_byte(&modTargetVoiceOffsets[voiceNr].end)) {
+			*paramValue = pgm_read_byte(&modTargetVoiceOffsets[voiceNr].end);
+		}
+
+		// **LFOTARGFIX - save the gap index
+		menu_TargetVoiceGapIndex = getModTargetGapIndex(*paramValue);
+
+		uint8_t value =  (uint8_t)pgm_read_word(&modTargets[*paramValue].param);
+		uint8_t upper,lower;
+		upper = (uint8_t)((uint8_t)((value&0x80)>>7) | (((paramNr - PAR_TARGET_LFO1)&0x3f)<<1));
+		lower = value&0x7f;
+      if (!isMorphParam)
+		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
+      else
+         preset_morph(morphValue);
+		//--AS fall thru to update display
+	}
+		break;
+
+	case DTYPE_AUTOM_TARGET: {//parameter_dtypes[paramNr] & 0x0F
+		const uint8_t nmt=getNumModTargets();
+		//**AUTOM - limit to valid range for encoder
+		if(*paramValue >= nmt)
+			*paramValue = (uint8_t)(nmt-1);
+		break;
+	}
+
+	case DTYPE_0B255:
+		//if(*paramValue > 255)
+		//	*paramValue = 255;
+		break;
+
+   case DTYPE_0B16://parameter_dtypes[paramNr] & 0x0F
+	   if(*paramValue > 16)
+			*paramValue = 16;
+		break;
+   
+	case DTYPE_1B16://parameter_dtypes[paramNr] & 0x0F
+		if(*paramValue < 1)
+			*paramValue = 1;
+		else if(*paramValue > 16)
+			*paramValue = 16;
+		break;
+	case DTYPE_0B15:
+		if(*paramValue>15)
+			*paramValue = 15;
+		break;
+	case DTYPE_MIX_FM://parameter_dtypes[paramNr] & 0x0F
+	case DTYPE_ON_OFF:
+	case DTYPE_0b1:
+		if(*paramValue > 1)
+			*paramValue = 1;
+		break;
+
+
+
+	case DTYPE_MENU://parameter_dtypes[paramNr] & 0x0F
+	{
+		//get the used menu (upper 4 bit)
+		const uint8_t menuId = pgm_read_byte(&parameter_dtypes[paramNr]) >> 4;
+		//get the number of entries
+		uint8_t numEntries = getMaxEntriesForMenu(menuId);
+		if(*paramValue >= numEntries)
+			*paramValue = (uint8_t)(numEntries-1);
+
+	} // parameter_dtypes[paramNr] & 0x0F case DTYPE_MENU
+		break;
+
+	default://parameter_dtypes[paramNr] & 0x0F
+	case DTYPE_0B127:
+		if(*paramValue > 127)
+			*paramValue = 127;
+		break;
+	} //parameter_dtypes[paramNr] & 0x0F
+
+
+	// --AS TODO this will also send MIDI_CC or CC_2 for the above items that have already been sent. is this desired?
+	//send parameter change to uart tx
+	if(paramNr < 128) // => Sound Parameter
+   {
+      if (!isMorphParam)
+		frontPanel_sendData(MIDI_CC,(uint8_t)paramNr,*paramValue);
+      else
+         preset_morph(morphValue);
+   }
+	else if(paramNr > 127 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
+   {
+      if (!isMorphParam)
+		frontPanel_sendData(CC_2,(uint8_t)(paramNr-128),*paramValue);
+      else
+         preset_morph(morphValue);
+   }
+	else // non sound parameters (ie current step data, etc)
+		menu_parseGlobalParam(paramNr,parameter_values[paramNr]);
+
+	//frontPanel_sendData(0xb0,paramNr,*paramValue);
+}
+
 
 //-----------------------------------------------------------------
 // given an encoder wheel change, will set the menu item to the correct new one
@@ -2630,7 +2903,12 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
 		frontPanel_sendData(SEQ_CC,SEQ_TRACK_LENGTH,value);
 		break;
-
+      
+   case PAR_TRACK_SCALE:
+      frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
+		frontPanel_sendData(SEQ_CC,SEQ_TRACK_SCALE,value);
+		break;
+      
 	case PAR_SHUFFLE:
 		frontPanel_sendData(SEQ_CC,SEQ_SHUFFLE,value);
 		break;
@@ -2672,6 +2950,7 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 	case PAR_MORPH:
 	{
 		//value += (value==127)*1;
+      morphValue = value;
 		preset_morph(value);
 	}
 	break;
@@ -2845,6 +3124,10 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 	case PAR_BUT_SHIFT_MODE:
 		shiftMode=value;
 		break;
+   case PAR_LOAD_PERF_ON_BANK:
+      parameter_values[PAR_LOAD_PERF_ON_BANK]=value;
+   break;
+      
 
 	}
 }

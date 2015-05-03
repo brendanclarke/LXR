@@ -533,86 +533,87 @@ enum
 //control messages from cortex for leds
 //status
 #define FRONT_STEP_LED_STATUS_BYTE 		0xb1
-#define FRONT_SEQ_CC					0xb2
+#define FRONT_SEQ_CC					      0xb2
 #define FRONT_CODEC_CONTROL				0xb3
-#define VOICE_CC						0xb4
-#define FRONT_SET_BPM					0xb5
-#define FRONT_CC_2						0xb6	//for parameters above 127
+#define VOICE_CC						      0xb4
+#define FRONT_SET_BPM				   	0xb5
+#define FRONT_CC_2					   	0xb6	//for parameters above 127
 #define FRONT_CC_LFO_TARGET				0xb7
-#define FRONT_CC_VELO_TARGET			0xb8
-#define FRONT_STEP_CC					0xb9	// toggle a step in the subStepPattern array
-#define FRONT_SET_P1_DEST				0xba	// SET_P1_DEST, stepNr, destinationNr --> track(voice) via set active track cmd
-#define FRONT_SET_P2_DEST				0xbb
-#define FRONT_SET_P1_VAL				0xbc	// SET_P1_VAL, stepNr, value --> track(voice) via set active track cmd
-#define FRONT_SET_P2_VAL				0xbd
-#define FRONT_MAIN_STEP_CC				0xbe	// toggle main step
+#define FRONT_CC_VELO_TARGET		   	0xb8
+#define FRONT_STEP_CC				   	0xb9	// toggle a step in the subStepPattern array
+#define FRONT_SET_P1_DEST		   		0xba	// SET_P1_DEST, stepNr, destinationNr --> track(voice) via set active track cmd
+#define FRONT_SET_P2_DEST				   0xbb
+#define FRONT_SET_P1_VAL				   0xbc	// SET_P1_VAL, stepNr, value --> track(voice) via set active track cmd
+#define FRONT_SET_P2_VAL				   0xbd
+#define FRONT_MAIN_STEP_CC				   0xbe	// toggle main step
 #define FRONT_ARM_AUTOMATION_STEP		0xbf	// status - stepNr - track | OnOff
 
-#define SAMPLE_CC						0xc0
+#define SAMPLE_CC						      0xc0
 #define FRONT_SAMPLE_START_UPLOAD 		0x01
-#define FRONT_SAMPLE_COUNT		 		0x02
+#define FRONT_SAMPLE_COUNT		 		   0x02
 
 //message
 #define FRONT_CURRENT_STEP_NUMBER_CC	0x01	/**< send the current active chase light step number to the frontplate*/
-#define FRONT_LED_SEQ_BUTTON			0x02	/**< turn on a step seq. led*/
+#define FRONT_LED_SEQ_BUTTON			   0x02	/**< turn on a step seq. led*/
 #define FRONT_LED_QUERY_SEQ_TRACK		0x03	/**< the frontpanel wants to know whick seq. leds should be lit*/
-#define FRONT_LED_PULSE_BEAT			0x04	/**< pulse the beat indicator LED*/
+#define FRONT_LED_PULSE_BEAT			   0x04	/**< pulse the beat indicator LED*/
 #define FRONT_LED_SEQ_SUB_STEP			0x05
 
 //--AS appears unused
 //#define VOICE_MIDI_CHAN					0x02
 
 //Sequencer commands
-#define FRONT_SEQ_RUN_STOP				0x01
+#define FRONT_SEQ_RUN_STOP				   0x01
 
-#define FRONT_SEQ_MUTE_TRACK			0x09
+#define FRONT_SEQ_MUTE_TRACK			   0x09
 #define FRONT_SEQ_UNMUTE_TRACK			0x0a
-#define FRONT_SEQ_CHANGE_PAT			0x0b	/**< the user requested a new pattern. send the same message back to the front as ack that the new pattern is loaded*/
-#define FRONT_SEQ_ROLL_ON				0x0c	/**< start roll for voice data2*/
-#define FRONT_SEQ_ROLL_OFF				0x0d	/**< stop roll for voice data2*/
+#define FRONT_SEQ_CHANGE_PAT			   0x0b	/**< the user requested a new pattern. send the same message back to the front as ack that the new pattern is loaded*/
+#define FRONT_SEQ_ROLL_ON			   	0x0c	/**< start roll for voice data2*/
+#define FRONT_SEQ_ROLL_OFF			   	0x0d	/**< stop roll for voice data2*/
 #define FRONT_SEQ_REQUEST_STEP_PARAMS 	0x0f
-#define FRONT_SEQ_ROLL_ON_OFF			0x10	/**< turn voice roll/flamm on/off. data 2 parameter is bit 0 to 3 = voice number, bit 4 is on/off flag*/
+#define FRONT_SEQ_ROLL_ON_OFF		   	0x10	/**< turn voice roll/flamm on/off. data 2 parameter is bit 0 to 3 = voice number, bit 4 is on/off flag*/
 #define FRONT_SEQ_ROLL_RATE				0x11
-#define FRONT_SEQ_VOLUME				0x12
-#define FRONT_SEQ_NOTE					0x13
-#define FRONT_SEQ_PROB					0x14
+#define FRONT_SEQ_VOLUME			   	0x12
+#define FRONT_SEQ_NOTE				   	0x13
+#define FRONT_SEQ_PROB				   	0x14
 #define FRONT_SEQ_SET_ACTIVE_TRACK 		0x15	/**< select the active track. all track specific messages (request step params etc) received will refer to the track selected with this command*/
 //#define FRONT_SEQ_RESYNC_LFO			0x16	/**< LFO is no longer running on the front */
-#define FRONT_SEQ_EUKLID_LENGTH 		0x17	/** sets the length of the current track from 0 to 16 steps*/
+#define FRONT_SEQ_EUKLID_LENGTH 		   0x17	/** sets the length of the current track from 0 to 16 steps*/
 #define FRONT_SEQ_EUKLID_STEPS			0x18
 #define FRONT_SEQ_REQUEST_EUKLID_PARAMS 0x19
 #define FRONT_SEQ_SET_SHOWN_PATTERN		0x1A
 
-#define FRONT_SEQ_REC_ON_OFF			0x1B	/**< start(data2=1) or stop(data2=0) recording mode */
+#define FRONT_SEQ_REC_ON_OFF			   0x1B	/**< start(data2=1) or stop(data2=0) recording mode */
 #define FRONT_SEQ_REQUEST_PATTERN_PARAMS 0x1C 	/**< the sequencer sends back the data of the active pattern */
 #define FRONT_SEQ_SET_PAT_BEAT			0x1D	/**< on every Nth bar the pattern will change to the next pattern*/
 #define FRONT_SEQ_SET_PAT_NEXT			0x1E	/**< the next pattern that will be played when the current finishes*/
-#define FRONT_SEQ_CLEAR_TRACK			0x1f
-#define FRONT_SEQ_COPY_TRACK			0x20
+#define FRONT_SEQ_CLEAR_TRACK			   0x1f
+#define FRONT_SEQ_COPY_TRACK			   0x20
 #define FRONT_SEQ_COPY_PATTERN			0x21
 #define FRONT_SEQ_SET_QUANT				0x22
 #define FRONT_SEQ_SET_AUTOM_TRACK		0x23 	// SEQ_CC, SEQ_SET_AUTOM_TRACK, autoTrkNr
 #define FRONT_SEQ_SELECT_ACTIVE_STEP 	0x24
-#define FRONT_SEQ_SHUFFLE				0x25
+#define FRONT_SEQ_SHUFFLE				   0x25
 #define FRONT_SEQ_TRACK_LENGTH			0x26
+#define FRONT_SEQ_TRACK_SCALE          0x3c
 #define FRONT_SEQ_CLEAR_PATTERN			0x27
-#define FRONT_SEQ_CLEAR_AUTOM			0x28 	//voice nr (0xf0) + autom track nr (0x0f)
+#define FRONT_SEQ_CLEAR_AUTOM			   0x28 	//voice nr (0xf0) + autom track nr (0x0f)
 
-#define FRONT_SEQ_POSX					0x29
-#define FRONT_SEQ_POSY					0x2a
-#define FRONT_SEQ_FLUX					0x2b
-#define FRONT_SEQ_SOM_FREQ				0x2c
+#define FRONT_SEQ_POSX					   0x29
+#define FRONT_SEQ_POSY					   0x2a
+#define FRONT_SEQ_FLUX					   0x2b
+#define FRONT_SEQ_SOM_FREQ				   0x2c
 #define FRONT_SEQ_MIDI_CHAN				0x2d	//voiceNr (0xf0) + channel (0x0f). --AS voice 7=global channel
 #define FRONT_SEQ_MIDI_MODE				0x2e //--AS not used anymore
 #define FRONT_SEQ_MIDI_ROUTING			0x2f	// midi routing
-#define FRONT_SEQ_MIDI_TX_FILTER		0x30    // tx filtering
-#define FRONT_SEQ_MIDI_RX_FILTER		0x31    // rx filtering
-#define FRONT_SEQ_BAR_RESET_MODE		0x32	// --AS reset bar on manual pattern change (0 is default - to not reset)
+#define FRONT_SEQ_MIDI_TX_FILTER		   0x30    // tx filtering
+#define FRONT_SEQ_MIDI_RX_FILTER		   0x31    // rx filtering
+#define FRONT_SEQ_BAR_RESET_MODE		   0x32	// --AS reset bar on manual pattern change (0 is default - to not reset)
 #define FRONT_SEQ_ERASE_ON_OFF			0x33    // --AS turn erase mode on/off
-#define FRONT_SEQ_TRACK_ROTATION		0x34	// --AS rotate a track's start position 0 to 15
+#define FRONT_SEQ_TRACK_ROTATION		   0x34	// --AS rotate a track's start position 0 to 15
 #define FRONT_SEQ_EUKLID_ROTATION		0x35
 
-#define FRONT_SEQ_TRIGGER_IN_PPQ		0x36
+#define FRONT_SEQ_TRIGGER_IN_PPQ		   0x36
 #define FRONT_SEQ_TRIGGER_OUT1_PPQ 		0x37
 #define FRONT_SEQ_TRIGGER_OUT2_PPQ 		0x38
 #define FRONT_SEQ_TRIGGER_GATE_MODE 	0x39
@@ -637,12 +638,13 @@ enum
 
 
 //SysEx
-#define SYSEX_INACTIVE					0x00	/**< SysEx mode is deactivated*/
+#define SYSEX_INACTIVE					   0x00	/**< SysEx mode is deactivated*/
 #define SYSEX_REQUEST_STEP_DATA		 	0x01
 #define SYSEX_RECEIVE_STEP_DATA			0x02
 #define SYSEX_REQUEST_MAIN_STEP_DATA	0x03
 #define SYSEX_RECEIVE_MAIN_STEP_DATA	0x04
 #define SYSEX_REQUEST_PATTERN_DATA		0x05
 #define SYSEX_RECEIVE_PAT_LEN_DATA		0x06
+#define SYSEX_RECEIVE_PAT_SCALE_DATA	0x07
 #define SYSEX_ACTIVE_MODE_NONE			0x7f	/**< a placeholder message indicating that sysex is active but no mode is selected yet*/
 #endif /* MIDIMESSAGES_H_ */

@@ -1297,7 +1297,7 @@ void midiParser_parseMidiMessage(MidiMsg msg)
             }
            
             // additionally, check each voice channel to see if it cares about this message
-            for(v=0;v<6;v++) {
+            for(v=0;v<7;v++) {
                if(midi_MidiChannels[v]==chanonly) { // if channel match and we haven't sent it already for the voice
                   if(msgonly==NOTE_ON && msg.data2) {
                      midiParser_noteOn(v, msg.data1, msg.data2, 0);
@@ -1353,8 +1353,8 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       midiChannelCode=0;
    // deal with this separately, because we can't have the mainboard overwhelming
    // the front with bank change messages
-   // this stipes the channels across a byte
-      if (chanonly==midi_MidiChannels[7])
+   // this stripes the channels across a byte
+      if (chanonly==midi_MidiChannels[7]) // global channel - send global bank change to front
          midiChannelCode=0x3F;
       else{
          if (chanonly==midi_MidiChannels[0])
@@ -1368,10 +1368,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          if (chanonly==midi_MidiChannels[4])
             midiChannelCode|=BANK_5;
          if ( (chanonly==midi_MidiChannels[5])||(chanonly==midi_MidiChannels[6]) )
-            {
+         {
             midiChannelCode|=BANK_6;
             midiChannelCode|=BANK_7;
-            }
+         }
       }
            
          
