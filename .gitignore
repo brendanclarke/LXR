@@ -60,3 +60,9 @@ front/AVR/Release/
 *.res
 *.dep
 *.htm
+
+# annoying mac stuff
+.bundle
+.DS_Store
+.localized
+Thumbs.db
