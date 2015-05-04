@@ -874,6 +874,7 @@ static void buttonHandler_voiceButtonPressed(uint8_t voiceNr)
             frontPanel_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS, voiceNr);
          	//request the pattern info for the selected pattern (bar cnt, next...)
          	//frontPanel_sendData(SEQ_CC,SEQ_REQUEST_PATTERN_PARAMS,buttonNr);
+            
          
             if (buttonHandler_stateMemory.selectButtonMode == SELECT_MODE_STEP) {
             	//reactivate sequencer mode

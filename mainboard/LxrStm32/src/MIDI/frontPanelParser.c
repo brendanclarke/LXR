@@ -836,6 +836,10 @@ static void frontParser_handleSeqCC()
          uart_sendFrontpanelByte(FRONT_SEQ_CC);
          uart_sendFrontpanelByte(FRONT_SEQ_EUKLID_ROTATION);
          uart_sendFrontpanelByte(euklid_getRotation(frontParser_midiMsg.data2));
+         
+         uart_sendFrontpanelByte(FRONT_SEQ_CC);
+         uart_sendFrontpanelByte(FRONT_SEQ_TRACK_SCALE);
+         uart_sendFrontpanelByte(seq_getTrackScale(frontParser_midiMsg.data2));
          break;
    
       case FRONT_SEQ_SET_SHOWN_PATTERN:

@@ -455,7 +455,7 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	    /*PAR_PATTERN_BEAT*/ 	DTYPE_0B127,
 	    /*PAR_PATTERN_NEXT*/ 	DTYPE_MENU | (MENU_NEXT_PATTERN<<4),
 	    /*PAR_TRACK_LENGTH*/ 	DTYPE_1B16,
-       /*PAR_TRACK_SCALE*/ 	DTYPE_0B15,
+       /*PAR_TRACK_SCALE*/ 	DTYPE_MENU | (MENU_TRACK_SCALE<<4),
 	    /*PAR_POS_X*/ 			DTYPE_0B127,
 	    /*PAR_POS_Y*/ 			DTYPE_0B127,
 	    /*PAR_FLUX*/ 			DTYPE_0B127,
@@ -2005,6 +2005,8 @@ static uint8_t getMaxEntriesForMenu(uint8_t menuId)
 		return midiFilterNames[0][0];
 	case MENU_PPQ:
 		return ppqNames[0][0];
+   case MENU_TRACK_SCALE:
+      return trackScaleNames[0][0];
 	default:
 		return 0;
 	}
@@ -2067,6 +2069,9 @@ static void getMenuItemNameForValue(const uint8_t menuId, const uint8_t curParmV
 	case MENU_PPQ:
 		p=ppqNames[curParmVal+1];
 		break;
+   case MENU_TRACK_SCALE:
+      p=trackScaleNames[curParmVal+1];
+      break;
 	default:
 		p=menuText_dash;
 		break;

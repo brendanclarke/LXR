@@ -10,6 +10,7 @@
 #define MENUTEXT_H_
 
 //-----------------------------------------------------------------
+// -bc- these get bitshifted by 4 - not sure if more than 15 will cause problems
 #define MENU_FILTER			1
 #define MENU_WAVEFORM		2
 #define MENU_AUDIO_OUT		3
@@ -24,6 +25,8 @@
 #define MENU_MIDI_ROUTING	12
 #define MENU_MIDI_FILTERING 13
 #define MENU_PPQ		 	14
+#define MENU_TRACK_SCALE 15
+
 
 //-----------------------------------------------------------------
 // Shared texts. Reduce mem usage by pooling common text
@@ -247,6 +250,19 @@ const char midiFilterNames[][16] PROGMEM =
 	{"PCN"},
 	{"PCR"},
 	{"all"},
+};
+//-----------------------------------------------------------------
+const char trackScaleNames[][4] PROGMEM =
+{
+	{8},	// number of entries
+	{"off"},
+	{" x2"},
+	{" x4"},
+	{" x8"},
+	{"x16"},
+	{"x32"},
+	{"x64"},
+	{"128"},
 };
 //-----------------------------------------------------------------
 // these must correspond with shortNamesEnum
