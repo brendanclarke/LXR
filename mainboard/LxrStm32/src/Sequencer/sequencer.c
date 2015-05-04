@@ -64,8 +64,9 @@ uint8_t seq_masterStepCnt=0;				/** keeps track of the played steps between 0 an
 uint8_t seq_rollRate = 0x08;				//start with roll rate = 1/16
 uint8_t seq_rollState = 0;					/**< each bit represents a voice. if bit is set, roll is active*/
 
-static int8_t 	seq_stepIndex[NUM_TRACKS];	/**< we have 16 steps consisting of 8 sub steps = 128 steps.
+static int8_t 	seq_stepIndex[NUM_TRACKS+1];	/**< we have 16 steps consisting of 8 sub steps = 128 steps.
 											     each track has its own counter to allow different pattern lengths */
+                                      // -bc- +1 so we don't have to use DRUM1 as a reference
 
 static uint16_t seq_tempo = 120;			/**< seq speed in bpm*/
 
@@ -172,8 +173,8 @@ void seq_init()
       autoNode_init(&seq_automationNodes[i][1]);
    }
 
-   memset(seq_stepIndex,0,NUM_TRACKS);
-   memset(seq_lastMasterStep,0,NUM_TRACKS);
+   memset(seq_stepIndex,0,NUM_TRACKS+1);
+   memset(seq_lastMasterStep,0,NUM_TRACKS+1);
 
 
    for(i=0;i<NUM_PATTERN;i++)
@@ -204,8 +205,20 @@ void seq_setTrackLength(uint8_t trackNr, uint8_t length)
    if(length == 16)
       length=0;
 	// --AS **PATROT this was changed from setting length on seq_activePattern to shown (or edited) pattern
-   seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].length=length;
+   // --bc this gets changed to store scale - length is now bitmasked to use only the first 5 bits since it is 1-16
+   seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].length = length;
 
+}
+//------------------------------------------------------------------------------
+void seq_setTrackScale(uint8_t trackNr, uint8_t scale)
+{
+   //set the scaling of the track - in powers of 2 from 0 to 7 ie we set a scale divisor of 1 to 128
+   //this is stored as the upper 3 bits of length
+   if(scale > 7)
+      scale=7;
+      
+   seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].scale = scale;
+   
 }
 
 //------------------------------------------------------------------------------
@@ -215,6 +228,13 @@ uint8_t seq_getTrackLength(uint8_t trackNr)
    uint8_t r=seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].length;
    if(r==0)
       return 16;
+   return r;
+}
+
+//------------------------------------------------------------------------------
+uint8_t seq_getTrackScale(uint8_t trackNr)
+{
+   uint8_t r=seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].scale;
    return r;
 }
 //------------------------------------------------------------------------------
@@ -230,7 +250,7 @@ void seq_setTrackRotation(uint8_t trackNr, const uint8_t newRot)
 
 	// if sequencer is running, move the current step position to compensate for the rotation
    if(seq_running) {
-      int8_t len = lr->length;
+      int8_t len = 0x1f & (lr->length);
       if(len==0)
          len=16;
    
@@ -250,7 +270,7 @@ void seq_setTrackRotation(uint8_t trackNr, const uint8_t newRot)
 
 	//set new rotation value
    lr->rotate=newRot;
-
+   
 }
 //------------------------------------------------------------------------------
 // **PATROT
@@ -353,13 +373,13 @@ void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
    else {
       trigger_triggerVoice(voiceNr, TRIGGER_OFF);
    }
-
-	//--AS if a note is on for that channel send note-off first
-   voiceControl_noteOff(voiceNr);
-
-	//Trigger internal synth voice
-   voiceControl_noteOn(voiceNr, note, vol);
-
+   if (vol>0){
+   //--AS if a note is on for that channel send note-off first
+      voiceControl_noteOff(voiceNr);
+   
+   //Trigger internal synth voice
+      voiceControl_noteOn(voiceNr, note, vol);
+   }
    midiChan = midi_MidiChannels[voiceNr];
 
 	//--AS the note that is played will be whatever is received unless we have a note override set
@@ -395,23 +415,24 @@ static void seq_nextStep()
 	// track 0 determines the master step position
    uint8_t masterStepPos;
    uint8_t seqlen;
+   uint8_t seqscale;
+   uint8_t activeScaledStep;
 	//if( (((seq_stepIndex[0]+1) &0x7f) == 0) ||
 	//    (((seq_patternSet.seq_subStepPattern[seq_activePattern][0][seq_stepIndex[0]+1]).note & PATTERN_END_MASK)>=PATTERN_END_MASK) )
 
-   seqlen=seq_patternSet.seq_patternLengthRotate[seq_activePattern][0].length;
-   if(!seqlen)
-      seqlen=16;
 
-   if( (((seq_stepIndex[0]+1) & 0x7f) == 0) || ((seq_stepIndex[0]+1) / 8 == seqlen))
-   		//(((seq_patternSet.seq_subStepPattern[seq_activePattern][0][seq_stepIndex[0]+1]).note & PATTERN_END)) )
+   if ( ( (seq_stepIndex[NUM_TRACKS]+1) & 0x7f) == 0)
    {
       masterStepPos = 0;
    	//a bar has passed
-      seq_barCounter++;
+      if (seq_barCounter>=127)
+         seq_barCounter = 0;
+      else
+         seq_barCounter++;
    }
    else
    {
-      masterStepPos = seq_stepIndex[0]+1;
+      masterStepPos = seq_stepIndex[NUM_TRACKS]+1;
    }
 
 	//-------- check if a pattern switch is necessary --------
@@ -459,7 +480,9 @@ static void seq_nextStep()
          }
          else {
             seq_loadSeqNow=0; // pattern switch was initiated as 'instant' from front panel, reset flag
-            seq_barCounter = -1;
+            if(seq_resetBarOnPatternChange)
+               seq_barCounter = -1; // -bc- bar counter needs to be -1 to get set to 0 on first bar change
+                                    // after 'instant' switch
          }
       	//send the ack message to tell the front that a new pattern starts playing
          uart_sendFrontpanelByte(FRONT_SEQ_CC);
@@ -495,20 +518,26 @@ static void seq_nextStep()
    }
 
 	//--------- Time to process the single tracks -------------------------
-   trigger_clockTick(seq_stepIndex[0]+1);
-
+   trigger_clockTick(seq_stepIndex[NUM_TRACKS]+1);
+   
    int i;
    for(i=0;i<NUM_TRACKS;i++)
    {
-   	//increment the step index
-      seq_stepIndex[i]++;
-   	//check if track end is reached
    
+            
    	// --AS **PATROT we now use this for length
       seqlen=seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].length;
+      seqscale=seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].scale;
+      
       if(!seqlen)
          seqlen=16;
-   
+      
+      // for scaled patterns - is this step one we want to process
+      activeScaledStep = !(masterStepPos & (0xff >> (8-seqscale) )); 
+   	//increment the step index
+      if (activeScaledStep)
+         seq_stepIndex[i]++;
+      
       if((seq_stepIndex[i] / 8) == seqlen || (seq_stepIndex[i] & 0x7f) == 0)
       {
       	//if end is reached reset track to step 0
@@ -518,7 +547,7 @@ static void seq_nextStep()
    
       if(seq_SomModeActive)
       {
-         som_tick(seq_stepIndex[0],seq_mutedTracks);
+         som_tick(seq_stepIndex[NUM_TRACKS],seq_mutedTracks);
       
       } 
       else {
@@ -554,7 +583,8 @@ static void seq_nextStep()
                      {
                         const uint8_t vol = seq_patternSet.seq_subStepPattern[seq_activePattern][i][seq_stepIndex[i]].volume&STEP_VOLUME_MASK;
                         const uint8_t note = seq_patternSet.seq_subStepPattern[seq_activePattern][i][seq_stepIndex[i]].note;
-                        seq_triggerVoice(i,vol,note);
+                        if(activeScaledStep)
+                           seq_triggerVoice(i,vol,note);
                      }
                   } // if sub step is active
             } // if main step is active
@@ -582,6 +612,9 @@ static void seq_nextStep()
       }//end oneshot
    
    }
+   
+   // increment the reference step index
+   seq_stepIndex[NUM_TRACKS] = (seq_stepIndex[NUM_TRACKS]+1) & 0x7f;
 
 	//send message to frontpanel
 	//to display the current step
@@ -658,6 +691,7 @@ void seq_triggerNextMasterStep(uint8_t stepSize)
    	//set time to next step to zero, forcing the sequencer to process the next step now
       seq_setDeltaT(-1);
    }
+   seq_stepIndex[NUM_TRACKS]=sn;
 }
 //------------------------------------------------------------------------------
 void seq_resetDeltaAndTick()
@@ -932,7 +966,8 @@ void seq_sendMainStepInfoToFront(uint16_t stepNr)
    uart_sendFrontpanelSysExByte( (dataToSend>>14)& 0x7f); //last 2 bit
 
 	// send the track length
-   uart_sendFrontpanelSysExByte( seq_patternSet.seq_patternLengthRotate[currentPattern][currentTrack].length);
+   uart_sendFrontpanelSysExByte(seq_patternSet.seq_patternLengthRotate[currentPattern][currentTrack].length);
+   uart_sendFrontpanelSysExByte(seq_patternSet.seq_patternLengthRotate[currentPattern][currentTrack].scale);
 
 }
 //--------------------------------------------------------------------
@@ -1426,7 +1461,8 @@ static uint8_t seq_isNextStepSyncStep()
       seq_prescaleCounter = 0;
       return 0;
    }
-   if( ((seq_stepIndex[0] & 0x3) % 4) == 3) {
+   // -bc- use a dummy step index at the end as reference instead of DRUM1
+   if( ((seq_stepIndex[NUM_TRACKS] & 0x3) % 4) == 3) {
       return 1;
    }
    return 0;
@@ -1537,5 +1573,43 @@ static void seq_setStepIndexToStart()
       seq_stepIndex[i] = ( 8 * rot) - 1;
    
    }
+   // -bc- use a dummy step index at the end as rotation reference instead of DRUM1
+   seq_stepIndex[NUM_TRACKS] = ( 8 * rot) - 1;
+}
 
+/* BC - this gets called when attempting to switch to a pattern that is already viewed.
+   normally, this would do nothing, this adds the functionality that all tracks re-align to where
+   they should be based on the current bar and master step count. This lets the user manually 
+   create variations with length and scale changes and return to the original pattern quickly*/
+void seq_realign()
+{
+   uint8_t length, scale, i, bar;
+   if(seq_barCounter<=0)
+      bar=0;
+   else 
+      bar=seq_barCounter-1;
+   uint16_t stepsFromZero = seq_stepIndex[NUM_TRACKS] + (uint16_t)(128*bar);
+   uint16_t trackSteps;
+   
+   for(i=0;i<NUM_TRACKS;i++) {
+      length=seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].length;
+      if (!length)
+         length=16;
+      length = length << 3;
+      scale=seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].scale;
+      
+      
+      trackSteps=(stepsFromZero>>scale)%length;
+      
+      seq_stepIndex[i] = trackSteps;
+      // resetting the stepindex also resets rotation
+      seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].rotate = 0;
+   }
+   
+   // make sure the front panel knows that roation has been reset
+   uart_sendFrontpanelByte(FRONT_SEQ_CC);
+   uart_sendFrontpanelByte(FRONT_SEQ_TRACK_ROTATION);
+   uart_sendFrontpanelByte(0);
+   
+   seq_midiNoteOff(0xff);
 }

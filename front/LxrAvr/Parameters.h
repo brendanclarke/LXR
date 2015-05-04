@@ -331,7 +331,8 @@ enum ParamEnums
 	PAR_PATTERN_NEXT,
 	
 	PAR_TRACK_LENGTH,
-	
+	PAR_TRACK_SCALE,
+   
 	PAR_POS_X,
 	PAR_POS_Y,
 	PAR_FLUX,
@@ -342,9 +343,9 @@ enum ParamEnums
 	//#########################################
 	//######## Global Parameters ##############
 	//#########################################
-	PAR_BEGINNING_OF_GLOBALS, //a placeholder to mark the beginning of the global var space not present in morph and not needed in the seq
+	PAR_BEGINNING_OF_GLOBALS, /*250*/ //a placeholder to mark the beginning of the global var space not present in morph and not needed in the seq
 	//global params
-	PAR_BPM = PAR_BEGINNING_OF_GLOBALS,	/*250*/
+	PAR_BPM = PAR_BEGINNING_OF_GLOBALS,	
 	
 
 	
@@ -375,8 +376,9 @@ enum ParamEnums
 
 	PAR_BAR_RESET_MODE,					// bool --AS 0 or 1   /*270*/
 	PAR_MIDI_CHAN_GLOBAL,				// --AS global midi channel
-   	PAR_SEQ_PC_TIME,                 // bool, 0 for bar sequence change, 1 for step change
-	PAR_BUT_SHIFT_MODE,
+   PAR_SEQ_PC_TIME,                 // bool, 0 for bar sequence change, 1 for step change
+	PAR_BUT_SHIFT_MODE,              // 0 normal shift operation, 1 shift button is a toggle
+   PAR_LOAD_PERF_ON_BANK,           // 0, incoming bank changes select kit, 1 bank changes select perf
 	NUM_PARAMS
 };
 

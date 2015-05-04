@@ -35,7 +35,7 @@ static uint8_t voice4presetMask[37]={4,14,15,27,28, 40,46,55,      56,65,68,73, 
 static uint8_t voice5presetMask[37]={6,16,17,23,    24,29,30,31,   32,41,47,57,  58,66,69,92,   100,106,112,119,125, 132,141,147,153,        159,165,171,    177,183,189,195,    201,207,213,219,225}; 
 static uint8_t voice6presetMask[37]={7,18,19,25,    26,33,34,35,   36,42,48,59,  60,61,67,93,   101,107,113,120,126, 133,142,148,154,        160,166,172,    178,184,190,196,    202,208,214,220,226};         
 
-#define FILE_VERSION 2
+#define FILE_VERSION 3
 
 
 #define NUM_TRACKS 7
@@ -79,7 +79,7 @@ static void preset_writeDrumsetData(uint8_t isMorph)
    uint16_t i;
    unsigned int bytesWritten;
 	
-   if(isMorph)
+   if(isMorph>0)
    {
       for(i=0;i<END_OF_SOUND_PARAMETERS;i++)
       {
@@ -99,7 +99,10 @@ static void preset_writeDrumsetData(uint8_t isMorph)
          } 
          else 
          {
-            value = preset_getMorphValue(i,parameter_values[PAR_MORPH]);
+            if (isMorph==2) // -bc- added this to be able to write full morph params for 'performance' files
+               value = preset_getMorphValue(i,255);
+            else
+               value = preset_getMorphValue(i,parameter_values[PAR_MORPH]);
          }					
          f_write((FIL*)&preset_File,&value,1,&bytesWritten);	
       }
@@ -507,13 +510,13 @@ char* preset_loadName(uint8_t presetNr, uint8_t what, uint8_t loadSave)
          break;
       default:
       // 
-      if (loadSave==0)
+         if (loadSave==0)
          {
-         memcpy_P((void*)preset_currentName,PSTR("Empty   "),8);
+            memcpy_P((void*)preset_currentName,PSTR("Empty   "),8);
          }
-      else
+         else
          {
-         memcpy_P((void*)preset_currentSaveMenuName,PSTR("Empty   "),8);
+            memcpy_P((void*)preset_currentSaveMenuName,PSTR("Empty   "),8);
          }   
          return NULL; // for glo and sample we don't load a name
    }
@@ -531,15 +534,15 @@ char* preset_loadName(uint8_t presetNr, uint8_t what, uint8_t loadSave)
    {
    	//error opening the file
       if (loadSave==0)
-         {
+      {
          memcpy_P((void*)preset_currentName,PSTR("Empty   "),8);
          return (char*)preset_currentName;
-         }
+      }
       else
-         {
+      {
          memcpy_P((void*)preset_currentSaveMenuName,PSTR("Empty   "),8);
          return (char*)preset_currentSaveMenuName;
-         } 
+      } 
       
       	
    }
@@ -664,7 +667,7 @@ void preset_queryPatternInfoFromSeq(uint8_t patternNr, uint8_t* next, uint8_t* r
    *repeat =  frontParser_stepData.prob;
 }
 //----------------------------------------------------
-void preset_queryMainStepDataFromSeq(uint16_t stepNr, uint16_t *mainStepData, uint8_t *length)
+void preset_queryMainStepDataFromSeq(uint16_t stepNr, uint16_t *mainStepData, uint8_t *length, uint8_t *scale)
 {
    frontParser_newSeqDataAvailable = 0;
 
@@ -697,6 +700,7 @@ void preset_queryMainStepDataFromSeq(uint16_t stepNr, uint16_t *mainStepData, ui
 	// we are reusing these members for purposes other than those that were originally intended
    *mainStepData =(uint16_t) ((frontParser_stepData.volume<<8) | frontParser_stepData.prob);
    *length=frontParser_stepData.note;
+   *scale=frontParser_stepData.param1Nr;
 };
 
 //----------------------------------------------------
@@ -704,6 +708,7 @@ static void preset_writePatternData()
 {
    uint16_t bytesWritten;
    uint8_t length;
+   uint8_t scale;
 
 
 	//write the preset data
@@ -758,7 +763,7 @@ static void preset_writePatternData()
    for(i=0;i<(NUM_PATTERN*NUM_TRACKS);i++)
    {
    	//get next data chunk and write it to file (length here is ignored)
-      preset_queryMainStepDataFromSeq(i, &mainStepData, &length);
+      preset_queryMainStepDataFromSeq(i, &mainStepData, &length, &scale);
       f_write((FIL*)&preset_File,(const void*)&mainStepData,sizeof(uint16_t),&bytesWritten);	
    }
 		
@@ -811,9 +816,18 @@ static void preset_writePatternData()
    for(i=0;i<(NUM_PATTERN*NUM_TRACKS);i++)
    {
    	//get next data chunk and write it to file
-      preset_queryMainStepDataFromSeq(i, &mainStepData, &length);
+      preset_queryMainStepDataFromSeq(i, &mainStepData, &length, &scale);
       f_write((FIL*)&preset_File,(const void*)&length,sizeof(uint8_t),&bytesWritten);
    }
+   
+
+   for(i=0;i<(NUM_PATTERN*NUM_TRACKS);i++)
+   {
+   	//get next data chunk and write it to file
+      preset_queryMainStepDataFromSeq(i, &mainStepData, &length, &scale);
+      f_write((FIL*)&preset_File,(const void*)&scale,sizeof(uint8_t),&bytesWritten);
+   }
+   
 
 	//end sysex mode
    frontPanel_sendByte(SYSEX_END);
@@ -1012,12 +1026,42 @@ static uint8_t preset_readPatternData()
          _delay_us(200); //todo speed up using ACK possible?
       }
    
+      if(success) {
+         frontParser_midiMsg.status = 0;
+         while( (frontParser_midiMsg.status != SYSEX_START))
+         {
+            frontPanel_sendByte(SYSEX_START);
+            uart_checkAndParse();
+         }
+         _delay_ms(50);
+         frontPanel_sendByte(SYSEX_SEND_PAT_SCALE_DATA);
+         frontPanel_sysexMode = SYSEX_SEND_PAT_SCALE_DATA;
+      
+         for(i=0;i<(NUM_PATTERN*NUM_TRACKS);i++)
+         {
+            if(success)
+               f_read((FIL*)&preset_File,(void*)&next,sizeof(uint8_t),&bytesRead);
+            if( bytesRead==0) {
+               next=0; // default to a scale fo0 since nothing read
+               success=0;
+            }
+            frontPanel_sendByte(next);
+         //we have to give the cortex some time to cope with all the incoming data
+         //since it is mainly calculating audio it takes a while to process all
+         //incoming uart data
+         //if((i&0x1f) == 0x1f) //every 32 steps
+            _delay_us(200); //todo speed up using ACK possible?
+         }
+      }
+   
    	//end sysex mode
       frontPanel_sendByte(SYSEX_END);
    
       success=1; // just to document that we don't consider this a failure, we just didn't read the bytes for this
+   
+   
    }
-
+   menu_setActiveVoice(menu_getActiveVoice()); // refreshes euklid, scale parameters to front
    return success;
 
 #else
@@ -1181,9 +1225,12 @@ void preset_saveAll(uint8_t presetNr, uint8_t isAll)
 	// save kit
    preset_writeDrumsetData(0);
 
-	// write some more padding (we'll allocate 512 bytes for kit data. This should be more than
-	// we'll ever need. Right now we use about 228 bytes).
+   // check remain from drumkit data
    remain = 512 - (END_OF_SOUND_PARAMETERS);
+   
+   // write some more padding (we'll allocate 512 bytes for kit data. This should be more than
+	// we'll ever need. Right now we use about 228 bytes for kit plus morph params).
+   
    while(remain){
       if(remain < GEN_BUF_LEN)
          siz=(uint8_t)remain;
@@ -1193,9 +1240,30 @@ void preset_saveAll(uint8_t presetNr, uint8_t isAll)
       remain -=siz;
    }
 
+   	// save morph target
+   preset_writeDrumsetData(2);
+
+   // check remain from drumkit data
+   remain = 512 - (END_OF_SOUND_PARAMETERS);
+   
+   // write some more padding (we'll allocate 512 bytes for kit data. This should be more than
+	// we'll ever need. Right now we use about 228 bytes for kit plus morph params).
+   
+   while(remain){
+      if(remain < GEN_BUF_LEN)
+         siz=(uint8_t)remain;
+      else
+         siz=GEN_BUF_LEN;
+      f_write((FIL*)&preset_File, filename, siz, &bytesWritten);
+      remain -=siz;
+   }
+
+
+
 	// write pattern data
    preset_writePatternData();
-
+   
+   
 	//close the file
    f_close((FIL*)&preset_File);
 #else
@@ -1281,8 +1349,11 @@ void preset_loadAll(uint8_t presetNr, uint8_t isAll)
    if(res!=FR_OK)
       goto closeFile;
 
-	// read padding
+	// padding amount for kit
    remain = 512 - (END_OF_SOUND_PARAMETERS);
+   
+
+// read padding
    while(remain){
       if(remain < GEN_BUF_LEN)
          siz=(uint8_t)remain;
@@ -1294,6 +1365,31 @@ void preset_loadAll(uint8_t presetNr, uint8_t isAll)
       remain -=siz;
    }
 
+
+   if (version>=3) {
+   
+   // read morph data
+      res=preset_readDrumsetData(1);
+      if(res!=FR_OK)
+         goto closeFile;
+   
+   // padding amount for kit
+      remain = 512 - (END_OF_SOUND_PARAMETERS);
+   
+   
+   // read padding
+      while(remain){
+         if(remain < GEN_BUF_LEN)
+            siz=(uint8_t)remain;
+         else
+            siz=GEN_BUF_LEN;
+         f_read((FIL*)&preset_File, filename, siz, &bytesRead);
+         if(bytesRead !=siz)
+            goto closeFile;
+         remain -=siz;
+      }
+   
+   }
 
 	// read pattern data
    if(!preset_readPatternData())

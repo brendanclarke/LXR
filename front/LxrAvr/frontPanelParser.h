@@ -121,6 +121,7 @@ extern uint8_t frontPanel_longData;
 #define SEQ_SELECT_ACTIVE_STEP 0x24 //used for automation params to select the step for which the destination should be set
 #define SEQ_SHUFFLE			0x25
 #define SEQ_TRACK_LENGTH	0x26
+#define SEQ_TRACK_SCALE    0x3c
 #define SEQ_CLEAR_PATTERN	0x27
 #define SEQ_CLEAR_AUTOM		0x28 //voice nr (0xf0) + autom track nr (0x0f)
 
@@ -147,6 +148,7 @@ extern uint8_t frontPanel_longData;
 #define SEQ_COPY_TRACK_PATTERN 0x3a
 #define SEQ_PC_TIME 0x3b
 
+
 //SysEx
 #define SYSEX_REQUEST_STEP_DATA			0x01
 #define SYSEX_SEND_STEP_DATA			0x02
@@ -154,6 +156,7 @@ extern uint8_t frontPanel_longData;
 #define SYSEX_SEND_MAIN_STEP_DATA		0x04
 #define SYSEX_REQUEST_PATTERN_DATA		0x05
 #define SYSEX_SEND_PAT_LEN_DATA			0x06
+#define SYSEX_SEND_PAT_SCALE_DATA		0x07
 
 
 /** a struct defining a standard midi message*/

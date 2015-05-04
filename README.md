@@ -21,6 +21,47 @@ Additions to .34 Firmware:
 
 7. Multiple voices can be set to respond (and record) note-ons on the global channel. When the currently active track has a 'note' assignment other than 'any', note-ons to the global channel will be matched to ALL tracks that have a note assignment other than 'any', rather than just the active one.
 
+8. MIDI channel select menus now have a '0' option that disables MIDI input.
+
+9. 'Load' menu now includes entries to load individual drum voices. This includes a number of load/save menu changes to deal with this:
+	- The name and number of drum voices will reflect the drum kit the voice was derived from, even if this was changed via a MIDI bank change request.
+	- The shortcut functions of the knobs has changed (knobs 1-4, from left to right):
+
+	LOAD MENU
+
+		- knob 1: change load type (kit, drum 1, pattern, etc)
+		- knob 2: change preset number NB: auto-loads for all kit and voice types
+		- knob 3: no function, except disables auto-load if turned
+		- knob 4: disables auto-load, moves cursor between load type and 'ok' if it exists
+
+	SAVE MENU
+
+		- knob 1: change save type (same as for load menu)
+		- knob 2: change cursor position (ie cycles through type, preset, alphanums, and 'ok')
+		- knob 3: change cursor value
+		- knob 4: for alphanumeric values, cycles through more characters
+		note that the order of characters for the shortcut knobs has changed. Capital letters are all the way on the left of knob 3, numbers are in the middle of knob 3, and lower case is all the way to the left of knob 4.
+
+10. Added pattern scaling option. This is accessed via a second page under 'click' (the transient voicing sub-page). The number is the binary exponent of the pattern multiplier. i.e., if you set this to 2, the pattern will be 2^2=4 bars long, each step is a quarter note, and each sub-step is 1/32nd. The maximum exponent is 7 (pattern is 128 bars long), beyond this there is no effect despite the control going to 15 (ran out of data types). Note that this required changing some functions so that they do not use the step counter for track 1 as a reference. A dummy step counter was introduced instead for this. It is unlikely, but possible this will cause problems with the trigger mod, but I have no way of testing this.
+
+The control currently doesn't refresh when switching tracks for some reason, but this is purely cosmetic. The parameter is per sub-pattern, and is saved with the pattern set, just as the pattern length (1-16) is.
+
+11. 'Performance' and 'All' save types now save the morph target parameters in addition to the drum kit and pattern. The version number for this type of file has been incremented to 3. Previous versions will load with an empty morph target, but will be re-saved as the new type. 
+
+12. added a global option to interpret Bank Change (CC0) messages incoming on the global channel as a command to load a 'Performance' data set instead of a drum kit. Bank changes on voice MIDI channels will still change that part individually.
+
+13. Added a 'realign pattern' shortcut. pressing the pattern button of the currently viewed pattern in 'perf' mode will align all tracks to the master clock. This also resets any 'pattern rotation' set. Also, when holding shift in 'PERF' mode, you can press the voice buttons to quickly switch the active voice for pattern rotation. This is in addition to the multiple voice-unmute shortcut. shift+current pattern will also do the re-alignment.
+
+14. When the velocity of a step is set to '0', the step will not re-trigger envelopes. This lets you use steps as 'automation only' - a bit like 'trigless locks' on elektron kit.
+
+15. One-shot LFO's! These are added as additional waveforms in the LFO settings. i.e. "si1", "tr1", etc are 1 shot versions of sine, triangle, and all the other normal lfo shapes. 
+	- There is also a new LFO shape "exponential triangle" - "xtr" and "xt1" which are the exponential up followed immediately by exponential down. 
+	-With a one-shot LFO selected, the 'offset' control instead sets a delay for the start of the LFO. It's a little weird because the delay gets scaled with 'rate' but it adds a lot of musical options. 
+	- The 'noise' LFO holds a single random value on each retrigger. 
+	- The 'rect' LFO is inverted in one-shot mode, so that it can be instantly on and then off, with the 'offset' delay setting an off portion at the beginning if desired.
+
+16. Quick access to morph target parameters. When viewing a single parameter (click in and adjust with the encoder), press 'shift' to edit and view the parameter for the morph target.
+
 
 
 Sonic Potions LXR Drumsynth Firmware

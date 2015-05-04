@@ -31,6 +31,8 @@ extern uint8_t menu_activeVoice;
 extern uint8_t menu_playedPattern;
 extern uint8_t menu_shownPattern;
 extern uint8_t menu_muteModeActive;
+extern uint8_t editModeActive;
+extern uint8_t morphValue;
 #define NUM_PRESET_LOCATIONS 11 
 //kit, drum1, drum2, drum3, snare, cym, hh, morph sound, pattern, performance, all
 extern uint8_t menu_currentPresetNr[NUM_PRESET_LOCATIONS];
@@ -145,6 +147,7 @@ enum NamesEnum
 	TEXT_PROBABILITY,
 	TEXT_ACTIVE_STEP,
 	TEXT_PAT_LENGTH,
+   TEXT_PAT_SCALE,
 	TEXT_NUM_STEPS,
 	TEXT_ROTATION,
 	
@@ -192,6 +195,7 @@ enum NamesEnum
 	TEXT_MIDI_CHAN_GLOBAL,
 	TEXT_SEQ_PC_TIME,
 	TEXT_BUT_SHIFT_MODE,
+   TEXT_LOAD_PERF_ON_BANK,
 	NUM_NAMES
 };
 //-----------------------------------------------------------------
@@ -252,6 +256,7 @@ enum shortNamesEnum
 	SHORT_PROBABILITY,
 	SHORT_STEP,
 	SHORT_LENGTH,
+   SHORT_SCALE,
 	SHORT_ROTATION,
 	
 	SHORT_BPM,
@@ -281,8 +286,9 @@ enum shortNamesEnum
 	SHORT_TRIGGER_OUT1,
 	SHORT_TRIGGER_OUT2,
 	SHORT_BAR_RESET_MODE,
-   	SHORT_SEQ_PC_TIME,
-   	SHORT_BUT_SHIFT_MODE,
+   SHORT_SEQ_PC_TIME,
+   SHORT_BUT_SHIFT_MODE,
+   SHORT_LOAD_PERF_ON_BANK,
 
 
 	
@@ -360,6 +366,7 @@ enum longNamesEnum
 	LONG_PROBABILITY,
 	LONG_NUMBER,
 	LONG_LENGTH,
+   LONG_SCALE,
 	LONG_STEPS,
 	LONG_ROTATION,
 	LONG_TEMPO,
@@ -394,8 +401,9 @@ enum longNamesEnum
 	LONG_TRIGGER_OUT2,
 	LONG_TRIGGER_GATE_MODE,
 	LONG_BAR_RESET_MODE,
-   	LONG_SEQ_PC_TIME,
-   	LONG_BUT_SHIFT_MODE,
+   LONG_SEQ_PC_TIME,
+   LONG_BUT_SHIFT_MODE,
+   LONG_LOAD_PERF_ON_BANK,
 	
 };
 
