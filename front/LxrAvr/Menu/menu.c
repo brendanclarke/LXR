@@ -3394,6 +3394,7 @@ void menu_setActiveVoice(uint8_t voiceNr)
 	// **LFOTARGFIX - save the gap index
 	menu_TargetVoiceGapIndex = getModTargetGapIndex(parameter_values[PAR_TARGET_LFO1+voiceNr]);
 	menu_activeVoice = voiceNr;
+   frontPanel_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS, voiceNr);
 };
 //----------------------------------------------------------------
 uint8_t menu_areMuteLedsShown()

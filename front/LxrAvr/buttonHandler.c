@@ -853,8 +853,6 @@ static void buttonHandler_voiceButtonPressed(uint8_t voiceNr)
             // -bc- addition: shift-voice in perf mode selects as well as unmutes
             menu_setActiveVoice(voiceNr);
             frontPanel_sendData(SEQ_CC, SEQ_SET_ACTIVE_TRACK, voiceNr);
-            menu_setActiveVoice(voiceNr);
-            frontPanel_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS, voiceNr);
             
             buttonHandler_showMuteLEDs();
          
@@ -871,8 +869,9 @@ static void buttonHandler_voiceButtonPressed(uint8_t voiceNr)
          
             menu_setActiveVoice(voiceNr);
          
-            frontPanel_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS, voiceNr);
-         	//request the pattern info for the selected pattern (bar cnt, next...)
+            
+         	//-bc- the request euklid params has been moved to within menu_setActiveVoice()
+            //request the pattern info for the selected pattern (bar cnt, next...)
          	//frontPanel_sendData(SEQ_CC,SEQ_REQUEST_PATTERN_PARAMS,buttonNr);
             
          

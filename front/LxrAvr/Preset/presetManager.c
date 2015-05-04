@@ -1061,7 +1061,7 @@ static uint8_t preset_readPatternData()
    
    
    }
-
+   menu_setActiveVoice(menu_getActiveVoice()); // refreshes euklid, scale parameters to front
    return success;
 
 #else

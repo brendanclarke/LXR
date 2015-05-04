@@ -1583,8 +1583,12 @@ static void seq_setStepIndexToStart()
    create variations with length and scale changes and return to the original pattern quickly*/
 void seq_realign()
 {
-   uint8_t length, scale, i;
-   uint16_t stepsFromZero = seq_stepIndex[NUM_TRACKS] + 128*seq_barCounter;
+   uint8_t length, scale, i, bar;
+   if(seq_barCounter<=0)
+      bar=0;
+   else 
+      bar=seq_barCounter-1;
+   uint16_t stepsFromZero = seq_stepIndex[NUM_TRACKS] + (uint16_t)(128*bar);
    uint16_t trackSteps;
    
    for(i=0;i<NUM_TRACKS;i++) {
@@ -1594,7 +1598,9 @@ void seq_realign()
       length = length << 3;
       scale=seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].scale;
       
-      trackSteps = (stepsFromZero >> scale)%length;
+      
+      trackSteps=(stepsFromZero>>scale)%length;
+      
       seq_stepIndex[i] = trackSteps;
       // resetting the stepindex also resets rotation
       seq_patternSet.seq_patternLengthRotate[seq_activePattern][i].rotate = 0;
