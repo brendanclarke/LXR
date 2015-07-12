@@ -795,6 +795,22 @@ static void frontParser_handleSeqCC()
             seq_copyTrackPattern(srcNr,dstPat,frontParser_shownPattern);
          }
          break;
+         
+      case FRONT_SEQ_COPY_STEP:
+         {
+            const uint8_t src = frontParser_midiMsg.data2>>4;
+            const uint8_t dst = frontParser_midiMsg.data2&0xf;
+            seq_copyStep(src,dst,frontParser_shownPattern);
+         }
+         break;
+      
+      case FRONT_SEQ_COPY_SUB_STEP:
+         {
+            const uint8_t src = frontParser_midiMsg.data2>>4;
+            const uint8_t dst = frontParser_midiMsg.data2&0xf;
+            seq_copySubStep(src,dst,frontParser_shownPattern);
+         }
+         break;
    
       case FRONT_SEQ_TRACK_LENGTH:
          seq_setTrackLength(frontParser_activeTrack,frontParser_midiMsg.data2);

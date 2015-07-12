@@ -620,6 +620,8 @@ enum
 
 #define FRONT_SEQ_COPY_TRACK_PATTERN   0x3a // added message for single track pattern copy
 #define FRONT_SEQ_PC_TIME_MODE         0x3b // setting for change pattern on bar or step
+#define FRONT_SEQ_COPY_STEP            0x3d // added message for copy step
+#define FRONT_SEQ_COPY_SUB_STEP        0x3e // special shift-copy step function?
 
 //codec control messages
 #define EQ_ON_OFF						0x01

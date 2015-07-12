@@ -49,104 +49,160 @@ volatile struct {
 static uint8_t buttonHandler_mutedVoices = 0;
 static int8_t buttonHandler_armedAutomationStep = NO_STEP_SELECTED;
 
+static void buttonHandler_copySubStep(uint8_t selectButtonPressed);
+static void buttonHandler_copyStep(uint8_t seqButtonPressed);
+static void buttonHandler_enterSeqMode();
+static void buttonHandler_leaveSeqMode();
+static void buttonHandler_updateSubSteps();
+
 #define ARM_AUTOMATION		0x40
 #define DISARM_AUTOMATION	0x00
+
+
+//--------------------------------------------------------
+static void buttonHandler_copySubStep(uint8_t selectButtonPressed)
+{
+      if (copyClear_Mode == MODE_COPY_STEP&&copyClear_srcSet())
+      {// switch source to sub-step
+         copyClear_Mode = MODE_COPY_SUB_STEP;
+         copyClear_setSrc((int8_t)selectButtonPressed, MODE_COPY_SUB_STEP);
+         led_setBlinkLed((uint8_t) (LED_PART_SELECT1 + selectButtonPressed), 1);
+      }
+      else if (copyClear_Mode == MODE_COPY_SUB_STEP&&copyClear_srcSet())
+      {
+         copyClear_setDst((int8_t)selectButtonPressed, MODE_COPY_SUB_STEP);
+         copyClear_copySubStep();
+         led_clearAllBlinkLeds();
+         
+         //query current sequencer step states and light up the corresponding leds
+         uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
+         uint8_t patternNr = menu_getViewedPattern(); //max 7 => 0x07 = 0b111
+         uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x7));
+         frontPanel_sendData(LED_CC, LED_QUERY_SEQ_TRACK, value);
+         menu_repaintAll();
+      }
+
+}
+
+//--------------------------------------------------------
+static void buttonHandler_copyStep(uint8_t seqButtonPressed)
+{     
+
+      if (copyClear_srcSet()) 
+      { // if we have already selected a source, do the copy operation
+       	//select dest
+
+         copyClear_setDst((int8_t)seqButtonPressed, MODE_COPY_STEP);
+         copyClear_copyStep();
+         led_clearAllBlinkLeds();
+      
+         //query current sequencer step states and light up the corresponding leds
+         uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
+         uint8_t patternNr = menu_getViewedPattern(); //max 7 => 0x07 = 0b111
+         uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x7));
+         frontPanel_sendData(LED_CC, LED_QUERY_SEQ_TRACK, value);
+         menu_repaintAll();
+      } 
+      else 
+      {
+         copyClear_setSrc((int8_t)seqButtonPressed, MODE_COPY_STEP);
+         led_setBlinkLed((uint8_t) (LED_STEP1 + seqButtonPressed), 1);
+         // light up substep leds
+
+      }
+}
 
 //--------------------------------------------------------
 static void buttonHandler_armTimerActionStep(int8_t stepNr) {
 	//check if sub or main step
-   const uint8_t isMainStep = ((stepNr % 8) == 0);
-   buttonHandler_armedAutomationStep = stepNr;
+	const uint8_t isMainStep = ((stepNr % 8) == 0);
+	buttonHandler_armedAutomationStep = stepNr;
 
-   if (isMainStep) {
-      const uint8_t mainStepNr = (uint8_t) (stepNr / 8);
-      led_setBlinkLed((uint8_t) (LED_STEP1 + mainStepNr), 1);
-   } 
-   else {
-      const uint8_t selectButtonNr = (uint8_t) (stepNr % 8);
-      led_setBlinkLed((uint8_t) (LED_PART_SELECT1 + selectButtonNr), 1);
-   }
+	if (isMainStep) {
+		const uint8_t mainStepNr = (uint8_t) (stepNr / 8);
+		led_setBlinkLed((uint8_t) (LED_STEP1 + mainStepNr), 1);
+	} else {
+		const uint8_t selectButtonNr = (uint8_t) (stepNr % 8);
+		led_setBlinkLed((uint8_t) (LED_PART_SELECT1 + selectButtonNr), 1);
+	}
 
-   frontPanel_sendData(ARM_AUTOMATION_STEP, (uint8_t) (stepNr),
-      	menu_getActiveVoice() | ARM_AUTOMATION);
+	frontPanel_sendData(ARM_AUTOMATION_STEP, (uint8_t) (stepNr),
+			menu_getActiveVoice() | ARM_AUTOMATION);
 
 }
 //--------------------------------------------------------
 static void buttonHandler_disarmTimerActionStep() {
-   if (buttonHandler_armedAutomationStep != NO_STEP_SELECTED) {
-      const uint8_t isMainStep =
-      		((buttonHandler_armedAutomationStep % 8) == 0);
-      if (isMainStep) {
-         const uint8_t mainStepNr =
-         		(uint8_t) (buttonHandler_armedAutomationStep / 8);
-         led_setBlinkLed((uint8_t) (LED_STEP1 + mainStepNr), 0);
-      } 
-      else {
-         const uint8_t selectButtonNr =
-         		(uint8_t) (buttonHandler_armedAutomationStep % 8);
-         led_setBlinkLed((uint8_t) (LED_PART_SELECT1 + selectButtonNr), 0);
-      }
-   
-   	//revert to original sound
-   	//make changes temporary while an automation step is armed - revert to original value
-      if (buttonHandler_resetLock == 1) {
-         parameter_values[buttonHandler_originalParameter] =
-            	buttonHandler_originalValue;
-      }
-   
-      buttonHandler_armedAutomationStep = NO_STEP_SELECTED;
-      frontPanel_sendData(ARM_AUTOMATION_STEP, 0, DISARM_AUTOMATION);
-   
-      if (buttonHandler_resetLock == 1) {
-         buttonHandler_resetLock = 0;
-      	//&revert to original value
-         if (buttonHandler_originalParameter < 128) // => Sound Parameter
-         {
-            frontPanel_sendData(MIDI_CC,
-               	(uint8_t) (buttonHandler_originalParameter),
-               	buttonHandler_originalValue);
-         } 
-         else if (buttonHandler_originalParameter >= 128
-         		&& (buttonHandler_originalParameter
-         				< END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
-         {
-            frontPanel_sendData(CC_2,
-               	(uint8_t) (buttonHandler_originalParameter - 128),
-               	buttonHandler_originalValue);
-         } 
-         else {
-            menu_parseGlobalParam(buttonHandler_originalParameter,
-               	parameter_values[buttonHandler_originalParameter]);
-         }
-         menu_repaintAll();
-      }
-      return;
-   }
+	if (buttonHandler_armedAutomationStep != NO_STEP_SELECTED) {
+		const uint8_t isMainStep =
+				((buttonHandler_armedAutomationStep % 8) == 0);
+		if (isMainStep) {
+			const uint8_t mainStepNr =
+					(uint8_t) (buttonHandler_armedAutomationStep / 8);
+			led_setBlinkLed((uint8_t) (LED_STEP1 + mainStepNr), 0);
+		} else {
+			const uint8_t selectButtonNr =
+					(uint8_t) (buttonHandler_armedAutomationStep % 8);
+			led_setBlinkLed((uint8_t) (LED_PART_SELECT1 + selectButtonNr), 0);
+		}
 
-   buttonHandler_armedAutomationStep = NO_STEP_SELECTED;
-   frontPanel_sendData(ARM_AUTOMATION_STEP, 0, DISARM_AUTOMATION);
+		//revert to original sound
+		//make changes temporary while an automation step is armed - revert to original value
+		if (buttonHandler_resetLock == 1) {
+			parameter_values[buttonHandler_originalParameter] =
+					buttonHandler_originalValue;
+		}
+
+		buttonHandler_armedAutomationStep = NO_STEP_SELECTED;
+		frontPanel_sendData(ARM_AUTOMATION_STEP, 0, DISARM_AUTOMATION);
+
+		if (buttonHandler_resetLock == 1) {
+			buttonHandler_resetLock = 0;
+			//&revert to original value
+			if (buttonHandler_originalParameter < 128) // => Sound Parameter
+					{
+				frontPanel_sendData(MIDI_CC,
+						(uint8_t) (buttonHandler_originalParameter),
+						buttonHandler_originalValue);
+			} else if (buttonHandler_originalParameter >= 128
+					&& (buttonHandler_originalParameter
+							< END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
+					{
+				frontPanel_sendData(CC_2,
+						(uint8_t) (buttonHandler_originalParameter - 128),
+						buttonHandler_originalValue);
+			} else {
+				menu_parseGlobalParam(buttonHandler_originalParameter,
+						parameter_values[buttonHandler_originalParameter]);
+			}
+			menu_repaintAll();
+		}
+		return;
+	}
+
+	buttonHandler_armedAutomationStep = NO_STEP_SELECTED;
+	frontPanel_sendData(ARM_AUTOMATION_STEP, 0, DISARM_AUTOMATION);
 
 }
 ;
 //--------------------------------------------------------
 int8_t buttonHandler_getArmedAutomationStep() {
-   return buttonHandler_armedAutomationStep;
+	return buttonHandler_armedAutomationStep;
 }
 ;
 //--------------------------------------------------------
 static uint8_t buttonHandler_TimerActionOccured() {
-   buttonHandler_disarmTimerActionStep();
-   if (buttonHandler_buttonTimerStepNr == TIMER_ACTION_OCCURED) //NO_STEP_SELECTED)
-   {
-   	//a timed action apeared -> do nothing
-      return 1;
-   }
-   buttonHandler_buttonTimerStepNr = NO_STEP_SELECTED;
-   return 0;
+	buttonHandler_disarmTimerActionStep();
+	if (buttonHandler_buttonTimerStepNr == TIMER_ACTION_OCCURED) //NO_STEP_SELECTED)
+	{
+		//a timed action apeared -> do nothing
+		return 1;
+	}
+	buttonHandler_buttonTimerStepNr = NO_STEP_SELECTED;
+	return 0;
 }
 static void buttonHandler_setTimeraction(uint8_t buttonNr) {
-   buttonHandler_buttonTimer = time_sysTick + BUTTON_TIMEOUT;
-   buttonHandler_buttonTimerStepNr = (int8_t) buttonNr;
+	buttonHandler_buttonTimer = time_sysTick + BUTTON_TIMEOUT;
+	buttonHandler_buttonTimerStepNr = (int8_t) buttonNr;
 
 }
 //--------------------------------------------------------
@@ -156,7 +212,6 @@ static void buttonHandler_setTimeraction(uint8_t buttonNr) {
  {
  const uint8_t arrayPos	= BUT_MODE/8;
  const uint8_t bitPos	= BUT_MODE&7;
-
  if(din_inputData[arrayPos] & (1<<bitPos))
  {
  return 0;
@@ -169,25 +224,25 @@ static void buttonHandler_setTimeraction(uint8_t buttonNr) {
 //periodically called handler for timed actions
 //-> hold a step button for a long time to select/rec automation
 void buttonHandler_tick() {
-   if ((time_sysTick > buttonHandler_buttonTimer)) {
-      if (buttonHandler_buttonTimerStepNr >= 0) //!=NO_STEP_SELECTED)
-      {
-      	//select step
-         buttonHandler_armTimerActionStep(buttonHandler_buttonTimerStepNr);
-      	//reset
-         buttonHandler_buttonTimerStepNr = TIMER_ACTION_OCCURED; //NO_STEP_SELECTED;
-      }
-   }
+	if ((time_sysTick > buttonHandler_buttonTimer)) {
+		if (buttonHandler_buttonTimerStepNr >= 0) //!=NO_STEP_SELECTED)
+				{
+			//select step
+			buttonHandler_armTimerActionStep(buttonHandler_buttonTimerStepNr);
+			//reset
+			buttonHandler_buttonTimerStepNr = TIMER_ACTION_OCCURED; //NO_STEP_SELECTED;
+		}
+	}
 }
 
 //--------------------------------------------------------
 static void buttonHandler_updateSubSteps() {
-   led_clearSelectLeds();
+	led_clearSelectLeds();
 	//query current sequencer step states and light up the corresponding leds
-   uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
-   uint8_t patternNr = menu_getViewedPattern(); //max 7 => 0x07 = 0b111
-   uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x7));
-   frontPanel_sendData(LED_CC, LED_QUERY_SEQ_TRACK, value);
+	uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
+	uint8_t patternNr = menu_getViewedPattern(); //max 7 => 0x07 = 0b111
+	uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x7));
+	frontPanel_sendData(LED_CC, LED_QUERY_SEQ_TRACK, value);
 }
 //--------------------------------------------------------
 /*
@@ -199,130 +254,114 @@ static void buttonHandler_updateSubSteps() {
 static void buttonHandler_enterSeqModeStepMode() {
 //	lastActivePage = menu_activePage;
 //	lastActiveSubPage = menu_getSubPage();
-   menu_switchSubPage(0);
-   menu_switchPage(SEQ_PAGE);
+	menu_switchSubPage(0);
+	menu_switchPage(SEQ_PAGE);
 
-   buttonHandler_updateSubSteps();
+	buttonHandler_updateSubSteps();
 
-   led_setBlinkLed(selectedStepLed, 1);
+	led_setBlinkLed(selectedStepLed, 1);
 }
 
 //--------------------------------------------------------
-/**returns 1 if the shift button is pressed*/
+/**returns 1 is the shift button is pressed*/
 uint8_t buttonHandler_getShift() {
-  if (!shiftMode) // shift is set to momentary (default)
-  {
-      const uint8_t arrayPos = BUT_SHIFT / 8;
-      const uint8_t bitPos = BUT_SHIFT & 7;
-      if (din_inputData[arrayPos] & (1 << bitPos)) 
-      {
-         return 0;
-      }
-      return 1;	
-   }
-   // toggle - button presses alter state
-   return shiftState;
-	
+	const uint8_t arrayPos = BUT_SHIFT / 8;
+	const uint8_t bitPos = BUT_SHIFT & 7;
+
+	if (din_inputData[arrayPos] & (1 << bitPos)) {
+		return 0;
+	}
+	return 1;
 }
 //--------------------------------------------------------
-static void buttonHandler_handleModeButtons(uint8_t mode) 
-{
-   if (buttonHandler_getShift()) 
-   {
-   	//set the new mode
-      buttonHandler_stateMemory.selectButtonMode = (uint8_t) ((mode + 4) & 0x07);
-   } 
-   else 
-   {
-   	//set the new mode
-      buttonHandler_stateMemory.selectButtonMode = (uint8_t) (mode & 0x07);
-   }
+static void buttonHandler_handleModeButtons(uint8_t mode) {
+	if (buttonHandler_getShift()) {
+		//set the new mode
+		buttonHandler_stateMemory.selectButtonMode = (uint8_t) ((mode + 4) & 0x07);
+	} else {
+		//set the new mode
+		buttonHandler_stateMemory.selectButtonMode = (uint8_t) (mode & 0x07);
+	}
 
-   led_clearAllBlinkLeds();
+	led_clearAllBlinkLeds();
 
 	//update the status LED
-   led_setMode2(buttonHandler_stateMemory.selectButtonMode);
+	led_setMode2(buttonHandler_stateMemory.selectButtonMode);
 
-   switch (buttonHandler_stateMemory.selectButtonMode) 
-   {
-      case SELECT_MODE_PERF: 
-         {
-            led_clearSequencerLeds();
-            led_clearSelectLeds();
-            led_initPerformanceLeds();
-         
-         //set menu to perf page
-            lastActiveSubPage = menu_getSubPage();
-            menu_switchPage(PERFORMANCE_PAGE);
-            menu_switchSubPage(0);
-            menu_repaintAll();
-         
-         }
-         break;
-   
-      case SELECT_MODE_STEP:
-         //menu_switchPage(menu_getActiveVoice());
-         led_setActiveSelectButton(menu_getSubPage());
-         buttonHandler_enterSeqModeStepMode();
-         break;
-      case SELECT_MODE_VOICE:
-      //set menu to voice page mode
-         menu_switchPage(menu_getActiveVoice());
-         led_setActiveSelectButton(menu_getSubPage());
-         menu_resetActiveParameter();
-         break;
-   
-      case SELECT_MODE_LOAD_SAVE:
-         menu_switchPage(LOAD_PAGE);
-         break;
-   
-      case SELECT_MODE_MENU:
-         menu_switchPage(MENU_MIDI_PAGE);
-         break;
-   
-      case SELECT_MODE_SOM_GEN:
-      #if USE_DRUM_MAP_GENERATOR
-      menu_switchPage(SOM_PAGE);
-      #endif
-         break;
-   
-      case SELECT_MODE_PAT_GEN:
-         frontPanel_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS,
-            menu_getActiveVoice());
-         menu_switchPage(EUKLID_PAGE);
-      
-         break;
-   
-      default:
-         break;
-   }
+	switch (buttonHandler_stateMemory.selectButtonMode) {
+	case SELECT_MODE_PERF: {
+		led_clearSequencerLeds();
+		led_clearSelectLeds();
+		led_initPerformanceLeds();
+
+		//set menu to perf page
+		lastActiveSubPage = menu_getSubPage();
+		menu_switchPage(PERFORMANCE_PAGE);
+		menu_switchSubPage(0);
+		menu_repaintAll();
+
+	}
+		break;
+
+	case SELECT_MODE_STEP:
+		//menu_switchPage(menu_getActiveVoice());
+		led_setActiveSelectButton(menu_getSubPage());
+		buttonHandler_enterSeqModeStepMode();
+		break;
+	case SELECT_MODE_VOICE:
+		//set menu to voice page mode
+		menu_switchPage(menu_getActiveVoice());
+		led_setActiveSelectButton(menu_getSubPage());
+		menu_resetActiveParameter();
+		break;
+
+	case SELECT_MODE_LOAD_SAVE:
+		menu_switchPage(LOAD_PAGE);
+		break;
+
+	case SELECT_MODE_MENU:
+		menu_switchPage(MENU_MIDI_PAGE);
+		break;
+
+	case SELECT_MODE_SOM_GEN:
+#if USE_DRUM_MAP_GENERATOR
+		menu_switchPage(SOM_PAGE);
+#endif
+		break;
+
+	case SELECT_MODE_PAT_GEN:
+		frontPanel_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS,
+				menu_getActiveVoice());
+		menu_switchPage(EUKLID_PAGE);
+
+		break;
+
+	default:
+		break;
+	}
 }
 //--------------------------------------------------------
-void buttonHandler_muteVoice(uint8_t voice, uint8_t isMuted) 
-{
+void buttonHandler_muteVoice(uint8_t voice, uint8_t isMuted) {
 	DISABLE_CONV_WARNING
-   if (isMuted) 
-   {
-      buttonHandler_mutedVoices |= (1 << voice);
-   
-   } 
-   else 
-   {
-      buttonHandler_mutedVoices &= ~(1 << voice);
-   }
+	if (isMuted) {
+		buttonHandler_mutedVoices |= (1 << voice);
+
+	} else {
+		buttonHandler_mutedVoices &= ~(1 << voice);
+
+	}
 	END_DISABLE_CONV_WARNING
 
 	//muted tracks are lit
-   if (menu_muteModeActive) 
-   {
-      led_setActiveVoiceLeds((uint8_t) (~buttonHandler_mutedVoices));
-   }
+	if (menu_muteModeActive) {
+		led_setActiveVoiceLeds((uint8_t) (~buttonHandler_mutedVoices));
+	}
 }
 ;
 //--------------------------------------------------------
 void buttonHandler_showMuteLEDs() {
-   led_setActiveVoiceLeds((uint8_t) (~buttonHandler_mutedVoices));
-   menu_muteModeActive = 1;
+	led_setActiveVoiceLeds((uint8_t) (~buttonHandler_mutedVoices));
+	menu_muteModeActive = 1;
 }
 //--------------------------------------------------------
 static void buttonHandler_handleSelectButton(uint8_t buttonNr) {
@@ -331,7 +370,7 @@ static void buttonHandler_handleSelectButton(uint8_t buttonNr) {
    
       switch (buttonHandler_stateMemory.selectButtonMode) {
          case SELECT_MODE_STEP:
-         case SELECT_MODE_VOICE: 
+         case SELECT_MODE_VOICE:
             {
             //select buttons represent sub steps
             
@@ -399,12 +438,14 @@ static void buttonHandler_handleSelectButton(uint8_t buttonNr) {
             break;
       
          case SELECT_MODE_VOICE:
+            {
          //change sub page -> osc, filter, mod etc...
             menu_switchSubPage(buttonNr);
          //go to 1st parameter on sub page
             menu_resetActiveParameter();
             led_setActiveSelectButton(buttonNr);
             menu_repaintAll();
+            }
             break;
       
          case SELECT_MODE_PERF:
@@ -589,21 +630,32 @@ static void buttonHandler_seqButtonPressed(uint8_t seqButtonPressed)
          default:
             break;
       }
+      
    } 
    else { // shift is not down
       switch (buttonHandler_stateMemory.selectButtonMode) {
          case SELECT_MODE_VOICE:
-         // button is held down, start a timer. If the button is held we
-         // can record automation for the one button. The regular handling for
-         // adding/removing step is handled in the button release
-            buttonHandler_setTimeraction((uint8_t) (seqButtonPressed * 8));
+            if (copyClear_Mode > MODE_CLEAR){
+               buttonHandler_copyStep(seqButtonPressed);
+            }
+            else{
+            // button is held down, start a timer. If the button is held we
+            // can record automation for the one button. The regular handling for
+            // adding/removing step is handled in the button release
+               buttonHandler_setTimeraction((uint8_t) (seqButtonPressed * 8));
+            }
             break;
          case SELECT_MODE_STEP:
-            led_clearAllBlinkLeds();
-            buttonHandler_selectActiveStep(ledNr, seqButtonPressed);
+            if (copyClear_Mode > MODE_CLEAR){
+               buttonHandler_copyStep(seqButtonPressed);
+            }
+            else{
+               led_clearAllBlinkLeds();
+               buttonHandler_selectActiveStep(ledNr, seqButtonPressed);
          
-         //reset sub step to 1 (== main step parameters)
-            led_setBlinkLed(LED_PART_SELECT1, 1);
+               //reset sub step to 1 (== main step parameters)
+               led_setBlinkLed(LED_PART_SELECT1, 1);
+            }
             break;
          case SELECT_MODE_PERF: //--- buttons 1-8 initiate a manual roll
             if (seqButtonPressed < 8) {
@@ -639,6 +691,10 @@ static void buttonHandler_seqButtonPressed(uint8_t seqButtonPressed)
 //--------------------------------------------------------
 static void buttonHandler_seqButtonReleased(uint8_t seqButtonPressed)
 {
+   if (copyClear_Mode > MODE_COPY_TRACK_PATTERN)
+   {
+      return;
+   }
 
    uint8_t ledNr = (uint8_t) (seqButtonPressed + LED_STEP1);
 
@@ -698,7 +754,12 @@ static void buttonHandler_seqButtonReleased(uint8_t seqButtonPressed)
 // one of the 8 part buttons is pressed
 static void buttonHandler_partButtonPressed(uint8_t partNr)
 {
-   if (copyClear_Mode == MODE_COPY_TRACK) 
+   if (copyClear_Mode>=MODE_COPY_STEP)
+   {
+      buttonHandler_copySubStep(partNr);
+   } 
+
+   else if (copyClear_Mode == MODE_COPY_TRACK) 
    {
       // user has previously selected a track and now selects
       // a pattern - escape from pattern copy and instead

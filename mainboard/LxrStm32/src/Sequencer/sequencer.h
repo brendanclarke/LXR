@@ -236,6 +236,10 @@ void seq_copyPattern(uint8_t src, uint8_t dst);
 //------------------------------------------------------------------------------
 void seq_copyTrackPattern(uint8_t srcNr, uint8_t dstPat, uint8_t srcPat);
 //------------------------------------------------------------------------------
+void seq_copyStep(uint8_t srcStep, uint8_t dstStep, uint8_t activeTrack);
+//------------------------------------------------------------------------------
+void seq_copySubStep(uint8_t srcStep, uint8_t dstStep, uint8_t activeTrack);
+//------------------------------------------------------------------------------
 //selects the automation track (0:1) that is recorded to
 void seq_setActiveAutomationTrack(uint8_t trackNr);
 //------------------------------------------------------------------------------

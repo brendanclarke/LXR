@@ -130,6 +130,32 @@ void copyClear_copyTrackPattern()
    buttonHandler_copySrc = buttonHandler_copyDst = SRC_DST_NONE;
 };
 //-----------------------------------------------------------------------------
+void copyClear_copyStep()
+{
+   if(copyClear_Mode != MODE_COPY_STEP)
+   {
+      return;
+   }
+   uint8_t value = (uint8_t)(((buttonHandler_copySrc&0xf)<<4) | (buttonHandler_copyDst&0xf));
+   led_clearSequencerLeds();
+   frontPanel_sendData(SEQ_CC,SEQ_COPY_STEP,value);
+	
+   buttonHandler_copySrc = buttonHandler_copyDst = SRC_DST_NONE;
+};
+//-----------------------------------------------------------------------------
+void copyClear_copySubStep()
+{
+   if(copyClear_Mode != MODE_COPY_SUB_STEP)
+   {
+      return;
+   }
+   uint8_t value = (uint8_t)(((buttonHandler_copySrc&0xf)<<4) | (buttonHandler_copyDst&0xf));
+   led_clearSequencerLeds();
+   frontPanel_sendData(SEQ_CC,SEQ_COPY_SUB_STEP,value);
+	
+   buttonHandler_copySrc = buttonHandler_copyDst = SRC_DST_NONE;
+};
+//-----------------------------------------------------------------------------
 uint8_t copyClear_isClearModeActive() 
 {
    return (copyClear_Mode == MODE_CLEAR);
