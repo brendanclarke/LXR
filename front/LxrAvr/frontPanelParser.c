@@ -204,7 +204,7 @@ void frontPanel_parseData(uint8_t data)
 	{	
 		//reset the byte counter
 		frontParser_rxCnt = 0;
-		frontParser_midiMsg.status = data;
+		frontParser_midiMsg.status = data;      
       
       if(frontParser_midiMsg.status == PATCH_RESET)
       {
@@ -320,6 +320,17 @@ void frontPanel_parseData(uint8_t data)
 					frontParser_rxCnt = 0;
 				}
 			}
+         // bc - to receive ACK messages other than SYSEX_START, process bytes following that signal
+         else if(frontParser_rxCnt==0)
+         {
+            frontParser_midiMsg.data1=data;
+            frontParser_rxCnt++;
+         }
+         else
+         {
+            frontParser_midiMsg.data2=data;
+            frontParser_rxCnt++;
+         }
 		}
 		else if(frontParser_rxCnt==0)
 		{

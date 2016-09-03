@@ -81,6 +81,8 @@ uint8_t frontParser_shownPattern = 0;
 uint8_t frontParser_activeStep=0;
 
 uint8_t frontParser_stepCopySource=0;
+uint8_t frontParser_incomingTrack=0;
+uint8_t frontParser_incomingPattern=0;
 
 //------------------------------------------------------
 /**send all active step numbers to frontpanel to light up corresponding LEDs*/
@@ -165,7 +167,7 @@ void frontParser_parseUartData(unsigned char data)
       if(data==SYSEX_START)
       {
          frontParser_sysexActive = SYSEX_ACTIVE_MODE_NONE;
-         uart_clearFrontFifo();
+         //uart_clearFrontFifo();
       
       	//send SYSEX_START as ACK
          uart_sendFrontpanelSysExByte(SYSEX_START);
@@ -266,6 +268,39 @@ static void frontParser_handleSysexData(unsigned char data)
          break;
    
       
+      case SYSEX_RECEIVE_PATTERN_AND_VOICE:
+         
+         frontParser_incomingTrack=(uint8_t)(data&0x07);
+         frontParser_incomingPattern=(uint8_t)(data>>3);
+      
+         uart_sendFrontpanelSysExByte(SYSEX_START);
+         uart_sendFrontpanelSysExByte(SYSEX_RECEIVE_PATTERN_AND_VOICE);
+         uart_sendFrontpanelSysExByte(data);
+         break;
+      case SYSEX_RECEIVE_PATTERN_NEXT:
+                   
+         seq_patternSet.seq_patternSettings[frontParser_incomingPattern].nextPattern = data;
+         
+         
+         //signal ack
+                     
+         uart_sendFrontpanelSysExByte(SYSEX_START);
+         uart_sendFrontpanelSysExByte(SYSEX_RECEIVE_PATTERN_NEXT);
+         uart_sendFrontpanelSysExByte(data);
+         
+         
+         break;
+      case SYSEX_RECEIVE_PATTERN_REPEAT:
+            
+         seq_patternSet.seq_patternSettings[frontParser_incomingPattern].changeBar = data;
+      
+         //signal ack
+         
+         uart_sendFrontpanelSysExByte(SYSEX_START);
+         uart_sendFrontpanelSysExByte(SYSEX_RECEIVE_PATTERN_REPEAT);
+         uart_sendFrontpanelSysExByte(data);
+         
+         break;
       case SYSEX_RECEIVE_MAIN_STEP_DATA:
          if(frontParser_rxCnt<2)
          {
@@ -276,8 +311,8 @@ static void frontParser_handleSysexData(unsigned char data)
             frontParser_sysexBuffer[frontParser_rxCnt++] = data;
          
          //calculate the step pattern and track indices
-            const uint8_t currentPattern	= frontParser_sysexSeqStepNr / 7;
-            const uint8_t currentTrack  	= frontParser_sysexSeqStepNr - currentPattern*7;
+            const uint8_t currentPattern	= frontParser_incomingPattern; //frontParser_sysexSeqStepNr / 7;
+            const uint8_t currentTrack  	= frontParser_incomingTrack; //frontParser_sysexSeqStepNr - currentPattern*7;
          
             uint16_t mainStepData = frontParser_sysexBuffer[0] | frontParser_sysexBuffer[1]<<7 | frontParser_sysexBuffer[2]<<14;
          
@@ -300,14 +335,14 @@ static void frontParser_handleSysexData(unsigned char data)
          
          
          //inc the step counter
-            frontParser_sysexSeqStepNr++;
+         //frontParser_sysexSeqStepNr++;
             frontParser_rxCnt = 0;
          
-         //signal new pattern
-         // -- AS we do this below after receiving pattern length data
-         //if( seq_isRunning()) {
-         //	seq_newPatternAvailable = 1;
-         //}
+         //signal ready for new main step data
+         
+            uart_sendFrontpanelSysExByte(SYSEX_START);
+            uart_sendFrontpanelSysExByte(SYSEX_RECEIVE_MAIN_STEP_DATA);
+         
          }
          break;
       case SYSEX_RECEIVE_PAT_LEN_DATA:
@@ -458,6 +493,10 @@ static void frontParser_handleSysexData(unsigned char data)
          frontParser_sysexActive = data;
          frontParser_sysexSeqStepNr = 0;
          frontParser_rxCnt = 0;
+         
+         uart_sendFrontpanelSysExByte(SYSEX_START);
+         uart_sendFrontpanelSysExByte(data);
+         
          break;
    }
 }
