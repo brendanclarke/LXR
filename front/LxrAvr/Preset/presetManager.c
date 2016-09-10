@@ -43,7 +43,7 @@ static uint8_t voice6presetMask[VOICE_PARAM_LENGTH]={7,18,19,25,    26,33,34,35,
 #define VERSION_4_PATTERN_STEP_BYTES
 #define VERSION_4_PATTERN_DATA_BYTES
 
-#define ACK_TIMEOUT 100
+#define ACK_TIMEOUT 200
 
 #define NUM_TRACKS 7
 #define NUM_PATTERN 8
@@ -872,7 +872,7 @@ static void preset_writePatternData()
       //frontPanel_sendByte(SYSEX_START);
       uart_checkAndParse();
    }		
-   _delay_ms(10);
+   _delay_ms(50);
 	//enter step data mode
    frontPanel_sendByte(SYSEX_REQUEST_STEP_DATA);
    frontPanel_sysexMode = SYSEX_REQUEST_STEP_DATA;
@@ -1053,6 +1053,8 @@ static uint8_t preset_sendMainStepData(uint8_t patternVoice, uint16_t stepData)
       if (usTimeout>ACK_TIMEOUT)
       {
          success=0;
+         lcd_clear();
+         lcd_home();
          lcd_string_F(PSTR("V-Pat ERR"));
          while(1){;};
       }
@@ -1076,6 +1078,8 @@ static uint8_t preset_sendMainStepData(uint8_t patternVoice, uint16_t stepData)
       if (usTimeout>ACK_TIMEOUT)
       {
          success=0;
+         lcd_clear();
+         lcd_home();
          lcd_string_F(PSTR("Step ERR"));
          while(1){;};
       }
@@ -1085,6 +1089,21 @@ static uint8_t preset_sendMainStepData(uint8_t patternVoice, uint16_t stepData)
    
    
    frontPanel_sendByte(SYSEX_END);
+   while((frontParser_midiMsg.status != SYSEX_END))
+   {
+      uart_checkAndParse();
+      _delay_us(1);
+      usTimeout++;
+      if (usTimeout>ACK_TIMEOUT)
+      {
+         success=0;
+         lcd_clear();
+         lcd_home();
+         lcd_string_F(PSTR("END ERR"));
+         while(1){;};
+      }
+   }
+   frontParser_midiMsg.status = 0;
    return success;
 }
 
@@ -1092,7 +1111,7 @@ static uint8_t preset_sendMainStepData(uint8_t patternVoice, uint16_t stepData)
 // returns 1 on success
 static uint8_t preset_sendNextRepeat(uint8_t patternVoice, uint8_t next, uint8_t repeat)
 {
-   uint8_t success=1;
+
    uint8_t usTimeout=0;
                   
    frontParser_midiMsg.status = 0;
@@ -1113,7 +1132,8 @@ static uint8_t preset_sendNextRepeat(uint8_t patternVoice, uint8_t next, uint8_t
       usTimeout++;
       if (usTimeout>ACK_TIMEOUT)
       {
-         success=0;
+         lcd_clear();
+         lcd_home();
          lcd_string_F(PSTR("V-Pat ERR"));
          while(1){;};
       }
@@ -1137,7 +1157,8 @@ static uint8_t preset_sendNextRepeat(uint8_t patternVoice, uint8_t next, uint8_t
       usTimeout++;
       if (usTimeout>ACK_TIMEOUT)
       {
-         success=0;
+         lcd_clear();
+         lcd_home();
          lcd_string_F(PSTR("Next ERR"));
          while(1){;};
       }
@@ -1160,7 +1181,8 @@ static uint8_t preset_sendNextRepeat(uint8_t patternVoice, uint8_t next, uint8_t
       usTimeout++;
       if (usTimeout>ACK_TIMEOUT)
       {
-         success=0;
+         lcd_clear();
+         lcd_home();
          lcd_string_F(PSTR("Repeat ERR"));
          while(1){;};
       }
@@ -1170,6 +1192,182 @@ static uint8_t preset_sendNextRepeat(uint8_t patternVoice, uint8_t next, uint8_t
    
    
    frontPanel_sendByte(SYSEX_END);
+   while((frontParser_midiMsg.status != SYSEX_END))
+   {
+      uart_checkAndParse();
+      _delay_us(1);
+      usTimeout++;
+      if (usTimeout>ACK_TIMEOUT)
+      {
+         lcd_clear();
+         lcd_home();
+         lcd_string_F(PSTR("END ERR"));
+         while(1){;};
+      }
+   }
+   frontParser_midiMsg.status = 0;
+   
+   frontPanel_sendData(SEQ_CC,SEQ_SET_SHOWN_PATTERN,menu_shownPattern);
+   
+   return 1;
+}
+
+//----------------------------------------------------
+// returns 1 on success
+static uint8_t preset_sendTrackLength(uint8_t patternVoice, uint8_t length)
+{
+   uint8_t success=1;
+   uint8_t usTimeout=0;
+                  
+   frontParser_midiMsg.status = 0;
+            
+   frontPanel_sendByte(SYSEX_START);
+   frontPanel_sendByte(SYSEX_SEND_PATTERN_AND_VOICE);
+   frontPanel_sendByte((uint8_t)(patternVoice&0x7f));
+   frontPanel_sysexMode = SYSEX_SEND_PATTERN_AND_VOICE;
+            
+   // wait for message ACK
+   usTimeout=0;
+   while( (frontParser_midiMsg.status != SYSEX_START) 
+                && (frontParser_midiMsg.data1 != SYSEX_SEND_PATTERN_AND_VOICE)
+                && (frontParser_midiMsg.data2 != patternVoice) )
+   {
+      uart_checkAndParse();
+      _delay_us(1);
+      usTimeout++;
+      if (usTimeout>ACK_TIMEOUT)
+      {
+         success=0;
+         lcd_clear();
+         lcd_home();
+         lcd_string_F(PSTR("V-Pat ERR"));
+         while(1){;};
+      }
+            
+   }
+   frontParser_midiMsg.status = 0;
+         
+   frontPanel_sendByte(SYSEX_START);
+   frontPanel_sendByte(SYSEX_SEND_PAT_LEN_DATA);
+   frontPanel_sendByte(length);
+   
+   frontPanel_sysexMode = SYSEX_SEND_PAT_LEN_DATA;
+   // we have to give the cortex some time to cope with all the incoming data,
+   // wait for the appropriate ack back
+   usTimeout=0;
+   while( (frontParser_midiMsg.status != SYSEX_START) 
+                && (frontParser_midiMsg.data1 != SYSEX_SEND_PAT_LEN_DATA) 
+                && (frontParser_midiMsg.data2 != length) )
+   {
+      uart_checkAndParse();
+      _delay_us(1);
+      usTimeout++;
+      if (usTimeout>ACK_TIMEOUT)
+      {
+         success=0;
+         lcd_clear();
+         lcd_home();
+         lcd_string_F(PSTR("Length ERR"));
+         while(1){;};
+      }
+   }
+   frontParser_midiMsg.status = 0;
+   
+   frontPanel_sendByte(SYSEX_END);
+   while((frontParser_midiMsg.status != SYSEX_END))
+   {
+      uart_checkAndParse();
+      _delay_us(1);
+      usTimeout++;
+      if (usTimeout>ACK_TIMEOUT)
+      {
+         success=0;
+         lcd_clear();
+         lcd_home();
+         lcd_string_F(PSTR("END ERR"));
+         while(1){;};
+      }
+   }
+   frontParser_midiMsg.status = 0;
+   return 1;
+}
+
+//----------------------------------------------------
+// returns 1 on success
+static uint8_t preset_sendTrackScale(uint8_t patternVoice, uint8_t scale)
+{
+   uint8_t success=1;
+   uint8_t usTimeout=0;
+                  
+   frontParser_midiMsg.status = 0;
+            
+   frontPanel_sendByte(SYSEX_START);
+   frontPanel_sendByte(SYSEX_SEND_PATTERN_AND_VOICE);
+   frontPanel_sendByte((uint8_t)(patternVoice&0x7f));
+   frontPanel_sysexMode = SYSEX_SEND_PATTERN_AND_VOICE;
+            
+   // wait for message ACK
+   usTimeout=0;
+   while( (frontParser_midiMsg.status != SYSEX_START) 
+                && (frontParser_midiMsg.data1 != SYSEX_SEND_PATTERN_AND_VOICE)
+                && (frontParser_midiMsg.data2 != patternVoice) )
+   {
+      uart_checkAndParse();
+      _delay_us(1);
+      usTimeout++;
+      if (usTimeout>ACK_TIMEOUT)
+      {
+         success=0;
+         lcd_clear();
+         lcd_home();
+         lcd_string_F(PSTR("V-Pat ERR"));
+         while(1){;};
+      }
+            
+   }
+   frontParser_midiMsg.status = 0;
+         
+   frontPanel_sendByte(SYSEX_START);
+   frontPanel_sendByte(SYSEX_SEND_PAT_SCALE_DATA);
+   frontPanel_sysexMode = SYSEX_SEND_PAT_SCALE_DATA;
+   frontPanel_sendByte(scale);
+   // we have to give the cortex some time to cope with all the incoming data,
+   // wait for the appropriate ack back
+   usTimeout=0;
+   while( (frontParser_midiMsg.status != SYSEX_START) 
+                && (frontParser_midiMsg.data1 != SYSEX_SEND_PAT_SCALE_DATA) 
+                && (frontParser_midiMsg.data2 != scale) )
+   {
+      uart_checkAndParse();
+      _delay_us(1);
+      usTimeout++;
+      if (usTimeout>ACK_TIMEOUT)
+      {
+         success=0;
+         lcd_clear();
+         lcd_home();
+         lcd_string_F(PSTR("Scale ERR"));
+         while(1){;};
+      }
+   }
+   frontParser_midiMsg.status = 0;
+   
+   frontPanel_sendByte(SYSEX_END);
+   while((frontParser_midiMsg.status != SYSEX_END))
+   {
+      uart_checkAndParse();
+      _delay_us(1);
+      usTimeout++;
+      if (usTimeout>ACK_TIMEOUT)
+      {
+         success=0;
+         lcd_clear();
+         lcd_home();
+         lcd_string_F(PSTR("END ERR"));
+         while(1){;};
+      }
+   }
+   frontParser_midiMsg.status = 0;
    return success;
 }
 
@@ -1222,7 +1420,7 @@ static uint8_t preset_readPatternData(uint8_t voiceArray)
       	//since it is mainly calculating audio it takes a while to process all
       	//incoming uart data also FIFO overflow
       	//if((i&0x1f) == 0x1f) //every 32 steps
-         _delay_us(100);
+         _delay_us(200);
       } 
       else {
          success=0;
@@ -1232,8 +1430,8 @@ static uint8_t preset_readPatternData(uint8_t voiceArray)
 
 	//end sysex mode
    frontPanel_sendByte(SYSEX_END);
-
-
+   _delay_ms(50);
+   
 	// ---------- send the main step data next
    if(success) {
       uint16_t mainStepData;
@@ -1254,11 +1452,21 @@ static uint8_t preset_readPatternData(uint8_t voiceArray)
          }
       }
    }
-      
+   else
+   {
+   
+      lcd_clear();
+      lcd_home();
+      lcd_string_F(PSTR("NOmain"));
+      while(1){;};
+   }
+   
+   
+      /*
+      bc - doesn't work for now, keep old SEQ send routine
    //---------- pattern info (next/repeat)
-
    if(success) {
-      for(i=0;i<(NUM_PATTERN);i++)
+      for(i=0;i<NUM_PATTERN;i++)
       {
          f_read((FIL*)&preset_File,(void*)&next,sizeof(uint8_t),&bytesRead);
          if(!bytesRead) {
@@ -1275,6 +1483,45 @@ static uint8_t preset_readPatternData(uint8_t voiceArray)
       }
    
    }
+   */
+   
+   //---------- pattern info (next/repeat)
+
+   if(success) {
+      for(i=0;i<(NUM_PATTERN);i++)
+      {
+         f_read((FIL*)&preset_File,(void*)&next,sizeof(uint8_t),&bytesRead);
+         if(!bytesRead) {
+            success=0;
+            break;
+         }
+         f_read((FIL*)&preset_File,(void*)&repeat,sizeof(uint8_t),&bytesRead);
+         if(!bytesRead) {
+            success=0;
+            break;
+         }
+      
+         frontPanel_sendData(SEQ_CC,SEQ_SET_SHOWN_PATTERN,(uint8_t)i);
+      
+         frontPanel_sendData(SEQ_CC,SEQ_SET_PAT_BEAT,repeat);
+         frontPanel_sendData(SEQ_CC,SEQ_SET_PAT_NEXT,next);
+      	//we have to give the cortex some time to cope with all the incoming data
+      	//since it is mainly calculating audio it takes a while to process all
+      	//incoming uart data
+      	//if((i&0x1f) == 0x1f) //every 32 steps
+         _delay_us(200); //todo speed up using ACK possible?
+      }
+   
+      frontPanel_sendData(SEQ_CC,SEQ_SET_SHOWN_PATTERN,menu_shownPattern);
+   }
+   else
+   {
+   
+      lcd_clear();
+      lcd_home();
+      lcd_string_F(PSTR("NOnx/rpt"));
+      while(1){;};
+   }
 
 	// ------------ shuffle settings
    if(success) {
@@ -1285,12 +1532,69 @@ static uint8_t preset_readPatternData(uint8_t voiceArray)
          frontPanel_sendData(SEQ_CC,SEQ_SHUFFLE,parameter_values[PAR_SHUFFLE]);
       else {
          success=0;
+         {
+            lcd_clear();
+            lcd_home();
+            lcd_string_F(PSTR("ShuffReadERR"));
+            while(1){;};
+         }
       }
    }
-
+   else
+   {
+   
+      lcd_clear();
+      lcd_home();
+      lcd_string_F(PSTR("NOshuff"));
+      while(1){;};
+   }
+   
+   /*
 	// ----------- Pattern/track lengths
 	// -- AS this might not exist in the saved data file, we still want success
+   
    if(success) {
+      uint8_t length;
+      for(i=0;i<NUM_PATTERN;i++)
+      {
+         for(k=0;k<NUM_TRACKS;k++)
+         {
+            if(success)
+               f_read((FIL*)&preset_File,(void*)&length,sizeof(uint8_t),&bytesRead);
+            if( bytesRead==0) 
+            {
+               length=0; // default to a length of 16 since we didn't read anything
+               success=0;
+               {
+                  lcd_clear();
+                  lcd_home();
+                  lcd_string_F(PSTR("LenReadERR"));
+                  while(1){;};
+               }
+            
+            }
+         
+            preset_sendTrackLength( ((uint8_t)(i<<3|k)), length);
+         
+         }
+      }
+      success=1;
+   }
+   else
+   {
+      lcd_clear();
+      lcd_home();
+      lcd_string_F(PSTR("NOLengt"));
+      while(1){;};
+   }
+   
+   */
+   
+   if(success) {
+      lcd_clear();
+      lcd_home();
+      lcd_string_F(PSTR("Sc"));
+   
       frontParser_midiMsg.status = 0;
       frontPanel_sendByte(SYSEX_START);
       while( (frontParser_midiMsg.status != SYSEX_START))
@@ -1298,17 +1602,36 @@ static uint8_t preset_readPatternData(uint8_t voiceArray)
          //frontPanel_sendByte(SYSEX_START);
          uart_checkAndParse();
       }
+      lcd_string_F(PSTR("St"));
       _delay_ms(50);
       frontPanel_sendByte(SYSEX_SEND_PAT_LEN_DATA);
       frontPanel_sysexMode = SYSEX_SEND_PAT_LEN_DATA;
-   
+      _delay_ms(50);
       for(i=0;i<(NUM_PATTERN*NUM_TRACKS);i++)
       {
          if(success)
+         {
+            uint16_t byteReadTimeout=0;
+            
             f_read((FIL*)&preset_File,(void*)&next,sizeof(uint8_t),&bytesRead);
+            while(bytesRead==0)
+            {
+               _delay_us(1);
+               f_read((FIL*)&preset_File,(void*)&next,sizeof(uint8_t),&bytesRead);
+               byteReadTimeout++;
+            }
+            
+         }
+         lcd_string_F(PSTR("r"));
          if( bytesRead==0) {
             next=0; // default to a length of 16 since we didn't read anything
             success=0;
+            {
+               lcd_clear();
+               lcd_home();
+               lcd_string_F(PSTR("lrERR"));
+               while(1){;};
+            }
          }
          frontPanel_sendByte(next);
       	//we have to give the cortex some time to cope with all the incoming data
@@ -1316,51 +1639,39 @@ static uint8_t preset_readPatternData(uint8_t voiceArray)
       	//incoming uart data
       	//if((i&0x1f) == 0x1f) //every 32 steps
          _delay_us(200); //todo speed up using ACK possible?
+         lcd_string_F(PSTR("s"));
       }
    
    	//end sysex mode
       frontPanel_sendByte(SYSEX_END);
    
       success=1; // just to document that we don't consider this a failure, we just didn't read the bytes for this
-   
+      lcd_string_F(PSTR("E"));
    
    }
    
 	// ----------- Pattern/track scale
-   
    if(success) {
-      frontParser_midiMsg.status = 0;
-      frontPanel_sendByte(SYSEX_START);
-      while( (frontParser_midiMsg.status != SYSEX_START))
+      uint8_t scale;
+      for(i=0;i<NUM_PATTERN;i++)
       {
-         //frontPanel_sendByte(SYSEX_START);
-         uart_checkAndParse();
-      }
-      _delay_ms(50);
-      frontPanel_sendByte(SYSEX_SEND_PAT_SCALE_DATA);
-      frontPanel_sysexMode = SYSEX_SEND_PAT_SCALE_DATA;
-      
-      for(i=0;i<(NUM_PATTERN*NUM_TRACKS);i++)
-      {
-         if(success)
-            f_read((FIL*)&preset_File,(void*)&next,sizeof(uint8_t),&bytesRead);
-         if( bytesRead==0) {
-            next=0; // default to a scale fo0 since nothing read
-            success=0;
+         for(k=0;k<NUM_TRACKS;k++)
+         {
+            if(success)
+               f_read((FIL*)&preset_File,(void*)&scale,sizeof(uint8_t),&bytesRead);
+            if( bytesRead==0) 
+            {
+               scale=0; // default to a scale of 0 since we didn't read anything
+               success=0;
+            }
+         
+            preset_sendTrackScale( ((uint8_t)((i<<3)|k)), scale);
+         
          }
-         frontPanel_sendByte(next);
-         //we have to give the cortex some time to cope with all the incoming data
-         //since it is mainly calculating audio it takes a while to process all
-         //incoming uart data
-         //if((i&0x1f) == 0x1f) //every 32 steps
-         _delay_us(200); //todo speed up using ACK possible?
       }
-               	//end sysex mode
-      frontPanel_sendByte(SYSEX_END);
-   
-      success=1; // just to document that we don't consider this a failure, we just didn't read the bytes for this
-   
+      success=1;
    }
+   
    
    menu_setActiveVoice(menu_getActiveVoice()); // refreshes euklid, scale parameters to front
    menu_repaintAll();

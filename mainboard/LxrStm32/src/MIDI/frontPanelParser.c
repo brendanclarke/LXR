@@ -172,6 +172,11 @@ void frontParser_parseUartData(unsigned char data)
       	//send SYSEX_START as ACK
          uart_sendFrontpanelSysExByte(SYSEX_START);
       }
+      else if(data==SYSEX_END)
+      {
+         frontParser_sysexActive = SYSEX_INACTIVE;
+         uart_sendFrontpanelSysExByte(SYSEX_END);
+      }
       else
       {
          frontParser_sysexActive = SYSEX_INACTIVE;
@@ -345,6 +350,7 @@ static void frontParser_handleSysexData(unsigned char data)
          
          }
          break;
+      
       case SYSEX_RECEIVE_PAT_LEN_DATA:
       // --AS same as above but we are receiving length data for each pattern
          {
@@ -354,12 +360,6 @@ static void frontParser_handleSysexData(unsigned char data)
          
          //first load into inactive track
             PatternSet* patternSet = &seq_patternSet;
-         
-            if((seq_newPatternVoiceArray&(0x01<<currentTrack))==0)
-            
-            { // track is not in the array, use current length instead
-               data = patternSet->seq_patternLengthRotate[currentPattern][currentTrack].length;
-            }
          
             if( (currentPattern == seq_activePattern) && seq_isRunning() )
             {
@@ -380,23 +380,44 @@ static void frontParser_handleSysexData(unsigned char data)
             }
          }
          break;
-   
-   
-      case SYSEX_RECEIVE_PAT_SCALE_DATA:
-      // --BC same as above but we are receiving scale data for each pattern
+      /*
+      case SYSEX_RECEIVE_PAT_LEN_DATA:
+      // --AS same as above but we are receiving length data for each pattern
          {
          //calculate the step pattern and track indices
-            const uint8_t currentPattern	= frontParser_sysexSeqStepNr / 7;
-            const uint8_t currentTrack  	= frontParser_sysexSeqStepNr - currentPattern*7;
+            const uint8_t currentPattern	= frontParser_incomingPattern;
+            const uint8_t currentTrack  	= frontParser_incomingTrack;
          
          //first load into inactive track
             PatternSet* patternSet = &seq_patternSet;
          
-            if((seq_newPatternVoiceArray&(0x01<<currentTrack))==0)
-            
-            { // track is not in the array, use current scale instead
-               data = patternSet->seq_patternLengthRotate[currentPattern][currentTrack].scale;
+            if( (currentPattern == seq_activePattern) && seq_isRunning() )
+            {
+               seq_tmpPattern.seq_patternLengthRotate[currentTrack].length = data;
+            } 
+            else {
+               patternSet->seq_patternLengthRotate[currentPattern][currentTrack].length = data;
             }
+         
+         
+            uart_sendFrontpanelSysExByte(SYSEX_START);
+            uart_sendFrontpanelSysExByte(SYSEX_RECEIVE_PAT_LEN_DATA);
+            uart_sendFrontpanelSysExByte(data);
+         
+         }
+         break;
+   
+      */
+      case SYSEX_RECEIVE_PAT_SCALE_DATA:
+      // --BC same as above but we are receiving scale data for each pattern
+         {
+         //calculate the step pattern and track indices
+            const uint8_t currentPattern	= frontParser_incomingPattern;
+            const uint8_t currentTrack  	= frontParser_incomingTrack;
+         
+         //first load into inactive track
+            PatternSet* patternSet = &seq_patternSet;
+         
          
             if( (currentPattern == seq_activePattern) && seq_isRunning() )
             {
@@ -407,14 +428,10 @@ static void frontParser_handleSysexData(unsigned char data)
             }
          
          
-         //inc the step counter
-            frontParser_sysexSeqStepNr++;
-            frontParser_rxCnt = 0;
+            uart_sendFrontpanelSysExByte(SYSEX_START);
+            uart_sendFrontpanelSysExByte(SYSEX_RECEIVE_PAT_SCALE_DATA);
+            uart_sendFrontpanelSysExByte(data);
          
-         // signal new pattern after receiving all the data
-            if( seq_isRunning() && (frontParser_sysexSeqStepNr == NUM_TRACKS*NUM_PATTERN)) {
-               seq_newPatternAvailable = 1;
-            }
          }
          break;
    
@@ -494,8 +511,8 @@ static void frontParser_handleSysexData(unsigned char data)
          frontParser_sysexSeqStepNr = 0;
          frontParser_rxCnt = 0;
          
-         uart_sendFrontpanelSysExByte(SYSEX_START);
-         uart_sendFrontpanelSysExByte(data);
+         //uart_sendFrontpanelSysExByte(SYSEX_START);
+         //uart_sendFrontpanelSysExByte(data);
          
          break;
    }
