@@ -62,8 +62,8 @@
 #define ON     1
 #define OFF    0
 
-volatile unsigned long startBlock, totalBlocks; 
-volatile unsigned char SDHC_flag, cardType;
+extern volatile unsigned long startBlock, totalBlocks;
+extern volatile unsigned char SDHC_flag, cardType;
 //volatile unsigned char buffer[512];
 
 unsigned char SD_init(void);

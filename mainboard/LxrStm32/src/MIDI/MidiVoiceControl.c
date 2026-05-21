@@ -45,6 +45,8 @@
 #include "Uart.h"
 //#include "LCD_driver.h"
 
+uint8_t voiceStatus[NUM_VOICES];
+
 static uint8_t active_voices=0;	// which voices are currently playing a note
 //----------------------------------------------------------------
 // this fn assumes a valid voice is sent

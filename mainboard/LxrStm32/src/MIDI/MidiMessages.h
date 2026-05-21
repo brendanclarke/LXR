@@ -228,7 +228,7 @@ OMNI_MODE_OFF,
 OMNI_MODE_ON,
 MONO_MODE_ON,
 POLY_MODE_ON, /*127*/
-}MIDIccParamEnums;
+	};
 
 
 // LXR PARAMETERS
@@ -385,7 +385,7 @@ enum
 
 	RESERVED4,						/*128*/
 
-}ParamEnums;
+};
 
 //for all parameters above 127
 enum
@@ -545,7 +545,7 @@ enum
 	CC2_MUTE_7,
    CC2_MUTE_ALL,
 
-}Param2Enums;
+};
 
 
 //Cortex <-> Front messages

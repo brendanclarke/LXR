@@ -1498,6 +1498,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    const uint16_t MIDIparamNr = msg.data1;
 // const uint16_t msgVal = msg.data2;
    uint8_t midiChannelCode=0;
+   uint8_t i;
    
    uint16_t LXRparamNr = I_DUNNO; // zero is undefined in LXR param numbers
  
