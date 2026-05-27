@@ -56,6 +56,81 @@ static void frontParser_handleMidiMessage();
 static void frontParser_handleSysexData(unsigned char data);
 static void frontParser_handleSeqCC();
 
+#define FLOW_INITIAL_GRANT 4
+#define FLOW_ACK_CREDITS 1
+#define FRONT_FILE_DONE_TYPE_PERFORMANCE 8
+#define DEFERRED_PERF_MSG_CACHE_SIZE 128
+
+static uint8_t comm_loadSessionActive = 0;
+static uint8_t comm_quietUi = 0;
+static uint8_t comm_flowActive = 0;
+static uint8_t comm_flowChannel = 0;
+static uint8_t comm_flowBudgetRemaining = 0;
+
+uint8_t frontParser_deferPerfLoadCacheUntilPatternChange = 1;
+static uint8_t frontParser_deferredPerfLoadActive = 0;
+static uint8_t frontParser_deferredPerfVoiceCachePending = 0;
+static uint8_t frontParser_deferredPerfPatternPending = 0;
+static uint8_t frontParser_deferredPerfUnholdPending = 0;
+static uint8_t frontParser_deferredPerfProtectedPattern = 0;
+static uint8_t frontParser_deferredPerfReplay = 0;
+static uint8_t frontParser_deferredPerfMsgCount = 0;
+static MidiMsg frontParser_deferredPerfMsgCache[DEFERRED_PERF_MSG_CACHE_SIZE];
+
+extern MidiMsg frontParser_midiMsg;
+extern uint8_t frontParser_sysexActive;
+
+static uint8_t frontParser_flowGrantByte(uint8_t channel, uint8_t credits)
+{
+   return (uint8_t)(((channel & 0x07) << 4) | (credits & 0x0f));
+}
+
+static uint8_t frontParser_isFlowMessage(uint8_t status, uint8_t data1)
+{
+   return (status == FRONT_SEQ_CC)
+      && (data1 >= FRONT_SEQ_FLOW_BEGIN)
+      && (data1 <= FRONT_SEQ_FLOW_ABORT);
+}
+
+static void frontParser_sendFlowGrant(uint8_t channel, uint8_t credits)
+{
+   if((frontParser_sysexActive != SYSEX_INACTIVE) && (channel != FLOW_CH_LOAD_SESSION))
+   {
+      comm_flowActive = 0;
+      comm_flowBudgetRemaining = 0;
+      return;
+   }
+
+   uart_sendFrontpanelPriorityByte(FRONT_SEQ_CC);
+   uart_sendFrontpanelPriorityByte(FRONT_SEQ_FLOW_GRANT);
+   uart_sendFrontpanelPriorityByte(frontParser_flowGrantByte(channel, credits));
+}
+
+static void frontParser_suspendCreditFlowForSysex()
+{
+   comm_flowActive = 0;
+   comm_flowBudgetRemaining = 0;
+}
+
+static void frontParser_flowMessageApplied()
+{
+   if(!comm_flowActive || frontParser_isFlowMessage(frontParser_midiMsg.status, frontParser_midiMsg.data1))
+      return;
+
+   if(comm_flowBudgetRemaining)
+      comm_flowBudgetRemaining--;
+
+   if(comm_flowBudgetRemaining == 0)
+   {
+      comm_flowBudgetRemaining = FLOW_INITIAL_GRANT;
+      frontParser_sendFlowGrant(comm_flowChannel, FLOW_INITIAL_GRANT);
+   }
+}
+
+uint8_t frontParser_isQuietUi()
+{
+   return comm_quietUi;
+}
 
 #define VOICE_PARAM_LENGTH 36
 static uint8_t voice1presetMask[VOICE_PARAM_LENGTH]={1,8,9,20,      37,43,49,50,   62,70,74,78,  82,83,88,94,   102,108,115,121,     128,134,137,143,    149,155,161,167,    173,179,185,191,    197,203,209,215}; 
@@ -64,6 +139,155 @@ static uint8_t voice3presetMask[VOICE_PARAM_LENGTH]={3,12,13,22,    39,45,53,54,
 static uint8_t voice4presetMask[VOICE_PARAM_LENGTH]={4,14,15,27,28, 40,46,55,      56,65,68,73,  77,81,91,99,   105,111,118,124,     131,140,146,152,        158,164,170,    176,182,188,194,    200,206,212,218}; 
 static uint8_t voice5presetMask[VOICE_PARAM_LENGTH]={6,16,17,23,    24,29,30,31,   32,41,47,57,  58,66,69,92,   100,106,112,119,125, 132,141,147,153,        159,165,171,    177,183,189,195,    201,207,213,219}; 
 static uint8_t voice6presetMask[VOICE_PARAM_LENGTH]={7,18,19,25,    26,33,34,35,   36,42,48,59,  60,61,67,93,   101,107,113,120,126, 133,142,148,154,        160,166,172,    178,184,190,196,    202,208,214,220};  
+
+static uint8_t* frontParser_getVoicePresetMask(uint8_t *voice)
+{
+   switch(*voice)
+   {
+      case 0:
+         return voice1presetMask;
+      case 1:
+         return voice2presetMask;
+      case 2:
+         return voice3presetMask;
+      case 3:
+         return voice4presetMask;
+      case 4:
+         return voice5presetMask;
+      case 6:
+         *voice = 5;
+         return voice6presetMask;
+      case 5:
+         return voice6presetMask;
+      default:
+         return 0;
+   }
+}
+
+static void frontParser_clearVoiceCache(uint8_t voice)
+{
+   uint8_t i;
+   uint8_t *presetMask = frontParser_getVoicePresetMask(&voice);
+
+   if(!presetMask)
+      return;
+
+   midi_midiLfoCacheAvailable[voice] = 0;
+   midi_midiVeloCacheAvailable[voice] = 0;
+
+   for(i=0;i<VOICE_PARAM_LENGTH;i++)
+   {
+      midi_midiCacheAvailable[presetMask[i]] = 0;
+   }
+}
+
+static void frontParser_clearDeferredPerfLoad()
+{
+   frontParser_deferredPerfLoadActive = 0;
+   frontParser_deferredPerfVoiceCachePending = 0;
+   frontParser_deferredPerfPatternPending = 0;
+   frontParser_deferredPerfUnholdPending = 0;
+   frontParser_deferredPerfMsgCount = 0;
+}
+
+static uint8_t frontParser_isDeferredPerfControlMessage()
+{
+   if(frontParser_midiMsg.status != FRONT_SEQ_CC)
+      return 0;
+
+   if(frontParser_isFlowMessage(frontParser_midiMsg.status, frontParser_midiMsg.data1))
+      return 1;
+
+   switch(frontParser_midiMsg.data1)
+   {
+      case FRONT_SEQ_FILE_BEGIN:
+      case FRONT_SEQ_FILE_DONE:
+      case FRONT_SEQ_LOAD_VOICE:
+      case FRONT_SEQ_UNHOLD_VOICE:
+         return 1;
+      default:
+         return 0;
+   }
+}
+
+static uint8_t frontParser_shouldDeferPerfMessage()
+{
+   if(!frontParser_deferredPerfLoadActive || frontParser_deferredPerfReplay)
+      return 0;
+
+   if(frontParser_isDeferredPerfControlMessage())
+      return 0;
+
+   switch(frontParser_midiMsg.status)
+   {
+      case FRONT_SEQ_CC:
+      case FRONT_SET_BPM:
+      case FRONT_CC_MACRO_TARGET:
+         return 1;
+
+      case MIDI_CC:
+      case FRONT_CC_2:
+      case FRONT_CC_LFO_TARGET:
+      case FRONT_CC_VELO_TARGET:
+         return seq_voicesLoading ? 0 : 1;
+
+      default:
+         return 0;
+   }
+}
+
+static uint8_t frontParser_cacheDeferredPerfMessage()
+{
+   if(!frontParser_shouldDeferPerfMessage())
+      return 0;
+
+   if(frontParser_deferredPerfMsgCount < DEFERRED_PERF_MSG_CACHE_SIZE)
+   {
+      frontParser_deferredPerfMsgCache[frontParser_deferredPerfMsgCount++] = frontParser_midiMsg;
+   }
+
+   return 1;
+}
+
+static void frontParser_applyDeferredPerfMessages()
+{
+   uint8_t i;
+
+   frontParser_deferredPerfReplay = 1;
+   for(i=0;i<frontParser_deferredPerfMsgCount;i++)
+   {
+      frontParser_midiMsg = frontParser_deferredPerfMsgCache[i];
+      frontParser_handleMidiMessage();
+   }
+   frontParser_deferredPerfReplay = 0;
+   frontParser_deferredPerfMsgCount = 0;
+}
+
+static uint8_t frontParser_shouldStagePattern(uint8_t pattern)
+{
+   if(frontParser_deferredPerfLoadActive)
+      return pattern == frontParser_deferredPerfProtectedPattern;
+
+   return (pattern == seq_activePattern) && seq_isRunning() && !seq_loadFastMode;
+}
+
+static void frontParser_markDeferredPatternPending()
+{
+   if(frontParser_deferredPerfLoadActive)
+      frontParser_deferredPerfPatternPending = 1;
+}
+
+static void frontParser_deferPerfUnholdVoice(uint8_t voice)
+{
+   if(voice > 6)
+      return;
+
+   if(voice == 6)
+      voice = 5;
+
+   frontParser_deferredPerfUnholdPending |= (uint8_t)(0x01 << voice);
+   seq_voicesLoading &= (uint8_t)~(0x01 << voice);
+}
 
 //a counter for the received bytes
 //each message is made up from 3 bytes (status 0xb0, parameter nr and parameter value)
@@ -202,12 +426,12 @@ void frontParser_uncacheVoice(uint8_t voice)
          default:
             break;
       }
-      //midi_midiLfoCacheAvailable[voice]=0;
+      midi_midiLfoCacheAvailable[voice]=0;
    }
    if(midi_midiVeloCacheAvailable[voice])
    {
       modNode_setDestination(&velocityModulators[voice], midi_midiVeloCache[voice]);
-      //midi_midiVeloCacheAvailable[voice]=0;
+      midi_midiVeloCacheAvailable[voice]=0;
    }
    
    for(i=0;i<VOICE_PARAM_LENGTH;i++)
@@ -215,11 +439,68 @@ void frontParser_uncacheVoice(uint8_t voice)
       if(midi_midiCacheAvailable[presetMask[i]])
       {
          midiParser_ccHandler(midi_midiCache[presetMask[i]],1);
-         //midi_midiCacheAvailable[presetMask[i]]=0;
+         midi_midiCacheAvailable[presetMask[i]]=0;
       }
    }
    
 }   
+
+static uint8_t frontParser_voiceCachePending(uint8_t voice)
+{
+   uint8_t i;
+   uint8_t *presetMask = frontParser_getVoicePresetMask(&voice);
+
+   if(!presetMask)
+      return 0;
+
+   if(midi_midiLfoCacheAvailable[voice] || midi_midiVeloCacheAvailable[voice])
+      return 1;
+
+   for(i=0;i<VOICE_PARAM_LENGTH;i++)
+   {
+      if(midi_midiCacheAvailable[presetMask[i]])
+         return 1;
+   }
+
+   return 0;
+}
+
+static void frontParser_applyPendingVoiceCache()
+{
+   uint8_t voice;
+
+   for(voice=0;voice<6;voice++)
+   {
+      if(frontParser_deferredPerfUnholdPending & (0x01<<voice))
+      {
+         frontParser_unholdVoice(voice);
+         frontParser_deferredPerfUnholdPending &= (uint8_t)~(0x01<<voice);
+      }
+
+      if(frontParser_voiceCachePending(voice))
+      {
+         frontParser_uncacheVoice(voice);
+         if(voice == 5)
+            seq_newVoiceAvailable &= (uint8_t)~0x60;
+         else
+            seq_newVoiceAvailable &= (uint8_t)~(0x01<<voice);
+      }
+   }
+}
+
+void frontParser_applyDeferredVoiceCache()
+{
+   if(frontParser_deferredPerfVoiceCachePending)
+   {
+      frontParser_applyDeferredPerfMessages();
+      frontParser_applyPendingVoiceCache();
+      if(frontParser_deferredPerfPatternPending)
+         seq_applyTmpPatternTo(frontParser_deferredPerfProtectedPattern);
+      frontParser_deferredPerfVoiceCachePending = 0;
+      frontParser_deferredPerfPatternPending = 0;
+   }
+}
+
 //------------------------------------------------------
 /**send all active step numbers to frontpanel to light up corresponding LEDs*/
 void frontParser_updateTrackLeds(const uint8_t trackNr, uint8_t patternNr)
@@ -302,6 +583,7 @@ void frontParser_parseUartData(unsigned char data)
       frontParser_midiMsg.status = data;
       if(data==SYSEX_START)
       {
+         frontParser_suspendCreditFlowForSysex();
          frontParser_sysexActive = SYSEX_ACTIVE_MODE_NONE;
          uart_clearFrontFifo();
          
@@ -319,8 +601,7 @@ void frontParser_parseUartData(unsigned char data)
       }
       else if(data==FRONT_CALLBACK_ACK)
       {
-         uart_clearFrontFifo();
-         uart_sendFrontpanelSysExByte(FRONT_CALLBACK_ACK);
+         uart_sendFrontpanelPriorityByte(FRONT_CALLBACK_ACK);
       }
       else
       {
@@ -436,7 +717,12 @@ static void frontParser_handleSysexData(unsigned char data)
          //first load into inactive track
             PatternSet* patternSet = &seq_patternSet;
             
-            if( (currentPattern == seq_activePattern) && seq_isRunning() )
+            if(frontParser_deferredPerfLoadActive && (currentPattern == frontParser_deferredPerfProtectedPattern))
+            {
+               seq_tmpPattern.seq_mainSteps[currentTrack] = mainStepData;
+               frontParser_markDeferredPatternPending();
+            }
+            else if( (currentPattern == seq_activePattern) && seq_isRunning() )
             {  
                if(seq_loadFastMode)
                {
@@ -444,7 +730,9 @@ static void frontParser_handleSysexData(unsigned char data)
                   patternSet->seq_mainSteps[currentPattern][currentTrack] = mainStepData;
                }
                else
+               {
                   seq_tmpPattern.seq_mainSteps[currentTrack] = mainStepData;
+               }
             } 
             else
             {
@@ -470,10 +758,11 @@ static void frontParser_handleSysexData(unsigned char data)
             uint8_t repeat = frontParser_sysexBuffer[1];
             //first load into inactive track
             PatternSet* patternSet = &seq_patternSet;
-            if( (currentPattern == seq_activePattern) && seq_isRunning() && !seq_loadFastMode )
+            if(frontParser_shouldStagePattern(currentPattern))
             {
                seq_tmpPattern.seq_patternSettings.nextPattern=next;
                seq_tmpPattern.seq_patternSettings.changeBar=repeat;
+               frontParser_markDeferredPatternPending();
             }
             else
             {
@@ -503,9 +792,10 @@ static void frontParser_handleSysexData(unsigned char data)
             PatternSet* patternSet = &seq_patternSet;
          
          
-            if( (currentPattern == seq_activePattern) && seq_isRunning() && !seq_loadFastMode )
+            if(frontParser_shouldStagePattern(currentPattern))
             {
                seq_tmpPattern.seq_patternLengthRotate[currentTrack].length = data;
+               frontParser_markDeferredPatternPending();
             } 
             else 
             
@@ -540,9 +830,10 @@ static void frontParser_handleSysexData(unsigned char data)
             PatternSet* patternSet = &seq_patternSet;
          
             
-            if( (currentPattern == seq_activePattern) && seq_isRunning() && !seq_loadFastMode )
+            if(frontParser_shouldStagePattern(currentPattern))
             {
                seq_tmpPattern.seq_patternLengthRotate[currentTrack].scale = data;
+               frontParser_markDeferredPatternPending();
             } 
             else 
             {
@@ -603,7 +894,7 @@ static void frontParser_handleSysexData(unsigned char data)
             }
          */
          //do not overwrite playing pattern
-            if( (currentPattern == seq_activePattern)   && seq_isRunning())
+            if(frontParser_shouldStagePattern(currentPattern))
             {
                seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].volume 	= frontParser_sysexBuffer[0];
                seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].prob 	= frontParser_sysexBuffer[1];
@@ -612,6 +903,7 @@ static void frontParser_handleSysexData(unsigned char data)
                seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param1Val 	= frontParser_sysexBuffer[4];
                seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param2Nr 	= frontParser_sysexBuffer[5];
                seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param2Val 	= frontParser_sysexBuffer[6];
+               frontParser_markDeferredPatternPending();
             } 
             else {
             
@@ -659,7 +951,7 @@ static void frontParser_handleSysexData(unsigned char data)
             
          //do not overwrite playing pattern
          
-            if( (currentPattern == seq_activePattern)   && seq_isRunning() && !seq_loadFastMode)
+            if(frontParser_shouldStagePattern(currentPattern))
             {
                seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].volume 	= frontParser_sysexBuffer[0];
                seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].prob 	= frontParser_sysexBuffer[1];
@@ -668,6 +960,7 @@ static void frontParser_handleSysexData(unsigned char data)
                seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param1Val 	= frontParser_sysexBuffer[4];
                seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param2Nr 	= frontParser_sysexBuffer[5];
                seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param2Val 	= frontParser_sysexBuffer[6];
+               frontParser_markDeferredPatternPending();
             } 
             else 
             {
@@ -697,7 +990,7 @@ static void frontParser_handleSysexData(unsigned char data)
                {  
                   seq_tracksLocked &= ~(0x01<<currentTrack);
                }
-               else if (currentPattern == 7 && seq_isRunning() && !seq_loadFastMode)
+               else if (!frontParser_deferredPerfLoadActive && currentPattern == 7 && seq_isRunning() && !seq_loadFastMode)
                {
                   seq_newPatternAvailable=1;
                }
@@ -720,6 +1013,11 @@ static void frontParser_handleSysexData(unsigned char data)
 // This is called when we've received a full midi message
 static void frontParser_handleMidiMessage()
 {
+   if(frontParser_cacheDeferredPerfMessage())
+   {
+      frontParser_flowMessageApplied();
+      return;
+   }
 
    switch(frontParser_midiMsg.status)
    {
@@ -1001,7 +1299,7 @@ static void frontParser_handleMidiMessage()
             if(seq_voicesLoading&(0x01<<(velModNr)))
             {
                midi_midiVeloCache[velModNr]=value;
-               midi_midiLfoCacheAvailable[velModNr]=1;
+               midi_midiVeloCacheAvailable[velModNr]=1;
             }
             else
             {
@@ -1067,6 +1365,8 @@ static void frontParser_handleMidiMessage()
          }
          break;
    } // frontParser_midiMsg.status
+
+   frontParser_flowMessageApplied();
 }
 //------------------------------------------------------
 // Sequencer message handler
@@ -1075,6 +1375,55 @@ static void frontParser_handleSeqCC()
 {
    switch(frontParser_midiMsg.data1)
    {
+      case FRONT_SEQ_FLOW_BEGIN:
+         if(frontParser_midiMsg.data2 == FLOW_CH_LOAD_SESSION)
+         {
+            comm_loadSessionActive = 1;
+            comm_quietUi = 1;
+            comm_flowActive = 0;
+            comm_flowBudgetRemaining = 0;
+            frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
+         }
+         else
+         {
+            comm_flowActive = 1;
+            comm_flowChannel = (uint8_t)(frontParser_midiMsg.data2 & 0x07);
+            comm_flowBudgetRemaining = FLOW_INITIAL_GRANT;
+            frontParser_sendFlowGrant(comm_flowChannel, FLOW_INITIAL_GRANT);
+         }
+         break;
+
+      case FRONT_SEQ_FLOW_END:
+         if(frontParser_midiMsg.data2 == FLOW_CH_LOAD_SESSION)
+         {
+            comm_loadSessionActive = 0;
+            comm_quietUi = 0;
+            comm_flowActive = 0;
+            comm_flowBudgetRemaining = 0;
+            frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
+         }
+         else
+         {
+            uint8_t channel = (uint8_t)(frontParser_midiMsg.data2 & 0x07);
+            if(comm_flowActive && (comm_flowChannel == channel))
+            {
+               comm_flowActive = 0;
+               comm_flowBudgetRemaining = 0;
+            }
+            frontParser_sendFlowGrant(channel, FLOW_ACK_CREDITS);
+         }
+         break;
+
+      case FRONT_SEQ_FLOW_ABORT:
+         comm_loadSessionActive = 0;
+         comm_quietUi = 0;
+         comm_flowActive = 0;
+         comm_flowBudgetRemaining = 0;
+         frontParser_clearDeferredPerfLoad();
+         break;
+
+      case FRONT_SEQ_FLOW_GRANT:
+         break;
    
       case FRONT_SEQ_REQUEST_PATTERN_PARAMS:
       /* send back bar change and next pattern params from requested pattern*/
@@ -1443,6 +1792,8 @@ static void frontParser_handleSeqCC()
    
    
       case FRONT_SEQ_RUN_STOP:
+         if(frontParser_midiMsg.data2 == 0)
+            frontParser_applyDeferredVoiceCache();
          seq_setRunning(frontParser_midiMsg.data2);
          break;
    
@@ -1602,9 +1953,15 @@ static void frontParser_handleSeqCC()
             - set only by SYSEX_RECEIVE_MAIN_STEP_DATA, unset by SYSEX_BEGIN_PATTERN_TRANSMIT
          */
          
+         frontParser_clearVoiceCache(frontParser_midiMsg.data2);
          seq_voicesLoading |= (0x01<<frontParser_midiMsg.data2);
          break;
       case FRONT_SEQ_UNHOLD_VOICE:
+         if(frontParser_deferredPerfLoadActive)
+         {
+            frontParser_deferPerfUnholdVoice(frontParser_midiMsg.data2);
+            break;
+         }
          frontParser_unholdVoice(frontParser_midiMsg.data2);
          seq_voicesLoading &= ~(0x01<<frontParser_midiMsg.data2);
          if(!seq_isRunning())
@@ -1613,7 +1970,29 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_LOAD_FAST:
          seq_loadFastMode=frontParser_midiMsg.data2;
          break;
+      case FRONT_SEQ_FILE_BEGIN:
+         frontParser_clearDeferredPerfLoad();
+         if((frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
+            && seq_isRunning()
+            && frontParser_deferPerfLoadCacheUntilPatternChange)
+         {
+            frontParser_deferredPerfLoadActive = 1;
+            frontParser_deferredPerfProtectedPattern = seq_activePattern & 0x07;
+         }
+         break;
       case FRONT_SEQ_FILE_DONE:
+         if(frontParser_deferredPerfLoadActive
+            && (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE))
+         {
+            frontParser_deferredPerfVoiceCachePending = 1;
+            frontParser_deferredPerfLoadActive = 0;
+         }
+         else
+         {
+            frontParser_deferredPerfLoadActive = 0;
+            frontParser_applyPendingVoiceCache();
+            frontParser_clearDeferredPerfLoad();
+         }
          seq_voicesLoading=0;
          break;
       case FRONT_SEQ_TRACK_NOTE1:

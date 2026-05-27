@@ -463,6 +463,9 @@ void preset_readDrumVoice(uint8_t track, uint8_t isMorph)
       default:
          return;
    }
+
+   if(!frontPanel_flowBegin(FLOW_CH_VOICE_PARAM))
+      return;
    
    if(isMorph)
    {
@@ -506,6 +509,9 @@ void preset_readDrumVoice(uint8_t track, uint8_t isMorph)
    
    frontPanel_holdForBuffer();
    frontPanel_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,track);
+
+   if(!frontPanel_flowFailed())
+      (void)frontPanel_flowEnd(FLOW_CH_VOICE_PARAM);
    
 }
  
@@ -529,6 +535,9 @@ void preset_readDrumsetMeta(uint8_t isMorph)
    }
    else
    {
+      if(!frontPanel_flowBegin(FLOW_CH_DRUM_META))
+         return;
+
    // copy values from temp to where they are supposed to be - normal params or morph
     
       for (i=0;i<END_OF_SOUND_PARAMETERS-END_OF_INDIVIDUAL_VOICE_PARAMS;i++)
@@ -568,6 +577,9 @@ void preset_readDrumsetMeta(uint8_t isMorph)
       frontPanel_sendData(CC_2,(uint8_t)(PAR_MAC1_DST2_AMT-128),parameter_values[PAR_MAC1_DST2_AMT]);
       frontPanel_sendData(CC_2,(uint8_t)(PAR_MAC2_DST1_AMT-128),parameter_values[PAR_MAC2_DST1_AMT]);
       frontPanel_sendData(CC_2,(uint8_t)(PAR_MAC2_DST2_AMT-128),parameter_values[PAR_MAC2_DST2_AMT]);
+
+      if(!frontPanel_flowFailed())
+         (void)frontPanel_flowEnd(FLOW_CH_DRUM_META);
    }
 }
 
@@ -580,7 +592,7 @@ uint8_t preset_loadDrumset(uint8_t presetNr, uint8_t voiceArray, uint8_t isMorph
    UINT bytesRead;
    uint8_t trkNum;
 
-   uart_clearFifo();
+   uart_clearRxFifo();
    frontParser_rxDisable=1;
    
    preset_workingPreset=presetNr;
@@ -641,7 +653,7 @@ closeFile:
    f_close((FIL*)&preset_File);
    
    frontParser_rxDisable=0;
-   uart_clearFifo();
+   uart_clearRxFifo();
    
    return 0;
 }
@@ -1746,7 +1758,7 @@ uint8_t preset_loadPattern(uint8_t presetNr, uint8_t voiceArray)
    uint8_t trkNum;
    uint8_t patNum;
 
-   uart_clearFifo();
+   uart_clearRxFifo();
    frontParser_rxDisable=1;
    
    preset_workingPreset=presetNr;
@@ -1838,7 +1850,7 @@ closeFile:
    
    _delay_ms(50);
    frontParser_rxDisable=0;
-   uart_clearFifo();
+   uart_clearRxFifo();
    
    return 0;
 }
@@ -2073,8 +2085,13 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
    uint8_t trkNum;
    uint8_t patNum;
    uint8_t i;
+   uint8_t flowSessionStarted=0;
+   uint8_t flowSessionOk=1;
 
-   uart_clearFifo();
+   uart_clearRxFifo();
+   if(!frontPanel_flowBeginSession())
+      return 1;
+   flowSessionStarted=1;
    frontParser_rxDisable=1;
    
    preset_workingPreset=presetNr;
@@ -2085,8 +2102,12 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
    
    //open the file
    FRESULT res = f_open((FIL*)&preset_File,filename,FA_OPEN_EXISTING | FA_READ);
-   if(res!=FR_OK)
+   if(res!=FR_OK) {
+      (void)frontPanel_flowEndSession();
+      frontParser_rxDisable=0;
+      uart_clearRxFifo();
       return 1; //file open error... maybe the file does not exist?
+   }
    
 	//first the preset name
    f_read((FIL*)&preset_File,(void*)preset_currentName,8,&bytesRead);
@@ -2209,10 +2230,12 @@ closeFile:
    f_close((FIL*)&preset_File);
    
    _delay_ms(50);
+   if(flowSessionStarted)
+      flowSessionOk = frontPanel_flowEndSession();
    frontParser_rxDisable=0;
-   uart_clearFifo();
+   uart_clearRxFifo();
    
-   return 0;
+   return flowSessionOk ? 0 : 1;
 }
 
    
@@ -2226,8 +2249,13 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
    uint8_t version=0;
    uint8_t trkNum;
    uint8_t patNum;
+   uint8_t flowSessionStarted=0;
+   uint8_t flowSessionOk=1;
 
-   uart_clearFifo();
+   uart_clearRxFifo();
+   if(!frontPanel_flowBeginSession())
+      return 1;
+   flowSessionStarted=1;
    frontParser_rxDisable=1;
    
    preset_workingPreset=presetNr;
@@ -2238,8 +2266,12 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
    
 	//open the file
    FRESULT res = f_open((FIL*)&preset_File,filename,FA_OPEN_EXISTING | FA_READ);
-   if(res!=FR_OK)
+   if(res!=FR_OK) {
+      (void)frontPanel_flowEndSession();
+      frontParser_rxDisable=0;
+      uart_clearRxFifo();
       return 1; //file open error... maybe the file does not exist?
+   }
    
 	//first the preset name
    f_read((FIL*)&preset_File,(void*)preset_currentName,8,&bytesRead);
@@ -2252,6 +2284,8 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
       goto closeFile;
    
    preset_workingVersion = version;
+
+   frontPanel_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PERFORMANCE);
    
    if(preset_workingVoiceArray>=0x3f) // all voices - load perf metadata too
    {
@@ -2343,6 +2377,24 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
    
    preset_readKitToTemp(1);
    preset_readKitToTemp(0);
+
+   for (trkNum=0;trkNum<NUM_TRACKS;trkNum++)
+   {
+      if(voiceArray&(0x01<<trkNum))
+      {
+         if(trkNum<6)
+         {
+            frontPanel_sendData(SEQ_CC,SEQ_LOAD_VOICE,trkNum);
+            preset_readDrumVoice(trkNum, 1);
+            preset_readDrumVoice(trkNum, 0);
+         }
+
+         if(trkNum<5)
+            frontPanel_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,trkNum);
+      }
+   }
+
+   frontPanel_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,5);
    
    if( (voiceArray>=0x7f) || (voiceArray==0) )
    {
@@ -2373,10 +2425,12 @@ closeFile:
 	//close the file handle
    f_close((FIL*)&preset_File);
    
+   if(flowSessionStarted)
+      flowSessionOk = frontPanel_flowEndSession();
    frontParser_rxDisable=0;
-   uart_clearFifo();
+   uart_clearRxFifo();
    
-   return 0;
+   return flowSessionOk ? 0 : 1;
 }
 
 //----------------------------------------------------

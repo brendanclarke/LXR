@@ -3343,10 +3343,18 @@ void menu_switchPage(uint8_t pageNr)
 void menu_sendAllGlobals()
 {
 	uint16_t i;
+   if(!frontPanel_flowBegin(FLOW_CH_GLOBALS))
+      return;
+
 	for(i=PAR_BEGINNING_OF_GLOBALS;(i<NUM_PARAMS);i++)
 	{
 		menu_parseGlobalParam(i,parameter_values[i]);
+      if(frontPanel_flowFailed())
+         break;
 	}
+
+   if(!frontPanel_flowFailed())
+      (void)frontPanel_flowEnd(FLOW_CH_GLOBALS);
 };
 //-----------------------------------------------------------------
 // This is used to send a global (non voice specific) parameter to the back.

@@ -38,3 +38,18 @@ uint8_t fifo_BufferOut(FifoBuffer* fifo, uint8_t *pByte)
    return 1;
 }
 //----------------------------------------------------------------------------
+uint8_t fifo_count(FifoBuffer* fifo)
+{
+   return (uint8_t)((fifo->write - fifo->read) & BUFFER_MASK);
+}
+//----------------------------------------------------------------------------
+uint8_t fifo_free(FifoBuffer* fifo)
+{
+   return (uint8_t)(BUFFER_MASK - fifo_count(fifo));
+}
+//----------------------------------------------------------------------------
+uint8_t fifo_isEmpty(FifoBuffer* fifo)
+{
+   return (fifo->read == fifo->write);
+}
+//----------------------------------------------------------------------------

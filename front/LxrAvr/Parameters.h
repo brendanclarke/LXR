@@ -413,7 +413,7 @@ enum ParamEnums
 	PAR_LOAD_PERF_ON_BANK,			// 0, incoming bank changes select kit, 1 bank changes select perf
 	PAR_SKIP_FIRST_ROLL,			/*300*/
 
-	PAR_FILE_LOAD_FAST,
+	PAR_FILE_LOAD_FAST,			// bool, apply 'kit' load immediately
 
 	PAR_GLOBAL_SETTINGS_VERSION,
 
@@ -424,6 +424,9 @@ enum ParamEnums
 	PAR_MIDI_NOTE5,
 	PAR_MIDI_NOTE6,
 	PAR_MIDI_NOTE7,
+
+	// PAR_CACHE_FOR_PERF, // bool, 0=perf load while playing works exactly like 'all', 
+						// 1=kit, pattern, settings cached until pattern change
 
 	NUM_PARAMS                      	 /*310*/
 };

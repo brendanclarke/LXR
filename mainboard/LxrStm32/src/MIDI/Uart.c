@@ -170,7 +170,7 @@ void uart_processFront()
 void uart_sendFrontpanelByte(uint8_t data)
 {
 	//do not send anything besides sysex data while sysex mode is active!
-	if(frontParser_sysexActive == 0)
+	if((frontParser_sysexActive == 0) && !frontParser_isQuietUi())
 	{
 		//put data in the output fifo
 		fifo_bufferIn(&fifo_frontTx,data);
@@ -179,6 +179,15 @@ void uart_sendFrontpanelByte(uint8_t data)
 		USART_ITConfig(USART3, USART_IT_TXE, ENABLE);
 	}
 };
+//-----------------------------------------------------------------------------
+void uart_sendFrontpanelPriorityByte(uint8_t data)
+{
+	//put data in the output fifo
+	fifo_bufferIn(&fifo_frontTx,data);
+
+	//enable Transmit Data Register empty interrupt
+	USART_ITConfig(USART3, USART_IT_TXE, ENABLE);
+}
 //-----------------------------------------------------------------------------
 void uart_sendFrontpanelSysExByte(uint8_t data)
 {

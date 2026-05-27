@@ -16,6 +16,7 @@
 //debug
 #include <stdlib.h>
 #include "Hardware/lcd.h"
+#include "Hardware/timebase.h"
 #include <util/atomic.h>
 #include "Preset/PresetManager.h"
 #include <util/delay.h>
@@ -60,6 +61,123 @@ uint8_t frontPanel_wait = 0;
 #define PATTERN_CHANGE_OP 0xAF
 #define NULL_OP 0x00
 uint8_t frontPanel_longData;
+
+#define FLOW_WAIT_TICKS 384
+
+static uint8_t comm_flowActive = 0;
+static uint8_t comm_flowChannel = 0;
+static uint8_t comm_txCredits = 0;
+static uint8_t comm_flowAckPending = 0;
+static uint8_t comm_flowAckChannel = 0;
+static uint8_t comm_flowFailed = 0;
+
+static uint8_t frontPanel_flowIsCommand(uint8_t command)
+{
+   return (command >= SEQ_FLOW_BEGIN) && (command <= SEQ_FLOW_ABORT);
+}
+
+static uint8_t frontPanel_flowUsesCredit(uint8_t status, uint8_t data1)
+{
+   return !(status == SEQ_CC && frontPanel_flowIsCommand(data1));
+}
+
+static uint16_t frontPanel_flowNow()
+{
+   uint16_t now;
+
+   ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+   {
+      now = time_sysTick;
+   }
+
+   return now;
+}
+
+static void frontPanel_handleFlowMessage()
+{
+   uint8_t channel = frontParser_midiMsg.data2;
+   uint8_t credits = 0;
+
+   switch(frontParser_midiMsg.data1)
+   {
+      case SEQ_FLOW_GRANT:
+         channel = (uint8_t)((frontParser_midiMsg.data2 >> 4) & 0x07);
+         credits = (uint8_t)(frontParser_midiMsg.data2 & 0x0f);
+         if(credits == 0)
+            break;
+
+         if(comm_flowAckPending && (channel == comm_flowAckChannel))
+            comm_flowAckPending = 0;
+
+         if(comm_flowActive && (channel == comm_flowChannel))
+         {
+            comm_txCredits = credits;
+            comm_flowFailed = 0;
+         }
+         break;
+
+      case SEQ_FLOW_ABORT:
+         comm_flowActive = 0;
+         comm_txCredits = 0;
+         comm_flowFailed = 1;
+         if(channel == comm_flowAckChannel)
+            comm_flowAckPending = 0;
+         break;
+
+      default:
+         break;
+   }
+}
+
+static uint8_t frontPanel_waitForFlowAck(uint8_t channel)
+{
+   uint16_t start = frontPanel_flowNow();
+
+   while(comm_flowAckPending)
+   {
+      uart_checkAndParse();
+      if((uint16_t)(frontPanel_flowNow() - start) > FLOW_WAIT_TICKS)
+      {
+         frontPanel_sendData(SEQ_CC, SEQ_FLOW_ABORT, channel);
+         comm_flowAckPending = 0;
+         comm_flowActive = 0;
+         comm_txCredits = 0;
+         comm_flowFailed = 1;
+         return 0;
+      }
+   }
+
+   return 1;
+}
+
+static uint8_t frontPanel_flowSendAndWait(uint8_t command, uint8_t channel)
+{
+   comm_flowAckChannel = channel;
+   comm_flowAckPending = 1;
+   frontPanel_sendData(SEQ_CC, command, channel);
+
+   return frontPanel_waitForFlowAck(channel);
+}
+
+static uint8_t frontPanel_waitForCredit()
+{
+   uint16_t start = frontPanel_flowNow();
+
+   while(comm_flowActive && (comm_txCredits == 0))
+   {
+      uart_checkAndParse();
+      if((uint16_t)(frontPanel_flowNow() - start) > FLOW_WAIT_TICKS)
+      {
+         frontPanel_sendData(SEQ_CC, SEQ_FLOW_ABORT, comm_flowChannel);
+         comm_flowActive = 0;
+         comm_txCredits = 0;
+         comm_flowFailed = 1;
+         return 0;
+      }
+   }
+
+   return !comm_flowFailed;
+}
 
 
 
@@ -129,6 +247,59 @@ while(frontPanel_wait)
 {
     uart_checkAndParse();
 }
+}
+//------------------------------------------------------------
+uint8_t frontPanel_flowBeginSession()
+{
+   return frontPanel_flowBegin(FLOW_CH_LOAD_SESSION);
+}
+//------------------------------------------------------------
+uint8_t frontPanel_flowEndSession()
+{
+   return frontPanel_flowEnd(FLOW_CH_LOAD_SESSION);
+}
+//------------------------------------------------------------
+uint8_t frontPanel_flowBegin(uint8_t channel)
+{
+   comm_flowActive = (channel != FLOW_CH_LOAD_SESSION);
+   comm_flowChannel = channel;
+   comm_txCredits = 0;
+   comm_flowFailed = 0;
+
+   if(!frontPanel_flowSendAndWait(SEQ_FLOW_BEGIN, channel))
+      return 0;
+
+   if(channel != FLOW_CH_LOAD_SESSION)
+      comm_flowActive = 1;
+
+   return 1;
+}
+//------------------------------------------------------------
+uint8_t frontPanel_flowEnd(uint8_t channel)
+{
+   uint8_t ret = frontPanel_flowSendAndWait(SEQ_FLOW_END, channel);
+
+   if(channel == comm_flowChannel)
+   {
+      comm_flowActive = 0;
+      comm_txCredits = 0;
+   }
+
+   return ret && !comm_flowFailed;
+}
+//------------------------------------------------------------
+uint8_t frontPanel_flowFailed()
+{
+   return comm_flowFailed;
+}
+//------------------------------------------------------------
+void frontPanel_flowAbortSession()
+{
+   frontPanel_sendData(SEQ_CC, SEQ_FLOW_ABORT, FLOW_CH_LOAD_SESSION);
+   comm_flowAckPending = 0;
+   comm_flowActive = 0;
+   comm_txCredits = 0;
+   comm_flowFailed = 1;
 }
 //------------------------------------------------------------
 void frontParser_parseNrpn(uint8_t value)
@@ -399,17 +570,29 @@ void frontPanel_parseData(uint8_t data)
                break;
          }
       }
-      else if( (frontParser_rxCnt==0) && !frontParser_rxDisable)
+      else if(frontParser_rxCnt==0)
       {
-      	//parameter nr
-         frontParser_midiMsg.data1 = data;
-         frontParser_rxCnt++;
+         if(!frontParser_rxDisable || (frontParser_midiMsg.status == SEQ_CC))
+         {
+      	   //parameter nr
+            frontParser_midiMsg.data1 = data;
+            frontParser_rxCnt++;
+         }
       }
-      else if (!frontParser_rxDisable)
+      else
       {
       	//parameter value
          frontParser_midiMsg.data2 = data;
          frontParser_rxCnt=0;
+
+         if(frontParser_rxDisable)
+         {
+            if((frontParser_midiMsg.status == SEQ_CC) && frontPanel_flowIsCommand(frontParser_midiMsg.data1))
+               frontPanel_handleFlowMessage();
+
+            return;
+         }
+
       	//process the received data
          if(frontParser_midiMsg.status == MIDI_CC) //sound cc data from cortex 
          {
@@ -470,6 +653,13 @@ void frontPanel_parseData(uint8_t data)
                switch(frontParser_midiMsg.data1)
                {
                	
+                  case SEQ_FLOW_BEGIN:
+                  case SEQ_FLOW_GRANT:
+                  case SEQ_FLOW_END:
+                  case SEQ_FLOW_ABORT:
+                     frontPanel_handleFlowMessage();
+                     break;
+
                   case SEQ_SET_PAT_BEAT:
                      parameter_values[PAR_PATTERN_BEAT] = frontParser_midiMsg.data2;
                      menu_repaint();
@@ -970,15 +1160,31 @@ void frontPanel_sendMidiMsg(MidiMsg msg)
 //------------------------------------------------------------
 void frontPanel_sendData(uint8_t status, uint8_t data1, uint8_t data2)
 {
-	//we need atomic acess, otherwise the LFO will interrupt message sending
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) 
-	{
-		while(uart_putc(status) == 0); 
-		//data 1 - parameter number
-		while(uart_putc(data1) == 0);
-		//data 2 - value	
-		while(uart_putc(data2) == 0);
-	}		
+   uint8_t queued = 0;
+   uint8_t usesCredit = (uint8_t)(comm_flowActive && frontPanel_flowUsesCredit(status, data1));
+
+   if(usesCredit && !frontPanel_waitForCredit())
+      return;
+
+   while(!queued)
+   {
+      while(uart_txFree() < 3);
+
+      // Keep the three-byte message contiguous, but never wait with interrupts masked.
+      ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+      {
+         if(uart_txFree() >= 3)
+         {
+            (void)uart_putc(status);
+            (void)uart_putc(data1);
+            (void)uart_putc(data2);
+            queued = 1;
+         }
+      }
+   }
+
+   if(usesCredit && (comm_txCredits > 0))
+      comm_txCredits--;
 }
 //------------------------------------------------------------
 void frontPanel_sendByte(uint8_t data)

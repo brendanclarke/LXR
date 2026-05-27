@@ -28,6 +28,9 @@
 
 void uart_init();
 void uart_clearFifo();
+void uart_clearRxFifo();
+uint8_t uart_txFree();
+uint8_t uart_txEmpty();
 uint8_t uart_putc(unsigned char c);
 void uart_puts (char *s);
 uint8_t uart_getc(uint8_t *data);

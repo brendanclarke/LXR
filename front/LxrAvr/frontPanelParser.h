@@ -183,6 +183,7 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SEQ_SET_LOOP             0x45
 #define SEQ_LOAD_VOICE		 0x48
 #define SEQ_UNHOLD_VOICE             0x49
+#define SEQ_FILE_BEGIN             0x4f
 #define SEQ_LOAD_FAST             0x50
 #define SEQ_FILE_DONE             0x51
 #define SEQ_TRACK_NOTE1           0x52
@@ -193,6 +194,15 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SEQ_TRACK_NOTE6           0x57
 #define SEQ_TRACK_NOTE7           0x58
 #define SEQ_MIDI_CHAN_OFF         0x59
+#define SEQ_FLOW_BEGIN            0x5a
+#define SEQ_FLOW_GRANT            0x5b
+#define SEQ_FLOW_END              0x5c
+#define SEQ_FLOW_ABORT            0x5d
+
+#define FLOW_CH_LOAD_SESSION      0x00
+#define FLOW_CH_GLOBALS           0x01
+#define FLOW_CH_VOICE_PARAM       0x02
+#define FLOW_CH_DRUM_META         0x03
 //bc adds
 
 #define SEQ_COPY_TRACK_PATTERN         0x3a
@@ -248,6 +258,12 @@ void frontPanel_updatePatternLeds();
 void frontPanel_updateActiveStepLeds();
 void frontPanel_updateSubstepLeds();
 void frontPanel_sendMacro(uint8_t whichMacro,uint8_t value);
+uint8_t frontPanel_flowBegin(uint8_t channel);
+uint8_t frontPanel_flowEnd(uint8_t channel);
+uint8_t frontPanel_flowFailed();
+uint8_t frontPanel_flowBeginSession();
+uint8_t frontPanel_flowEndSession();
+void frontPanel_flowAbortSession();
 
 extern volatile MidiMsg frontParser_midiMsg;
 extern uint8_t frontParser_sysexCallback; 

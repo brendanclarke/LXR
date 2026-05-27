@@ -677,6 +677,7 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_SEQ_SET_LOOP             0x45
 #define FRONT_SEQ_LOAD_VOICE             0x48
 #define FRONT_SEQ_UNHOLD_VOICE             0x49
+#define FRONT_SEQ_FILE_BEGIN             0x4f
 #define FRONT_SEQ_LOAD_FAST             0x50
 #define FRONT_SEQ_FILE_DONE             0x51
 #define FRONT_SEQ_TRACK_NOTE1		0x52
@@ -687,6 +688,15 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_SEQ_TRACK_NOTE6		0x57
 #define FRONT_SEQ_TRACK_NOTE7		0x58
 #define FRONT_SEQ_MIDI_CHAN_OFF         0x59
+#define FRONT_SEQ_FLOW_BEGIN            0x5a
+#define FRONT_SEQ_FLOW_GRANT            0x5b
+#define FRONT_SEQ_FLOW_END              0x5c
+#define FRONT_SEQ_FLOW_ABORT            0x5d
+
+#define FLOW_CH_LOAD_SESSION            0x00
+#define FLOW_CH_GLOBALS                 0x01
+#define FLOW_CH_VOICE_PARAM             0x02
+#define FLOW_CH_DRUM_META               0x03
 
 //codec control messages
 #define EQ_ON_OFF						0x01

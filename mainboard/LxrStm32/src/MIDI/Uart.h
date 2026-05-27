@@ -51,6 +51,7 @@ void initFrontpanelUart();
 void uart_processFront();
 //sends a byte to the frontpanel
 void uart_sendFrontpanelByte(uint8_t data);
+void uart_sendFrontpanelPriorityByte(uint8_t data);
 //send sysex data to the frontpanel
 //unlike the sendFrontPanelByte function, this function is allowed to send data whilke sysex mode is active
 void uart_sendFrontpanelSysExByte(uint8_t data);

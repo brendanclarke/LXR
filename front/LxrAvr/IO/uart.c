@@ -129,6 +129,21 @@ void uart_clearFifo()
 
 };
 //----------------------------------------------------
+void uart_clearRxFifo()
+{
+   fifo_clear(&uart_rxBuffer);
+}
+//----------------------------------------------------
+uint8_t uart_txFree()
+{
+   return fifo_free(&uart_txBuffer);
+}
+//----------------------------------------------------
+uint8_t uart_txEmpty()
+{
+   return fifo_isEmpty(&uart_txBuffer);
+}
+//----------------------------------------------------
 //output one byte on the uart
 uint8_t uart_putc(unsigned char c)
 {

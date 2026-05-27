@@ -48,9 +48,13 @@ extern uint8_t frontParser_sysexActive;
 extern uint8_t frontParser_activeFrontTrack;
 
 void frontParser_parseUartData(unsigned char data);
+uint8_t frontParser_isQuietUi();
 
 void frontParser_updateTrackLeds(const uint8_t trackNr, uint8_t patternNr);
 void frontParser_updateSubStepLeds(const uint8_t trackNr, uint8_t patternNr);
 void frontParser_uncacheVoice(uint8_t voice);
+void frontParser_applyDeferredVoiceCache();
+
+extern uint8_t frontParser_deferPerfLoadCacheUntilPatternChange;
 
 #endif /* FRONTPANELPARSER_H_ */

@@ -236,13 +236,18 @@ void seq_init()
 
 }
 //------------------------------------------------------------------------------
-void seq_activateTmpPattern()
+void seq_applyTmpPatternTo(uint8_t pattern)
 {  
-
-   memcpy(&seq_patternSet.seq_subStepPattern[seq_activePattern],&seq_tmpPattern.seq_subStepPattern,sizeof(Step)*NUM_TRACKS*NUM_STEPS);
-   memcpy(&seq_patternSet.seq_mainSteps[seq_activePattern],&seq_tmpPattern.seq_mainSteps,sizeof(uint16_t)*NUM_TRACKS);
-   memcpy(&seq_patternSet.seq_patternSettings[seq_activePattern],&seq_tmpPattern.seq_patternSettings,sizeof(PatternSetting));
-   memcpy(&seq_patternSet.seq_patternLengthRotate[seq_activePattern],&seq_tmpPattern.seq_patternLengthRotate,sizeof(LengthRotate)*NUM_TRACKS);
+   pattern &= 0x07;
+   memcpy(&seq_patternSet.seq_subStepPattern[pattern],&seq_tmpPattern.seq_subStepPattern,sizeof(Step)*NUM_TRACKS*NUM_STEPS);
+   memcpy(&seq_patternSet.seq_mainSteps[pattern],&seq_tmpPattern.seq_mainSteps,sizeof(uint16_t)*NUM_TRACKS);
+   memcpy(&seq_patternSet.seq_patternSettings[pattern],&seq_tmpPattern.seq_patternSettings,sizeof(PatternSetting));
+   memcpy(&seq_patternSet.seq_patternLengthRotate[pattern],&seq_tmpPattern.seq_patternLengthRotate,sizeof(LengthRotate)*NUM_TRACKS);
+}
+//------------------------------------------------------------------------------
+void seq_activateTmpPattern()
+{
+   seq_applyTmpPatternTo(seq_activePattern);
 }
 //------------------------------------------------------------------------------
 void seq_setShuffle(float shuffle)
@@ -695,6 +700,7 @@ static void seq_nextStep()
          seq_newPatternExecuted=1;
          if (seq_loadPendigFlag)
          {
+            frontParser_applyDeferredVoiceCache();
             // manual switching - button switch sets all per track pending
             euklid_clearRotation();
             for (i=0;i<NUM_TRACKS;i++)
