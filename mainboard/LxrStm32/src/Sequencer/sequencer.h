@@ -138,6 +138,10 @@ typedef struct TempPatternStruct
 }TempPattern;
 
 extern uint8_t seq_activePattern;
+extern uint8_t seq_pendingPattern;
+extern uint8_t seq_perTrackActivePattern[7];
+extern uint8_t seq_perTrackPendingPattern[7];
+extern int8_t seq_stepIndex[NUM_TRACKS+1];
 extern uint8_t seq_newPatternAvailable;
 extern uint8_t seq_recordActive;				/**< set to 1 to activate the reording mode*/
 
@@ -167,6 +171,7 @@ extern uint8_t seq_skipFirstRoll;
 
 extern uint8_t seq_vMorphAmount[7];
 extern uint8_t seq_vMorphFlag;
+extern uint8_t seq_morphLoadDisabled;
 
 void sequencer_sendVMorph(uint8_t voiceArray, uint8_t morphAmount);
 //------------------------------------------------------------------------------

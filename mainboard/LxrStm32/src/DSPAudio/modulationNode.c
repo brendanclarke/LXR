@@ -271,6 +271,9 @@ void modNode_updateValue(ModulationNode* vm, float val)
 //-----------------------------------------------------------------------
 void modNode_vMorph(ModulationNode* vm, float val)
 {
+   if(seq_morphLoadDisabled)
+      return;
+
    switch(vm->destination)
    {
       case PAR_MORPH_DRUM1:

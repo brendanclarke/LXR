@@ -21,6 +21,7 @@
 #include "../IO/din.h"
 #include "../IO/dout.h"
 #include "../Hardware/timebase.h"
+#include <string.h>
 
 
 #define FILE_VERSION 5
@@ -121,6 +122,13 @@ static uint8_t voice5presetMask[VOICE_PARAM_LENGTH]={6,16,17,23,    24,29,30,31,
 static uint8_t voice6presetMask[VOICE_PARAM_LENGTH]={7,18,19,25,    26,33,34,35,   36,42,48,59,  60,61,67,93,   101,107,113,120,126, 133,142,148,154,        160,166,172,    178,184,190,196,    202,208,214,220};         
 
 static void preset_makeFileName(char *buf, uint8_t num, uint8_t type);
+
+static void preset_showLoadingPerf()
+{
+   lcd_clear();
+   lcd_home();
+   lcd_string_F(PSTR("Loading Perf"));
+}
 
 
 //----------------------------------------------------
@@ -2087,6 +2095,8 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
    uint8_t i;
    uint8_t flowSessionStarted=0;
    uint8_t flowSessionOk=1;
+   uint8_t fileBeginSent=0;
+   uint8_t fileDoneSent=0;
 
    uart_clearRxFifo();
    if(!frontPanel_flowBeginSession())
@@ -2120,6 +2130,8 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
       goto closeFile;
    
    preset_workingVersion = version;
+   frontPanel_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_ALL);
+   fileBeginSent=1;
    
    if( (preset_workingVoiceArray>=0x7f) || (preset_workingVoiceArray==0x7f) )
    {
@@ -2217,6 +2229,7 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
    }
 
    frontPanel_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_ALL);
+   fileDoneSent=1;
    
 	//force complete repaint
    menu_repaintAll();
@@ -2228,6 +2241,9 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
 closeFile:
 	//close the file handle
    f_close((FIL*)&preset_File);
+
+   if(fileBeginSent && !fileDoneSent)
+      frontPanel_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_ALL);
    
    _delay_ms(50);
    if(flowSessionStarted)
@@ -2251,6 +2267,8 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
    uint8_t patNum;
    uint8_t flowSessionStarted=0;
    uint8_t flowSessionOk=1;
+   uint8_t fileBeginSent=0;
+   uint8_t fileDoneSent=0;
 
    uart_clearRxFifo();
    if(!frontPanel_flowBeginSession())
@@ -2284,8 +2302,10 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
       goto closeFile;
    
    preset_workingVersion = version;
+   preset_showLoadingPerf();
 
    frontPanel_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PERFORMANCE);
+   fileBeginSent=1;
    
    if(preset_workingVoiceArray>=0x3f) // all voices - load perf metadata too
    {
@@ -2346,9 +2366,7 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
 	//close the file handle
    f_close((FIL*)&preset_File);
    
-   lcd_clear();
-   lcd_home();
-   lcd_string_F(PSTR("Loading Perf"));
+   preset_showLoadingPerf();
    
    frontPanel_sendData(SEQ_CC,SEQ_EUKLID_RESET,0x01);
    
@@ -2416,6 +2434,7 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
    }
    
    frontPanel_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_PERFORMANCE);
+   fileDoneSent=1;
    
 #else
 	// frontPanel_sendData(PRESET,PRESET_LOAD,presetNr);
@@ -2424,6 +2443,9 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
 closeFile:
 	//close the file handle
    f_close((FIL*)&preset_File);
+
+   if(fileBeginSent && !fileDoneSent)
+      frontPanel_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_PERFORMANCE);
    
    if(flowSessionStarted)
       flowSessionOk = frontPanel_flowEndSession();

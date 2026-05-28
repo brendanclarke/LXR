@@ -41,6 +41,7 @@
 #include "MidiMessages.h"
 #include "CymbalVoice.h"
 #include "sequencer.h"
+#include "frontPanelParser.h"
 #include "TriggerOut.h"
 #include "Uart.h"
 //#include "LCD_driver.h"
@@ -96,9 +97,10 @@ void voiceControl_noteOff(uint8_t voice)
       active_voices &= (~(1<<voice));
    
    	//send midi note off
-      if(midi_MidiChannels[voice])
+      uint8_t midiChannel = frontParser_prfCacheLiveMidiChannel(voice);
+      if(midiChannel)
       {
-         midiChan = midi_MidiChannels[voice]-1;
+         midiChan = midiChannel-1;
          seq_midiNoteOff(midiChan);
       }
    }

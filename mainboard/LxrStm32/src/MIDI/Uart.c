@@ -189,6 +189,16 @@ void uart_sendFrontpanelPriorityByte(uint8_t data)
 	USART_ITConfig(USART3, USART_IT_TXE, ENABLE);
 }
 //-----------------------------------------------------------------------------
+void uart_sendFrontpanelPriorityByteWait(uint8_t data)
+{
+	while(!fifo_bufferIn(&fifo_frontTx,data))
+	{
+		USART_ITConfig(USART3, USART_IT_TXE, ENABLE);
+	}
+
+	USART_ITConfig(USART3, USART_IT_TXE, ENABLE);
+}
+//-----------------------------------------------------------------------------
 void uart_sendFrontpanelSysExByte(uint8_t data)
 {
 	//put data in the output fifo

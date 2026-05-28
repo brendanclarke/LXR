@@ -91,6 +91,7 @@ int8_t seq_loopUpdateFlag=0;
 
 uint8_t seq_vMorphFlag=0;
 uint8_t seq_vMorphAmount[7];
+uint8_t seq_morphLoadDisabled=0;
 
 int8_t 	seq_stepIndex[NUM_TRACKS+1];	/**< we have 16 steps consisting of 8 sub steps = 128 steps.
 											     each track has its own counter to allow different pattern lengths */
@@ -415,6 +416,16 @@ static void seq_parseAutomationNodes(uint8_t track, Step* stepData)
    uint8_t val1 = stepData->param1Val;
    uint8_t val2 = stepData->param2Val;
    uint8_t voiceNum;
+
+   if(seq_morphLoadDisabled)
+   {
+      if(param1>=PAR_MORPH_DRUM1&&param1<=PAR_MORPH_HIHAT)
+         param1 = 0;
+      if(param2>=PAR_MORPH_DRUM1&&param2<=PAR_MORPH_HIHAT)
+         param2 = 0;
+      seq_vMorphFlag = 0;
+   }
+
    if(param1)
    {
       if(param1>=PAR_MORPH_DRUM1&&param1<=PAR_MORPH_HIHAT)
@@ -427,7 +438,7 @@ static void seq_parseAutomationNodes(uint8_t track, Step* stepData)
    {
       if(param2>=PAR_MORPH_DRUM1&&param2<=PAR_MORPH_HIHAT)
       {
-         voiceNum = (uint8_t)(0x01<<((uint8_t)(param1-PAR_MORPH_DRUM1)));
+         voiceNum = (uint8_t)(0x01<<((uint8_t)(param2-PAR_MORPH_DRUM1)));
          sequencer_sendVMorph(voiceNum, val2);
       }
    }
@@ -442,10 +453,40 @@ static void seq_parseAutomationNodes(uint8_t track, Step* stepData)
    }
 }
 //------------------------------------------------------------------------------
+static Step* seq_liveStepForTrack(uint8_t track, uint8_t step)
+{
+   if(frontParser_prfCacheTrackUsesLivePattern(track))
+      return frontParser_prfCacheLiveStep(track, step);
+
+   return &seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[track]][track][step & 0x7f];
+}
+//------------------------------------------------------------------------------
+static LengthRotate seq_liveLengthRotateForTrack(uint8_t track)
+{
+   if(frontParser_prfCacheTrackUsesLivePattern(track))
+      return frontParser_prfCacheLiveLengthRotate(track);
+
+   return seq_patternSet.seq_patternLengthRotate[seq_perTrackActivePattern[track]][track];
+}
+//------------------------------------------------------------------------------
+static uint8_t seq_liveMainStepActive(uint8_t track, uint8_t mainStep)
+{
+   if(frontParser_prfCacheTrackUsesLivePattern(track))
+      return (frontParser_prfCacheLiveMainSteps(track) & (1<<mainStep)) > 0;
+
+   return (seq_patternSet.seq_mainSteps[seq_perTrackActivePattern[track]][track] & (1<<mainStep)) > 0;
+}
+//------------------------------------------------------------------------------
+static uint8_t seq_liveStepActive(uint8_t track, uint8_t step)
+{
+   return (seq_liveStepForTrack(track, step)->volume & STEP_ACTIVE_MASK) > 0;
+}
+//------------------------------------------------------------------------------
 void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
 {
    uint8_t midiChan; // which midi channel to send a note on
    uint8_t midiNote; // which midi note to send
+   Step *stepData;
 
    if(voiceNr > 6) 
       return;
@@ -465,7 +506,8 @@ void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
    }
    
    
-   seq_parseAutomationNodes(voiceNr, &seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voiceNr]][voiceNr][seq_stepIndex[voiceNr]]);
+   stepData = seq_liveStepForTrack(voiceNr, seq_stepIndex[voiceNr]);
+   seq_parseAutomationNodes(voiceNr, stepData);
 
 	//turn the trigger off before sending the next one
    if(voiceNr>=5)
@@ -484,20 +526,22 @@ void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
    //Trigger internal synth voice
       voiceControl_noteOn(voiceNr, note, vol);
    }
-   if(midi_MidiChannels[voiceNr])
+   uint8_t midiChannel = frontParser_prfCacheLiveMidiChannel(voiceNr);
+   if(midiChannel)
    {
-      midiChan = midi_MidiChannels[voiceNr]-1;
+      midiChan = midiChannel-1;
    
    //--AS the note that is played will be whatever is received unless we have a note override set
    // A note override is any non-zero value for this parameter
-      if(midi_NoteOverride[voiceNr] == 0)
+      uint8_t noteOverride = frontParser_prfCacheLiveNoteOverrideValue(voiceNr);
+      if(noteOverride == 0)
          midiNote = note;
       else
-         midiNote = midi_NoteOverride[voiceNr];
+         midiNote = noteOverride;
    
    //send the new note to midi/usb out
       seq_sendMidiNoteOn(midiChan, midiNote,
-         seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voiceNr]][voiceNr][seq_stepIndex[voiceNr]].volume&STEP_VOLUME_MASK);
+         stepData->volume&STEP_VOLUME_MASK);
    }
 }
 //------------------------------------------------------------------------------
@@ -532,9 +576,15 @@ uint8_t seq_getTransposedNote(uint8_t voice, uint8_t note)
 //------------------------------------------------------------------------------
 static uint8_t seq_determineNextPattern()
 {
-   const PatternSetting * const p=&seq_patternSet.seq_patternSettings[seq_activePattern];
-   if( (seq_barCounter>0)&&(seq_barCounter % (p->changeBar+1) == 0) )
-      return p->nextPattern;
+   PatternSetting p;
+
+   if(frontParser_prfCacheUseLivePattern())
+      return seq_activePattern;
+
+   p = seq_patternSet.seq_patternSettings[seq_activePattern];
+
+   if( (seq_barCounter>0)&&(seq_barCounter % (p.changeBar+1) == 0) )
+      return p.nextPattern;
    else
       return seq_activePattern;
 }
@@ -593,15 +643,15 @@ static void seq_nextStep()
    //---- do we need to do a voice morph
    if(!(seq_stepIndex[NUM_TRACKS]%4))
    {
-      if(seq_vMorphFlag)
+      uint8_t vMorphFlag = frontParser_prfCacheTakeLiveVMorphFlag();
+      if(vMorphFlag)
       {
          for (i=0;i<7;i++)
          {
-            if (seq_vMorphFlag&(0x01<<i))
-               sequencer_sendVMorph((uint8_t)(0x01<<i), seq_vMorphAmount[i]);
+            if (vMorphFlag&(0x01<<i))
+               sequencer_sendVMorph((uint8_t)(0x01<<i), frontParser_prfCacheLiveVMorphAmountValue(i));
          
          }
-         seq_vMorphFlag=0x00;
       }
    }
    
@@ -786,10 +836,13 @@ static void seq_nextStep()
    
    for(i=0;i<NUM_TRACKS;i++)
    {
+      LengthRotate lr;
+      Step *stepData;
       voiceTriggered=0;
    	// --AS **PATROT we now use this for length
-      seqlen=seq_patternSet.seq_patternLengthRotate[seq_perTrackActivePattern[i]][i].length;
-      seqscale=seq_patternSet.seq_patternLengthRotate[seq_perTrackActivePattern[i]][i].scale;
+      lr = seq_liveLengthRotateForTrack(i);
+      seqlen=lr.length;
+      seqscale=lr.scale;
       
       if(!seqlen)
          seqlen=16;
@@ -859,7 +912,7 @@ static void seq_nextStep()
          if(!(seq_mutedTracks & (1<<i) ) )
          {
          	//if main step (associated with current substep) is active
-            if(seq_intIsMainStepActive(i,stepAcPtr[i]/8,seq_perTrackActivePattern[i])) {
+            if(seq_liveMainStepActive(i,stepAcPtr[i]/8)) {
             
             	// --AS **RECORD if we are in erase mode (shift clear while record and playing)
             	// and this is the active track on the front, we erase the note value
@@ -870,7 +923,7 @@ static void seq_nextStep()
                	// erase the main step and all substeps
                   seq_eraseStepAndSubSteps(frontParser_activeTrack,stepAcPtr[i]/8);
                } 
-               else if((seq_intIsStepActive(i,stepAcPtr[i],seq_perTrackActivePattern[i]))&&(activeScaledStep)&&(!voiceTriggered))
+               else if((seq_liveStepActive(i,stepAcPtr[i]))&&(activeScaledStep)&&(!voiceTriggered))
                {
                   //PROBABILITY
                   //every 8th step a new random value is generated
@@ -882,10 +935,11 @@ static void seq_nextStep()
                      seq_rndValue[i] = GetRngValue()&0x7f;
                   }
                
-                  if( (seq_rndValue[i]) <= seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[i]][i][stepAcPtr[i]].prob )
+                  stepData = seq_liveStepForTrack(i, stepAcPtr[i]);
+                  if( (seq_rndValue[i]) <= stepData->prob )
                   {
-                     uint8_t vol = seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[i]][i][stepAcPtr[i]].volume&STEP_VOLUME_MASK;
-                     uint8_t note = seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[i]][i][stepAcPtr[i]].note;
+                     uint8_t vol = stepData->volume&STEP_VOLUME_MASK;
+                     uint8_t note = stepData->note;
                      note = seq_getTransposedNote(i, note);
                      seq_triggerVoice(i,vol,note);
                      if(seq_loopLength&&seq_recordActive)
@@ -965,7 +1019,7 @@ void seq_triggerNextMasterStep(uint8_t stepSize)
 {
    uint8_t i, sn, len;
    for(i=0;i<NUM_TRACKS;i++) {
-      len = seq_patternSet.seq_patternLengthRotate[seq_perTrackActivePattern[i]][i].length;
+      len = seq_liveLengthRotateForTrack(i).length;
       if(!len) // length of 0 means length of 16 (since we are using 4 bits)
          len=16;
       len *= 8; // need length in steps
@@ -1173,6 +1227,7 @@ void seq_setRunning(uint8_t isRunning)
 	//jump to 1st step if sequencer is stopped
    if(!seq_running)
    {
+      frontParser_applyDeferredVoiceCache();
    
    	// --AS reset all track rotations to 0. We are not saving rotated value. it's a performance tool.
       uint8_t i;
@@ -1249,8 +1304,9 @@ void seq_setMute(uint8_t trackNr, uint8_t isMuted)
          seq_mutedTracks = 0xFF;
          for (idx=0;idx<7;idx++)
          {
-            if(midi_MidiChannels[idx])
-               voiceControl_noteOff(midi_MidiChannels[idx]-1);
+            uint8_t midiChannel = frontParser_prfCacheLiveMidiChannel(idx);
+            if(midiChannel)
+               voiceControl_noteOff(midiChannel-1);
          }
       }
       else
@@ -1265,8 +1321,9 @@ void seq_setMute(uint8_t trackNr, uint8_t isMuted)
       	//mute track
          seq_mutedTracks |= (1<<trackNr);
       	// --AS turn off the midi note that may be playing on that track
-         if(midi_MidiChannels[trackNr])
-            voiceControl_noteOff(midi_MidiChannels[trackNr]-1);
+         uint8_t midiChannel = frontParser_prfCacheLiveMidiChannel(trackNr);
+         if(midiChannel)
+            voiceControl_noteOff(midiChannel-1);
       } 
       else {
       	//unmute track
@@ -1363,14 +1420,13 @@ void seq_sendStepInfoToFront(uint16_t stepNr)
 uint8_t seq_rollTrig(uint8_t voice) // called by all roll modes to trigger a voice
 {
    uint8_t triggered = 0;
+   Step *stepData = seq_liveStepForTrack(voice, seq_stepIndex[voice]);
 
-   uint8_t vol = 
-      seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voice]][voice][seq_stepIndex[voice]].volume&0x7f;
-   uint8_t note = 
-      seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voice]][voice][seq_stepIndex[voice]].note&0x7f;
+   uint8_t vol = stepData->volume&0x7f;
+   uint8_t note = stepData->note&0x7f;
       
-   uint8_t stepActive = seq_intIsMainStepActive(voice,(seq_stepIndex[voice]>>3),seq_perTrackActivePattern[voice]) &
-      		seq_intIsStepActive(voice,seq_stepIndex[voice],seq_perTrackActivePattern[voice]);
+   uint8_t stepActive = seq_liveMainStepActive(voice,(seq_stepIndex[voice]>>3)) &
+      		seq_liveStepActive(voice,seq_stepIndex[voice]);
    
    switch(seq_rollMode)
    {
@@ -2122,7 +2178,8 @@ void seq_sendMidiNoteOn(const uint8_t channel, const uint8_t note, const uint8_t
  */
 static void seq_sendProgChg(const uint8_t ptn)
 {
-   if(midi_MidiChannels[7])
+   uint8_t midiChannel = frontParser_prfCacheLiveMidiChannel(7);
+   if(midiChannel)
    {
       static MidiMsg msg = {0,0,0, {0,0,1}};
    
@@ -2130,7 +2187,7 @@ static void seq_sendProgChg(const uint8_t ptn)
       if((midiParser_txRxFilter & 0x80)==0)
          return;
    
-      msg.status = PROG_CHANGE | (midi_MidiChannels[7]-1);
+      msg.status = PROG_CHANGE | (midiChannel-1);
       msg.data1=ptn;
       msg.bits.length=1;
       seq_sendMidi(msg);
@@ -2147,10 +2204,11 @@ static void seq_setStepIndexToStart()
 {
    uint8_t len, rot, i;
    for(i=0;i<NUM_TRACKS;i++) {
+      LengthRotate lr = seq_liveLengthRotateForTrack(i);
    	// adjust rot in case the pattern length is less than the rotated amount
    	// len is 0-15 where a value of 0 means 16
-      rot=seq_patternSet.seq_patternLengthRotate[seq_perTrackActivePattern[i]][i].rotate;
-      len=seq_patternSet.seq_patternLengthRotate[seq_perTrackActivePattern[i]][i].length;
+      rot=lr.rotate;
+      len=lr.length;
       if(len && (rot > len))
          rot = rot % len;
    
@@ -2180,11 +2238,12 @@ void seq_realign()
    uint16_t trackSteps;
    
    for(i=0;i<NUM_TRACKS;i++) {
-      length=seq_patternSet.seq_patternLengthRotate[seq_perTrackActivePattern[i]][i].length;
+      LengthRotate lr = seq_liveLengthRotateForTrack(i);
+      length=lr.length;
       if (!length)
          length=16;
       length = length << 3;
-      scale=seq_patternSet.seq_patternLengthRotate[seq_perTrackActivePattern[i]][i].scale;
+      scale=lr.scale;
       
       
       trackSteps=(stepsFromZero>>scale)%length;
@@ -2204,6 +2263,9 @@ void seq_realign()
 
 void sequencer_sendVMorph(uint8_t voiceArray, uint8_t morphAmount)
 {
+   if(seq_morphLoadDisabled)
+      return;
+
    uart_sendFrontpanelByte(FRONT_SEQ_VOICE_MORPH);
    uart_sendFrontpanelByte(voiceArray);
    uart_sendFrontpanelByte(morphAmount);

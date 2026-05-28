@@ -38,6 +38,7 @@
 #include "frontPanelParser.h"
 #include "MidiMessages.h"
 #include "MidiParser.h"
+#include "ParameterArray.h"
 #include "sequencer.h"
 #include "Uart.h"
 #include "SD_Manager.h"
@@ -59,7 +60,23 @@ static void frontParser_handleSeqCC();
 #define FLOW_INITIAL_GRANT 4
 #define FLOW_ACK_CREDITS 1
 #define FRONT_FILE_DONE_TYPE_PERFORMANCE 8
+#define FRONT_FILE_DONE_TYPE_ALL 9
 #define DEFERRED_PERF_MSG_CACHE_SIZE 128
+#define PRF_CACHE_LIVE_PARAM_COUNT 310
+#define PRF_PENDING_EXPECTED_MAINSTEP_COUNT (NUM_PATTERN * NUM_TRACKS)
+#define PRF_PENDING_EXPECTED_STEP_COUNT (NUM_PATTERN * NUM_TRACKS * NUM_STEPS)
+#define PRF_PENDING_EXPECTED_LENGTH_COUNT (NUM_PATTERN * NUM_TRACKS)
+#define PRF_PENDING_EXPECTED_SCALE_COUNT (NUM_PATTERN * NUM_TRACKS)
+#define PRF_PENDING_EXPECTED_CHAIN_COUNT NUM_PATTERN
+
+typedef enum {
+   PRF_CACHE_IDLE = 0,
+   PRF_CACHE_RECEIVING_AVR_LIVE,
+   PRF_CACHE_LIVE_ACTIVE,
+   PRF_CACHE_RECEIVING_PENDING,
+   PRF_CACHE_PENDING_VALID,
+   PRF_CACHE_ABORTING
+} PrfCacheState;
 
 static uint8_t comm_loadSessionActive = 0;
 static uint8_t comm_quietUi = 0;
@@ -67,7 +84,7 @@ static uint8_t comm_flowActive = 0;
 static uint8_t comm_flowChannel = 0;
 static uint8_t comm_flowBudgetRemaining = 0;
 
-uint8_t frontParser_deferPerfLoadCacheUntilPatternChange = 1;
+uint8_t frontParser_deferPerfLoadCacheUntilPatternChange = 0;
 static uint8_t frontParser_deferredPerfLoadActive = 0;
 static uint8_t frontParser_deferredPerfVoiceCachePending = 0;
 static uint8_t frontParser_deferredPerfPatternPending = 0;
@@ -76,6 +93,33 @@ static uint8_t frontParser_deferredPerfProtectedPattern = 0;
 static uint8_t frontParser_deferredPerfReplay = 0;
 static uint8_t frontParser_deferredPerfMsgCount = 0;
 static MidiMsg frontParser_deferredPerfMsgCache[DEFERRED_PERF_MSG_CACHE_SIZE];
+static PrfCacheState frontParser_prfCacheState = PRF_CACHE_IDLE;
+static uint8_t frontParser_prfCacheProtectedPattern = 0;
+static uint8_t frontParser_prfCachePendingValid = 0;
+static uint8_t frontParser_prfCacheAvrLiveValid = 0;
+static uint8_t frontParser_prfCacheStmLiveValid = 0;
+static uint8_t frontParser_prfCacheLiveParams[PRF_CACHE_LIVE_PARAM_COUNT];
+static uint8_t frontParser_prfCacheLiveMorph[END_OF_SOUND_PARAMETERS];
+static TempPattern frontParser_prfCacheLivePattern;
+static uint8_t frontParser_prfCacheLiveActivePattern = 0;
+static uint8_t frontParser_prfCacheLivePendingPattern = 0;
+static uint8_t frontParser_prfCacheLivePerTrackActivePattern[NUM_TRACKS];
+static uint8_t frontParser_prfCacheLivePerTrackPendingPattern[NUM_TRACKS];
+static int8_t frontParser_prfCacheLiveStepIndex[NUM_TRACKS+1];
+static uint8_t frontParser_prfCacheLiveMidiChannels[8];
+static uint8_t frontParser_prfCacheLiveNoteOverride[7];
+static uint8_t frontParser_prfCacheLiveVMorphAmount[7];
+static uint8_t frontParser_prfCacheLiveVMorphFlag = 0;
+static uint8_t frontParser_prfCacheLiveSeqVoicesLoading = 0;
+static uint8_t frontParser_prfCacheLiveSeqNewVoiceAvailable = 0;
+static uint8_t frontParser_prfCacheLiveSeqTracksLocked = 0;
+static uint8_t frontParser_prfCacheLiveSeqLoadFastMode = 0;
+static uint16_t frontParser_prfPendingMainStepCount = 0;
+static uint16_t frontParser_prfPendingStepCount = 0;
+static uint16_t frontParser_prfPendingLengthCount = 0;
+static uint16_t frontParser_prfPendingScaleCount = 0;
+static uint16_t frontParser_prfPendingChainCount = 0;
+static uint16_t frontParser_prfPendingProtectedWriteCount = 0;
 
 extern MidiMsg frontParser_midiMsg;
 extern uint8_t frontParser_sysexActive;
@@ -104,6 +148,27 @@ static void frontParser_sendFlowGrant(uint8_t channel, uint8_t credits)
    uart_sendFrontpanelPriorityByte(FRONT_SEQ_CC);
    uart_sendFrontpanelPriorityByte(FRONT_SEQ_FLOW_GRANT);
    uart_sendFrontpanelPriorityByte(frontParser_flowGrantByte(channel, credits));
+}
+
+static void frontParser_sendFlowGrantWait(uint8_t channel, uint8_t credits)
+{
+   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_CC);
+   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_FLOW_GRANT);
+   uart_sendFrontpanelPriorityByteWait(frontParser_flowGrantByte(channel, credits));
+}
+
+static void frontParser_sendFlowAbort(uint8_t channel)
+{
+   uart_sendFrontpanelPriorityByte(FRONT_SEQ_CC);
+   uart_sendFrontpanelPriorityByte(FRONT_SEQ_FLOW_ABORT);
+   uart_sendFrontpanelPriorityByte(channel);
+}
+
+static void frontParser_sendPrfCacheStatus(uint8_t command, uint8_t status)
+{
+   uart_sendFrontpanelPriorityByte(PRF_CACHE_STATUS);
+   uart_sendFrontpanelPriorityByte(command);
+   uart_sendFrontpanelPriorityByte(status);
 }
 
 static void frontParser_suspendCreditFlowForSysex()
@@ -190,6 +255,275 @@ static void frontParser_clearDeferredPerfLoad()
    frontParser_deferredPerfMsgCount = 0;
 }
 
+static void frontParser_resetPrfPendingCounters()
+{
+   frontParser_prfPendingMainStepCount = 0;
+   frontParser_prfPendingStepCount = 0;
+   frontParser_prfPendingLengthCount = 0;
+   frontParser_prfPendingScaleCount = 0;
+   frontParser_prfPendingChainCount = 0;
+   frontParser_prfPendingProtectedWriteCount = 0;
+}
+
+static void frontParser_clearPrfCacheSession()
+{
+   frontParser_prfCacheState = PRF_CACHE_IDLE;
+   frontParser_prfCacheProtectedPattern = 0;
+   frontParser_prfCachePendingValid = 0;
+   frontParser_prfCacheAvrLiveValid = 0;
+   frontParser_prfCacheStmLiveValid = 0;
+   frontParser_resetPrfPendingCounters();
+}
+
+static void frontParser_clearPrfRuntimeFlags()
+{
+   frontParser_prfCacheLiveVMorphFlag = 0;
+   seq_vMorphFlag = 0;
+}
+
+static uint8_t frontParser_prfCacheSessionActive()
+{
+   return (frontParser_prfCacheState != PRF_CACHE_IDLE)
+      && (frontParser_prfCacheState != PRF_CACHE_ABORTING);
+}
+
+static uint8_t frontParser_prfCacheCanExit()
+{
+   return frontParser_prfCacheStmLiveValid
+      && frontParser_prfCachePendingValid
+      && (frontParser_prfCacheState == PRF_CACHE_PENDING_VALID);
+}
+
+static void frontParser_prfCacheCountPatternWrite(uint8_t pattern)
+{
+   if(frontParser_prfCacheState != PRF_CACHE_RECEIVING_PENDING)
+      return;
+
+   if((pattern & 0x07) == (frontParser_prfCacheProtectedPattern & 0x07))
+      frontParser_prfPendingProtectedWriteCount++;
+}
+
+static uint8_t frontParser_prfPendingCountsValid()
+{
+   return (frontParser_prfPendingMainStepCount >= PRF_PENDING_EXPECTED_MAINSTEP_COUNT)
+      && (frontParser_prfPendingStepCount >= PRF_PENDING_EXPECTED_STEP_COUNT)
+      && (frontParser_prfPendingLengthCount >= PRF_PENDING_EXPECTED_LENGTH_COUNT)
+      && (frontParser_prfPendingScaleCount >= PRF_PENDING_EXPECTED_SCALE_COUNT)
+      && (frontParser_prfPendingChainCount >= PRF_PENDING_EXPECTED_CHAIN_COUNT)
+      && (frontParser_prfPendingProtectedWriteCount > 0);
+}
+
+static void frontParser_capturePrfStmLiveSnapshot()
+{
+   uint8_t track;
+   uint8_t step;
+   uint8_t pattern = (uint8_t)(frontParser_prfCacheProtectedPattern & 0x07);
+
+   frontParser_prfCacheLiveActivePattern = seq_activePattern;
+   frontParser_prfCacheLivePendingPattern = seq_pendingPattern;
+   frontParser_prfCacheLivePattern.seq_patternSettings = seq_patternSet.seq_patternSettings[pattern];
+
+   for(track=0;track<NUM_TRACKS;track++)
+   {
+      frontParser_prfCacheLivePerTrackActivePattern[track] = seq_perTrackActivePattern[track];
+      frontParser_prfCacheLivePerTrackPendingPattern[track] = seq_perTrackPendingPattern[track];
+      frontParser_prfCacheLivePattern.seq_mainSteps[track] = seq_patternSet.seq_mainSteps[pattern][track];
+      frontParser_prfCacheLivePattern.seq_patternLengthRotate[track] =
+         seq_patternSet.seq_patternLengthRotate[pattern][track];
+
+      for(step=0;step<NUM_STEPS;step++)
+      {
+         frontParser_prfCacheLivePattern.seq_subStepPattern[track][step] =
+            seq_patternSet.seq_subStepPattern[pattern][track][step];
+      }
+   }
+
+   for(track=0;track<NUM_TRACKS+1;track++)
+      frontParser_prfCacheLiveStepIndex[track] = seq_stepIndex[track];
+
+   for(track=0;track<8;track++)
+      frontParser_prfCacheLiveMidiChannels[track] = midi_MidiChannels[track];
+
+   for(track=0;track<7;track++)
+   {
+      frontParser_prfCacheLiveNoteOverride[track] = midi_NoteOverride[track];
+      frontParser_prfCacheLiveVMorphAmount[track] = seq_vMorphAmount[track];
+   }
+
+   frontParser_prfCacheLiveVMorphFlag = seq_vMorphFlag;
+   frontParser_prfCacheLiveSeqVoicesLoading = seq_voicesLoading;
+   frontParser_prfCacheLiveSeqNewVoiceAvailable = seq_newVoiceAvailable;
+   frontParser_prfCacheLiveSeqTracksLocked = seq_tracksLocked;
+   frontParser_prfCacheLiveSeqLoadFastMode = seq_loadFastMode;
+   frontParser_prfCacheStmLiveValid = 1;
+}
+
+uint8_t frontParser_prfCacheUseLivePattern()
+{
+   return frontParser_prfCacheStmLiveValid
+      && (frontParser_prfCacheState != PRF_CACHE_IDLE)
+      && (frontParser_prfCacheState != PRF_CACHE_ABORTING);
+}
+
+uint8_t frontParser_prfCacheTrackUsesLivePattern(uint8_t track)
+{
+   if(track >= NUM_TRACKS || !frontParser_prfCacheUseLivePattern())
+      return 0;
+
+   return (frontParser_prfCacheLivePerTrackActivePattern[track] & 0x07)
+      == (frontParser_prfCacheProtectedPattern & 0x07);
+}
+
+Step* frontParser_prfCacheLiveStep(uint8_t track, uint8_t step)
+{
+   if(track >= NUM_TRACKS)
+      track = 0;
+
+   return &frontParser_prfCacheLivePattern.seq_subStepPattern[track][step & 0x7f];
+}
+
+uint16_t frontParser_prfCacheLiveMainSteps(uint8_t track)
+{
+   if(track >= NUM_TRACKS)
+      return 0;
+
+   return frontParser_prfCacheLivePattern.seq_mainSteps[track];
+}
+
+LengthRotate frontParser_prfCacheLiveLengthRotate(uint8_t track)
+{
+   LengthRotate lr;
+   lr.value = 0;
+
+   if(track < NUM_TRACKS)
+      lr = frontParser_prfCacheLivePattern.seq_patternLengthRotate[track];
+
+   return lr;
+}
+
+PatternSetting frontParser_prfCacheLivePatternSetting()
+{
+   return frontParser_prfCacheLivePattern.seq_patternSettings;
+}
+
+uint8_t frontParser_prfCacheLiveMidiChannel(uint8_t voice)
+{
+   if(voice >= 8)
+      return 0;
+
+   if(frontParser_prfCacheUseLivePattern())
+      return frontParser_prfCacheLiveMidiChannels[voice];
+
+   return midi_MidiChannels[voice];
+}
+
+uint8_t frontParser_prfCacheLiveNoteOverrideValue(uint8_t voice)
+{
+   if(voice >= 7)
+      return 0;
+
+   if(frontParser_prfCacheUseLivePattern())
+      return frontParser_prfCacheLiveNoteOverride[voice];
+
+   return midi_NoteOverride[voice];
+}
+
+uint8_t frontParser_prfCacheTakeLiveVMorphFlag()
+{
+   uint8_t flag;
+
+   if(frontParser_prfCacheUseLivePattern())
+   {
+      flag = frontParser_prfCacheLiveVMorphFlag;
+      frontParser_prfCacheLiveVMorphFlag = 0;
+      return flag;
+   }
+
+   flag = seq_vMorphFlag;
+   seq_vMorphFlag = 0;
+   return flag;
+}
+
+uint8_t frontParser_prfCacheLiveVMorphAmountValue(uint8_t voice)
+{
+   if(voice >= 7)
+      return 0;
+
+   if(frontParser_prfCacheUseLivePattern())
+      return frontParser_prfCacheLiveVMorphAmount[voice];
+
+   return seq_vMorphAmount[voice];
+}
+
+static void frontParser_sendPrfRestoreParam(uint16_t paramNr, uint8_t value, uint8_t isMorph)
+{
+   uint8_t status;
+   uint8_t data1;
+
+   if(paramNr < 128)
+   {
+      status = isMorph ? PRF_RESTORE_MORPH_CC : PRF_RESTORE_PARAM_CC;
+      data1 = (uint8_t)paramNr;
+   }
+   else
+   {
+      status = isMorph ? PRF_RESTORE_MORPH_CC2 : PRF_RESTORE_PARAM_CC2;
+      data1 = (uint8_t)(paramNr - 128);
+   }
+
+   uart_sendFrontpanelPriorityByteWait(status);
+   uart_sendFrontpanelPriorityByteWait(data1);
+   uart_sendFrontpanelPriorityByteWait(value);
+}
+
+static void frontParser_sendPrfLiveRestore()
+{
+   uint16_t i;
+
+   if(!frontParser_prfCacheAvrLiveValid)
+      return;
+
+   for(i=0;i<PRF_CACHE_LIVE_PARAM_COUNT;i++)
+      frontParser_sendPrfRestoreParam(i, frontParser_prfCacheLiveParams[i], 0);
+
+   for(i=0;i<END_OF_SOUND_PARAMETERS;i++)
+      frontParser_sendPrfRestoreParam(i, frontParser_prfCacheLiveMorph[i], 1);
+}
+
+static uint8_t frontParser_cachePrfLiveSnapshotMessage()
+{
+   uint16_t paramNr;
+
+   if(frontParser_prfCacheState != PRF_CACHE_RECEIVING_AVR_LIVE)
+      return 0;
+
+   switch(frontParser_midiMsg.status)
+   {
+      case PRF_RESTORE_PARAM_CC:
+         frontParser_prfCacheLiveParams[frontParser_midiMsg.data1] = frontParser_midiMsg.data2;
+         return 1;
+
+      case PRF_RESTORE_PARAM_CC2:
+         paramNr = (uint16_t)(frontParser_midiMsg.data1 + 128);
+         if(paramNr < PRF_CACHE_LIVE_PARAM_COUNT)
+            frontParser_prfCacheLiveParams[paramNr] = frontParser_midiMsg.data2;
+         return 1;
+
+      case PRF_RESTORE_MORPH_CC:
+         frontParser_prfCacheLiveMorph[frontParser_midiMsg.data1] = frontParser_midiMsg.data2;
+         return 1;
+
+      case PRF_RESTORE_MORPH_CC2:
+         paramNr = (uint16_t)(frontParser_midiMsg.data1 + 128);
+         if(paramNr < END_OF_SOUND_PARAMETERS)
+            frontParser_prfCacheLiveMorph[paramNr] = frontParser_midiMsg.data2;
+         return 1;
+
+      default:
+         return 0;
+   }
+}
+
 static uint8_t frontParser_isDeferredPerfControlMessage()
 {
    if(frontParser_midiMsg.status != FRONT_SEQ_CC)
@@ -202,6 +536,13 @@ static uint8_t frontParser_isDeferredPerfControlMessage()
    {
       case FRONT_SEQ_FILE_BEGIN:
       case FRONT_SEQ_FILE_DONE:
+      case FRONT_SEQ_PRF_CACHE_BEGIN:
+      case FRONT_SEQ_PRF_PENDING_BEGIN:
+      case FRONT_SEQ_PRF_PENDING_DONE:
+      case FRONT_SEQ_PRF_CACHE_ABORT:
+      case FRONT_SEQ_PRF_AVR_SNAPSHOT_BEGIN:
+      case FRONT_SEQ_PRF_AVR_SNAPSHOT_END:
+      case FRONT_SEQ_PRF_RESTORE_AVR_LIVE:
       case FRONT_SEQ_LOAD_VOICE:
       case FRONT_SEQ_UNHOLD_VOICE:
          return 1;
@@ -212,6 +553,9 @@ static uint8_t frontParser_isDeferredPerfControlMessage()
 
 static uint8_t frontParser_shouldDeferPerfMessage()
 {
+   if(frontParser_prfCacheSessionActive())
+      return 0;
+
    if(!frontParser_deferredPerfLoadActive || frontParser_deferredPerfReplay)
       return 0;
 
@@ -265,6 +609,9 @@ static void frontParser_applyDeferredPerfMessages()
 
 static uint8_t frontParser_shouldStagePattern(uint8_t pattern)
 {
+   if(frontParser_prfCacheSessionActive())
+      return 0;
+
    if(frontParser_deferredPerfLoadActive)
       return pattern == frontParser_deferredPerfProtectedPattern;
 
@@ -490,6 +837,20 @@ static void frontParser_applyPendingVoiceCache()
 
 void frontParser_applyDeferredVoiceCache()
 {
+   if(frontParser_prfCacheCanExit())
+   {
+      frontParser_applyPendingVoiceCache();
+      frontParser_deferredPerfVoiceCachePending = 0;
+      frontParser_deferredPerfPatternPending = 0;
+      frontParser_clearDeferredPerfLoad();
+      frontParser_clearPrfRuntimeFlags();
+      frontParser_clearPrfCacheSession();
+      return;
+   }
+
+   if(frontParser_prfCacheSessionActive())
+      return;
+
    if(frontParser_deferredPerfVoiceCachePending)
    {
       frontParser_applyDeferredPerfMessages();
@@ -498,6 +859,7 @@ void frontParser_applyDeferredVoiceCache()
          seq_applyTmpPatternTo(frontParser_deferredPerfProtectedPattern);
       frontParser_deferredPerfVoiceCachePending = 0;
       frontParser_deferredPerfPatternPending = 0;
+      frontParser_clearDeferredPerfLoad();
    }
 }
 
@@ -717,12 +1079,14 @@ static void frontParser_handleSysexData(unsigned char data)
          //first load into inactive track
             PatternSet* patternSet = &seq_patternSet;
             
-            if(frontParser_deferredPerfLoadActive && (currentPattern == frontParser_deferredPerfProtectedPattern))
+            if(frontParser_shouldStagePattern(currentPattern))
             {
                seq_tmpPattern.seq_mainSteps[currentTrack] = mainStepData;
                frontParser_markDeferredPatternPending();
             }
-            else if( (currentPattern == seq_activePattern) && seq_isRunning() )
+            else if(!frontParser_prfCacheSessionActive()
+               && (currentPattern == seq_activePattern)
+               && seq_isRunning())
             {  
                if(seq_loadFastMode)
                {
@@ -737,6 +1101,12 @@ static void frontParser_handleSysexData(unsigned char data)
             else
             {
                patternSet->seq_mainSteps[currentPattern][currentTrack] = mainStepData;
+            }
+
+            if(frontParser_prfCacheState == PRF_CACHE_RECEIVING_PENDING)
+            {
+               frontParser_prfPendingMainStepCount++;
+               frontParser_prfCacheCountPatternWrite(currentPattern);
             }
          
             
@@ -768,6 +1138,11 @@ static void frontParser_handleSysexData(unsigned char data)
             {
                patternSet->seq_patternSettings[currentPattern].nextPattern = next;
                patternSet->seq_patternSettings[currentPattern].changeBar = repeat;
+            }
+            if(frontParser_prfCacheState == PRF_CACHE_RECEIVING_PENDING)
+            {
+               frontParser_prfPendingChainCount++;
+               frontParser_prfCacheCountPatternWrite(currentPattern);
             }
             //inc the step counter
             frontParser_sysexSeqStepNr++;
@@ -801,6 +1176,12 @@ static void frontParser_handleSysexData(unsigned char data)
             
             {
                patternSet->seq_patternLengthRotate[currentPattern][currentTrack].length = data;
+            }
+
+            if(frontParser_prfCacheState == PRF_CACHE_RECEIVING_PENDING)
+            {
+               frontParser_prfPendingLengthCount++;
+               frontParser_prfCacheCountPatternWrite(currentPattern);
             }
             
             frontParser_rxCnt = 0;
@@ -838,6 +1219,12 @@ static void frontParser_handleSysexData(unsigned char data)
             else 
             {
                patternSet->seq_patternLengthRotate[currentPattern][currentTrack].scale = data;
+            }
+
+            if(frontParser_prfCacheState == PRF_CACHE_RECEIVING_PENDING)
+            {
+               frontParser_prfPendingScaleCount++;
+               frontParser_prfCacheCountPatternWrite(currentPattern);
             }
          
          
@@ -973,6 +1360,12 @@ static void frontParser_handleSysexData(unsigned char data)
                patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Nr 	= frontParser_sysexBuffer[5];
                patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Val 	= frontParser_sysexBuffer[6];
             }
+
+            if(frontParser_prfCacheState == PRF_CACHE_RECEIVING_PENDING)
+            {
+               frontParser_prfPendingStepCount++;
+               frontParser_prfCacheCountPatternWrite(currentPattern);
+            }
             //signal that a new data chunk is available
             //frontParser_newSeqDataAvailable = 1;
             //reset receive counter for next chunk
@@ -990,7 +1383,11 @@ static void frontParser_handleSysexData(unsigned char data)
                {  
                   seq_tracksLocked &= ~(0x01<<currentTrack);
                }
-               else if (!frontParser_deferredPerfLoadActive && currentPattern == 7 && seq_isRunning() && !seq_loadFastMode)
+               else if (!frontParser_deferredPerfLoadActive
+                  && !frontParser_prfCacheSessionActive()
+                  && currentPattern == 7
+                  && seq_isRunning()
+                  && !seq_loadFastMode)
                {
                   seq_newPatternAvailable=1;
                }
@@ -1013,6 +1410,12 @@ static void frontParser_handleSysexData(unsigned char data)
 // This is called when we've received a full midi message
 static void frontParser_handleMidiMessage()
 {
+   if(frontParser_cachePrfLiveSnapshotMessage())
+   {
+      frontParser_flowMessageApplied();
+      return;
+   }
+
    if(frontParser_cacheDeferredPerfMessage())
    {
       frontParser_flowMessageApplied();
@@ -1419,10 +1822,95 @@ static void frontParser_handleSeqCC()
          comm_quietUi = 0;
          comm_flowActive = 0;
          comm_flowBudgetRemaining = 0;
+         frontParser_clearPrfCacheSession();
          frontParser_clearDeferredPerfLoad();
          break;
 
       case FRONT_SEQ_FLOW_GRANT:
+         break;
+
+      case FRONT_SEQ_PRF_CACHE_BEGIN:
+      {
+         uint8_t cacheAccepted = PRF_CACHE_REJECTED;
+
+         frontParser_clearPrfCacheSession();
+         if((frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
+            && seq_isRunning()
+            && frontParser_deferPerfLoadCacheUntilPatternChange)
+         {
+            frontParser_prfCacheProtectedPattern = seq_activePattern & 0x07;
+            frontParser_capturePrfStmLiveSnapshot();
+            frontParser_prfCacheState = PRF_CACHE_LIVE_ACTIVE;
+            frontParser_prfCachePendingValid = 0;
+            frontParser_clearDeferredPerfLoad();
+            cacheAccepted = PRF_CACHE_ACCEPTED;
+         }
+         frontParser_sendPrfCacheStatus(FRONT_SEQ_PRF_CACHE_BEGIN, cacheAccepted);
+         frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
+         break;
+      }
+
+      case FRONT_SEQ_PRF_PENDING_BEGIN:
+         if(frontParser_prfCacheState != PRF_CACHE_IDLE)
+         {
+            frontParser_resetPrfPendingCounters();
+            frontParser_prfCachePendingValid = 0;
+            frontParser_prfCacheState = PRF_CACHE_RECEIVING_PENDING;
+         }
+         frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
+         break;
+
+      case FRONT_SEQ_PRF_PENDING_DONE:
+         if(frontParser_prfCacheState == PRF_CACHE_RECEIVING_PENDING)
+         {
+            if(frontParser_prfPendingCountsValid())
+            {
+               frontParser_prfCachePendingValid = 1;
+               frontParser_prfCacheState = PRF_CACHE_PENDING_VALID;
+               frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
+            }
+            else
+            {
+               frontParser_prfCacheState = PRF_CACHE_ABORTING;
+               frontParser_clearPrfCacheSession();
+               frontParser_clearDeferredPerfLoad();
+               frontParser_sendFlowAbort(FLOW_CH_LOAD_SESSION);
+            }
+         }
+         else
+         {
+            frontParser_sendFlowAbort(FLOW_CH_LOAD_SESSION);
+         }
+         break;
+
+      case FRONT_SEQ_PRF_CACHE_ABORT:
+         frontParser_prfCacheState = PRF_CACHE_ABORTING;
+         frontParser_clearPrfCacheSession();
+         frontParser_clearDeferredPerfLoad();
+         frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
+         break;
+
+      case FRONT_SEQ_PRF_AVR_SNAPSHOT_BEGIN:
+         if(frontParser_prfCacheState != PRF_CACHE_IDLE)
+         {
+            frontParser_prfCacheState = PRF_CACHE_RECEIVING_AVR_LIVE;
+            frontParser_prfCacheAvrLiveValid = 0;
+         }
+         frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
+         break;
+
+      case FRONT_SEQ_PRF_AVR_SNAPSHOT_END:
+         if(frontParser_prfCacheState == PRF_CACHE_RECEIVING_AVR_LIVE)
+         {
+            frontParser_prfCacheAvrLiveValid = 1;
+            frontParser_prfCacheState = PRF_CACHE_LIVE_ACTIVE;
+         }
+         frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
+         break;
+
+      case FRONT_SEQ_PRF_RESTORE_AVR_LIVE:
+         frontParser_sendPrfLiveRestore();
+         frontParser_sendFlowGrantWait(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
          break;
    
       case FRONT_SEQ_REQUEST_PATTERN_PARAMS:
@@ -1973,15 +2461,30 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_FILE_BEGIN:
          frontParser_clearDeferredPerfLoad();
          if((frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
-            && seq_isRunning()
-            && frontParser_deferPerfLoadCacheUntilPatternChange)
+            || (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_ALL))
          {
-            frontParser_deferredPerfLoadActive = 1;
-            frontParser_deferredPerfProtectedPattern = seq_activePattern & 0x07;
+            seq_morphLoadDisabled = 1;
+            seq_vMorphFlag = 0;
+         }
+         if((frontParser_midiMsg.data2 != FRONT_FILE_DONE_TYPE_PERFORMANCE)
+            || (frontParser_prfCacheState == PRF_CACHE_IDLE))
+         {
+            frontParser_clearPrfCacheSession();
          }
          break;
       case FRONT_SEQ_FILE_DONE:
-         if(frontParser_deferredPerfLoadActive
+         if((frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
+            || (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_ALL))
+         {
+            seq_morphLoadDisabled = 0;
+            seq_vMorphFlag = 0;
+         }
+         if(frontParser_prfCacheSessionActive()
+            && (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE))
+         {
+            frontParser_deferredPerfLoadActive = 0;
+         }
+         else if(frontParser_deferredPerfLoadActive
             && (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE))
          {
             frontParser_deferredPerfVoiceCachePending = 1;

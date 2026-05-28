@@ -582,6 +582,13 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_ARM_AUTOMATION_STEP		0xbf	// status - stepNr - track | OnOff
 
 #define SAMPLE_CC						      0xc0
+#define PRF_RESTORE_PARAM_CC          0xc1
+#define PRF_RESTORE_PARAM_CC2         0xc2
+#define PRF_RESTORE_MORPH_CC          0xc3
+#define PRF_RESTORE_MORPH_CC2         0xc4
+#define PRF_CACHE_STATUS              0xc5
+#define PRF_CACHE_REJECTED            0x00
+#define PRF_CACHE_ACCEPTED            0x01
 #define FRONT_SAMPLE_START_UPLOAD 		0x01
 #define FRONT_SAMPLE_COUNT		 		   0x02
 
@@ -692,6 +699,13 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_SEQ_FLOW_GRANT            0x5b
 #define FRONT_SEQ_FLOW_END              0x5c
 #define FRONT_SEQ_FLOW_ABORT            0x5d
+#define FRONT_SEQ_PRF_CACHE_BEGIN       0x5e
+#define FRONT_SEQ_PRF_PENDING_BEGIN     0x5f
+#define FRONT_SEQ_PRF_PENDING_DONE      0x60
+#define FRONT_SEQ_PRF_CACHE_ABORT       0x61
+#define FRONT_SEQ_PRF_AVR_SNAPSHOT_BEGIN 0x62
+#define FRONT_SEQ_PRF_AVR_SNAPSHOT_END   0x63
+#define FRONT_SEQ_PRF_RESTORE_AVR_LIVE   0x64
 
 #define FLOW_CH_LOAD_SESSION            0x00
 #define FLOW_CH_GLOBALS                 0x01

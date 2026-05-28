@@ -172,7 +172,7 @@ sei();
 		
 		uart_checkAndParse();
 		//get the encoder values
-		const int8_t encoderValue = encode_read4();  
+		const int8_t encoderValue = encode_stableRead4();  
 		const uint8_t button = encode_readButton();
 		
 		//update the menu according to the encoder values

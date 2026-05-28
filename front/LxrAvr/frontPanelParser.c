@@ -70,6 +70,8 @@ static uint8_t comm_txCredits = 0;
 static uint8_t comm_flowAckPending = 0;
 static uint8_t comm_flowAckChannel = 0;
 static uint8_t comm_flowFailed = 0;
+static uint8_t comm_prfCacheStatusCommand = 0;
+static uint8_t comm_prfCacheStatusValue = PRF_CACHE_REJECTED;
 
 static uint8_t frontPanel_flowIsCommand(uint8_t command)
 {
@@ -147,7 +149,7 @@ static uint8_t frontPanel_waitForFlowAck(uint8_t channel)
       }
    }
 
-   return 1;
+   return !comm_flowFailed;
 }
 
 static uint8_t frontPanel_flowSendAndWait(uint8_t command, uint8_t channel)
@@ -300,6 +302,29 @@ void frontPanel_flowAbortSession()
    comm_flowActive = 0;
    comm_txCredits = 0;
    comm_flowFailed = 1;
+}
+//------------------------------------------------------------
+uint8_t frontPanel_prfCacheBegin(uint8_t fileType)
+{
+   comm_prfCacheStatusCommand = 0;
+   comm_prfCacheStatusValue = PRF_CACHE_REJECTED;
+
+   if(!frontPanel_prfCacheControl(SEQ_PRF_CACHE_BEGIN, fileType))
+      return PRF_CACHE_REJECTED;
+
+   if(comm_prfCacheStatusCommand != SEQ_PRF_CACHE_BEGIN)
+      return PRF_CACHE_REJECTED;
+
+   return comm_prfCacheStatusValue;
+}
+//------------------------------------------------------------
+uint8_t frontPanel_prfCacheControl(uint8_t command, uint8_t fileType)
+{
+   comm_flowAckChannel = FLOW_CH_LOAD_SESSION;
+   comm_flowAckPending = 1;
+   frontPanel_sendData(SEQ_CC, command, fileType);
+
+   return frontPanel_waitForFlowAck(FLOW_CH_LOAD_SESSION);
 }
 //------------------------------------------------------------
 void frontParser_parseNrpn(uint8_t value)
@@ -572,7 +597,9 @@ void frontPanel_parseData(uint8_t data)
       }
       else if(frontParser_rxCnt==0)
       {
-         if(!frontParser_rxDisable || (frontParser_midiMsg.status == SEQ_CC))
+         if(!frontParser_rxDisable
+            || (frontParser_midiMsg.status == SEQ_CC)
+            || (frontParser_midiMsg.status == PRF_CACHE_STATUS))
          {
       	   //parameter nr
             frontParser_midiMsg.data1 = data;
@@ -589,6 +616,11 @@ void frontPanel_parseData(uint8_t data)
          {
             if((frontParser_midiMsg.status == SEQ_CC) && frontPanel_flowIsCommand(frontParser_midiMsg.data1))
                frontPanel_handleFlowMessage();
+            else if(frontParser_midiMsg.status == PRF_CACHE_STATUS)
+            {
+               comm_prfCacheStatusCommand = frontParser_midiMsg.data1;
+               comm_prfCacheStatusValue = frontParser_midiMsg.data2;
+            }
 
             return;
          }
@@ -746,7 +778,7 @@ void frontPanel_parseData(uint8_t data)
                   case SEQ_CHANGE_PAT:
                      if(frontParser_midiMsg.data2 > 15) 
                         return;
-                  	//ack message that the sequencer changed to the requested pattern
+                 	//ack message that the sequencer changed to the requested pattern
                      uint8_t patMsg = frontParser_midiMsg.data2&0x07;
                   	// if a 'perf' or 'all' load locked the kit, un-lock and load
                      if(preset_workingVoiceArray)
@@ -797,9 +829,9 @@ void frontPanel_parseData(uint8_t data)
                      
                      break;
                   case SEQ_RUN_STOP:
-                  	// --AS This tells the front that the sequencer has started/stopped due to MTC msg
+                 	// --AS This tells the front that the sequencer has started/stopped due to MTC msg
                   	// we simply use this to turn on/off the led and cause the next press of start
-                  	// button to act properly
+                 	// button to act properly
                      buttonHandler_setRunStopState(frontParser_midiMsg.data2);
                      break;
                	
@@ -839,6 +871,32 @@ void frontPanel_parseData(uint8_t data)
                parameters2[frontParser_midiMsg.data1+128]=frontParser_midiMsg.data2;
                menu_repaint();
             
+            }
+            else if(frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC)
+            {
+               parameter_values[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
+            }
+            else if(frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC2)
+            {
+               uint16_t paramNr = (uint16_t)(frontParser_midiMsg.data1+128);
+               if(paramNr < NUM_PARAMS)
+                  parameter_values[paramNr]=frontParser_midiMsg.data2;
+            }
+            else if(frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC)
+            {
+               if(frontParser_midiMsg.data1 < END_OF_SOUND_PARAMETERS)
+                  parameters2[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
+            }
+            else if(frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC2)
+            {
+               uint16_t paramNr = (uint16_t)(frontParser_midiMsg.data1+128);
+               if(paramNr < END_OF_SOUND_PARAMETERS)
+                  parameters2[paramNr]=frontParser_midiMsg.data2;
+            }
+            else if(frontParser_midiMsg.status == PRF_CACHE_STATUS)
+            {
+               comm_prfCacheStatusCommand = frontParser_midiMsg.data1;
+               comm_prfCacheStatusValue = frontParser_midiMsg.data2;
             }
             
             else if(frontParser_midiMsg.status == BANK_CHANGE_CC)
