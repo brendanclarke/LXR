@@ -217,7 +217,7 @@ void frontPanel_updatePatternLeds()
 {
    uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
    uint8_t patternNr = menu_getViewedPattern(); //max 7 => 0x07 = 0b111
-   uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x7));
+   uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x0f));
    frontPanel_sendData(LED_CC, LED_QUERY_SEQ_TRACK, value);
 }
 //------------------------------------------------------------
@@ -226,7 +226,7 @@ void frontPanel_updateActiveStepLeds()
    /*
    uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
    uint8_t patternNr = menu_getViewedPattern(); //max 7 => 0x07 = 0b111
-   uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x7));
+   uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x0f));
    frontPanel_sendData(LED_CC, LED_QUERY_SEQ_TRACK, value);
    */
 }
@@ -235,7 +235,7 @@ void frontPanel_updateSubstepLeds()
 {
    uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
    uint8_t patternNr = menu_getViewedPattern(); //max 7 => 0x07 = 0b111
-   uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x7));
+   uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x0f));
    frontPanel_sendData(LED_CC, LED_ALL_SUBSTEP, value);
 }
 //------------------------------------------------------------
@@ -720,7 +720,8 @@ void frontPanel_parseData(uint8_t data)
                         led_clearAllBlinkLeds();
                         led_setBlinkLed((uint8_t) (LED_STEP1 + parameter_values[PAR_TRACK_ROTATION]), 1);
                         led_setBlinkLed((uint8_t) (LED_VOICE1 + menu_getActiveVoice()), 1);
-                        led_setBlinkLed((uint8_t) (LED_PART_SELECT1 + menu_getViewedPattern()) ,1);
+                        uint8_t viewedPattern = menu_getViewedPattern();
+                        led_setBlinkLed((uint8_t)((viewedPattern == SEQ_TMP_PATTERN) ? LED_STEP16 : (LED_PART_SELECT1 + viewedPattern)), 1);
                         
                      }
                      break;
@@ -779,7 +780,9 @@ void frontPanel_parseData(uint8_t data)
                      if(frontParser_midiMsg.data2 > 15) 
                         return;
                  	//ack message that the sequencer changed to the requested pattern
-                     uint8_t patMsg = frontParser_midiMsg.data2&0x07;
+                     uint8_t patMsg = frontParser_midiMsg.data2;
+                     if(patMsg != SEQ_TMP_PATTERN)
+                        patMsg &= 0x07;
                   	// if a 'perf' or 'all' load locked the kit, un-lock and load
                      if(preset_workingVoiceArray)
                      {
@@ -795,7 +798,7 @@ void frontPanel_parseData(uint8_t data)
                      }
                      preset_workingVoiceArray = 0;
                      }
-                     led_setBlinkLed((uint8_t)(LED_PART_SELECT1+patMsg),0);
+                     led_setBlinkLed((uint8_t)((patMsg == SEQ_TMP_PATTERN) ? LED_STEP16 : (LED_PART_SELECT1+patMsg)),0);
                   	//clear last pattern led
                   	
                      if( (parameter_values[PAR_FOLLOW]) ) {
@@ -875,12 +878,17 @@ void frontPanel_parseData(uint8_t data)
             else if(frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC)
             {
                parameter_values[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
+               parameters2[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
             }
             else if(frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC2)
             {
                uint16_t paramNr = (uint16_t)(frontParser_midiMsg.data1+128);
                if(paramNr < NUM_PARAMS)
+               {
                   parameter_values[paramNr]=frontParser_midiMsg.data2;
+                  if(paramNr < END_OF_SOUND_PARAMETERS)
+                     parameters2[paramNr]=frontParser_midiMsg.data2;
+               }
             }
             else if(frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC)
             {
@@ -892,6 +900,10 @@ void frontPanel_parseData(uint8_t data)
                uint16_t paramNr = (uint16_t)(frontParser_midiMsg.data1+128);
                if(paramNr < END_OF_SOUND_PARAMETERS)
                   parameters2[paramNr]=frontParser_midiMsg.data2;
+            }
+            else if(frontParser_midiMsg.status == PARAM_RESTORE_DONE)
+            {
+               menu_repaintAll();
             }
             else if(frontParser_midiMsg.status == PRF_CACHE_STATUS)
             {

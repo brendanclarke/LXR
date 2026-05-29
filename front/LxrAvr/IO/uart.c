@@ -222,10 +222,12 @@ void uart_checkAndParse()
 
 #else
    uint8_t data;
-   if(uart_getc(&data))
+   uint8_t budget = 16;
+   while(budget && uart_getc(&data))
    {
    	//there is new data available
       frontPanel_parseData(data);
+      budget--;
    }
 #endif
 }

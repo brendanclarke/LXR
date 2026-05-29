@@ -217,6 +217,7 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       const uint16_t paramNr = msg.data1-1;
       if(updateOriginalValue) {
          midiParser_originalCcValues[paramNr+1] = msg.data2;
+         seq_storeParameterIngress(paramNr+1, msg.data2);
       }
    
       switch(msg.data1)
@@ -849,6 +850,7 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    
       if(updateOriginalValue) {
          midiParser_originalCcValues[paramNr] = msg.data2;
+         seq_storeParameterIngress(paramNr, msg.data2);
       }
       switch(msg.data1)
       {
@@ -1799,6 +1801,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
             midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            seq_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
             if((midiParser_txRxFilter & 0x04)&&updateOriginalValue&&updateOriginalValue) 
@@ -2055,6 +2058,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
             midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            seq_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
             if((midiParser_txRxFilter & 0x04)&&updateOriginalValue) 
@@ -2312,6 +2316,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
             midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            seq_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
             if((midiParser_txRxFilter & 0x04)&&updateOriginalValue) 
@@ -2570,6 +2575,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
             midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            seq_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
             if((midiParser_txRxFilter & 0x04)&&updateOriginalValue) 
@@ -2829,6 +2835,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
             midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            seq_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
             if((midiParser_txRxFilter & 0x04)&&updateOriginalValue) 
@@ -3083,6 +3090,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
             midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            seq_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
             if((midiParser_txRxFilter & 0x04)&&updateOriginalValue) 
@@ -3337,6 +3345,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
             midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            seq_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
             if((midiParser_txRxFilter & 0x04)&&updateOriginalValue) 
@@ -3526,6 +3535,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
             midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            seq_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
             if((midiParser_txRxFilter & 0x04)&&updateOriginalValue) 

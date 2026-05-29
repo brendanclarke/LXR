@@ -860,7 +860,10 @@ void menu_shiftPerf(uint8_t shift)
       // represented by a blinking led. The leftmost LED blinking means rotation is off (0)
       // and each one represents a different rotation
       led_setBlinkLed((uint8_t) (LED_STEP1 + parameter_values[PAR_TRACK_ROTATION]), 1);
-      led_setBlinkLed((uint8_t) (LED_PART_SELECT1 + menu_getViewedPattern()),	1);
+      {
+         uint8_t viewedPattern = menu_getViewedPattern();
+         led_setBlinkLed((uint8_t)((viewedPattern == SEQ_TMP_PATTERN) ? LED_STEP16 : (LED_PART_SELECT1 + viewedPattern)), 1);
+      }
       led_setBlinkLed((uint8_t)(LED_VOICE1 + menu_getActiveVoice()) ,1);
       
       // show the active voice pattern
@@ -968,7 +971,7 @@ void menu_updateMainStepDisplay()
    led_clearSequencerLeds();
    uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
 	uint8_t patternNr = menu_shownPattern; //max 7 => 0x07 = 0b111
-	uint8_t value = (uint8_t)((trackNr<<4) | (patternNr&0x7));
+	uint8_t value = (uint8_t)((trackNr<<4) | (patternNr&0x0f));
 	frontPanel_sendData(LED_CC,LED_QUERY_SEQ_TRACK,value);
 }
 //-----------------------------------------------------------------
@@ -3314,7 +3317,7 @@ void menu_switchPage(uint8_t pageNr)
    
    		uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
    		uint8_t patternNr = menu_shownPattern; //max 7 => 0x07 = 0b111
-   		uint8_t value = (uint8_t)((trackNr<<4) | (patternNr&0x7));
+         uint8_t value = (uint8_t)((trackNr<<4) | (patternNr&0x0f));
    		frontPanel_sendData(LED_CC,LED_QUERY_SEQ_TRACK,value);
       
    	}

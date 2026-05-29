@@ -10,6 +10,7 @@
 #include <string.h>
 #include "Hardware/timebase.h"
 #include "Menu/menu.h"
+#include "frontPanelParser.h"
 
 //since we need an array to store the start time we have to limit the number of simultanousely pulsable LEDs
 #define NUM_OF_PULSABLE_LEDS 8	//MAX 8 at the moment (because of led_pulsingLeds)
@@ -73,11 +74,12 @@ void led_clearSelectBlinkLeds()
 //--------------------------------------------
 void led_initPerformanceLeds()
 {
-	led_setValue(1,(uint8_t)(menu_playedPattern + LED_PART_SELECT1));
+	led_setValue(1,(uint8_t)((menu_playedPattern == SEQ_TMP_PATTERN) ? LED_STEP16 : (menu_playedPattern + LED_PART_SELECT1)));
 	// a blinking LED shows the viewed pattern if different from the played pattern
 	if(menu_playedPattern != menu_getViewedPattern())
 	{
-		led_setBlinkLed((uint8_t)(LED_PART_SELECT1 + menu_getViewedPattern()) ,1);
+		uint8_t viewedPattern = menu_getViewedPattern();
+		led_setBlinkLed((uint8_t)((viewedPattern == SEQ_TMP_PATTERN) ? LED_STEP16 : (LED_PART_SELECT1 + viewedPattern)) ,1);
 	}		
 };
 //--------------------------------------------

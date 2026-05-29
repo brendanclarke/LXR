@@ -53,6 +53,8 @@
 #include "automationNode.h"
 #include "SomGenerator.h"
 #include "TriggerOut.h"
+#include "ParameterArray.h"
+#include "modulationNode.h"
 
 #define VOICE_PARAM_LENGTH 37
 #define SEQ_PRESCALER_MASK 	0x03
@@ -179,6 +181,45 @@ PatternSet seq_patternSet;
 
 TempPattern seq_tmpPattern;
 
+typedef struct SeqTmpKitAutomationStruct
+{
+   uint16_t lfoDestination[6];
+   uint16_t velocityDestination[6];
+   uint16_t macroDestination[4];
+   uint8_t lfoDestinationValid;
+   uint8_t velocityDestinationValid;
+   uint8_t macroDestinationValid;
+} SeqTmpKitAutomation;
+
+typedef struct SeqTmpKitStateStruct
+{
+   uint8_t frontPanelParams[END_OF_SOUND_PARAMETERS];
+   uint8_t frontPanelParamsValid[END_OF_SOUND_PARAMETERS];
+   uint8_t morphParams[END_OF_SOUND_PARAMETERS];
+   uint8_t morphParamsValid[END_OF_SOUND_PARAMETERS];
+   uint8_t interpolatedParams[END_OF_SOUND_PARAMETERS];
+   uint8_t interpolatedParamsValid[END_OF_SOUND_PARAMETERS];
+   SeqTmpKitAutomation automation;
+   uint8_t valid;
+} SeqTmpKitState;
+
+static SeqTmpKitState seq_tmpKitState;
+static SeqTmpKitAutomation seq_normalKitAutomation;
+static uint8_t seq_tmpKitActive = 0;
+static uint8_t seq_normalKitAutomationValid = 0;
+static uint8_t seq_tmpKitPushParamsToFrontEnabled = 0;
+
+typedef enum SeqParamIngressTargetEnum
+{
+   SEQ_PARAM_INGRESS_CURRENT_IMAGE = 0,
+   SEQ_PARAM_INGRESS_TMP_KIT_STATE
+} SeqParamIngressTarget;
+
+uint8_t stm_currentParamImage[END_OF_SOUND_PARAMETERS];
+static uint8_t stm_currentParamImageValid[END_OF_SOUND_PARAMETERS];
+static SeqTmpKitAutomation stm_currentAutomationImage;
+static SeqParamIngressTarget seq_paramIngressTarget = SEQ_PARAM_INGRESS_CURRENT_IMAGE;
+
 uint8_t seq_transpose_voiceAmount[7];
 uint8_t seq_transposeOnOff;
 
@@ -194,11 +235,310 @@ static void seq_sendProgChg(const uint8_t ptn);
 static void seq_eraseStepAndSubSteps(const uint8_t voice, const uint8_t mainStep);
 static void seq_activateTmpPattern();
 static void seq_nextStep();
+static void seq_captureTmpKitState();
+static void seq_setTmpKitActive(uint8_t active);
+static void seq_pushParameterValuesToFront(const uint8_t *source, const uint8_t *valid);
 static uint8_t seq_isNextStepSyncStep();
 static uint8_t seq_intIsStepActive(uint8_t voice, uint8_t stepNr, uint8_t patternNr);
 static uint8_t seq_intIsMainStepActive(uint8_t voice, uint8_t mainStepNr, uint8_t pattern);
 static void seq_resetNote(Step *step);
 static void seq_setStepIndexToStart();
+
+//------------------------------------------------------------------------------
+static uint8_t* seq_getIngressParamTarget()
+{
+   if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_TMP_KIT_STATE)
+      return seq_tmpKitState.frontPanelParams;
+
+   return stm_currentParamImage;
+}
+
+//------------------------------------------------------------------------------
+static uint8_t* seq_getIngressParamValidTarget()
+{
+   if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_TMP_KIT_STATE)
+      return seq_tmpKitState.frontPanelParamsValid;
+
+   return stm_currentParamImageValid;
+}
+
+//------------------------------------------------------------------------------
+static SeqTmpKitAutomation* seq_getIngressAutomationTarget()
+{
+   if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_TMP_KIT_STATE)
+      return &seq_tmpKitState.automation;
+
+   return &stm_currentAutomationImage;
+}
+
+//------------------------------------------------------------------------------
+void seq_storeParameterIngress(uint16_t param, uint8_t value)
+{
+   uint8_t *target = seq_getIngressParamTarget();
+   uint8_t *valid = seq_getIngressParamValidTarget();
+
+   if(param >= END_OF_SOUND_PARAMETERS)
+      return;
+
+   target[param] = value;
+   valid[param] = 1;
+}
+
+//------------------------------------------------------------------------------
+void seq_storeLfoDestinationIngress(uint8_t voice, uint16_t destination)
+{
+   SeqTmpKitAutomation *target = seq_getIngressAutomationTarget();
+
+   if(voice >= 6)
+      return;
+
+   target->lfoDestination[voice] = destination;
+   target->lfoDestinationValid |= (uint8_t)(1 << voice);
+}
+
+//------------------------------------------------------------------------------
+void seq_storeVelocityDestinationIngress(uint8_t voice, uint16_t destination)
+{
+   SeqTmpKitAutomation *target = seq_getIngressAutomationTarget();
+
+   if(voice >= 6)
+      return;
+
+   target->velocityDestination[voice] = destination;
+   target->velocityDestinationValid |= (uint8_t)(1 << voice);
+}
+
+//------------------------------------------------------------------------------
+void seq_storeMacroDestinationIngress(uint8_t destinationNr, uint16_t destination)
+{
+   SeqTmpKitAutomation *target = seq_getIngressAutomationTarget();
+
+   if(destinationNr >= 4)
+      return;
+
+   target->macroDestination[destinationNr] = destination;
+   target->macroDestinationValid |= (uint8_t)(1 << destinationNr);
+}
+
+//------------------------------------------------------------------------------
+uint8_t seq_normalizePatternNumber(uint8_t pattern)
+{
+   if(pattern == SEQ_TMP_PATTERN)
+      return SEQ_TMP_PATTERN;
+   return pattern & 0x07;
+}
+
+//------------------------------------------------------------------------------
+Step* seq_getStepPtr(uint8_t pattern, uint8_t track, uint8_t step)
+{
+   pattern = seq_normalizePatternNumber(pattern);
+   if(pattern == SEQ_TMP_PATTERN)
+      return &seq_tmpPattern.seq_subStepPattern[track][step & 0x7f];
+   return &seq_patternSet.seq_subStepPattern[pattern][track][step & 0x7f];
+}
+
+//------------------------------------------------------------------------------
+LengthRotate* seq_getLengthRotatePtr(uint8_t pattern, uint8_t track)
+{
+   pattern = seq_normalizePatternNumber(pattern);
+   if(pattern == SEQ_TMP_PATTERN)
+      return &seq_tmpPattern.seq_patternLengthRotate[track];
+   return &seq_patternSet.seq_patternLengthRotate[pattern][track];
+}
+
+//------------------------------------------------------------------------------
+PatternSetting* seq_getPatternSettingPtr(uint8_t pattern)
+{
+   pattern = seq_normalizePatternNumber(pattern);
+   if(pattern == SEQ_TMP_PATTERN)
+      return &seq_tmpPattern.seq_patternSettings;
+   return &seq_patternSet.seq_patternSettings[pattern];
+}
+
+//------------------------------------------------------------------------------
+uint16_t seq_getMainSteps(uint8_t pattern, uint8_t track)
+{
+   pattern = seq_normalizePatternNumber(pattern);
+   if(pattern == SEQ_TMP_PATTERN)
+      return seq_tmpPattern.seq_mainSteps[track];
+   return seq_patternSet.seq_mainSteps[pattern][track];
+}
+
+//------------------------------------------------------------------------------
+void seq_setMainSteps(uint8_t pattern, uint8_t track, uint16_t steps)
+{
+   pattern = seq_normalizePatternNumber(pattern);
+   if(pattern == SEQ_TMP_PATTERN)
+      seq_tmpPattern.seq_mainSteps[track] = steps;
+   else
+      seq_patternSet.seq_mainSteps[pattern][track] = steps;
+}
+
+//------------------------------------------------------------------------------
+static ModulationNode* seq_getLfoModNode(uint8_t voice)
+{
+   switch(voice)
+   {
+      case 0:
+      case 1:
+      case 2:
+         return &voiceArray[voice].lfo.modTarget;
+      case 3:
+         return &snareVoice.lfo.modTarget;
+      case 4:
+         return &cymbalVoice.lfo.modTarget;
+      case 5:
+      default:
+         return &hatVoice.lfo.modTarget;
+   }
+}
+
+//------------------------------------------------------------------------------
+static void seq_applyAutomationTargets(const SeqTmpKitAutomation *source)
+{
+   uint8_t i;
+
+   for(i=0;i<6;i++)
+   {
+      ModulationNode *lfoNode = seq_getLfoModNode(i);
+      if(source->lfoDestinationValid & (1 << i))
+      {
+         modNode_setDestination(lfoNode, source->lfoDestination[i]);
+         modNode_updateValue(lfoNode, lfoNode->lastVal);
+      }
+
+      if(source->velocityDestinationValid & (1 << i))
+      {
+         modNode_setDestination(&velocityModulators[i], source->velocityDestination[i]);
+         modNode_updateValue(&velocityModulators[i], velocityModulators[i].lastVal);
+      }
+   }
+
+   for(i=0;i<4;i++)
+   {
+      if(source->macroDestinationValid & (1 << i))
+      {
+         modNode_setDestination(&macroModulators[i], source->macroDestination[i]);
+         modNode_updateValue(&macroModulators[i], macroModulators[i].lastVal);
+      }
+   }
+}
+
+//------------------------------------------------------------------------------
+static void seq_snapshotCurrentParameterValues(uint8_t *target, uint8_t *valid)
+{
+   memcpy(target, stm_currentParamImage, END_OF_SOUND_PARAMETERS);
+   memcpy(valid, stm_currentParamImageValid, END_OF_SOUND_PARAMETERS);
+}
+
+//------------------------------------------------------------------------------
+static void seq_applyParameterValues(const uint8_t *source, const uint8_t *valid)
+{
+   uint16_t param;
+   MidiMsg msg;
+
+   for(param=1;param<END_OF_SOUND_PARAMETERS;param++)
+   {
+      if(valid && !valid[param])
+         continue;
+
+      if(param < 128)
+      {
+         msg.status = MIDI_CC;
+         msg.data1 = (uint8_t)param;
+      }
+      else
+      {
+         msg.status = FRONT_CC_2;
+         msg.data1 = (uint8_t)(param - 128);
+      }
+
+      msg.data2 = source[param];
+      midiParser_ccHandler(msg, 0);
+   }
+}
+
+//------------------------------------------------------------------------------
+static void seq_captureTmpKitState()
+{
+   seq_snapshotCurrentParameterValues(seq_tmpKitState.interpolatedParams,
+                                      seq_tmpKitState.interpolatedParamsValid);
+   memcpy(&seq_tmpKitState.automation, &stm_currentAutomationImage, sizeof(seq_tmpKitState.automation));
+   seq_tmpKitState.valid = 1;
+}
+
+//------------------------------------------------------------------------------
+static void seq_pushSingleParameterToFront(uint16_t param, uint8_t value)
+{
+   if(param < 128)
+   {
+      uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_PARAM_CC);
+      uart_sendFrontpanelPriorityByteWait((uint8_t)param);
+   }
+   else
+   {
+      uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_PARAM_CC2);
+      uart_sendFrontpanelPriorityByteWait((uint8_t)(param - 128));
+   }
+
+   uart_sendFrontpanelPriorityByteWait(value);
+}
+
+//------------------------------------------------------------------------------
+static void seq_pushParameterValuesToFront(const uint8_t *source, const uint8_t *valid)
+{
+   uint16_t param;
+
+   for(param=0;param<END_OF_SOUND_PARAMETERS;param++)
+   {
+      if(valid && !valid[param])
+         continue;
+
+      seq_pushSingleParameterToFront(param, source[param]);
+   }
+
+   uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
+   uart_sendFrontpanelPriorityByteWait(0);
+   uart_sendFrontpanelPriorityByteWait(0);
+}
+
+//------------------------------------------------------------------------------
+static void seq_maybePushParameterValuesToFront(const uint8_t *source, const uint8_t *valid)
+{
+   if(!seq_tmpKitPushParamsToFrontEnabled)
+      return;
+
+   seq_pushParameterValuesToFront(source, valid);
+}
+
+//------------------------------------------------------------------------------
+static void seq_setTmpKitActive(uint8_t active)
+{
+   if(active)
+   {
+      if(seq_tmpKitActive || !seq_tmpKitState.valid)
+         return;
+
+      memcpy(&seq_normalKitAutomation, &stm_currentAutomationImage, sizeof(seq_normalKitAutomation));
+      seq_normalKitAutomationValid = 1;
+      seq_applyParameterValues(seq_tmpKitState.interpolatedParams,
+                               seq_tmpKitState.interpolatedParamsValid);
+      seq_applyAutomationTargets(&seq_tmpKitState.automation);
+      seq_maybePushParameterValuesToFront(seq_tmpKitState.interpolatedParams,
+                                          seq_tmpKitState.interpolatedParamsValid);
+      seq_tmpKitActive = 1;
+      return;
+   }
+
+   if(!seq_tmpKitActive)
+      return;
+
+   seq_applyParameterValues(stm_currentParamImage, stm_currentParamImageValid);
+   if(seq_normalKitAutomationValid)
+      seq_applyAutomationTargets(&seq_normalKitAutomation);
+   seq_maybePushParameterValuesToFront(stm_currentParamImage, stm_currentParamImageValid);
+   seq_tmpKitActive = 0;
+}
 
 //------------------------------------------------------------------------------
 void seq_init()
@@ -224,6 +564,15 @@ void seq_init()
    memset(seq_stepIndex,0,NUM_TRACKS+1);
    memset(seq_lastMasterStep,0,NUM_TRACKS+1);
    memset(seq_transpose_voiceAmount,63,NUM_TRACKS);
+   memset(&seq_tmpKitState,0,sizeof(seq_tmpKitState));
+   memset(&seq_normalKitAutomation,0,sizeof(seq_normalKitAutomation));
+   memset(stm_currentParamImage,0,sizeof(stm_currentParamImage));
+   memset(stm_currentParamImageValid,0,sizeof(stm_currentParamImageValid));
+   memset(&stm_currentAutomationImage,0,sizeof(stm_currentAutomationImage));
+   seq_paramIngressTarget = SEQ_PARAM_INGRESS_CURRENT_IMAGE;
+   seq_tmpKitActive = 0;
+   seq_normalKitAutomationValid = 0;
+   seq_tmpKitPushParamsToFrontEnabled = 0;
    midi_clearCache();
    seq_transposeOnOff = 0;
 
@@ -234,11 +583,16 @@ void seq_init()
       seq_patternSet.seq_patternSettings[i].nextPattern 	= i;	//default setting: repeat same pattern
       seq_clearPattern(i); // will clear all tracks in the pattern
    }
+   seq_tmpPattern.seq_patternSettings.changeBar = 0;
+   seq_tmpPattern.seq_patternSettings.nextPattern = SEQ_TMP_PATTERN;
+   seq_clearPattern(SEQ_TMP_PATTERN);
 
 }
 //------------------------------------------------------------------------------
 void seq_applyTmpPatternTo(uint8_t pattern)
 {  
+   if(pattern == SEQ_TMP_PATTERN)
+      return;
    pattern &= 0x07;
    memcpy(&seq_patternSet.seq_subStepPattern[pattern],&seq_tmpPattern.seq_subStepPattern,sizeof(Step)*NUM_TRACKS*NUM_STEPS);
    memcpy(&seq_patternSet.seq_mainSteps[pattern],&seq_tmpPattern.seq_mainSteps,sizeof(uint16_t)*NUM_TRACKS);
@@ -263,7 +617,7 @@ void seq_setTrackLength(uint8_t trackNr, uint8_t length)
       length=0;
 	// --AS **PATROT this was changed from setting length on seq_activePattern to shown (or edited) pattern
    // --bc this gets changed to store scale - length is now bitmasked to use only the first 5 bits since it is 1-16
-   seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].length = length;
+   seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->length = length;
 
 }
 //------------------------------------------------------------------------------
@@ -274,7 +628,7 @@ void seq_setTrackScale(uint8_t trackNr, uint8_t scale)
    if(scale > 7)
       scale=7;
       
-   seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].scale = scale;
+   seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->scale = scale;
    
 }
 
@@ -282,7 +636,7 @@ void seq_setTrackScale(uint8_t trackNr, uint8_t scale)
 uint8_t seq_getTrackLength(uint8_t trackNr)
 {
 	// --AS **PATROT this was changed from getting seq_activePattern to shown (or edited) pattern
-   uint8_t r=seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].length;
+   uint8_t r=seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->length;
    if(r==0)
       return 16;
    return r;
@@ -290,7 +644,7 @@ uint8_t seq_getTrackLength(uint8_t trackNr)
 //------------------------------------------------------------------------------
 uint8_t seq_getTrackScale(uint8_t trackNr)
 {
-   uint8_t r=seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].scale;
+   uint8_t r=seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->scale;
    return r;
 }
 //------------------------------------------------------------------------------
@@ -299,7 +653,7 @@ void seq_setTrackRotation(uint8_t trackNr, const uint8_t newRot)
 {
 	// frontParser_shownPattern contains the pattern that is shown (being edited) on the front at the time this is called
 	// seq_activePattern is the pattern that is now playing
-   LengthRotate *lr=&seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr];
+   LengthRotate *lr=seq_getLengthRotatePtr(frontParser_shownPattern, trackNr);
 
    if(newRot == lr->rotate)
       return;
@@ -332,7 +686,7 @@ void seq_setTrackRotation(uint8_t trackNr, const uint8_t newRot)
 // **PATROT
 uint8_t seq_getTrackRotation(uint8_t trackNr)
 {
-   return seq_patternSet.seq_patternLengthRotate[frontParser_shownPattern][trackNr].rotate;
+   return seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->rotate;
 }
 //------------------------------------------------------------------------------
 static void seq_calcDeltaT(uint16_t bpm)
@@ -382,17 +736,18 @@ void seq_sync()
 //------------------------------------------------------------------------------
 void seq_setNextPattern(const uint8_t patNr, uint8_t voice)
 {
+   uint8_t nextPattern = seq_normalizePatternNumber(patNr);
    if(voice>=0x0f)
    {
-      seq_pendingPattern = patNr;
+      seq_pendingPattern = nextPattern;
       uint8_t i;
       for(i=0;i<NUM_TRACKS;i++)
       {
-         seq_perTrackPendingPattern[i]=patNr;
+         seq_perTrackPendingPattern[i]=nextPattern;
       }
    }
    else
-      seq_perTrackPendingPattern[voice] = patNr;
+      seq_perTrackPendingPattern[voice] = nextPattern;
    seq_loadPendigFlag = 1;
    seq_loadSeqNow = 1;
 }
@@ -458,7 +813,7 @@ static Step* seq_liveStepForTrack(uint8_t track, uint8_t step)
    if(frontParser_prfCacheTrackUsesLivePattern(track))
       return frontParser_prfCacheLiveStep(track, step);
 
-   return &seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[track]][track][step & 0x7f];
+   return seq_getStepPtr(seq_perTrackActivePattern[track], track, step);
 }
 //------------------------------------------------------------------------------
 static LengthRotate seq_liveLengthRotateForTrack(uint8_t track)
@@ -466,7 +821,7 @@ static LengthRotate seq_liveLengthRotateForTrack(uint8_t track)
    if(frontParser_prfCacheTrackUsesLivePattern(track))
       return frontParser_prfCacheLiveLengthRotate(track);
 
-   return seq_patternSet.seq_patternLengthRotate[seq_perTrackActivePattern[track]][track];
+   return *seq_getLengthRotatePtr(seq_perTrackActivePattern[track], track);
 }
 //------------------------------------------------------------------------------
 static uint8_t seq_liveMainStepActive(uint8_t track, uint8_t mainStep)
@@ -474,7 +829,7 @@ static uint8_t seq_liveMainStepActive(uint8_t track, uint8_t mainStep)
    if(frontParser_prfCacheTrackUsesLivePattern(track))
       return (frontParser_prfCacheLiveMainSteps(track) & (1<<mainStep)) > 0;
 
-   return (seq_patternSet.seq_mainSteps[seq_perTrackActivePattern[track]][track] & (1<<mainStep)) > 0;
+   return (seq_getMainSteps(seq_perTrackActivePattern[track], track) & (1<<mainStep)) > 0;
 }
 //------------------------------------------------------------------------------
 static uint8_t seq_liveStepActive(uint8_t track, uint8_t step)
@@ -581,10 +936,14 @@ static uint8_t seq_determineNextPattern()
    if(frontParser_prfCacheUseLivePattern())
       return seq_activePattern;
 
-   p = seq_patternSet.seq_patternSettings[seq_activePattern];
+   p = *seq_getPatternSettingPtr(seq_activePattern);
 
    if( (seq_barCounter>0)&&(seq_barCounter % (p.changeBar+1) == 0) )
+   {
+      if((seq_activePattern == SEQ_TMP_PATTERN) && (p.nextPattern == SEQ_TMP_PATTERN))
+         return SEQ_TMP_PATTERN;
       return p.nextPattern;
+   }
    else
       return seq_activePattern;
 }
@@ -719,7 +1078,8 @@ static void seq_nextStep()
    {
    	//check pattern settings if we have to auto change patterns
       seq_pendingPattern = seq_determineNextPattern();
-      if(seq_pendingPattern >= SEQ_NEXT_RANDOM)
+      if((seq_pendingPattern >= SEQ_NEXT_RANDOM)
+         && !((seq_activePattern == SEQ_TMP_PATTERN) && (seq_pendingPattern == SEQ_TMP_PATTERN)))
       {
          uint8_t limit = seq_pendingPattern - SEQ_NEXT_RANDOM +2;
          uint8_t rnd = GetRngValue() % limit;
@@ -746,7 +1106,8 @@ static void seq_nextStep()
             seq_newPatternAvailable = 0;
          }
          
-         seq_activePattern = seq_pendingPattern&0x07;
+         seq_activePattern = seq_normalizePatternNumber(seq_pendingPattern);
+         seq_setTmpKitActive(seq_activePattern == SEQ_TMP_PATTERN);
          seq_newPatternExecuted=1;
          if (seq_loadPendigFlag)
          {
@@ -755,7 +1116,7 @@ static void seq_nextStep()
             euklid_clearRotation();
             for (i=0;i<NUM_TRACKS;i++)
             {
-               seq_perTrackActivePattern[i]=seq_perTrackPendingPattern[i]&0x07;
+               seq_perTrackActivePattern[i]=seq_normalizePatternNumber(seq_perTrackPendingPattern[i]);
             }
          }
          else
@@ -765,7 +1126,7 @@ static void seq_nextStep()
             for (i=0;i<NUM_TRACKS;i++)
             {
             
-               seq_perTrackActivePattern[i]=seq_pendingPattern&0x07;
+               seq_perTrackActivePattern[i]=seq_normalizePatternNumber(seq_pendingPattern);
             }
          
          }
@@ -1177,30 +1538,33 @@ void seq_setQuantisation(uint8_t value)
 //------------------------------------------------------------------------------
 void seq_toggleStep(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
 {
-   if((seq_patternSet.seq_subStepPattern[patternNr][voice][stepNr].volume&STEP_ACTIVE_MASK)==0)
+   Step *step = seq_getStepPtr(patternNr, voice, stepNr);
+   if((step->volume&STEP_ACTIVE_MASK)==0)
    {
-      seq_patternSet.seq_subStepPattern[patternNr][voice][stepNr].volume |= STEP_ACTIVE_MASK;
+      step->volume |= STEP_ACTIVE_MASK;
    } 
    else {
-      seq_patternSet.seq_subStepPattern[patternNr][voice][stepNr].volume &= ~STEP_ACTIVE_MASK;
+      step->volume &= ~STEP_ACTIVE_MASK;
    }
 }
 //------------------------------------------------------------------------------
 void seq_toggleMainStep(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
 {
-   seq_patternSet.seq_mainSteps[patternNr][voice] ^= (1<<stepNr);
+   seq_setMainSteps(patternNr, voice, (uint16_t)(seq_getMainSteps(patternNr, voice) ^ (1<<stepNr)));
 }
 //------------------------------------------------------------------------------
 void seq_setMainStep(uint8_t patternNr, uint8_t voice, uint8_t stepNr, uint8_t onOff)
 {
+   uint16_t mainSteps = seq_getMainSteps(patternNr, voice);
    if(onOff)
    {
-      seq_patternSet.seq_mainSteps[patternNr][voice] |= (1<<stepNr);
+      mainSteps |= (1<<stepNr);
    }
    else
    {
-      seq_patternSet.seq_mainSteps[patternNr][voice] &= ~(1<<stepNr);
+      mainSteps &= ~(1<<stepNr);
    }
+   seq_setMainSteps(patternNr, voice, mainSteps);
 }
 //------------------------------------------------------------------------------
 // --AS this appears unused
@@ -1232,7 +1596,7 @@ void seq_setRunning(uint8_t isRunning)
    	// --AS reset all track rotations to 0. We are not saving rotated value. it's a performance tool.
       uint8_t i;
       for(i=0;i<NUM_TRACKS;i++) {
-         seq_patternSet.seq_patternLengthRotate[seq_perTrackActivePattern[i]][i].rotate=0;
+         seq_getLengthRotatePtr(seq_perTrackActivePattern[i], i)->rotate=0;
       	// let the front know this is happening
          uart_sendFrontpanelByte(FRONT_SEQ_CC);
          uart_sendFrontpanelByte(FRONT_SEQ_TRACK_ROTATION);
@@ -1273,7 +1637,7 @@ void seq_setRunning(uint8_t isRunning)
 //------------------------------------------------------------------------------
 static uint8_t seq_intIsStepActive(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
 {
-   return ((seq_patternSet.seq_subStepPattern[patternNr][voice][stepNr].volume & STEP_ACTIVE_MASK) > 0);
+   return ((seq_getStepPtr(patternNr, voice, stepNr)->volume & STEP_ACTIVE_MASK) > 0);
 }
 // --AS above will be inlined, below is for ext linkage
 uint8_t seq_isStepActive(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
@@ -1284,7 +1648,7 @@ uint8_t seq_isStepActive(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
 //------------------------------------------------------------------------------
 static uint8_t seq_intIsMainStepActive(uint8_t voice, uint8_t mainStepNr, uint8_t pattern)
 {
-   return (seq_patternSet.seq_mainSteps[pattern][voice] & (1<<mainStepNr)) > 0;
+   return (seq_getMainSteps(pattern, voice) & (1<<mainStepNr)) > 0;
 }
 // --AS above is inlined below for ext linkage
 uint8_t seq_isMainStepActive(uint8_t voice, uint8_t mainStepNr, uint8_t pattern)
@@ -1692,7 +2056,7 @@ void seq_setRollRate(uint8_t rate)
 int8_t seq_quantize(int8_t step, uint8_t track)
 {
    uint8_t quantisationMultiplier=1;
-   uint8_t scale=seq_patternSet.seq_patternLengthRotate[seq_perTrackActivePattern[track]][track].scale;
+   uint8_t scale=seq_getLengthRotatePtr(seq_perTrackActivePattern[track], track)->scale;
    switch(seq_quantisation)
    {
       case QUANT_8:
@@ -1745,16 +2109,18 @@ void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value)
       		seq_intIsStepActive(voice,quantizedStep,seq_perTrackActivePattern[voice]))
       {*/
       if(seq_activeAutomTrack == 0) {
-         seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voice]][voice][quantizedStep].param1Nr = dest;
-         seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voice]][voice][quantizedStep].param1Val = value;
+         Step *step = seq_getStepPtr(seq_perTrackActivePattern[voice], voice, quantizedStep);
+         step->param1Nr = dest;
+         step->param1Val = value;
       } 
       else {
-         seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voice]][voice][quantizedStep].param2Nr = dest;
-         seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voice]][voice][quantizedStep].param2Val = value;
+         Step *step = seq_getStepPtr(seq_perTrackActivePattern[voice], voice, quantizedStep);
+         step->param2Nr = dest;
+         step->param2Val = value;
       }
       
       if(!seq_intIsStepActive(voice,quantizedStep,seq_perTrackActivePattern[voice])&&(quantizedStep%8))
-         seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voice]][voice][quantizedStep].volume=0;
+         seq_getStepPtr(seq_perTrackActivePattern[voice], voice, quantizedStep)->volume=0;
          
       //}
    }
@@ -1764,20 +2130,18 @@ void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value)
    	//step button is held down
    	//-> set step automation parameters
       if(seq_activeAutomTrack == 0) {
-         seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voice]]
-                                           [seq_armedArmedAutomationTrack]
-                                            [seq_armedArmedAutomationStep].param1Nr = dest;
-         seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voice]]
-                                           [seq_armedArmedAutomationTrack]
-                                            [seq_armedArmedAutomationStep].param1Val = value;
+         Step *step = seq_getStepPtr(seq_perTrackActivePattern[voice],
+                                           seq_armedArmedAutomationTrack,
+                                           seq_armedArmedAutomationStep);
+         step->param1Nr = dest;
+         step->param1Val = value;
       } 
       else {
-         seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voice]]
-                                           [seq_armedArmedAutomationTrack]
-                                            [seq_armedArmedAutomationStep].param2Nr = dest;
-         seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voice]]
-                                           [seq_armedArmedAutomationTrack]
-                                            [seq_armedArmedAutomationStep].param2Val = value;
+         Step *step = seq_getStepPtr(seq_perTrackActivePattern[voice],
+                                           seq_armedArmedAutomationTrack,
+                                           seq_armedArmedAutomationStep);
+         step->param2Nr = dest;
+         step->param2Val = value;
       }
    }
 }
@@ -1813,14 +2177,14 @@ void seq_addNote(uint8_t trackNr,uint8_t vel, uint8_t note)
       {
       	//if the mainstep is not active, we clear the 1st substep
       	//to prevent double notes while recording
-         seq_patternSet.seq_subStepPattern[targetPattern][trackNr][(quantizedStep/8)*8].volume 	&= ~STEP_ACTIVE_MASK;
+         seq_getStepPtr(targetPattern, trackNr, (uint8_t)((quantizedStep/8)*8))->volume 	&= ~STEP_ACTIVE_MASK;
       }
    
    	//set the current step in the requested track active
       if (vel==0)
-         stepPtr=&seq_patternSet.seq_subStepPattern[targetPattern][trackNr][unquantizedStep];
+         stepPtr=seq_getStepPtr(targetPattern, trackNr, unquantizedStep);
       else
-         stepPtr=&seq_patternSet.seq_subStepPattern[targetPattern][trackNr][quantizedStep];
+         stepPtr=seq_getStepPtr(targetPattern, trackNr, quantizedStep);
       
    
       stepPtr->note 		= note;				// note (--AS was SEQ_DEFAULT_NOTE)
@@ -1856,11 +2220,11 @@ static void seq_eraseStepAndSubSteps(const uint8_t voice, const uint8_t mainStep
 
 	// turn off all substeps
    for(i=(uint8_t)(mainStep*8);i<(uint8_t)((mainStep+1)*8);i++) {
-      seq_resetNote(&seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voice]][voice][i]);
+      seq_resetNote(seq_getStepPtr(seq_perTrackActivePattern[voice], voice, i));
    }
 
 	// first substep needs to be made active
-   seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[voice]][voice][(uint8_t)(mainStep*8)].volume |= STEP_ACTIVE_MASK;
+   seq_getStepPtr(seq_perTrackActivePattern[voice], voice, (uint8_t)(mainStep*8))->volume |= STEP_ACTIVE_MASK;
 
 	//if( (frontParser_shownPattern == seq_activePattern) && ( frontParser_activeTrack == voice) )
 	//{
@@ -1882,7 +2246,8 @@ void seq_writeTranspose()
             for (i=0;i<128;i++) // for all steps
             {
                // legitimate transpose value - do the transpose
-               trnNote = seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[k]][k][i].note;
+               Step *step = seq_getStepPtr(seq_perTrackActivePattern[k], k, i);
+               trnNote = step->note;
                if (trnNote<(63-transposeAmt)) // transposing would result in a note less than zero!
                {
                   trnNote = 0;
@@ -1895,7 +2260,7 @@ void seq_writeTranspose()
                {
                   trnNote=127;
                }
-               seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[k]][k][i].note = trnNote;  
+               step->note = trnNote;
             }
          }   
          seq_transpose_voiceAmount[k]=63;
@@ -1932,18 +2297,19 @@ void seq_clearTrack(uint8_t trackNr, uint8_t pattern)
    int k;
    for(k=0;k<128;k++)
    {
-      seq_resetNote(&seq_patternSet.seq_subStepPattern[pattern][trackNr][k]);
+      Step *step = seq_getStepPtr(pattern, trackNr, k);
+      seq_resetNote(step);
    
    	//every 1st step in a substep pattern active
       if( (k%8) == 0)
-         seq_patternSet.seq_subStepPattern[pattern][trackNr][k].volume |= STEP_ACTIVE_MASK ;
+         step->volume |= STEP_ACTIVE_MASK ;
    }
 
 	// all main steps off for this track
-   seq_patternSet.seq_mainSteps[pattern][trackNr] = 0;
+   seq_setMainSteps(pattern, trackNr, 0);
 
 	//**PATROT all pattern rotations off and all patterns set to length 16
-   seq_patternSet.seq_patternLengthRotate[pattern][trackNr].rotate=0;
+   seq_getLengthRotatePtr(pattern, trackNr)->rotate=0;
 
 }
 //------------------------------------------------------------------------------
@@ -1963,15 +2329,17 @@ void seq_clearAutomation(uint8_t trackNr, uint8_t pattern, uint8_t automTrack)
    {
       for(k=0;k<128;k++)
       {
-         seq_patternSet.seq_subStepPattern[pattern][trackNr][k].param1Nr 	= NO_AUTOMATION;
-         seq_patternSet.seq_subStepPattern[pattern][trackNr][k].param1Val 	= 0;
+         Step *step = seq_getStepPtr(pattern, trackNr, k);
+         step->param1Nr 	= NO_AUTOMATION;
+         step->param1Val 	= 0;
       }
    } 
    else {
       for(k=0;k<128;k++)
       {
-         seq_patternSet.seq_subStepPattern[pattern][trackNr][k].param2Nr		= NO_AUTOMATION;
-         seq_patternSet.seq_subStepPattern[pattern][trackNr][k].param2Val	= 0;
+         Step *step = seq_getStepPtr(pattern, trackNr, k);
+         step->param2Nr		= NO_AUTOMATION;
+         step->param2Val	= 0;
       }
    }
 }
@@ -1984,8 +2352,8 @@ void seq_copyTrack(uint8_t srcNr, uint8_t dstNr, uint8_t pattern)
    Step *src, *dst;
    for(k=0;k<128;k++)
    {
-      dst=&seq_patternSet.seq_subStepPattern[pattern][dstNr][k];
-      src=&seq_patternSet.seq_subStepPattern[pattern][srcNr][k];
+      dst=seq_getStepPtr(pattern,dstNr,k);
+      src=seq_getStepPtr(pattern,srcNr,k);
       dst->note		= src->note;
       dst->param1Nr 	= src->param1Nr;
       dst->param1Val 	= src->param1Val;
@@ -1996,11 +2364,11 @@ void seq_copyTrack(uint8_t srcNr, uint8_t dstNr, uint8_t pattern)
    }
 
 	// copy which main steps are on/off
-   seq_patternSet.seq_mainSteps[pattern][dstNr] = seq_patternSet.seq_mainSteps[pattern][srcNr];
+   seq_setMainSteps(pattern, dstNr, seq_getMainSteps(pattern, srcNr));
 
 	// --AS copy length and rotation offset from source track
-   seq_patternSet.seq_patternLengthRotate[pattern][dstNr].value =
-      	seq_patternSet.seq_patternLengthRotate[pattern][srcNr].value;
+   seq_getLengthRotatePtr(pattern, dstNr)->value =
+      seq_getLengthRotatePtr(pattern, srcNr)->value;
 
 
 }
@@ -2009,12 +2377,15 @@ void seq_copyPattern(uint8_t src, uint8_t dst)
 {
    int k,j;
    Step *psrc, *pdst;
+   uint8_t normalizedSrc = seq_normalizePatternNumber(src);
+   uint8_t normalizedDst = seq_normalizePatternNumber(dst);
+
    for(j=0;j<NUM_TRACKS;j++)
    {
       for(k=0;k<128;k++)
       {
-         pdst=&seq_patternSet.seq_subStepPattern[dst][j][k];
-         psrc=&seq_patternSet.seq_subStepPattern[src][j][k];
+         pdst=seq_getStepPtr(dst,j,k);
+         psrc=seq_getStepPtr(src,j,k);
          pdst->note			= psrc->note;
          pdst->param1Nr 		= psrc->param1Nr;
          pdst->param1Val 	= psrc->param1Val;
@@ -2024,13 +2395,16 @@ void seq_copyPattern(uint8_t src, uint8_t dst)
          pdst->volume		= psrc->volume;
       }
    
-      seq_patternSet.seq_mainSteps[dst][j] = seq_patternSet.seq_mainSteps[src][j];
+      seq_setMainSteps(dst, j, seq_getMainSteps(src, j));
    
    	// --AS copy length and rotation offset from source pattern for the track
-      seq_patternSet.seq_patternLengthRotate[dst][j].value =
-         		seq_patternSet.seq_patternLengthRotate[src][j].value;
+      seq_getLengthRotatePtr(dst, j)->value =
+         seq_getLengthRotatePtr(src, j)->value;
    
    }
+
+   if((normalizedDst == SEQ_TMP_PATTERN) && (normalizedSrc != SEQ_TMP_PATTERN))
+      seq_captureTmpKitState();
 }
 //------------------------------------------------------------------------------
 void seq_copyTrackPattern(uint8_t srcNr, uint8_t dstPat, uint8_t srcPat)
@@ -2040,8 +2414,8 @@ void seq_copyTrackPattern(uint8_t srcNr, uint8_t dstPat, uint8_t srcPat)
    Step *psrc, *pdst;
    for(k=0;k<128;k++)
    {
-      pdst=&seq_patternSet.seq_subStepPattern[dstPat][srcNr][k];
-      psrc=&seq_patternSet.seq_subStepPattern[srcPat][srcNr][k];
+      pdst=seq_getStepPtr(dstPat,srcNr,k);
+      psrc=seq_getStepPtr(srcPat,srcNr,k);
       pdst->note			= psrc->note;
       pdst->param1Nr 		= psrc->param1Nr;
       pdst->param1Val 	= psrc->param1Val;
@@ -2052,11 +2426,11 @@ void seq_copyTrackPattern(uint8_t srcNr, uint8_t dstPat, uint8_t srcPat)
    
    }
    
-   seq_patternSet.seq_mainSteps[dstPat][srcNr] = seq_patternSet.seq_mainSteps[srcPat][srcNr];
+   seq_setMainSteps(dstPat, srcNr, seq_getMainSteps(srcPat, srcNr));
    
    	// --AS copy length and rotation offset from source pattern for the track
-   seq_patternSet.seq_patternLengthRotate[dstPat][srcNr].value =
-         		seq_patternSet.seq_patternLengthRotate[srcPat][srcNr].value;
+   seq_getLengthRotatePtr(dstPat, srcNr)->value =
+      seq_getLengthRotatePtr(srcPat, srcNr)->value;
    
 }
 //------------------------------------------------------------------------------
@@ -2066,8 +2440,8 @@ void seq_copySubStep(uint8_t src, uint8_t dst, uint8_t track)
    
       // copy the step data
 
-   pdst=&seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[track]][track][dst];
-   psrc=&seq_patternSet.seq_subStepPattern[seq_perTrackActivePattern[track]][track][src];
+   pdst=seq_getStepPtr(seq_perTrackActivePattern[track],track,dst);
+   psrc=seq_getStepPtr(seq_perTrackActivePattern[track],track,src);
    pdst->note			= psrc->note;
    pdst->param1Nr 		= psrc->param1Nr;
    pdst->param1Val 	= psrc->param1Val;
@@ -2250,7 +2624,7 @@ void seq_realign()
       
       seq_stepIndex[i] = trackSteps;
       // resetting the stepindex also resets rotation
-      seq_patternSet.seq_patternLengthRotate[seq_perTrackActivePattern[i]][i].rotate = 0;
+      seq_getLengthRotatePtr(seq_perTrackActivePattern[i], i)->rotate = 0;
    }
    
    // make sure the front panel knows that roation has been reset

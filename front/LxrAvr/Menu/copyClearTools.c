@@ -160,7 +160,7 @@ void copyClear_copyStep()
    // turn on destination main step
    uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
    uint8_t patternNr = menu_getViewedPattern(); //max 7 => 0x07 = 0b111
-   uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x7));
+   uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x0f));
    frontPanel_sendData(MAIN_STEP_CC, value, (uint8_t)( (buttonHandler_copyDst / 8) | (0x40) ) );
    
    led_clearAllBlinkLeds();
@@ -179,7 +179,7 @@ void copyClear_copySubStep()
    // turn on destination main step
    uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
    uint8_t patternNr = menu_getViewedPattern(); //max 7 => 0x07 = 0b111
-   uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x7));
+   uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x0f));
    frontPanel_sendData(MAIN_STEP_CC, value, (uint8_t)( (buttonHandler_copyDst / 8) | (0x40) ) );
    
    led_clearAllBlinkLeds();

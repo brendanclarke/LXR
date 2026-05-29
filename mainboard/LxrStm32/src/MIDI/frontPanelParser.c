@@ -1460,6 +1460,7 @@ static void frontParser_handleMidiMessage()
                // macro destination message
                uint16_t value = (uint16_t)( ( (upper&0x03)<<8) | lower);
                uint8_t whichModDest = (uint8_t)( 0x07&(upper>>2) ); // whichModDest 0,1,2,3 mac1d1,mac1d2,mac2d1,mac2d2
+               seq_storeMacroDestinationIngress(whichModDest, value);
                modNode_setDestination(&macroModulators[whichModDest], value);
                modNode_updateValue(&macroModulators[whichModDest],macroModulators[whichModDest].lastVal);
             }
@@ -1512,6 +1513,7 @@ static void frontParser_handleMidiMessage()
                //because hh slope on front is 127 and on cortex is 0 wrap data1 at 127
                frontParser_midiMsg.data1 &= 0x7f;
                
+               seq_storeParameterIngress(frontParser_midiMsg.data1, frontParser_midiMsg.data2);
                
                midi_midiCache[paramNr]=frontParser_midiMsg;
                midi_midiCacheAvailable[paramNr]=1;
@@ -1539,6 +1541,7 @@ static void frontParser_handleMidiMessage()
             // message is for loading voice, or if all voices loading, always hold message
             if(seq_voicesLoading)
             {
+               seq_storeParameterIngress(frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
                midi_midiCache[frontParser_midiMsg.data1+128]=frontParser_midiMsg;
                midi_midiCacheAvailable[frontParser_midiMsg.data1+128]=1;
             // message is cached for voice release. 
@@ -1564,6 +1567,7 @@ static void frontParser_handleMidiMessage()
             uint8_t value = ((upper&0x01)<<7) | lower;
          
             uint8_t lfoNr = (upper&0xfe)>>1;
+            seq_storeLfoDestinationIngress(lfoNr, value);
             
             if(seq_voicesLoading&(0x01<<(lfoNr)))
             {
@@ -1599,9 +1603,7 @@ static void frontParser_handleMidiMessage()
             uint8_t val = (hi<<7)|lo;
             if(val && val < 128 )
                val++;
-            seq_patternSet.seq_subStepPattern[frontParser_shownPattern]
-                                          [frontParser_activeTrack]
-                                          [seq_selectedStep].param1Nr = val;
+            seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, seq_selectedStep)->param1Nr = val;
          }
          break;
       case FRONT_SET_P2_DEST: 
@@ -1612,16 +1614,14 @@ static void frontParser_handleMidiMessage()
             uint8_t val = (hi<<7)|lo;
             if(val && val < 128 )
                val++;
-            seq_patternSet.seq_subStepPattern[frontParser_shownPattern]
-                                          [frontParser_activeTrack]
-                                          [seq_selectedStep].param2Nr = val;
+            seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, seq_selectedStep)->param2Nr = val;
          }
          break;
       case FRONT_SET_P1_VAL: 
          { // frontParser_midiMsg.status
             uint8_t stepNr = frontParser_midiMsg.data1;
             uint8_t value = frontParser_midiMsg.data2;
-            seq_patternSet.seq_subStepPattern[frontParser_shownPattern][frontParser_activeTrack][stepNr].param1Val = value;
+            seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, stepNr)->param1Val = value;
          
          }
          break;
@@ -1629,7 +1629,7 @@ static void frontParser_handleMidiMessage()
          { // frontParser_midiMsg.status
             uint8_t stepNr = frontParser_midiMsg.data1;
             uint8_t value = frontParser_midiMsg.data2;
-            seq_patternSet.seq_subStepPattern[frontParser_shownPattern][frontParser_activeTrack][stepNr].param2Val = value;
+            seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, stepNr)->param2Val = value;
          }
          break;
    
@@ -1649,7 +1649,7 @@ static void frontParser_handleMidiMessage()
          //data 1 = track und pattern nr
          //data 2 = step nr
             uint8_t voiceNr 	= frontParser_midiMsg.data1 >> 4;
-            uint8_t patternNr 	= frontParser_midiMsg.data1 & 0x7;
+            uint8_t patternNr 	= seq_normalizePatternNumber(frontParser_midiMsg.data1 & 0x0f);
             uint8_t stepNr 		= frontParser_midiMsg.data2 & 0x1f;
          
          
@@ -1682,7 +1682,7 @@ static void frontParser_handleMidiMessage()
          //data 1 = track und pattern nr
          //data 2 = step nr
             uint8_t voiceNr 	= frontParser_midiMsg.data1 >> 4;
-            uint8_t patternNr 	= frontParser_midiMsg.data1 & 0x7;
+            uint8_t patternNr 	= seq_normalizePatternNumber(frontParser_midiMsg.data1 & 0x0f);
             uint8_t stepNr 		= frontParser_midiMsg.data2;
          
          //toggle the step in the seq
@@ -1699,6 +1699,7 @@ static void frontParser_handleMidiMessage()
          // the modTargets array in the AVR code
             uint8_t value = ((upper&0x01)<<7) | lower;
             uint8_t velModNr = (upper&0xfe)>>1;
+            seq_storeVelocityDestinationIngress(velModNr, value);
             if(seq_voicesLoading&(0x01<<(velModNr)))
             {
                midi_midiVeloCache[velModNr]=value;
@@ -1738,7 +1739,7 @@ static void frontParser_handleMidiMessage()
             case FRONT_LED_QUERY_SEQ_TRACK:
                {
                   uint8_t trackNr = frontParser_midiMsg.data2 >> 4;
-                  uint8_t patternNr = frontParser_midiMsg.data2 & 0x7;
+                  uint8_t patternNr = seq_normalizePatternNumber(frontParser_midiMsg.data2 & 0x0f);
                
                   frontParser_updateTrackLeds(trackNr, patternNr);
                
@@ -1757,7 +1758,7 @@ static void frontParser_handleMidiMessage()
             case FRONT_LED_ALL_SUBSTEP:
                {
                   uint8_t trackNr = frontParser_midiMsg.data2 >> 4;
-                  uint8_t patternNr = frontParser_midiMsg.data2 & 0x7;
+                  uint8_t patternNr = seq_normalizePatternNumber(frontParser_midiMsg.data2 & 0x0f);
                
                   frontParser_updateSubStepLeds(trackNr, patternNr);               
                }
@@ -1917,19 +1918,19 @@ static void frontParser_handleSeqCC()
       /* send back bar change and next pattern params from requested pattern*/
          uart_sendFrontpanelByte(FRONT_SEQ_CC);
          uart_sendFrontpanelByte(FRONT_SEQ_SET_PAT_BEAT);
-         uart_sendFrontpanelByte(seq_patternSet.seq_patternSettings[frontParser_shownPattern].changeBar);
+         uart_sendFrontpanelByte(seq_getPatternSettingPtr(frontParser_shownPattern)->changeBar);
       
          uart_sendFrontpanelByte(FRONT_SEQ_CC);
          uart_sendFrontpanelByte(FRONT_SEQ_SET_PAT_NEXT);
-         uart_sendFrontpanelByte(seq_patternSet.seq_patternSettings[frontParser_shownPattern].nextPattern);
+         uart_sendFrontpanelByte(seq_getPatternSettingPtr(frontParser_shownPattern)->nextPattern);
       
       
          break;
       case FRONT_SEQ_SET_PAT_BEAT:
-         seq_patternSet.seq_patternSettings[frontParser_shownPattern].changeBar = frontParser_midiMsg.data2;
+         seq_getPatternSettingPtr(frontParser_shownPattern)->changeBar = frontParser_midiMsg.data2;
          break;
       case FRONT_SEQ_SET_PAT_NEXT:
-         seq_patternSet.seq_patternSettings[frontParser_shownPattern].nextPattern = frontParser_midiMsg.data2;
+         seq_getPatternSettingPtr(frontParser_shownPattern)->nextPattern = frontParser_midiMsg.data2;
          break;
    
       case FRONT_SEQ_REC_ON_OFF:
@@ -1941,17 +1942,17 @@ static void frontParser_handleSeqCC()
          break;
    
       case FRONT_SEQ_NOTE:
-         seq_patternSet.seq_subStepPattern[frontParser_shownPattern][frontParser_activeTrack][frontParser_activeStep].note = frontParser_midiMsg.data2;
+         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->note = frontParser_midiMsg.data2;
          break;
    
       case FRONT_SEQ_VOLUME:
-         seq_patternSet.seq_subStepPattern[frontParser_shownPattern][frontParser_activeTrack][frontParser_activeStep].volume &= ~(0x7f);
-         seq_patternSet.seq_subStepPattern[frontParser_shownPattern][frontParser_activeTrack][frontParser_activeStep].volume |= (frontParser_midiMsg.data2&0x7f);
+         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->volume &= ~(0x7f);
+         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->volume |= (frontParser_midiMsg.data2&0x7f);
          break;
    
       case FRONT_SEQ_PROB:
       
-         seq_patternSet.seq_subStepPattern[frontParser_shownPattern][frontParser_activeTrack][frontParser_activeStep].prob = frontParser_midiMsg.data2;
+         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->prob = frontParser_midiMsg.data2;
          break;
          
       case FRONT_SEQ_EUKLID_RESET:
@@ -1962,7 +1963,7 @@ static void frontParser_handleSeqCC()
    
       case FRONT_SEQ_EUKLID_LENGTH:
          {
-            uint8_t pattern = frontParser_midiMsg.data2&0x07;
+            uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_midiMsg.data2&0x07);
             uint8_t length 	= frontParser_midiMsg.data2 >> 3;
             length += 1;
             euklid_setLength(frontParser_activeTrack, pattern, length);
@@ -1974,7 +1975,7 @@ static void frontParser_handleSeqCC()
          {
             uint8_t steps 	= frontParser_midiMsg.data2 >> 3;
             steps += 1;
-            uint8_t pattern = frontParser_midiMsg.data2 & 0x7;
+            uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_midiMsg.data2 & 0x7);
          
             euklid_setSteps(frontParser_activeTrack,steps,pattern);
             frontParser_updateTrackLeds(frontParser_activeTrack, pattern);
@@ -1985,7 +1986,7 @@ static void frontParser_handleSeqCC()
          {
             uint8_t rotation = frontParser_midiMsg.data2 >> 3;
          //rotation += 1;
-            uint8_t pattern = frontParser_midiMsg.data2 & 0x7;
+            uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_midiMsg.data2 & 0x7);
          
             euklid_setRotation(frontParser_activeTrack,rotation,pattern);
             frontParser_updateTrackLeds(frontParser_activeTrack, pattern);
@@ -1996,7 +1997,7 @@ static void frontParser_handleSeqCC()
          {
             uint8_t rotation = frontParser_midiMsg.data2 >> 3;
          //rotation += 1;
-            uint8_t pattern = frontParser_midiMsg.data2 & 0x7;
+            uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_midiMsg.data2 & 0x7);
          
             euklid_setSubStepRotation(frontParser_activeTrack,rotation,pattern);
             frontParser_updateTrackLeds(frontParser_activeTrack, pattern);
@@ -2154,7 +2155,7 @@ static void frontParser_handleSeqCC()
          if (frontParser_midiMsg.data2==frontParser_shownPattern)
             seq_realign();
          else
-            frontParser_shownPattern = frontParser_midiMsg.data2;
+            frontParser_shownPattern = seq_normalizePatternNumber(frontParser_midiMsg.data2);
          break;   
       case FRONT_SEQ_SET_ACTIVE_TRACK:
          if ( (frontParser_activeTrack==frontParser_midiMsg.data2)&&(!seq_isRunning()) )
@@ -2173,27 +2174,26 @@ static void frontParser_handleSeqCC()
    
       case FRONT_SEQ_REQUEST_STEP_PARAMS:
          {
+            Step *step = seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_midiMsg.data2);
          
          
          /* send back probability, volume and note nr*/
             uart_sendFrontpanelByte(FRONT_SEQ_CC);
             uart_sendFrontpanelByte(FRONT_SEQ_VOLUME);
-            uart_sendFrontpanelByte(seq_patternSet.seq_subStepPattern[frontParser_shownPattern][frontParser_activeTrack][frontParser_midiMsg.data2].volume&STEP_VOLUME_MASK);
+            uart_sendFrontpanelByte(step->volume&STEP_VOLUME_MASK);
          
             uart_sendFrontpanelByte(FRONT_SEQ_CC);
             uart_sendFrontpanelByte(FRONT_SEQ_NOTE);
-            uart_sendFrontpanelByte(seq_patternSet.seq_subStepPattern[frontParser_shownPattern][frontParser_activeTrack][frontParser_midiMsg.data2].note);
+            uart_sendFrontpanelByte(step->note);
          
             uart_sendFrontpanelByte(FRONT_SEQ_CC);
             uart_sendFrontpanelByte(FRONT_SEQ_PROB);
-            uart_sendFrontpanelByte(seq_patternSet.seq_subStepPattern[frontParser_shownPattern][frontParser_activeTrack][frontParser_midiMsg.data2].prob);
+            uart_sendFrontpanelByte(step->prob);
          
          //send back automation params
          // --AS **AUTOM subtract one for differing offsets when parameter is < 128
             uint8_t hi,lo;
-            uint8_t dest = seq_patternSet.seq_subStepPattern[frontParser_shownPattern]
-            										[frontParser_activeTrack]
-            										[frontParser_midiMsg.data2].param1Nr;
+            uint8_t dest = step->param1Nr;
             if(dest < 128 && dest)
                dest--;
             hi = dest>>7;
@@ -2202,18 +2202,14 @@ static void frontParser_handleSeqCC()
             uart_sendFrontpanelByte(hi);
             uart_sendFrontpanelByte(lo);
          
-            uint8_t val = seq_patternSet.seq_subStepPattern[frontParser_shownPattern]
-            									   [frontParser_activeTrack]
-            									   [frontParser_midiMsg.data2].param1Val;
+            uint8_t val = step->param1Val;
             hi = val>>7;
             lo = val&0x7f;
             uart_sendFrontpanelByte(FRONT_SET_P1_VAL);
             uart_sendFrontpanelByte(hi);
             uart_sendFrontpanelByte(lo);
          // --AS **AUTOM subtract one for differing offsets
-            dest = seq_patternSet.seq_subStepPattern[frontParser_shownPattern]
-               							[frontParser_activeTrack]
-               							[frontParser_midiMsg.data2].param2Nr;
+            dest = step->param2Nr;
             if(dest < 128 && dest)
                dest--;
             hi = dest>>7;
@@ -2222,9 +2218,7 @@ static void frontParser_handleSeqCC()
             uart_sendFrontpanelByte(hi);
             uart_sendFrontpanelByte(lo);
          
-            val = seq_patternSet.seq_subStepPattern[frontParser_shownPattern]
-               						   [frontParser_activeTrack]
-               						   [frontParser_midiMsg.data2].param2Val;
+            val = step->param2Val;
             hi = val>>7;
             lo = val&0x7f;
             uart_sendFrontpanelByte(FRONT_SET_P2_VAL);
@@ -2276,6 +2270,10 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_CHANGE_PAT:
          //switch to one of the 8 patterns on the next pattern start
          seq_setNextPattern( (frontParser_midiMsg.data2&0x07),(frontParser_midiMsg.data2>>3) );
+         break;
+
+      case FRONT_SEQ_CHANGE_TMP_PAT:
+         seq_setNextPattern(SEQ_TMP_PATTERN, (frontParser_midiMsg.data2>>3));
          break;
    
    

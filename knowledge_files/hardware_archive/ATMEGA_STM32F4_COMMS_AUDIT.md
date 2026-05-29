@@ -737,14 +737,16 @@ The current 500 kbaud rate is not the theoretical maximum for either processor, 
 
 The AVR (20 MHz, U2X=1) can only hit exact baud rates at discrete UBRR values. The STM32 (USART3 on APB1 = 42 MHz) uses a fractional BRR divider and can hit almost any target; the AVR is always the limiting side.
 
-| Rate | AVR UBRR | AVR error | STM32 BRR | STM32 error | Notes |
-|------|----------|-----------|-----------|-------------|-------|
-| 500 k | 4 | 0% | — | 0% | Current |
-| 625 k | 3 | 0% | 67 | +0.3% | Drop-in, lowest risk |
-| 1.25 M | 1 | 0% | 33.10 (fractional) | −0.06% | 2.5× faster, excellent accuracy |
-| 2.5 M | 0 | 0% | 17 | +0.6% | Signal integrity risk |
+The "clock error" columns express how far each processor's hardware divider deviates from the nominal target baud rate, as a percentage. It is **not** a bit error rate — it is a clock accuracy figure. UART has no shared clock; the receiver samples each bit at the centre of its expected window, so if the transmitter runs slightly fast or slow, the sampling point drifts across the 10-bit frame (start + 8 data + stop). The practical rule is that the **combined** clock error from both ends must stay below approximately **4–5%** for reliable 8N1 reception. Both figures in the table are the per-device deviation; add them for the worst-case combined drift.
 
-UART's standard tolerance budget is approximately ±2% cumulative across both ends. All three candidates are within that window, but 2.5 Mbaud leaves very little margin for cable capacitance or PCB trace length on a noisy embedded board.
+| Rate | AVR UBRR | AVR clock error | STM32 BRR | STM32 clock error | Combined | Notes |
+|------|----------|-----------------|-----------|-------------------|----------|-------|
+| 500 k *(current)* | 4 | 0% | 5 + 4/16 | 0% | **0%** | Divides cleanly into both clocks |
+| 625 k | 3 | 0% | 67 (integer) | +0.3% | **0.3%** | Drop-in, lowest risk |
+| 1.25 M | 1 | 0% | 2 + 1/16 (fractional) | −0.06% | **0.06%** | 2.5× faster, excellent accuracy |
+| 2.5 M | 0 | 0% | 17 (integer) | +0.6% | **0.6%** | Signal integrity risk |
+
+The 4–5% combined budget means all four rates are well within tolerance in isolation. The current 500 kbaud divides exactly into both the AVR's 20 MHz oscillator and the STM32's 42 MHz APB1 clock — which is the main reason it was a sensible original choice. 2.5 Mbaud leaves very little margin for cable capacitance or PCB trace length on a noisy embedded board.
 
 ### 12.2 Candidate Assessment
 

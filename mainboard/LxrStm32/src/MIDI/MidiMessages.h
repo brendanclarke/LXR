@@ -587,6 +587,7 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define PRF_RESTORE_MORPH_CC          0xc3
 #define PRF_RESTORE_MORPH_CC2         0xc4
 #define PRF_CACHE_STATUS              0xc5
+#define PARAM_RESTORE_DONE            0xc6
 #define PRF_CACHE_REJECTED            0x00
 #define PRF_CACHE_ACCEPTED            0x01
 #define FRONT_SAMPLE_START_UPLOAD 		0x01
@@ -617,6 +618,7 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_SEQ_MUTE_TRACK			   0x09
 #define FRONT_SEQ_UNMUTE_TRACK			0x0a
 #define FRONT_SEQ_CHANGE_PAT			   0x0b	/**< the user requested a new pattern. send the same message back to the front as ack that the new pattern is loaded*/
+#define FRONT_SEQ_CHANGE_TMP_PAT		   0x0e	/**< request seq_tmpPattern as a temporary ninth performance pattern */
 #define FRONT_SEQ_ROLL_ON			   	0x0c	/**< start roll for voice data2*/
 #define FRONT_SEQ_ROLL_OFF			   	0x0d	/**< stop roll for voice data2*/
 #define FRONT_SEQ_REQUEST_STEP_PARAMS 	0x0f

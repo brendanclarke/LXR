@@ -76,6 +76,7 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define PRF_RESTORE_MORPH_CC  0xc3
 #define PRF_RESTORE_MORPH_CC2 0xc4
 #define PRF_CACHE_STATUS      0xc5
+#define PARAM_RESTORE_DONE    0xc6
 #define PRF_CACHE_REJECTED    0x00
 #define PRF_CACHE_ACCEPTED    0x01
 #define SAMPLE_START_UPLOAD 0x01
@@ -127,6 +128,7 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SEQ_MUTE_TRACK		0x09
 #define SEQ_UNMUTE_TRACK	0x0a
 #define SEQ_CHANGE_PAT		0x0b	/**<requested a new pattern. the same message is send back to the front as ack that the new pattern is loaded (after the current patern finished)*/
+#define SEQ_CHANGE_TMP_PAT	0x0e	/**< request STM seq_tmpPattern as a temporary ninth performance pattern */
 #define SEQ_ROLL_ON			0x0c	/**< start roll for voice data2*/
 #define SEQ_ROLL_OFF		0x0d	/**< stop roll for voice data2*/
 //#define SEQ_GET_ACTIVE_PAT	0x0e	/**< get the active pattern number from the sequencer */
@@ -142,6 +144,8 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SEQ_EUKLID_STEPS	0x18
 #define SEQ_REQUEST_EUKLID_PARAMS 0x19
 #define SEQ_SET_SHOWN_PATTERN	0x1A
+
+#define SEQ_TMP_PATTERN 8
 
 #define SEQ_REC_ON_OFF		0x1B		/**< start(data2=1) or stop(data2=0) recording mode */
 #define SEQ_REQUEST_PATTERN_PARAMS 0x1C /**< the sequencer sends back the data of the active pattern */

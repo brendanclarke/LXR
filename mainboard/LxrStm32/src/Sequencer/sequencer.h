@@ -52,6 +52,7 @@
   * track 7 is the open hh... it triggers the highhat voice but with longer decay. it chokes the closed hihat*/
 #define NUM_TRACKS 7
 #define NUM_PATTERN 8
+#define SEQ_TMP_PATTERN 8
 #define NUM_STEPS 128
 
 #define SEQ_DEFAULT_NOTE 63
@@ -195,6 +196,12 @@ uint8_t seq_getTrackRotation(uint8_t trackNr);
 //------------------------------------------------------------------------------
 // void seq_activateTmpPattern();
 void seq_applyTmpPatternTo(uint8_t pattern);
+uint8_t seq_normalizePatternNumber(uint8_t pattern);
+Step* seq_getStepPtr(uint8_t pattern, uint8_t track, uint8_t step);
+LengthRotate* seq_getLengthRotatePtr(uint8_t pattern, uint8_t track);
+PatternSetting* seq_getPatternSettingPtr(uint8_t pattern);
+uint16_t seq_getMainSteps(uint8_t pattern, uint8_t track);
+void seq_setMainSteps(uint8_t pattern, uint8_t track, uint16_t steps);
 //------------------------------------------------------------------------------
 void seq_init();
 //------------------------------------------------------------------------------
@@ -293,6 +300,14 @@ void seq_copySubStep(uint8_t srcStep, uint8_t dstStep, uint8_t activeTrack);
 void seq_setActiveAutomationTrack(uint8_t trackNr);
 //------------------------------------------------------------------------------
 void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value);
+//------------------------------------------------------------------------------
+void seq_storeParameterIngress(uint16_t param, uint8_t value);
+//------------------------------------------------------------------------------
+void seq_storeLfoDestinationIngress(uint8_t voice, uint16_t destination);
+//------------------------------------------------------------------------------
+void seq_storeVelocityDestinationIngress(uint8_t voice, uint16_t destination);
+//------------------------------------------------------------------------------
+void seq_storeMacroDestinationIngress(uint8_t destinationNr, uint16_t destination);
 //------------------------------------------------------------------------------
 void seq_writeTranspose();
 //------------------------------------------------------------------------------

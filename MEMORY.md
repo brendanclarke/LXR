@@ -26,6 +26,20 @@ make firmware
 
 **Session 001 close status**: full top-level build succeeds in this repo with `make clean && make firmware` (warnings remain, no fatal errors).
 
+**Current status after Session 002 cleanup (2026-05-29)**: repository is intentionally dirty and work-in-progress on branch `custom-develop-patload-envmod` (HEAD observed as `9764bbe`). Do not treat the current firmware image as release-ready until the temp-pattern parameter pushback bug is resolved or intentionally disabled.
+
+Canonical current WIP docs:
+- `COMMS_FLOW_AUDIT-IN_FLIGHT.md`
+- `PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`
+- `knowledge_files/log_archive/002_SESSION_HANDOFF_LOG.md`
+
+These two root audits were expanded on 2026-05-29 from source diffs:
+- `COMMS_FLOW_AUDIT-IN_FLIGHT.md`: compares `LXR-9120ea7620f1a9a4a924f029cdaf3ae71df303fd/front|mainboard` against `LXR-custom-develop-patload-envmod-90d3f08/front|mainboard`.
+- `PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`: compares `LXR-custom-develop-patload-envmod-90d3f08/front|mainboard` against the current `front|mainboard`.
+
+User-referenced checkpoint:
+- Commit `90d3f08` is the checkpoint where `.ALL` and `.PRF` load their parameters correctly provided there is no morph automation and background loading into the temp slot is turned off for `.PRF`.
+
 ---
 
 ## Repository Layout
@@ -150,6 +164,8 @@ make firmware
 | Confirmed hardware/protocol notes? | `knowledge_files/hardware_archive/` |
 | Current known issues and reminders? | `MEMORY.md` |
 | Session 001 build triage details | `BUILD_AUDIT.md` |
+| Current comms/flow checkpoint and deferred hardening plan | `COMMS_FLOW_AUDIT-IN_FLIGHT.md` |
+| Current `.PRF`/`.ALL` load checkpoint and temp-slot WIP | `PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md` |
 
 ---
 
@@ -159,6 +175,8 @@ make firmware
 - Keep build reproducible with current toolchains (`arm-none-eabi-gcc`, `avr-gcc`) and preserve firmware image output flow.
 - This folder is the repository/codebase.
 - Only session logs under `knowledge_files/log_archive/` should be changed inside `knowledge_files/` unless a session explicitly requires otherwise.
+- Some reference files formerly at repo root were moved under `knowledge_files/reference_material/` during Session 002 cleanup (`Changelog.txt`, `Readme - firmware additions to v.36.txt`, `linux_build_guide.txt`, `lxr-midi-assign.txt`, `mod_targ_lineup.xls`).
+- Root files `P000.ALL`, `P000.PRF`, and `P005.PRF` are temporary test files and are expected to be removed later.
 
 ## General Process Reminders
 
@@ -250,11 +268,8 @@ Sample flash map:
 
 ## Encoder
 
-- **Algorithm**: <to audit>
-- **Seed**: <to audit>
-- **Divide**: <to audit>
-- **Acceleration**: <to audit>
-- **Rebound suppression**: <to audit>
+- Session 002 encoder work completed successfully. See `knowledge_files/session_in_flight/ENCODER_AUDIT-COMPLETE.md` and `knowledge_files/log_archive/002_SESSION_HANDOFF_LOG.md`.
+- Timer/resource details and implementation notes are in the completed audit.
 
 ---
 
@@ -289,6 +304,7 @@ Sample flash map:
 
 - Inter-MCU UART protocol uses MIDI-like status/data framing and sysex-like bulk transfer behavior.
 - Communications audit warns about silent FIFO overflow and blocking ACK wait patterns; review `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` before touching parser/transport logic.
+- Current flow-control checkpoint details are in `COMMS_FLOW_AUDIT-IN_FLIGHT.md`. Implemented checkpoint behavior includes acknowledged load sessions, STM32 quiet mode, and credit-metered globals/voice/meta bursts. Old SysEx/callback waits still need timeout recovery in a later pass.
 - If build errors reference functions/line numbers missing in local files, treat as snapshot mismatch and confirm active repository first.
 
 ---
@@ -310,8 +326,21 @@ Sample flash map:
 
 ### High Priority
 
-- Hardware smoke test pending for current successful build outputs.
+- Current repository state is WIP. The immediate continuation task is to temporarily disable or fix STM-to-AVR parameter pushback on temp-pattern transitions, then hardware-test temp pattern entry/exit.
+- `.PRF` background loading into the temp slot is not finished; keep it isolated from the playing normal pattern/parameters.
+- Hardware smoke test pending for any final build output after the current WIP is stabilized.
 - Warning triage needed (compiler diagnostics are currently noisy and can hide regressions).
+
+### Current Temp Pattern / `.PRF` WIP Reminders
+
+- SEQ16 is temporarily used as a SELECT button for `SEQ_TMP_PATTERN`.
+- Temp pattern select/play/copy/paste works and was user-tested.
+- Temporary parameter data must stay STM-side only. Do not add AVR-side temp parameter storage.
+- STM-side temp parameter capture uses a canonical raw parameter image plus validity masks; do not use `midiParser_originalCcValues` or `parameterArray` as temp raw-parameter truth.
+- STM-to-AVR parameter pushback on temp-pattern transitions currently does not work correctly and should be the next narrow fix.
+- Do not make the temp pattern loadable/saveable unless explicitly requested.
+- The current `front`/`mainboard` diff also contains a suspect PRF cache state-machine experiment (`SEQ_PRF_CACHE_*`, live-pattern getters, pending counters). Treat it as WIP until reconciled with the temp-slot plan.
+- Current-only backup files `front/LxrAvr/config.h.bak`, `front/LxrAvr/encoder.c.bak`, and `front/LxrAvr/encoder.h.bak` exist in the diff and should not be committed as canonical code without an explicit decision.
 
 ### Medium Priority
 
@@ -329,6 +358,10 @@ Sample flash map:
 - Applying patches from an `err.txt` log without confirming the log matches current local source snapshot.
 - Working in a similarly named sibling repository without verifying `pwd` and branch first.
 - Using compiler workarounds alone (`-fcommon`, `-fgnu89-inline`) as a substitute for real source ownership/linkage fixes.
+- Reintroducing unbounded STM32 front RX full-drain as a first communications fix; it previously caused a known-good `.ALL` load freeze.
+- Changing PAT_CHAIN to pair-level ACK without changing the AVR sender; current protocol expects byte-by-byte callbacks.
+- Using `midiParser_originalCcValues` as the source of truth for current loaded STM voice parameters.
+- Using `parameterArray` to reconstruct raw menu parameter bytes for the temp cache; it points into live converted/modulated DSP state.
 
 ---
 
