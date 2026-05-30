@@ -77,6 +77,9 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define PRF_RESTORE_MORPH_CC2 0xc4
 #define PRF_CACHE_STATUS      0xc5
 #define PARAM_RESTORE_DONE    0xc6
+#define PARAM_RESTORE_BEGIN   0xc7
+#define PARAM_RESTORE_READY   0xc8
+#define PARAM_RESTORE_ACK     0xc9
 #define PRF_CACHE_REJECTED    0x00
 #define PRF_CACHE_ACCEPTED    0x01
 #define SAMPLE_START_UPLOAD 0x01

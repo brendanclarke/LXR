@@ -207,7 +207,9 @@ static SeqTmpKitState seq_tmpKitState;
 static SeqTmpKitAutomation seq_normalKitAutomation;
 static uint8_t seq_tmpKitActive = 0;
 static uint8_t seq_normalKitAutomationValid = 0;
-static uint8_t seq_tmpKitPushParamsToFrontEnabled = 0;
+static uint8_t seq_tmpKitPushParamsToFrontEnabled = 1; // RESTORE: Enabled by default now
+volatile uint8_t seq_tmpKitHandshakeReady = 0;
+volatile uint8_t seq_tmpKitHandshakeAck = 0;
 
 typedef enum SeqParamIngressTargetEnum
 {
@@ -468,16 +470,48 @@ static void seq_captureTmpKitState()
 }
 
 //------------------------------------------------------------------------------
+/* RESTORE PUSH-UP PROCESS (STM32 Side)
+   This mechanism synchronizes the STM32's canonical parameter image (current or temporary)
+   back to the AVR front-panel menu.
+
+   Handshake Logic:
+   1. STM sends PARAM_RESTORE_BEGIN.
+   2. STM blocks and calls uart_processFront() while waiting for AVR to send PARAM_RESTORE_READY.
+      - Blocking is necessary to ensure the dump happens atomically relative to UI state.
+      - uart_processFront() must be called because the main loop is blocked, and the 
+        READY response byte arriving in the FIFO is only parsed by the frontPanelParser 
+        when that function is executed.
+   3. Once READY is received (indicating AVR has suppressed outbound traffic to prevent feedback),
+      STM iterates through END_OF_SOUND_PARAMETERS.
+   4. For each valid parameter, it calls seq_pushSingleParameterToFront().
+   5. STM sends PARAM_RESTORE_DONE.
+   6. STM blocks and calls uart_processFront() while waiting for AVR to send PARAM_RESTORE_ACK.
+   7. Normal operation resumes.
+*/
+
 static void seq_pushSingleParameterToFront(uint16_t param, uint8_t value)
 {
+   /* RESTORE: Skip internal STM indices < 2 which don't map to AVR sound params.
+      STM index 0/1 are internal placeholders not used for voice parameters. */
+   if(param < 2)
+      return;
+
    if(param < 128)
    {
       uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_PARAM_CC);
-      uart_sendFrontpanelPriorityByteWait((uint8_t)param);
+      /* RESTORE OFFSET RULE: 
+         AVR sound parameter indices < 128 are shifted by -1 relative to the STM canonical image.
+         The STM image adds +1 on ingress (from AVR to STM), so we must subtract 1 on egress.
+         Example: STM index 32 (OSC Coarse) -> AVR index 31.
+         Failure to apply this offset causes parameters to land in the 'Fine' slot (index +1). */
+      uart_sendFrontpanelPriorityByteWait((uint8_t)(param - 1));
    }
    else
    {
       uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_PARAM_CC2);
+      /* RESTORE CC2 RULE: 
+         Parameters >= 128 (high sound params / CC2) do not require the -1 offset.
+         They map directly to (param - 128) on the wire and are stored correctly on the AVR. */
       uart_sendFrontpanelPriorityByteWait((uint8_t)(param - 128));
    }
 
@@ -488,7 +522,26 @@ static void seq_pushSingleParameterToFront(uint16_t param, uint8_t value)
 static void seq_pushParameterValuesToFront(const uint8_t *source, const uint8_t *valid)
 {
    uint16_t param;
+   uint32_t timeout;
 
+   /* RESTORE: Handshake Phase 1 - BEGIN */
+   seq_tmpKitHandshakeReady = 0;
+   uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_BEGIN);
+   uart_sendFrontpanelPriorityByteWait(0);
+   uart_sendFrontpanelPriorityByteWait(0);
+
+   /* RESTORE: Handshake Phase 2 - Wait for READY
+      We must loop uart_processFront() here. Handshake responses arrive via ISR 
+      but seq_tmpKitHandshakeReady is only set when the frontPanelParser 
+      (called by uart_processFront) interprets the byte. */
+   timeout = 0x000FFFFF;
+   while(!seq_tmpKitHandshakeReady && timeout--)
+   {
+      uart_processFront();
+      __asm__("nop");
+   }
+
+   /* RESTORE: Handshake Phase 3 - Data Transfer */
    for(param=0;param<END_OF_SOUND_PARAMETERS;param++)
    {
       if(valid && !valid[param])
@@ -497,9 +550,20 @@ static void seq_pushParameterValuesToFront(const uint8_t *source, const uint8_t 
       seq_pushSingleParameterToFront(param, source[param]);
    }
 
+   /* RESTORE: Handshake Phase 4 - DONE */
+   seq_tmpKitHandshakeAck = 0;
    uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
    uart_sendFrontpanelPriorityByteWait(0);
    uart_sendFrontpanelPriorityByteWait(0);
+
+   /* RESTORE: Handshake Phase 5 - Wait for ACK
+      Final synchronization ensuring the AVR has finished the repaint and is ready for normal traffic. */
+   timeout = 0x000FFFFF;
+   while(!seq_tmpKitHandshakeAck && timeout--)
+   {
+      uart_processFront();
+      __asm__("nop");
+   }
 }
 
 //------------------------------------------------------------------------------
@@ -572,7 +636,7 @@ void seq_init()
    seq_paramIngressTarget = SEQ_PARAM_INGRESS_CURRENT_IMAGE;
    seq_tmpKitActive = 0;
    seq_normalKitAutomationValid = 0;
-   seq_tmpKitPushParamsToFrontEnabled = 0;
+   seq_tmpKitPushParamsToFrontEnabled = 1;
    midi_clearCache();
    seq_transposeOnOff = 0;
 

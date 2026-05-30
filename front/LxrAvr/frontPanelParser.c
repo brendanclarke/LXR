@@ -26,6 +26,9 @@ static uint8_t frontParser_rxCnt=0;
 volatile MidiMsg frontParser_midiMsg;
 static uint16_t frontParser_nrpnNr = 0;
 
+volatile uint8_t frontParser_restoreActive = 0; // RESTORE: True during a canonical parameter dump from STM
+static uint16_t frontParser_restoreCount = 0; // DEBUG
+
 uint8_t frontPanel_sysexMode = 0;
 uint8_t frontParser_sysexCallback = 0;
 uint8_t frontParser_rxDisable=0;
@@ -599,7 +602,13 @@ void frontPanel_parseData(uint8_t data)
       {
          if(!frontParser_rxDisable
             || (frontParser_midiMsg.status == SEQ_CC)
-            || (frontParser_midiMsg.status == PRF_CACHE_STATUS))
+            || (frontParser_midiMsg.status == PRF_CACHE_STATUS)
+            || (frontParser_midiMsg.status == PARAM_RESTORE_BEGIN)
+            || (frontParser_midiMsg.status == PARAM_RESTORE_DONE)
+            || (frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC)
+            || (frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC2)
+            || (frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC)
+            || (frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC2))
          {
       	   //parameter nr
             frontParser_midiMsg.data1 = data;
@@ -621,10 +630,20 @@ void frontPanel_parseData(uint8_t data)
                comm_prfCacheStatusCommand = frontParser_midiMsg.data1;
                comm_prfCacheStatusValue = frontParser_midiMsg.data2;
             }
-
-            return;
+            else if((frontParser_midiMsg.status == PARAM_RESTORE_BEGIN)
+               || (frontParser_midiMsg.status == PARAM_RESTORE_DONE)
+               || (frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC)
+               || (frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC2)
+               || (frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC)
+               || (frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC2))
+            {
+               /* RESTORE: Allow these messages to fall through to the processor even when rxDisable is true. */
+            }
+            else
+            {
+               return;
+            }
          }
-
       	//process the received data
          if(frontParser_midiMsg.status == MIDI_CC) //sound cc data from cortex 
          {
@@ -860,6 +879,24 @@ void frontPanel_parseData(uint8_t data)
             
             /* -bc- additions to front interpreter start here*/
             //-------------------------------------------------
+            /* RESTORE PUSH-UP PROCESS (AVR Side)
+               This mechanism handles the incoming parameter dump from STM32.
+
+               Handshake Logic:
+               1. AVR receives PARAM_RESTORE_BEGIN.
+                  - Sets frontParser_restoreActive = 1.
+                  - Sends PARAM_RESTORE_READY back to STM.
+               2. While frontParser_restoreActive is 1, frontPanel_sendData() suppresses all 
+                  outbound parameter traffic to prevent feedback loops (where restored display 
+                  values are misinterpreted as user edits and sent back to STM).
+               3. AVR receives PRF_RESTORE_PARAM_CC/CC2 messages and updates parameter_values[].
+                  - Crucially, it does NOT update parameters2[] (morph endpoint) to avoid 
+                    corrupting the morph state during a display-only synchronization.
+               4. AVR receives PARAM_RESTORE_DONE.
+                  - Calls menu_repaintAll() to update the display.
+                  - Sends PARAM_RESTORE_ACK back to STM.
+                  - Clears frontParser_restoreActive = 0.
+            */
             else if(frontParser_midiMsg.status == PARAM_CC)
             {
                parameter_values[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
@@ -875,10 +912,22 @@ void frontPanel_parseData(uint8_t data)
                menu_repaint();
             
             }
+            else if(frontParser_midiMsg.status == PARAM_RESTORE_BEGIN)
+            {
+               // RESTORE: Start of a canonical parameter dump from STM.
+               lcd_setcursor(0,0);
+               lcd_string_F(PSTR("RESTORE BEGIN   "));
+               frontParser_restoreActive = 1;
+               frontParser_restoreCount = 0;
+               // Inform STM we are ready to receive and have suppressed outbound traffic.
+               frontPanel_sendData(PARAM_RESTORE_READY, 0, 0);
+            }
             else if(frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC)
             {
+               // RESTORE: Update main parameters only. Do not touch parameters2 (morph endpoint)
+               // to avoid corrupting morph state during a display-only synchronization.
                parameter_values[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
-               parameters2[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
+               frontParser_restoreCount++;
             }
             else if(frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC2)
             {
@@ -886,24 +935,40 @@ void frontPanel_parseData(uint8_t data)
                if(paramNr < NUM_PARAMS)
                {
                   parameter_values[paramNr]=frontParser_midiMsg.data2;
-                  if(paramNr < END_OF_SOUND_PARAMETERS)
-                     parameters2[paramNr]=frontParser_midiMsg.data2;
+                  frontParser_restoreCount++;
+                  // RESTORE: Parameters2 mirroring explicitly removed for restore dumps.
                }
             }
             else if(frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC)
             {
+               // RESTORE: Morph-specific restore messages still update parameters2.
                if(frontParser_midiMsg.data1 < END_OF_SOUND_PARAMETERS)
+               {
                   parameters2[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
+                  frontParser_restoreCount++;
+               }
             }
             else if(frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC2)
             {
                uint16_t paramNr = (uint16_t)(frontParser_midiMsg.data1+128);
                if(paramNr < END_OF_SOUND_PARAMETERS)
+               {
                   parameters2[paramNr]=frontParser_midiMsg.data2;
+                  frontParser_restoreCount++;
+               }
             }
             else if(frontParser_midiMsg.status == PARAM_RESTORE_DONE)
             {
+               // RESTORE: End of dump. Repaint the full menu to reflect new values.
+               char text[17];
+               sprintf(text, "DONE %d      ", frontParser_restoreCount);
+               lcd_setcursor(0,0);
+               lcd_string(text);
+
                menu_repaintAll();
+               // Inform STM we have finished and re-enabled normal operation.
+               frontPanel_sendData(PARAM_RESTORE_ACK, 0, 0);
+               frontParser_restoreActive = 0;
             }
             else if(frontParser_midiMsg.status == PRF_CACHE_STATUS)
             {
@@ -1230,6 +1295,14 @@ void frontPanel_sendMidiMsg(MidiMsg msg)
 //------------------------------------------------------------
 void frontPanel_sendData(uint8_t status, uint8_t data1, uint8_t data2)
 {
+   /* RESTORE: Suppress outbound traffic while a parameter restore transaction is active
+      to prevent feedback loops where pushed-up display values are sent back as authoritative edits.
+      Allow READY and ACK messages to pass through. */
+   if(frontParser_restoreActive && status != PARAM_RESTORE_READY && status != PARAM_RESTORE_ACK)
+   {
+      return;
+   }
+
    uint8_t queued = 0;
    uint8_t usesCredit = (uint8_t)(comm_flowActive && frontPanel_flowUsesCredit(status, data1));
 

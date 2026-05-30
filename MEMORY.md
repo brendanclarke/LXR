@@ -26,7 +26,7 @@ make firmware
 
 **Session 001 close status**: full top-level build succeeds in this repo with `make clean && make firmware` (warnings remain, no fatal errors).
 
-**Current status after Session 002 cleanup (2026-05-29)**: repository is intentionally dirty and work-in-progress on branch `custom-develop-patload-envmod` (HEAD observed as `9764bbe`). Do not treat the current firmware image as release-ready until the temp-pattern parameter pushback bug is resolved or intentionally disabled.
+**Current status after Session 002 restoration (2026-05-29)**: repository is at a functional baseline equivalent to the end of transcript 2. HEAD is `b9703ab`. STM-to-AVR parameter pushback is functional and verified on hardware.
 
 Canonical current WIP docs:
 - `COMMS_FLOW_AUDIT-IN_FLIGHT.md`
@@ -326,10 +326,10 @@ Sample flash map:
 
 ### High Priority
 
-- Current repository state is WIP. The immediate continuation task is to temporarily disable or fix STM-to-AVR parameter pushback on temp-pattern transitions, then hardware-test temp pattern entry/exit.
-- `.PRF` background loading into the temp slot is not finished; keep it isolated from the playing normal pattern/parameters.
-- Hardware smoke test pending for any final build output after the current WIP is stabilized.
-- Warning triage needed (compiler diagnostics are currently noisy and can hide regressions).
+- Current repository state is at a verified functional baseline. 
+- Next phase: Re-evaluate background `.PRF` loading into the temp slot with proper isolation and morph harmony.
+- Hardware smoke test verified for SEQ16 temp pattern selection/copy/play and parameter sync.
+- Suspect experimental proposals (endpoint-aware switching) are documented in `PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`.
 
 ### Current Temp Pattern / `.PRF` WIP Reminders
 
@@ -337,7 +337,8 @@ Sample flash map:
 - Temp pattern select/play/copy/paste works and was user-tested.
 - Temporary parameter data must stay STM-side only. Do not add AVR-side temp parameter storage.
 - STM-side temp parameter capture uses a canonical raw parameter image plus validity masks; do not use `midiParser_originalCcValues` or `parameterArray` as temp raw-parameter truth.
-- STM-to-AVR parameter pushback on temp-pattern transitions currently does not work correctly and should be the next narrow fix.
+- STM-to-AVR parameter pushback on temp-pattern transitions is functional and verified. It uses a 5-phase handshake to ensure sync.
+- The correct -1 offset for low sound parameters is applied on egress.
 - Do not make the temp pattern loadable/saveable unless explicitly requested.
 - The current `front`/`mainboard` diff also contains a suspect PRF cache state-machine experiment (`SEQ_PRF_CACHE_*`, live-pattern getters, pending counters). Treat it as WIP until reconciled with the temp-slot plan.
 - Current-only backup files `front/LxrAvr/config.h.bak`, `front/LxrAvr/encoder.c.bak`, and `front/LxrAvr/encoder.h.bak` exist in the diff and should not be committed as canonical code without an explicit decision.

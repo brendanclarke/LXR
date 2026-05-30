@@ -160,7 +160,7 @@ void uart_processFront()
 	}
 #else
 	uint8_t data;
-	if(fifoBig_bufferOut(&fifo_frontRx,&data))
+   while(fifoBig_bufferOut(&fifo_frontRx,&data))
 	{
 		frontParser_parseUartData(data);
 	}

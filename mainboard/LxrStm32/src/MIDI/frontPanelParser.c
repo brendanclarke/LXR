@@ -1424,6 +1424,14 @@ static void frontParser_handleMidiMessage()
 
    switch(frontParser_midiMsg.status)
    {
+      case PARAM_RESTORE_READY:
+         seq_tmpKitHandshakeReady = 1;
+         break;
+
+      case PARAM_RESTORE_ACK:
+         seq_tmpKitHandshakeAck = 1;
+         break;
+
       case FRONT_CC_MACRO_TARGET: //frontParser_midiMsg.status
          {
          

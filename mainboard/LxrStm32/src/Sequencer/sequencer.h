@@ -153,6 +153,9 @@ extern TempPattern seq_tmpPattern;
 extern uint8_t seq_transpose_voiceAmount[7];
 extern uint8_t seq_transposeOnOff;
 
+extern volatile uint8_t seq_tmpKitHandshakeReady;
+extern volatile uint8_t seq_tmpKitHandshakeAck;
+
 extern uint8_t seq_selectedStep;
 
 extern uint8_t seq_resetBarOnPatternChange;
