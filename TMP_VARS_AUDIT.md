@@ -877,6 +877,13 @@ Conclusion:
 
 - During ordinary live morph, resolved automation target assignments still effectively follow the kit/front endpoint sideband assignments from `parameter_values[]`.
 - The morph automation target endpoint selector bytes in `parameters2[]` are now valid storage/display/copy-transfer data, but they are not yet first-class live morph destination selectors.
+- This behavior is intentional for the current firmware state and should be treated as a high-risk invariant.
+
+Danger flag:
+
+- It will be **VERY dangerous** to deviate from this live morph behavior casually.
+- Any future change that makes morph automation target endpoints affect live resolved automation destinations must be designed and tested as an explicit behavior change, not smuggled into storage, copy/paste, menu display, or background-load work.
+- In particular, do not make `preset_morph()` start sending resolved automation destination sideband messages merely because the endpoint storage model now preserves morph automation target endpoint bytes.
 
 Implication for a future fix:
 
@@ -885,3 +892,253 @@ Implication for a future fix:
   - `CC_LFO_TARGET` for `PAR_TARGET_LFO*` plus the paired `PAR_VOICE_LFO*` context;
   - `MACRO_CC` for `PAR_MAC*_DST*`, if macro destination morph behavior is desired.
 - This should be treated as a separate behavior change from the endpoint storage/copy-transfer work.
+
+---
+
+## 16. Implementation Pass: Temporary Pattern Inherits Endpoint Images on Copy
+
+Status: implemented on 2026-05-31.
+
+Goal:
+
+- When copying a pattern from the normal pattern set to the temporary pattern, the STM should preserve the endpoint images it just received from the AVR for both normal and temporary kit states.
+- The temporary pattern should no longer get zeroed kit/front endpoint or morph parameter endpoint arrays as a test baseline.
+
+Implemented behavior in `seq_captureTmpKitState()`:
+
+- Temporary interpolated/current-play parameter bytes are still captured from normal interpolated/current-play storage.
+- Temporary interpolated/current-play automation targets are still copied from normal interpolated/current-play automation target storage.
+- Temporary kit/front endpoint bytes now copy from `seq_normalKitState.frontPanelParams[]`.
+- Temporary kit/front endpoint validity now copies from `seq_normalKitState.frontPanelParamsValid[]`.
+- Temporary morph parameter endpoint bytes now copy from `seq_normalKitState.morphParams[]`.
+- Temporary morph parameter endpoint validity now copies from `seq_normalKitState.morphParamsValid[]`.
+- Temporary kit/front endpoint automation targets now copy from `seq_normalKitState.frontPanelAutomationTargets`.
+- Temporary morph automation target endpoints now copy from `seq_normalKitState.morphParameterEndpointAutomationTargets`.
+
+Result:
+
+- On copy-to-temp, normal and temporary parameter structs both retain the kit/front endpoint image, morph parameter endpoint image, and their corresponding resolved automation target images received from the AVR.
+- Entering the temporary pattern still applies the temporary interpolated/current-play image to sound.
+- Entering the temporary pattern now restores the inherited temporary endpoint images to AVR menu storage instead of zero-filled endpoint images.
+
+Files changed:
+
+- `mainboard/LxrStm32/src/Sequencer/sequencer.c`
+
+Build check:
+
+- `make -C mainboard/LxrStm32 stm32` completed successfully.
+
+Observed warnings:
+
+- Existing `seq_init()` bounds warnings and linker RWX segment warning remain; unrelated to this change.
+
+---
+
+## 17. Planned Change: File Loads Must Populate Only Normal Parameter Storage
+
+Status: planning note only on 2026-05-31. No code change in this section.
+
+User requirement:
+
+- Any parameter data received from a file load must always land in the normal pattern set parameter storage.
+- File-load parameter ingress must never write to temporary parameter storage.
+- If the temporary pattern is currently playing, file load operations must produce no audible parameter or automation-target changes at all.
+- This applies to raw sound parameters, LFO automation target sidebands, velocity automation target sidebands, and macro modulation target sidebands.
+
+Current risk found by code reading:
+
+- STM parameter ingress currently defaults to `SEQ_PARAM_INGRESS_CURRENT_IMAGE`.
+- `SEQ_PARAM_INGRESS_CURRENT_IMAGE` resolves through `seq_getCurrentImageKitState()`.
+- Therefore, when `seq_tmpKitActive` is true, current-image ingress writes to `seq_tmpKitState.interpolatedParams[]` and `seq_tmpKitState.interpolatedAutomationTargets`.
+- That is correct for live edits while the temporary pattern is the sounding pattern, but it is wrong for file-load streams.
+- The `seq_voicesLoading` path stores incoming `MIDI_CC`, `FRONT_CC_2`, `FRONT_CC_LFO_TARGET`, and `FRONT_CC_VELO_TARGET` through the same ingress helpers, so voice-load file data can also be misdirected to temporary storage while the temporary pattern is active.
+- `frontParser_uncacheVoice()` later applies cached file-load parameters and cached LFO/velocity automation target destinations to live nodes. If the temporary pattern is playing, that delayed apply would violate the no-audible-change rule unless it is guarded.
+
+Planned storage rule:
+
+- Add an explicit STM ingress target for normal interpolated/current-play storage, distinct from "currently sounding image".
+- Working name: `SEQ_PARAM_INGRESS_NORMAL_INTERPOLATED`.
+- Under that target:
+  - raw parameter bytes store to `seq_normalKitState.interpolatedParams[]`;
+  - validity bytes store to `seq_normalKitState.interpolatedParamsValid[]`;
+  - LFO automation target sidebands store to `seq_normalKitState.interpolatedAutomationTargets.lfoDestination[]`;
+  - velocity automation target sidebands store to `seq_normalKitState.interpolatedAutomationTargets.velocityDestination[]`;
+  - macro modulation target sidebands store to `seq_normalKitState.interpolatedAutomationTargets.macroDestination[]`.
+
+Planned bracketing rule:
+
+- On STM receipt of file-load begin messages, force parameter ingress to `SEQ_PARAM_INGRESS_NORMAL_INTERPOLATED`.
+- On STM receipt of file-load completion or abort messages, restore parameter ingress to `SEQ_PARAM_INGRESS_CURRENT_IMAGE`.
+- The existing candidates to audit/use are:
+  - `FRONT_SEQ_FILE_BEGIN`;
+  - `FRONT_SEQ_FILE_DONE`;
+  - `FRONT_SEQ_LOAD_VOICE`;
+  - `FRONT_SEQ_UNHOLD_VOICE`;
+  - `FRONT_SEQ_PRF_CACHE_BEGIN`;
+  - `FRONT_SEQ_PRF_CACHE_ABORT`;
+  - pending/deferred performance-load messages if they carry file parameter payload.
+- If these existing messages do not bracket every AVR file-load parameter stream reliably, add a small explicit file-parameter-ingress bracket rather than relying on playback state.
+
+Planned live-apply rule:
+
+- Replace sideband checks that currently use only:
+  - `seq_getIngressTarget() == SEQ_PARAM_INGRESS_CURRENT_IMAGE`
+- with a helper that means "this ingress is allowed to touch live sound now."
+- For ordinary live edits, that helper should still allow current behavior.
+- For file-load ingress while the temporary pattern is active, that helper must return false.
+- For file-load ingress while the normal pattern set is active, existing audible behavior can remain unless a later requirement says file loads should always be fully backgrounded even during normal playback.
+
+Planned voice-cache rule:
+
+- File-load voice cache data must be treated as normal-pattern-set data.
+- While the temporary pattern is active:
+  - `frontParser_unholdVoice()` may move cached bytes into the normal kit cache image;
+  - `frontParser_uncacheVoice()` must not apply those cached bytes or cached LFO/velocity automation target destinations to live voice nodes.
+- When playback returns to the normal pattern set, normal storage and normal cached/applied state should be the source of sound.
+- The cache-release path is a major risk area because it can make a file load audible after the original receive bracket has ended.
+
+Non-goals for this change:
+
+- Do not change copy-to-temporary-pattern behavior from section 16.
+- Do not change the live morph behavior flagged in section 15.
+- Do not add LCD/debug/status writes for this path.
+- Do not alter temporary pattern parameter storage during any file load.
+
+Implementation files expected:
+
+- `mainboard/LxrStm32/src/Sequencer/sequencer.h`
+- `mainboard/LxrStm32/src/Sequencer/sequencer.c`
+- `mainboard/LxrStm32/src/MIDI/frontPanelParser.c`
+- Possibly `mainboard/LxrStm32/src/MIDI/MidiMessages.h` and AVR message headers only if existing file-load brackets are insufficient.
+
+---
+
+## 18. Implementation Pass: File Loads Target Normal Images Only
+
+Status: implemented on 2026-05-31.
+
+Goal:
+
+- File-load parameter data must always populate the normal pattern set parameter image.
+- File-load pattern data must always populate `seq_patternSet`, not `seq_tmpPattern`.
+- While the temporary pattern is sounding, file loads must not change the audible temporary sound.
+
+Implemented STM parameter ingress behavior:
+
+- Added `SEQ_PARAM_INGRESS_NORMAL_INTERPOLATED`.
+- Under this ingress target:
+  - raw parameter bytes store to `seq_normalKitState.interpolatedParams[]`;
+  - validity bytes store to `seq_normalKitState.interpolatedParamsValid[]`;
+  - LFO automation target sidebands store to `seq_normalKitState.interpolatedAutomationTargets`;
+  - velocity automation target sidebands store to `seq_normalKitState.interpolatedAutomationTargets`;
+  - macro modulation target sidebands store to `seq_normalKitState.interpolatedAutomationTargets`.
+- Added `seq_shouldApplyIngressToLive()`:
+  - current-image ingress still applies live;
+  - normal-interpolated file-load ingress applies live only when the temporary kit is not active;
+  - endpoint ingress remains store-only.
+- Added `seq_isTmpKitActive()` for parser-side cache-release decisions.
+
+Implemented STM file-load bracketing behavior:
+
+- `FRONT_SEQ_FILE_BEGIN` now forces normal-interpolated ingress.
+- `FRONT_SEQ_FILE_DONE`, `FRONT_SEQ_FLOW_ABORT`, and `FRONT_SEQ_PRF_CACHE_ABORT` restore current-image ingress.
+- `FRONT_SEQ_LOAD_VOICE` also forces normal-interpolated ingress so standalone voice-load payloads are captured correctly.
+- Deferred performance-load replay is also wrapped in normal-interpolated ingress, so cached file payload does not replay into the temporary image.
+
+Implemented STM no-temp-pattern behavior:
+
+- `frontParser_shouldStagePattern()` now returns false during file-load ingress.
+- Result: file-load sysex writes main steps, steps, pattern length, pattern scale, and pattern chain data directly into `seq_patternSet`.
+- File-load sysex no longer uses `seq_tmpPattern` as a staging buffer.
+- This is intentional per the new rule that file loads should never touch temporary pattern data.
+
+Implemented STM no-audible-temp-change behavior:
+
+- Incoming normal-interpolated file-load parameters are stored only while the temporary kit is active.
+- LFO, velocity, and macro destination sidebands are stored only while the temporary kit is active.
+- Delayed voice-cache release now calls a wrapper:
+  - if the temporary kit is active, cached file-load voice data is cleared without applying to live voice/modulation nodes;
+  - otherwise the existing cache apply path is used.
+
+Implemented AVR bracketing behavior:
+
+- Added `SEQ_FILE_BEGIN/WTYPE_KIT` at the start of kit file load after the file is opened and the name is read.
+- Added `SEQ_FILE_BEGIN/WTYPE_PATTERN` at the start of pattern file load before pattern sysex payload begins.
+- Existing `SEQ_FILE_BEGIN` messages for all/performance loads remain unchanged.
+- Existing `SEQ_FILE_DONE` messages close the brackets.
+
+Files changed:
+
+- `mainboard/LxrStm32/src/Sequencer/sequencer.h`
+- `mainboard/LxrStm32/src/Sequencer/sequencer.c`
+- `mainboard/LxrStm32/src/MIDI/frontPanelParser.c`
+- `front/LxrAvr/Preset/presetManager.c`
+
+Build check:
+
+- `make -C mainboard/LxrStm32 stm32` completed successfully.
+- `make -C front/LxrAvr avr` completed successfully.
+
+Observed warnings:
+
+- STM build still reports pre-existing warnings in mixer, oscillator, modulation node, sequencer init bounds, trigger memset, main exit recursion, MidiParser fallthrough, and frontPanelParser unused/fallthrough areas.
+- AVR build still reports the pre-existing `preset_readDrumVoice()` fallthrough warning.
+
+---
+
+## 19. Follow-Up Fix: File Load Still Reached Temporary Morph Parameter Endpoint / Voice Cache
+
+Status: implemented on 2026-05-31.
+
+User observation:
+
+- Loading from file while playing the temporary pattern still produced audible changes.
+- Suspicion: temporary kit/front endpoints appeared preserved, but the temporary interpolation set and temporary morph parameter endpoint set seemed to be overwritten.
+
+Code-read result:
+
+- Temporary interpolated parameter storage was not directly overwritten by the new normal-interpolated ingress target.
+- `SEQ_PARAM_INGRESS_NORMAL_INTERPOLATED` correctly routes raw parameter bytes to `seq_normalKitState.interpolatedParams[]`.
+- However, the morph parameter endpoint receive path still had a stale two-way routing rule:
+  - `SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT` -> normal morph parameter endpoint;
+  - everything else -> temporary morph parameter endpoint.
+- Because file-load ingress now uses `SEQ_PARAM_INGRESS_NORMAL_INTERPOLATED`, any `PRF_RESTORE_MORPH_*` bytes received under that mode would incorrectly land in `seq_tmpKitState.morphParams[]`.
+
+Implemented morph parameter endpoint fix:
+
+- `PRF_RESTORE_MORPH_CC/CC2` now routes to temporary morph parameter endpoint storage only when ingress target is explicitly `SEQ_PARAM_INGRESS_TMP_KIT_STATE`.
+- All other ingress targets, including normal kit endpoint and normal-interpolated file-load ingress, route to `seq_normalKitState.morphParams[]`.
+
+Second audible-change source found:
+
+- `frontParser_unholdVoice()` still promoted loaded voice cache into `midi_midiKit[]`, `midi_kitLfoCache[]`, and `midi_kitVeloCache[]`.
+- It also set `seq_newVoiceAvailable`.
+- While the temporary pattern is active, that can become audible later through trigger-time `frontParser_uncacheVoice()` even if the raw STM parameter bytes were stored in the normal parameter image.
+
+Implemented voice-cache fix:
+
+- Added `frontParser_unholdLoadedVoice()`.
+- While the temporary kit is active, loaded voice cache is cleared instead of being promoted into live kit cache or marked for trigger-time apply.
+- While the normal kit is active, existing unhold behavior is preserved.
+- Deferred voice unhold now uses this wrapper too.
+
+Current expected behavior after this pass:
+
+- File-load raw parameter bytes go to normal interpolated parameter storage.
+- File-load morph parameter endpoint bytes go to normal morph parameter endpoint storage.
+- File-load voice cache should no longer become audible through unhold or later trigger-time cache apply while the temporary pattern is active.
+- Temporary kit/front endpoint storage, temporary interpolated storage, and temporary morph parameter endpoint storage should remain untouched by file-load parameter streams unless the code is in an explicit temporary-pattern copy/switch operation.
+
+Files changed:
+
+- `mainboard/LxrStm32/src/MIDI/frontPanelParser.c`
+
+Build check:
+
+- `make -C mainboard/LxrStm32 stm32` completed successfully.
+
+Observed warnings:
+
+- Existing frontPanelParser warnings remain: unused `frontParser_sendPrfRestoreParam`, unused local in `frontParser_sendPrfLiveRestore`, and pre-existing fallthrough warnings.
+- Linker RWX segment warning remains.

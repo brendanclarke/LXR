@@ -94,6 +94,8 @@ static uint8_t frontParser_deferredPerfProtectedPattern = 0;
 static uint8_t frontParser_deferredPerfReplay = 0;
 static uint8_t frontParser_deferredPerfMsgCount = 0;
 static MidiMsg frontParser_deferredPerfMsgCache[DEFERRED_PERF_MSG_CACHE_SIZE];
+static uint8_t frontParser_fileLoadIngressActive = 0;
+static uint8_t frontParser_fileLoadBracketActive = 0;
 static PrfCacheState frontParser_prfCacheState = PRF_CACHE_IDLE;
 static uint8_t frontParser_prfCacheProtectedPattern = 0;
 static uint8_t frontParser_prfCachePendingValid = 0;
@@ -254,6 +256,25 @@ static void frontParser_clearDeferredPerfLoad()
    frontParser_deferredPerfPatternPending = 0;
    frontParser_deferredPerfUnholdPending = 0;
    frontParser_deferredPerfMsgCount = 0;
+}
+
+static void frontParser_beginFileLoadIngress(uint8_t bracketed)
+{
+   /* FILE LOAD: File payloads update the normal pattern/parameter images.
+      Live edits still use SEQ_PARAM_INGRESS_CURRENT_IMAGE outside this bracket. */
+   frontParser_fileLoadIngressActive = 1;
+   if(bracketed)
+      frontParser_fileLoadBracketActive = 1;
+   seq_setIngressTarget(SEQ_PARAM_INGRESS_NORMAL_INTERPOLATED);
+   seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
+}
+
+static void frontParser_endFileLoadIngress()
+{
+   frontParser_fileLoadIngressActive = 0;
+   frontParser_fileLoadBracketActive = 0;
+   seq_setIngressTarget(SEQ_PARAM_INGRESS_CURRENT_IMAGE);
+   seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
 }
 
 static void frontParser_resetPrfPendingCounters()
@@ -598,6 +619,7 @@ static void frontParser_applyDeferredPerfMessages()
 {
    uint8_t i;
 
+   frontParser_beginFileLoadIngress(0);
    frontParser_deferredPerfReplay = 1;
    for(i=0;i<frontParser_deferredPerfMsgCount;i++)
    {
@@ -606,10 +628,14 @@ static void frontParser_applyDeferredPerfMessages()
    }
    frontParser_deferredPerfReplay = 0;
    frontParser_deferredPerfMsgCount = 0;
+   frontParser_endFileLoadIngress();
 }
 
 static uint8_t frontParser_shouldStagePattern(uint8_t pattern)
 {
+   if(frontParser_fileLoadIngressActive)
+      return 0;
+
    if(frontParser_prfCacheSessionActive())
       return 0;
 
@@ -793,6 +819,30 @@ void frontParser_uncacheVoice(uint8_t voice)
    
 }   
 
+static void frontParser_releaseVoiceCache(uint8_t voice)
+{
+   /* FILE LOAD: When the temporary pattern is sounding, cached voice payload
+      has already populated normal STM storage. Clear the delayed live cache
+      instead of applying it to the temporary sound. */
+   if(seq_isTmpKitActive())
+      frontParser_clearVoiceCache(voice);
+   else
+      frontParser_uncacheVoice(voice);
+}
+
+static void frontParser_unholdLoadedVoice(uint8_t voice)
+{
+   /* FILE LOAD: While the temporary kit is active, unhold must not promote
+      loaded voice cache into midi_midiKit or mark it for trigger-time apply. */
+   if(seq_isTmpKitActive())
+   {
+      frontParser_clearVoiceCache(voice);
+      return;
+   }
+
+   frontParser_unholdVoice(voice);
+}
+
 static uint8_t frontParser_voiceCachePending(uint8_t voice)
 {
    uint8_t i;
@@ -821,13 +871,13 @@ static void frontParser_applyPendingVoiceCache()
    {
       if(frontParser_deferredPerfUnholdPending & (0x01<<voice))
       {
-         frontParser_unholdVoice(voice);
+         frontParser_unholdLoadedVoice(voice);
          frontParser_deferredPerfUnholdPending &= (uint8_t)~(0x01<<voice);
       }
 
       if(frontParser_voiceCachePending(voice))
       {
-         frontParser_uncacheVoice(voice);
+         frontParser_releaseVoiceCache(voice);
          if(voice == 5)
             seq_newVoiceAvailable &= (uint8_t)~0x60;
          else
@@ -1459,12 +1509,12 @@ static void frontParser_handleMidiMessage()
                selected by the current transfer context. These raw selector bytes are
                distinct from the resolved automation target sideband messages. */
             uint8_t currentTarget = seq_getIngressTarget();
-            uint8_t *target = (currentTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT) 
-                                 ? seq_normalKitState.morphParams 
-                                 : seq_tmpKitState.morphParams;
-            uint8_t *valid = (currentTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
-                                 ? seq_normalKitState.morphParamsValid
-                                 : seq_tmpKitState.morphParamsValid;
+            uint8_t *target = (currentTarget == SEQ_PARAM_INGRESS_TMP_KIT_STATE)
+                                 ? seq_tmpKitState.morphParams
+                                 : seq_normalKitState.morphParams;
+            uint8_t *valid = (currentTarget == SEQ_PARAM_INGRESS_TMP_KIT_STATE)
+                                 ? seq_tmpKitState.morphParamsValid
+                                 : seq_normalKitState.morphParamsValid;
 
             if(paramNr < END_OF_SOUND_PARAMETERS)
             {
@@ -1476,7 +1526,7 @@ static void frontParser_handleMidiMessage()
 
       case FRONT_CC_MACRO_TARGET: //frontParser_midiMsg.status
          {
-            uint8_t applyLive = (seq_getIngressTarget() == SEQ_PARAM_INGRESS_CURRENT_IMAGE);
+            uint8_t applyLive = seq_shouldApplyIngressToLive();
          
             /* MACRO_CC message structure
             byte1 - status byte 0xaa as above
@@ -1585,11 +1635,20 @@ static void frontParser_handleMidiMessage()
             {
                frontParser_midiMsg.data1 += 1;
                frontParser_midiMsg.data1 &= 0x7f;
-            
-               midiParser_ccHandler(frontParser_midiMsg,1);
-            
-            //record automation if record is turned on
-               seq_recordAutomation(frontParser_activeTrack, frontParser_midiMsg.data1, frontParser_midiMsg.data2);
+
+               if(seq_shouldApplyIngressToLive())
+               {
+                  midiParser_ccHandler(frontParser_midiMsg,1);
+
+               //record automation if record is turned on
+                  seq_recordAutomation(frontParser_activeTrack, frontParser_midiMsg.data1, frontParser_midiMsg.data2);
+               }
+               else
+               {
+                  /* FILE LOAD: Store normal-image params without changing the
+                     temporary sound when the temporary pattern is active. */
+                  seq_storeParameterIngress(frontParser_midiMsg.data1, frontParser_midiMsg.data2);
+               }
             }
          }
          break;
@@ -1610,9 +1669,18 @@ static void frontParser_handleMidiMessage()
             }
             else
             {
-               midiParser_ccHandler(frontParser_midiMsg,1);
-               //record automation if record is turned on
-               seq_recordAutomation(frontParser_activeTrack, frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
+               if(seq_shouldApplyIngressToLive())
+               {
+                  midiParser_ccHandler(frontParser_midiMsg,1);
+                  //record automation if record is turned on
+                  seq_recordAutomation(frontParser_activeTrack, frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
+               }
+               else
+               {
+                  /* FILE LOAD: Store normal-image params without changing the
+                     temporary sound when the temporary pattern is active. */
+                  seq_storeParameterIngress(frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
+               }
             }
          }
          break;
@@ -1622,7 +1690,7 @@ static void frontParser_handleMidiMessage()
          {
             uint8_t upper = frontParser_midiMsg.data1;
             uint8_t lower = frontParser_midiMsg.data2;
-            uint8_t applyLive = (seq_getIngressTarget() == SEQ_PARAM_INGRESS_CURRENT_IMAGE);
+            uint8_t applyLive = seq_shouldApplyIngressToLive();
          // --AS **PATROT note that the only valid values for the following are listed in
          // the modTargets array in the AVR code
             uint8_t value = ((upper&0x01)<<7) | lower;
@@ -1761,7 +1829,7 @@ static void frontParser_handleMidiMessage()
          {
             uint8_t upper = frontParser_midiMsg.data1;
             uint8_t lower = frontParser_midiMsg.data2;
-            uint8_t applyLive = (seq_getIngressTarget() == SEQ_PARAM_INGRESS_CURRENT_IMAGE);
+            uint8_t applyLive = seq_shouldApplyIngressToLive();
          // --AS **PATROT note that the only valid values for the following are listed in
          // the modTargets array in the AVR code
             uint8_t value = ((upper&0x01)<<7) | lower;
@@ -1895,6 +1963,7 @@ static void frontParser_handleSeqCC()
          comm_quietUi = 0;
          comm_flowActive = 0;
          comm_flowBudgetRemaining = 0;
+         frontParser_endFileLoadIngress();
          frontParser_clearPrfCacheSession();
          frontParser_clearDeferredPerfLoad();
          break;
@@ -1958,6 +2027,7 @@ static void frontParser_handleSeqCC()
 
       case FRONT_SEQ_PRF_CACHE_ABORT:
          frontParser_prfCacheState = PRF_CACHE_ABORTING;
+         frontParser_endFileLoadIngress();
          frontParser_clearPrfCacheSession();
          frontParser_clearDeferredPerfLoad();
          frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
@@ -2549,6 +2619,7 @@ static void frontParser_handleSeqCC()
             - set only by SYSEX_RECEIVE_MAIN_STEP_DATA, unset by SYSEX_BEGIN_PATTERN_TRANSMIT
          */
          
+         frontParser_beginFileLoadIngress(0);
          frontParser_clearVoiceCache(frontParser_midiMsg.data2);
          seq_voicesLoading |= (0x01<<frontParser_midiMsg.data2);
          break;
@@ -2558,15 +2629,18 @@ static void frontParser_handleSeqCC()
             frontParser_deferPerfUnholdVoice(frontParser_midiMsg.data2);
             break;
          }
-         frontParser_unholdVoice(frontParser_midiMsg.data2);
+         frontParser_unholdLoadedVoice(frontParser_midiMsg.data2);
          seq_voicesLoading &= ~(0x01<<frontParser_midiMsg.data2);
          if(!seq_isRunning())
-            frontParser_uncacheVoice(frontParser_midiMsg.data2);
+            frontParser_releaseVoiceCache(frontParser_midiMsg.data2);
+         if(!frontParser_fileLoadBracketActive && !seq_voicesLoading)
+            frontParser_endFileLoadIngress();
          break;
       case FRONT_SEQ_LOAD_FAST:
          seq_loadFastMode=frontParser_midiMsg.data2;
          break;
       case FRONT_SEQ_FILE_BEGIN:
+         frontParser_beginFileLoadIngress(1);
          frontParser_clearDeferredPerfLoad();
          if((frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
             || (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_ALL))
@@ -2605,6 +2679,7 @@ static void frontParser_handleSeqCC()
             frontParser_clearDeferredPerfLoad();
          }
          seq_voicesLoading=0;
+         frontParser_endFileLoadIngress();
          break;
       case FRONT_SEQ_TRACK_NOTE1:
       case FRONT_SEQ_TRACK_NOTE2:

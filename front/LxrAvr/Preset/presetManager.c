@@ -692,6 +692,7 @@ uint8_t preset_loadDrumset(uint8_t presetNr, uint8_t voiceArray, uint8_t isMorph
    if(!bytesRead)
       goto closeFile;
    
+   frontPanel_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_KIT);
    preset_readKitToTemp(isMorph);
 
    
@@ -1867,6 +1868,7 @@ uint8_t preset_loadPattern(uint8_t presetNr, uint8_t voiceArray)
    lcd_home();
    lcd_string_F(PSTR("Loading Patrn"));
    
+   frontPanel_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PATTERN);
    frontPanel_sendData(SEQ_CC,SEQ_EUKLID_RESET,0x01);
    
    // bc - NB: if enabled, this will lock the track

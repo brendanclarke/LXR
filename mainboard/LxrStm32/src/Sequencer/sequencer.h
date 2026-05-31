@@ -241,6 +241,7 @@ void seq_init();
 #define SEQ_PARAM_INGRESS_CURRENT_IMAGE 0
 #define SEQ_PARAM_INGRESS_TMP_KIT_STATE 1
 #define SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT 2
+#define SEQ_PARAM_INGRESS_NORMAL_INTERPOLATED 3
 
 #define SEQ_AUTOMATION_INGRESS_NONE 0
 #define SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT 1
@@ -248,6 +249,8 @@ void seq_init();
 
 void seq_setIngressTarget(uint8_t target);
 uint8_t seq_getIngressTarget();
+uint8_t seq_shouldApplyIngressToLive();
+uint8_t seq_isTmpKitActive();
 void seq_setAutomationIngressTarget(uint8_t target);
 
 void seq_tick();
