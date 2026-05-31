@@ -11,6 +11,7 @@
 |---|------|----------------|-------|
 | 001 | 2026-05-21 | local branch `custom-develop-patload-envmod` (commit `3698612`) | build-break triage, source compatibility fixes (A1/A2/A3/B1/B2/B3), full firmware build verified |
 | 002 | 2026-05-29 | local branch `custom-develop-patload-envmod` (HEAD `b9703ab` plus restored/verified WIP) | encoder completion, `.ALL`/`.PRF` load checkpoint, functional parameter pushback handshake, SEQ16 temp-pattern/temp-parameter baseline |
+| 003 | 2026-05-31 | local branch `custom-develop-patload-envmod` (restored and extended) | symmetric kit structs, AVR endpoint dump handshake, mod target capture |
 
 ---
 
@@ -23,6 +24,10 @@ Session 001 established project context docs, audited build failures, applied th
 ### 002 — Encoder, Load Fixes, Comms Flow, Verified Temp Pattern Handshake (2026-05-29)
 Session 002 completed the encoder work, brought `.ALL` / `.PRF` loading to a checkpointed working state, and implemented a robust handshake-based parameter pushback for the temporary pattern slot. SEQ16 was successfully reassigned as a temp-pattern selector with functional sound and menu sync. Key fixes included resolving handshake blocking in the STM main loop, AVR whitelisting for restore messages, and applying the correct index offset for low sound parameters. The session established a verified functional baseline for temp-slot isolation, with suspect endpoint-aware switching proposals marked for cautious re-evaluation.
 - **Find here**: encoder completion, functional parameter pushback handshake, index offset fix (+1/-1), STM handshake blocking fix, AVR whitelisting, SEQ16 temp pattern selection, STM canonical parameter image, cleanup docs
+
+### 003 — Symmetric Kit Structs and AVR Endpoint Dump (2026-05-31)
+Session 003 advanced the parameter synchronization model by refactoring the STM32 to use symmetric `SeqKitState` structs for normal and temporary kits. A specialized AVR-to-STM dump protocol (Opcodes 0x65/0x66) was implemented to capture raw menu endpoints and mod targets during pattern copy operations. The session verified that switching between patterns correctly pushes the appropriate endpoint set to the AVR while maintaining sound stability via separate interpolation buffers. Historical deadlock and feedback issues were permanently resolved via blocking handshakes and parser whitelisting.
+- **Find here**: symmetric SeqKitState, AVR endpoint dump handshake, mod target capture (LFO/Velo/Macro), sound-stable menu synchronization, ingress redirection logic
 
 
 ---

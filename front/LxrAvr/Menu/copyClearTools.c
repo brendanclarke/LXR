@@ -11,6 +11,7 @@
 #include "../Hardware/lcd.h"
 #include "../ledHandler.h"
 #include "menu.h"
+#include "../Preset/PresetManager.h"
 
 uint8_t copyClear_Mode = MODE_NONE;
 #define SRC_DST_NONE -1
@@ -122,12 +123,21 @@ void copyClear_copyPattern()
    {
       return;
    }
+
+   /* RESTORE: If we are copying to the temporary sequence slot, first dump the current
+      AVR raw menu endpoints to the STM so it can populate its symmetric kit structures. */
+   if (buttonHandler_copyDst == SEQ_TMP_PATTERN)
+   {
+      preset_dumpNormalEndpointsToStm();
+   }
+
    uint8_t value = (uint8_t)(((buttonHandler_copySrc&0xf)<<4) | (buttonHandler_copyDst&0xf));
    led_clearSequencerLeds();
    frontPanel_sendData(SEQ_CC,SEQ_COPY_PATTERN,value);
-	
+
    buttonHandler_copySrc = buttonHandler_copyDst = SRC_DST_NONE;
 };
+
 //-----------------------------------------------------------------------------
 void copyClear_copyTrackPattern()
 {

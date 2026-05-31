@@ -181,29 +181,9 @@ PatternSet seq_patternSet;
 
 TempPattern seq_tmpPattern;
 
-typedef struct SeqTmpKitAutomationStruct
-{
-   uint16_t lfoDestination[6];
-   uint16_t velocityDestination[6];
-   uint16_t macroDestination[4];
-   uint8_t lfoDestinationValid;
-   uint8_t velocityDestinationValid;
-   uint8_t macroDestinationValid;
-} SeqTmpKitAutomation;
+SeqKitState seq_tmpKitState;
+SeqKitState seq_normalKitState; // -bc- full mirror for normal parameters
 
-typedef struct SeqTmpKitStateStruct
-{
-   uint8_t frontPanelParams[END_OF_SOUND_PARAMETERS];
-   uint8_t frontPanelParamsValid[END_OF_SOUND_PARAMETERS];
-   uint8_t morphParams[END_OF_SOUND_PARAMETERS];
-   uint8_t morphParamsValid[END_OF_SOUND_PARAMETERS];
-   uint8_t interpolatedParams[END_OF_SOUND_PARAMETERS];
-   uint8_t interpolatedParamsValid[END_OF_SOUND_PARAMETERS];
-   SeqTmpKitAutomation automation;
-   uint8_t valid;
-} SeqTmpKitState;
-
-static SeqTmpKitState seq_tmpKitState;
 static SeqTmpKitAutomation seq_normalKitAutomation;
 static uint8_t seq_tmpKitActive = 0;
 static uint8_t seq_normalKitAutomationValid = 0;
@@ -211,16 +191,7 @@ static uint8_t seq_tmpKitPushParamsToFrontEnabled = 1; // RESTORE: Enabled by de
 volatile uint8_t seq_tmpKitHandshakeReady = 0;
 volatile uint8_t seq_tmpKitHandshakeAck = 0;
 
-typedef enum SeqParamIngressTargetEnum
-{
-   SEQ_PARAM_INGRESS_CURRENT_IMAGE = 0,
-   SEQ_PARAM_INGRESS_TMP_KIT_STATE
-} SeqParamIngressTarget;
-
-uint8_t stm_currentParamImage[END_OF_SOUND_PARAMETERS];
-static uint8_t stm_currentParamImageValid[END_OF_SOUND_PARAMETERS];
-static SeqTmpKitAutomation stm_currentAutomationImage;
-static SeqParamIngressTarget seq_paramIngressTarget = SEQ_PARAM_INGRESS_CURRENT_IMAGE;
+static uint8_t seq_paramIngressTarget = SEQ_PARAM_INGRESS_CURRENT_IMAGE;
 
 uint8_t seq_transpose_voiceAmount[7];
 uint8_t seq_transposeOnOff;
@@ -251,8 +222,10 @@ static uint8_t* seq_getIngressParamTarget()
 {
    if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_TMP_KIT_STATE)
       return seq_tmpKitState.frontPanelParams;
+   else if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
+      return seq_normalKitState.frontPanelParams;
 
-   return stm_currentParamImage;
+   return seq_normalKitState.interpolatedParams;
 }
 
 //------------------------------------------------------------------------------
@@ -260,8 +233,10 @@ static uint8_t* seq_getIngressParamValidTarget()
 {
    if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_TMP_KIT_STATE)
       return seq_tmpKitState.frontPanelParamsValid;
+   else if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
+      return seq_normalKitState.frontPanelParamsValid;
 
-   return stm_currentParamImageValid;
+   return seq_normalKitState.interpolatedParamsValid;
 }
 
 //------------------------------------------------------------------------------
@@ -269,8 +244,25 @@ static SeqTmpKitAutomation* seq_getIngressAutomationTarget()
 {
    if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_TMP_KIT_STATE)
       return &seq_tmpKitState.automation;
+   else if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
+      return &seq_normalKitState.automation;
 
-   return &stm_currentAutomationImage;
+   return &seq_normalKitState.automation;
+}
+
+//------------------------------------------------------------------------------
+void seq_setIngressTarget(uint8_t target)
+{
+   if(target <= SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
+   {
+      seq_paramIngressTarget = target;
+   }
+}
+
+//------------------------------------------------------------------------------
+uint8_t seq_getIngressTarget()
+{
+   return (uint8_t)seq_paramIngressTarget;
 }
 
 //------------------------------------------------------------------------------
@@ -429,8 +421,8 @@ static void seq_applyAutomationTargets(const SeqTmpKitAutomation *source)
 //------------------------------------------------------------------------------
 static void seq_snapshotCurrentParameterValues(uint8_t *target, uint8_t *valid)
 {
-   memcpy(target, stm_currentParamImage, END_OF_SOUND_PARAMETERS);
-   memcpy(valid, stm_currentParamImageValid, END_OF_SOUND_PARAMETERS);
+   memcpy(target, seq_normalKitState.interpolatedParams, END_OF_SOUND_PARAMETERS);
+   memcpy(valid, seq_normalKitState.interpolatedParamsValid, END_OF_SOUND_PARAMETERS);
 }
 
 //------------------------------------------------------------------------------
@@ -465,7 +457,16 @@ static void seq_captureTmpKitState()
 {
    seq_snapshotCurrentParameterValues(seq_tmpKitState.interpolatedParams,
                                       seq_tmpKitState.interpolatedParamsValid);
-   memcpy(&seq_tmpKitState.automation, &stm_currentAutomationImage, sizeof(seq_tmpKitState.automation));
+   memcpy(&seq_tmpKitState.automation, &seq_normalKitState.automation, sizeof(seq_tmpKitState.automation));
+
+   /* RESTORE: Zero-out the temporary kit and morph endpoint arrays.
+      The normal kit endpoints were just collected from the AVR dump and should be preserved.
+      Validity masks for temp kit are set to 1 so the zero values are pushed up on temp entry. */
+   memset(seq_tmpKitState.frontPanelParams, 0, END_OF_SOUND_PARAMETERS);
+   memset(seq_tmpKitState.frontPanelParamsValid, 1, END_OF_SOUND_PARAMETERS);
+   memset(seq_tmpKitState.morphParams, 0, END_OF_SOUND_PARAMETERS);
+   memset(seq_tmpKitState.morphParamsValid, 1, END_OF_SOUND_PARAMETERS);
+
    seq_tmpKitState.valid = 1;
 }
 
@@ -583,13 +584,16 @@ static void seq_setTmpKitActive(uint8_t active)
       if(seq_tmpKitActive || !seq_tmpKitState.valid)
          return;
 
-      memcpy(&seq_normalKitAutomation, &stm_currentAutomationImage, sizeof(seq_normalKitAutomation));
+      memcpy(&seq_normalKitAutomation, &seq_normalKitState.automation, sizeof(seq_normalKitAutomation));
       seq_normalKitAutomationValid = 1;
       seq_applyParameterValues(seq_tmpKitState.interpolatedParams,
                                seq_tmpKitState.interpolatedParamsValid);
       seq_applyAutomationTargets(&seq_tmpKitState.automation);
-      seq_maybePushParameterValuesToFront(seq_tmpKitState.interpolatedParams,
-                                          seq_tmpKitState.interpolatedParamsValid);
+
+      /* RESTORE: Push the endpoint array (frontPanelParams) instead of the 
+         morphed sound image (interpolatedParams) as requested for this test step. */
+      seq_maybePushParameterValuesToFront(seq_tmpKitState.frontPanelParams,
+                                          seq_tmpKitState.frontPanelParamsValid);
       seq_tmpKitActive = 1;
       return;
    }
@@ -597,10 +601,13 @@ static void seq_setTmpKitActive(uint8_t active)
    if(!seq_tmpKitActive)
       return;
 
-   seq_applyParameterValues(stm_currentParamImage, stm_currentParamImageValid);
+   seq_applyParameterValues(seq_normalKitState.interpolatedParams, seq_normalKitState.interpolatedParamsValid);
    if(seq_normalKitAutomationValid)
       seq_applyAutomationTargets(&seq_normalKitAutomation);
-   seq_maybePushParameterValuesToFront(stm_currentParamImage, stm_currentParamImageValid);
+
+   /* RESTORE: Push the normal kit endpoint array instead of the morphed sound image. */
+   seq_maybePushParameterValuesToFront(seq_normalKitState.frontPanelParams, 
+                                       seq_normalKitState.frontPanelParamsValid);
    seq_tmpKitActive = 0;
 }
 
@@ -629,10 +636,8 @@ void seq_init()
    memset(seq_lastMasterStep,0,NUM_TRACKS+1);
    memset(seq_transpose_voiceAmount,63,NUM_TRACKS);
    memset(&seq_tmpKitState,0,sizeof(seq_tmpKitState));
+   memset(&seq_normalKitState, 0, sizeof(seq_normalKitState));
    memset(&seq_normalKitAutomation,0,sizeof(seq_normalKitAutomation));
-   memset(stm_currentParamImage,0,sizeof(stm_currentParamImage));
-   memset(stm_currentParamImageValid,0,sizeof(stm_currentParamImageValid));
-   memset(&stm_currentAutomationImage,0,sizeof(stm_currentAutomationImage));
    seq_paramIngressTarget = SEQ_PARAM_INGRESS_CURRENT_IMAGE;
    seq_tmpKitActive = 0;
    seq_normalKitAutomationValid = 0;

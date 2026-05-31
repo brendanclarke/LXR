@@ -711,6 +711,8 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_SEQ_PRF_AVR_SNAPSHOT_BEGIN 0x62
 #define FRONT_SEQ_PRF_AVR_SNAPSHOT_END   0x63
 #define FRONT_SEQ_PRF_RESTORE_AVR_LIVE   0x64
+#define FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN 0x65
+#define FRONT_SEQ_TMP_KIT_ENDPOINT_END   0x66
 
 #define FLOW_CH_LOAD_SESSION            0x00
 #define FLOW_CH_GLOBALS                 0x01

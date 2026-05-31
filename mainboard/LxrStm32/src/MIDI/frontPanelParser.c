@@ -52,6 +52,7 @@
 #include "Snare.h"
 #include "SomGenerator.h"
 #include "TriggerOut.h"
+#include <string.h>
 
 static void frontParser_handleMidiMessage();
 static void frontParser_handleSysexData(unsigned char data);
@@ -98,8 +99,8 @@ static uint8_t frontParser_prfCacheProtectedPattern = 0;
 static uint8_t frontParser_prfCachePendingValid = 0;
 static uint8_t frontParser_prfCacheAvrLiveValid = 0;
 static uint8_t frontParser_prfCacheStmLiveValid = 0;
-static uint8_t frontParser_prfCacheLiveParams[PRF_CACHE_LIVE_PARAM_COUNT];
-static uint8_t frontParser_prfCacheLiveMorph[END_OF_SOUND_PARAMETERS];
+// static uint8_t frontParser_prfCacheLiveParams[PRF_CACHE_LIVE_PARAM_COUNT];
+// static uint8_t frontParser_prfCacheLiveMorph[END_OF_SOUND_PARAMETERS];
 static TempPattern frontParser_prfCacheLivePattern;
 static uint8_t frontParser_prfCacheLiveActivePattern = 0;
 static uint8_t frontParser_prfCacheLivePendingPattern = 0;
@@ -483,11 +484,11 @@ static void frontParser_sendPrfLiveRestore()
    if(!frontParser_prfCacheAvrLiveValid)
       return;
 
-   for(i=0;i<PRF_CACHE_LIVE_PARAM_COUNT;i++)
+   /* for(i=0;i<PRF_CACHE_LIVE_PARAM_COUNT;i++)
       frontParser_sendPrfRestoreParam(i, frontParser_prfCacheLiveParams[i], 0);
 
    for(i=0;i<END_OF_SOUND_PARAMETERS;i++)
-      frontParser_sendPrfRestoreParam(i, frontParser_prfCacheLiveMorph[i], 1);
+      frontParser_sendPrfRestoreParam(i, frontParser_prfCacheLiveMorph[i], 1); */
 }
 
 static uint8_t frontParser_cachePrfLiveSnapshotMessage()
@@ -500,23 +501,23 @@ static uint8_t frontParser_cachePrfLiveSnapshotMessage()
    switch(frontParser_midiMsg.status)
    {
       case PRF_RESTORE_PARAM_CC:
-         frontParser_prfCacheLiveParams[frontParser_midiMsg.data1] = frontParser_midiMsg.data2;
+         // frontParser_prfCacheLiveParams[frontParser_midiMsg.data1] = frontParser_midiMsg.data2;
          return 1;
 
       case PRF_RESTORE_PARAM_CC2:
          paramNr = (uint16_t)(frontParser_midiMsg.data1 + 128);
          if(paramNr < PRF_CACHE_LIVE_PARAM_COUNT)
-            frontParser_prfCacheLiveParams[paramNr] = frontParser_midiMsg.data2;
+            // frontParser_prfCacheLiveParams[paramNr] = frontParser_midiMsg.data2;
          return 1;
 
       case PRF_RESTORE_MORPH_CC:
-         frontParser_prfCacheLiveMorph[frontParser_midiMsg.data1] = frontParser_midiMsg.data2;
+         // frontParser_prfCacheLiveMorph[frontParser_midiMsg.data1] = frontParser_midiMsg.data2;
          return 1;
 
       case PRF_RESTORE_MORPH_CC2:
          paramNr = (uint16_t)(frontParser_midiMsg.data1 + 128);
          if(paramNr < END_OF_SOUND_PARAMETERS)
-            frontParser_prfCacheLiveMorph[paramNr] = frontParser_midiMsg.data2;
+            // frontParser_prfCacheLiveMorph[paramNr] = frontParser_midiMsg.data2;
          return 1;
 
       default:
@@ -1432,6 +1433,45 @@ static void frontParser_handleMidiMessage()
          seq_tmpKitHandshakeAck = 1;
          break;
 
+      case PRF_RESTORE_PARAM_CC:
+      case PRF_RESTORE_PARAM_CC2:
+         {
+            uint16_t paramNr = frontParser_midiMsg.data1;
+            if(frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC2)
+               paramNr += 128;
+            else
+               paramNr += 1; // RESTORE: Apply +1 ingress offset for low sound params
+
+            seq_storeParameterIngress(paramNr, frontParser_midiMsg.data2);
+         }
+         break;
+
+      case PRF_RESTORE_MORPH_CC:
+      case PRF_RESTORE_MORPH_CC2:
+         {
+            uint16_t paramNr = frontParser_midiMsg.data1;
+            if(frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC2)
+               paramNr += 128;
+            else
+               paramNr += 1; // RESTORE: Apply +1 ingress offset for low morph target params
+
+            /* RESTORE: Store into the morph target array of the current ingress target. */
+            uint8_t currentTarget = seq_getIngressTarget();
+            uint8_t *target = (currentTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT) 
+                                 ? seq_normalKitState.morphParams 
+                                 : seq_tmpKitState.morphParams;
+            uint8_t *valid = (currentTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
+                                 ? seq_normalKitState.morphParamsValid
+                                 : seq_tmpKitState.morphParamsValid;
+
+            if(paramNr < END_OF_SOUND_PARAMETERS)
+            {
+               target[paramNr] = frontParser_midiMsg.data2;
+               valid[paramNr] = 1;
+            }
+         }
+         break;
+
       case FRONT_CC_MACRO_TARGET: //frontParser_midiMsg.status
          {
          
@@ -1921,8 +1961,26 @@ static void frontParser_handleSeqCC()
          frontParser_sendPrfLiveRestore();
          frontParser_sendFlowGrantWait(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
          break;
-   
+
+      case FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN:
+         /* RESTORE: Switch ingress target to normal kit endpoint buffer. 
+            Subsequent parameter and target messages will populate seq_normalKitState.frontPanelParams etc. */
+         seq_setIngressTarget(SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT);
+         /* RESTORE: Initialize the buffers and validity masks before receiving the dump. */
+         memset(seq_normalKitState.frontPanelParams, 0, END_OF_SOUND_PARAMETERS);
+         memset(seq_normalKitState.frontPanelParamsValid, 0, END_OF_SOUND_PARAMETERS);
+         memset(seq_normalKitState.morphParams, 0, END_OF_SOUND_PARAMETERS);
+         memset(seq_normalKitState.morphParamsValid, 0, END_OF_SOUND_PARAMETERS);
+         memset(&seq_normalKitState.automation, 0, sizeof(seq_normalKitState.automation));
+         break;
+
+      case FRONT_SEQ_TMP_KIT_ENDPOINT_END:
+         /* RESTORE: Switch ingress target back to default sound set. */
+         seq_setIngressTarget(SEQ_PARAM_INGRESS_CURRENT_IMAGE);
+         break;
+
       case FRONT_SEQ_REQUEST_PATTERN_PARAMS:
+
       /* send back bar change and next pattern params from requested pattern*/
          uart_sendFrontpanelByte(FRONT_SEQ_CC);
          uart_sendFrontpanelByte(FRONT_SEQ_SET_PAT_BEAT);

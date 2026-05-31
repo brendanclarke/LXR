@@ -204,11 +204,45 @@ Step* seq_getStepPtr(uint8_t pattern, uint8_t track, uint8_t step);
 LengthRotate* seq_getLengthRotatePtr(uint8_t pattern, uint8_t track);
 PatternSetting* seq_getPatternSettingPtr(uint8_t pattern);
 uint16_t seq_getMainSteps(uint8_t pattern, uint8_t track);
+#include "../MIDI/ParameterArray.h"
+
+typedef struct SeqTmpKitAutomationStruct
+{
+   uint16_t lfoDestination[6];
+   uint16_t velocityDestination[6];
+   uint16_t macroDestination[4];
+   uint8_t lfoDestinationValid;
+   uint8_t velocityDestinationValid;
+   uint8_t macroDestinationValid;
+} SeqTmpKitAutomation;
+
+typedef struct SeqKitStateStruct
+{
+   uint8_t frontPanelParams[END_OF_SOUND_PARAMETERS];
+   uint8_t frontPanelParamsValid[END_OF_SOUND_PARAMETERS];
+   uint8_t morphParams[END_OF_SOUND_PARAMETERS];
+   uint8_t morphParamsValid[END_OF_SOUND_PARAMETERS];
+   uint8_t interpolatedParams[END_OF_SOUND_PARAMETERS];
+   uint8_t interpolatedParamsValid[END_OF_SOUND_PARAMETERS];
+   SeqTmpKitAutomation automation;
+   uint8_t valid;
+} SeqKitState;
+
+extern SeqKitState seq_tmpKitState;
+extern SeqKitState seq_normalKitState;
+
 void seq_setMainSteps(uint8_t pattern, uint8_t track, uint16_t steps);
 //------------------------------------------------------------------------------
 void seq_init();
 //------------------------------------------------------------------------------
 /** call periodically to check if the next step has to be processed */
+#define SEQ_PARAM_INGRESS_CURRENT_IMAGE 0
+#define SEQ_PARAM_INGRESS_TMP_KIT_STATE 1
+#define SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT 2
+
+void seq_setIngressTarget(uint8_t target);
+uint8_t seq_getIngressTarget();
+
 void seq_tick();
 //------------------------------------------------------------------------------
 void seq_armAutomationStep(uint8_t stepNr, uint8_t track,uint8_t isArmed);

@@ -26,12 +26,13 @@ make firmware
 
 **Session 001 close status**: full top-level build succeeds in this repo with `make clean && make firmware` (warnings remain, no fatal errors).
 
-**Current status after Session 002 restoration (2026-05-29)**: repository is at a functional baseline equivalent to the end of transcript 2. HEAD is `b9703ab`. STM-to-AVR parameter pushback is functional and verified on hardware.
+**Current status after Session 003 (2026-05-31)**: repository is at a functional baseline where symmetric parameter storage and endpoint dumps are implemented. HEAD is a restored and extended version of the previous branch.
 
 Canonical current WIP docs:
 - `COMMS_FLOW_AUDIT-IN_FLIGHT.md`
 - `PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`
-- `knowledge_files/log_archive/002_SESSION_HANDOFF_LOG.md`
+- `TMP_VARS_AUDIT.md` (Verbose technical reference for symmetric kits)
+- `knowledge_files/log_archive/003_SESSION_HANDOFF_LOG.md`
 
 These two root audits were expanded on 2026-05-29 from source diffs:
 - `COMMS_FLOW_AUDIT-IN_FLIGHT.md`: compares `LXR-9120ea7620f1a9a4a924f029cdaf3ae71df303fd/front|mainboard` against `LXR-custom-develop-patload-envmod-90d3f08/front|mainboard`.
@@ -326,19 +327,20 @@ Sample flash map:
 
 ### High Priority
 
-- Current repository state is at a verified functional baseline. 
-- Next phase: Re-evaluate background `.PRF` loading into the temp slot with proper isolation and morph harmony.
-- Hardware smoke test verified for SEQ16 temp pattern selection/copy/play and parameter sync.
-- Suspect experimental proposals (endpoint-aware switching) are documented in `PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`.
+- Current repository state is at a verified functional baseline with symmetric `SeqKitState` implemented.
+- Next phase: Implement Morph Harmony (synchronizing `parameters2[]` during transitions) and re-integrate the background `.PRF` file loader to target the temporary kit struct.
+- Hardware verified for SEQ16 temp pattern selection/copy/play and full endpoint dump/sync.
+- Suspect experimental proposals (endpoint-aware switching) from Transcript 3 are documented in `PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`.
 
 ### Current Temp Pattern / `.PRF` WIP Reminders
 
-- SEQ16 is temporarily used as a SELECT button for `SEQ_TMP_PATTERN`.
+- SEQ16 is used as a SELECT button for `SEQ_TMP_PATTERN`.
 - Temp pattern select/play/copy/paste works and was user-tested.
-- Temporary parameter data must stay STM-side only. Do not add AVR-side temp parameter storage.
-- STM-side temp parameter capture uses a canonical raw parameter image plus validity masks; do not use `midiParser_originalCcValues` or `parameterArray` as temp raw-parameter truth.
+- AVR-to-STM endpoint dump (Opcodes 0x65/0x66) is implemented and captures `parameter_values`, `parameters2`, and all 16 mod targets.
+- STM-side `seq_normalKitState` and `seq_tmpKitState` are the source of truth for menu pushbacks.
 - STM-to-AVR parameter pushback on temp-pattern transitions is functional and verified. It uses a 5-phase handshake to ensure sync.
 - The correct -1 offset for low sound parameters is applied on egress.
+- Sound engine uses `interpolatedParams` buffer; menu uses `frontPanelParams` buffer.
 - Do not make the temp pattern loadable/saveable unless explicitly requested.
 - The current `front`/`mainboard` diff also contains a suspect PRF cache state-machine experiment (`SEQ_PRF_CACHE_*`, live-pattern getters, pending counters). Treat it as WIP until reconciled with the temp-slot plan.
 - Current-only backup files `front/LxrAvr/config.h.bak`, `front/LxrAvr/encoder.c.bak`, and `front/LxrAvr/encoder.h.bak` exist in the diff and should not be committed as canonical code without an explicit decision.

@@ -43,11 +43,13 @@ char* preset_loadName(uint8_t presetNr, uint8_t what, uint8_t loadSave);
 /** save a pattern set to the sd card */
 void preset_savePattern(uint8_t presetNr);
 uint8_t preset_loadPattern(uint8_t presetNr, uint8_t voiceArray);
-/** morph pattern linear to üpattern buffer 2*/
+/** morph pattern linear to ï¿½pattern buffer 2*/
 
 void preset_readDrumVoice(uint8_t track, uint8_t isMorph);
 void preset_readDrumVoice2(uint8_t track, uint8_t isMorph);
 void preset_morph(uint8_t voiceArray, uint8_t morph);
 uint8_t preset_getMorphValue(uint16_t index, uint8_t morph);
+
+void preset_dumpNormalEndpointsToStm();
 
 #endif /* PRESETMANAGER_H_ */
