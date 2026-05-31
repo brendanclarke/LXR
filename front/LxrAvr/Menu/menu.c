@@ -1363,7 +1363,7 @@ void menu_repaintGeneric()
 		//get address from top1-4 from activeParameter (base adress top1 + offset)
 		uint8_t parName = pgm_read_byte(&ap->top1 + activeParameter);
 		uint16_t parNr = pgm_read_word(&ap->bot1 + activeParameter);
-      if (shiftState&&menu_activePage<=VOICE7_PAGE)
+      if (shiftState && parNr < END_OF_SOUND_PARAMETERS)
          curParmVal = parameters2[parNr];
       else    
 		   curParmVal = parameter_values[parNr];
@@ -2762,44 +2762,7 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 	//get address from top1-8 from activeParameter (base adress top1 + offset)
 	uint16_t paramNr		= pgm_read_word(&menuPages[menu_activePage][activePage].bot1 + activeParameter);
    uint8_t *paramValue;
-   uint8_t isMorphParam = (paramNr<END_OF_SOUND_PARAMETERS&&buttonHandler_getShift());
-   
-   if( (paramNr >= PAR_VEL_DEST_1) && (paramNr <= PAR_VEL_DEST_6) )
-   {
-      isMorphParam = 0;
-   } 
-   else if( (paramNr >= PAR_TARGET_LFO1) && (paramNr <= PAR_TARGET_LFO6) )
-   {
-      isMorphParam = 0;
-   } 
-   else if( (paramNr >= PAR_VOICE_LFO1) && (paramNr <= PAR_VOICE_LFO6) )
-   {
-      isMorphParam = 0;
-   } 
-   else if ( (paramNr>=PAR_MIDI_NOTE1) && (paramNr <= PAR_MAC1_DST1) )
-   {
-      isMorphParam = 0;
-   }
-   else if (paramNr==PAR_MAC1_DST2)
-   {
-      isMorphParam = 0;
-   }
-   else if (paramNr==PAR_MAC2_DST1)
-   {
-      isMorphParam = 0;
-   }
-   else if (paramNr==PAR_MAC2_DST2)
-   {
-      isMorphParam = 0;
-   }		
-   else if (paramNr>=END_OF_SOUND_PARAMETERS)
-   {
-      isMorphParam = 0;
-   }
-   else
-   {
-      isMorphParam = 1;
-   }
+   uint8_t isMorphParam = (paramNr < END_OF_SOUND_PARAMETERS);
       
    if (isMorphParam)
    {
@@ -2871,8 +2834,11 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 		// **LFOTARGFIX - ensure that the lfo mod target is pointing to the same type of modulation
 		// on the new voice
 		const uint8_t newTargVal=getModTargetIdxFromGapIdx((uint8_t)(*paramValue-1),menu_TargetVoiceGapIndex);
-		// update the lfo mod target
-		parameter_values[PAR_TARGET_LFO1 + (paramNr - PAR_VOICE_LFO1)] = newTargVal;
+		// update the lfo mod target in the same endpoint image being edited
+      if(isMorphParam)
+         parameters2[PAR_TARGET_LFO1 + (paramNr - PAR_VOICE_LFO1)] = newTargVal;
+      else
+		   parameter_values[PAR_TARGET_LFO1 + (paramNr - PAR_VOICE_LFO1)] = newTargVal;
 
 		// determine the real param value given the index into modTargets
 		uint8_t value =  (uint8_t)pgm_read_word(&modTargets[newTargVal].param);
@@ -2895,7 +2861,9 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 	{
 		//**LFO - limit encoder start and end to range for the target voice (not the lfo number)
 		// this is a value from 1 to 6, so we adjust to be 0 based
-		uint8_t voiceNr =  (uint8_t)(parameter_values[PAR_VOICE_LFO1+(paramNr - PAR_TARGET_LFO1)]-1);
+		uint8_t voiceNr = isMorphParam
+         ? (uint8_t)(parameters2[PAR_VOICE_LFO1+(paramNr - PAR_TARGET_LFO1)]-1)
+         : (uint8_t)(parameter_values[PAR_VOICE_LFO1+(paramNr - PAR_TARGET_LFO1)]-1);
 		if(*paramValue < pgm_read_byte(&modTargetVoiceOffsets[voiceNr].start)) {
 			if(inc < 0) // going down, allow 0
 				*paramValue=0;

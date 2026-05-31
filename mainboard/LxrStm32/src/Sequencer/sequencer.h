@@ -206,7 +206,7 @@ PatternSetting* seq_getPatternSettingPtr(uint8_t pattern);
 uint16_t seq_getMainSteps(uint8_t pattern, uint8_t track);
 #include "../MIDI/ParameterArray.h"
 
-typedef struct SeqTmpKitAutomationStruct
+typedef struct SeqKitAutomationTargetsStruct
 {
    uint16_t lfoDestination[6];
    uint16_t velocityDestination[6];
@@ -214,7 +214,7 @@ typedef struct SeqTmpKitAutomationStruct
    uint8_t lfoDestinationValid;
    uint8_t velocityDestinationValid;
    uint8_t macroDestinationValid;
-} SeqTmpKitAutomation;
+} SeqKitAutomationTargets;
 
 typedef struct SeqKitStateStruct
 {
@@ -224,7 +224,9 @@ typedef struct SeqKitStateStruct
    uint8_t morphParamsValid[END_OF_SOUND_PARAMETERS];
    uint8_t interpolatedParams[END_OF_SOUND_PARAMETERS];
    uint8_t interpolatedParamsValid[END_OF_SOUND_PARAMETERS];
-   SeqTmpKitAutomation automation;
+   SeqKitAutomationTargets frontPanelAutomationTargets;
+   SeqKitAutomationTargets morphParameterEndpointAutomationTargets;
+   SeqKitAutomationTargets interpolatedAutomationTargets;
    uint8_t valid;
 } SeqKitState;
 
@@ -240,8 +242,13 @@ void seq_init();
 #define SEQ_PARAM_INGRESS_TMP_KIT_STATE 1
 #define SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT 2
 
+#define SEQ_AUTOMATION_INGRESS_NONE 0
+#define SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT 1
+#define SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT 2
+
 void seq_setIngressTarget(uint8_t target);
 uint8_t seq_getIngressTarget();
+void seq_setAutomationIngressTarget(uint8_t target);
 
 void seq_tick();
 //------------------------------------------------------------------------------

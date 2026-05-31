@@ -27,7 +27,9 @@ volatile MidiMsg frontParser_midiMsg;
 static uint16_t frontParser_nrpnNr = 0;
 
 volatile uint8_t frontParser_restoreActive = 0; // RESTORE: True during a canonical parameter dump from STM
-static uint16_t frontParser_restoreCount = 0; // DEBUG
+static uint16_t frontParser_restoreCount = 0;
+static uint16_t frontParser_restoreMorphCount = 0;
+// DEBUG
 
 uint8_t frontPanel_sysexMode = 0;
 uint8_t frontParser_sysexCallback = 0;
@@ -890,7 +892,7 @@ void frontPanel_parseData(uint8_t data)
                   outbound parameter traffic to prevent feedback loops (where restored display 
                   values are misinterpreted as user edits and sent back to STM).
                3. AVR receives PRF_RESTORE_PARAM_CC/CC2 messages and updates parameter_values[].
-                  - Crucially, it does NOT update parameters2[] (morph endpoint) to avoid 
+                  - Crucially, it does NOT update parameters2[] (morph parameter endpoint) to avoid
                     corrupting the morph state during a display-only synchronization.
                4. AVR receives PARAM_RESTORE_DONE.
                   - Calls menu_repaintAll() to update the display.
@@ -915,8 +917,8 @@ void frontPanel_parseData(uint8_t data)
             else if(frontParser_midiMsg.status == PARAM_RESTORE_BEGIN)
             {
                // RESTORE: Start of a canonical parameter dump from STM.
-               lcd_setcursor(0,0);
-               lcd_string_F(PSTR("RESTORE BEGIN   "));
+               // lcd_setcursor(0,0);
+               // lcd_string_F(PSTR("RESTORE BEGIN   "));
                frontParser_restoreActive = 1;
                frontParser_restoreCount = 0;
                // Inform STM we are ready to receive and have suppressed outbound traffic.
@@ -924,7 +926,7 @@ void frontPanel_parseData(uint8_t data)
             }
             else if(frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC)
             {
-               // RESTORE: Update main parameters only. Do not touch parameters2 (morph endpoint)
+               // RESTORE: Update main parameters only. Do not touch parameters2 (morph parameter endpoint)
                // to avoid corrupting morph state during a display-only synchronization.
                parameter_values[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
                frontParser_restoreCount++;
@@ -946,6 +948,7 @@ void frontPanel_parseData(uint8_t data)
                {
                   parameters2[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
                   frontParser_restoreCount++;
+                  frontParser_restoreMorphCount++;
                }
             }
             else if(frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC2)
@@ -955,15 +958,16 @@ void frontPanel_parseData(uint8_t data)
                {
                   parameters2[paramNr]=frontParser_midiMsg.data2;
                   frontParser_restoreCount++;
+                  frontParser_restoreMorphCount++;
                }
             }
             else if(frontParser_midiMsg.status == PARAM_RESTORE_DONE)
             {
                // RESTORE: End of dump. Repaint the full menu to reflect new values.
-               char text[17];
-               sprintf(text, "DONE %d      ", frontParser_restoreCount);
-               lcd_setcursor(0,0);
-               lcd_string(text);
+               // char text[17];
+               // sprintf(text, "M%d D%d       ", frontParser_restoreMorphCount, frontParser_restoreCount);
+               // lcd_setcursor(0,0);
+               // lcd_string(text);
 
                menu_repaintAll();
                // Inform STM we have finished and re-enabled normal operation.
@@ -1155,15 +1159,15 @@ void frontPanel_parseData(uint8_t data)
                      break;
                   case LCD_PRINT_SCREEN:
                      {
-                        
-                        char text[8];
-                        lcd_clear();
-                        lcd_home();
-                        lcd_string_F(PSTR("cortex says"));
-                        lcd_setcursor(0,2);
-                        itoa((int)frontParser_midiMsg.data2,text,10);
-                        lcd_string(text);
-                        _delay_ms(2000);
+                        // This was possibly added by some hallucinating LLM, probably Gemini. Should never happen.
+                        // char text[8];
+                        // lcd_clear();
+                        // lcd_home();
+                        // lcd_string_F(PSTR("cortex says"));
+                        // lcd_setcursor(0,2);
+                        // itoa((int)frontParser_midiMsg.data2,text,10);
+                        // lcd_string(text);
+                        // _delay_ms(2000);
                      }
                      break;
                }						

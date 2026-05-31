@@ -14,8 +14,8 @@ Restore the repository to a functional stance after a failed experimental spike 
 ```text
 DATE: 2026-05-31
 SESSION GOAL: Implement symmetric parameter storage and AVR endpoint collection.
-COMPLETED: Refactored STM32 storage into symmetric `SeqKitState` structs; implemented AVR-to-STM dump protocol (0x65/0x66) in `presetManager.c` and `sequencer.c`; added modulation target capture (LFO/Velo/Macro); verified sound-stable pattern switching with menu restoration; squashed stale PRF cache arrays.
-VERIFIED ON HARDWARE: YES. Copy Normal -> Temp triggers a full endpoint dump. Switching patterns correctly updates the AVR menu from the captured endpoints. Audio remain stable during all transitions.
+COMPLETED: Refactored STM32 storage into symmetric `SeqKitState` structs; implemented AVR-to-STM dump protocol (0x65/0x66) in `presetManager.c` and `sequencer.c`; added modulation target capture (LFO/Velo/Macro); implemented interleaved main/morph endpoint pushback in `sequencer.c`; verified sound-stable pattern switching with full menu restoration (Main + Morph); squashed stale PRF cache arrays.
+VERIFIED ON HARDWARE: YES. Copy Normal -> Temp triggers a full endpoint dump. Switching patterns correctly updates the AVR menu (including morph parameters) from the captured endpoints. Audio remains stable during all transitions.
 
 CHANGES THIS SESSION:
 - TMP_VARS_AUDIT.md:Verbose technical reference for the new data model and handshakes.

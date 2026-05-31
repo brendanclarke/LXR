@@ -592,10 +592,41 @@ void preset_readDrumsetMeta(uint8_t isMorph)
 }
 
 //----------------------------------------------------
-void preset_dumpNormalEndpointsToStm()
+static void preset_dumpAutomationTargetsToStm(const uint8_t *params)
 {
    uint16_t i;
    uint8_t value, upper, lower;
+
+   /* RESTORE: Resolved automation target sidebands are not ordinary parameter
+      bytes. The caller brackets this helper with SEQ_TMP_KIT_AUTOMATION_PHASE
+      so the STM knows whether these destinations belong to the kit/front
+      endpoint image or the morph automation target endpoint image. */
+   for (i = 0; i < 6; i++)
+   {
+      value = (uint8_t)pgm_read_word(&modTargets[params[PAR_VEL_DEST_1 + i]].param);
+      upper = (uint8_t)(((value & 0x80) >> 7) | (((i) & 0x3f) << 1));
+      lower = value & 0x7f;
+      frontPanel_sendData(CC_VELO_TARGET, upper, lower);
+
+      value = (uint8_t)pgm_read_word(&modTargets[params[PAR_TARGET_LFO1 + i]].param);
+      upper = (uint8_t)(((value & 0x80) >> 7) | (((i) & 0x3f) << 1));
+      lower = value & 0x7f;
+      frontPanel_sendData(CC_LFO_TARGET, upper, lower);
+   }
+
+   for (i = 0; i < 7; i = (uint8_t)(i + 2)) // 0, 2, 4, 6
+   {
+      value = (uint8_t)pgm_read_word(&modTargets[params[PAR_MAC1_DST1 + i]].param);
+      lower = value & 0x7f;
+      upper = (uint8_t)((((i) >> 1) << 2) | (value >> 7));
+      frontPanel_sendData(MACRO_CC, upper, lower);
+   }
+}
+
+//----------------------------------------------------
+void preset_dumpNormalEndpointsToStm()
+{
+   uint16_t i;
 
    /* RESTORE: Handshake BEGIN. Inform STM we are about to dump the raw menu state. */
    frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_ENDPOINT_BEGIN, 0);
@@ -609,7 +640,12 @@ void preset_dumpNormalEndpointsToStm()
          frontPanel_sendData(PRF_RESTORE_PARAM_CC2, (uint8_t)(i - 128), parameter_values[i]);
    }
 
-   // 2. Send parameters2[] (Morph target endpoints)
+   /* RESTORE: Resolved automation targets for parameter_values[] are bracketed
+      immediately after the kit/front endpoint bytes they describe. */
+   frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT);
+   preset_dumpAutomationTargetsToStm(parameter_values);
+
+   // 2. Send parameters2[] (Morph parameter endpoints)
    for (i = 0; i < END_OF_SOUND_PARAMETERS; i++)
    {
       if (i < 128)
@@ -618,30 +654,11 @@ void preset_dumpNormalEndpointsToStm()
          frontPanel_sendData(PRF_RESTORE_MORPH_CC2, (uint8_t)(i - 128), parameters2[i]);
    }
 
-   // 3. Send Mod Targets (LFO, Velocity, Macro)
-   for (i = 0; i < 6; i++)
-   {
-      // Velocity Targets
-      value = (uint8_t)pgm_read_word(&modTargets[parameter_values[PAR_VEL_DEST_1 + i]].param);
-      upper = (uint8_t)(((value & 0x80) >> 7) | (((i) & 0x3f) << 1));
-      lower = value & 0x7f;
-      frontPanel_sendData(CC_VELO_TARGET, upper, lower);
-
-      // LFO Targets
-      value = (uint8_t)pgm_read_word(&modTargets[parameter_values[PAR_TARGET_LFO1 + i]].param);
-      upper = (uint8_t)(((value & 0x80) >> 7) | (((i) & 0x3f) << 1));
-      lower = value & 0x7f;
-      frontPanel_sendData(CC_LFO_TARGET, upper, lower);
-   }
-
-   // Macro Targets
-   for (i = 0; i < 7; i = (uint8_t)(i + 2)) // 0, 2, 4, 6
-   {
-      value = (uint8_t)pgm_read_word(&modTargets[parameter_values[PAR_MAC1_DST1 + i]].param);
-      lower = value & 0x7f;
-      upper = (uint8_t)((((i) >> 1) << 2) | (value >> 7));
-      frontPanel_sendData(MACRO_CC, upper, lower);
-   }
+   /* RESTORE: Resolved automation targets for parameters2[] are sent as the
+      morph automation target endpoint image, separate from kit/front endpoints. */
+   frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_MORPH_ENDPOINT);
+   preset_dumpAutomationTargetsToStm(parameters2);
+   frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_NONE);
 
    /* RESTORE: Handshake END. Inform STM we have finished the dump. */
    frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_ENDPOINT_END, 0);
@@ -2107,7 +2124,7 @@ void preset_saveAll(uint8_t presetNr, uint8_t isAll)
       remain -=siz;
    }
 
-   	// save morph target
+   // save morph parameter endpoint
    preset_writeDrumsetData(2);
 
    // check remain from drumkit data

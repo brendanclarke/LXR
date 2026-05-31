@@ -184,14 +184,13 @@ TempPattern seq_tmpPattern;
 SeqKitState seq_tmpKitState;
 SeqKitState seq_normalKitState; // -bc- full mirror for normal parameters
 
-static SeqTmpKitAutomation seq_normalKitAutomation;
 static uint8_t seq_tmpKitActive = 0;
-static uint8_t seq_normalKitAutomationValid = 0;
 static uint8_t seq_tmpKitPushParamsToFrontEnabled = 1; // RESTORE: Enabled by default now
 volatile uint8_t seq_tmpKitHandshakeReady = 0;
 volatile uint8_t seq_tmpKitHandshakeAck = 0;
 
 static uint8_t seq_paramIngressTarget = SEQ_PARAM_INGRESS_CURRENT_IMAGE;
+static uint8_t seq_automationIngressTarget = SEQ_AUTOMATION_INGRESS_NONE;
 
 uint8_t seq_transpose_voiceAmount[7];
 uint8_t seq_transposeOnOff;
@@ -206,16 +205,21 @@ static void seq_sendMidi(MidiMsg msg);
 static void seq_sendRealtime(const uint8_t status);
 static void seq_sendProgChg(const uint8_t ptn);
 static void seq_eraseStepAndSubSteps(const uint8_t voice, const uint8_t mainStep);
-static void seq_activateTmpPattern();
 static void seq_nextStep();
 static void seq_captureTmpKitState();
 static void seq_setTmpKitActive(uint8_t active);
-static void seq_pushParameterValuesToFront(const uint8_t *source, const uint8_t *valid);
+static void seq_pushKitEndpointsToFront(const SeqKitState *kit);
 static uint8_t seq_isNextStepSyncStep();
 static uint8_t seq_intIsStepActive(uint8_t voice, uint8_t stepNr, uint8_t patternNr);
 static uint8_t seq_intIsMainStepActive(uint8_t voice, uint8_t mainStepNr, uint8_t pattern);
 static void seq_resetNote(Step *step);
 static void seq_setStepIndexToStart();
+
+//------------------------------------------------------------------------------
+static SeqKitState* seq_getCurrentImageKitState()
+{
+   return seq_tmpKitActive ? &seq_tmpKitState : &seq_normalKitState;
+}
 
 //------------------------------------------------------------------------------
 static uint8_t* seq_getIngressParamTarget()
@@ -225,7 +229,7 @@ static uint8_t* seq_getIngressParamTarget()
    else if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
       return seq_normalKitState.frontPanelParams;
 
-   return seq_normalKitState.interpolatedParams;
+   return seq_getCurrentImageKitState()->interpolatedParams;
 }
 
 //------------------------------------------------------------------------------
@@ -236,18 +240,42 @@ static uint8_t* seq_getIngressParamValidTarget()
    else if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
       return seq_normalKitState.frontPanelParamsValid;
 
-   return seq_normalKitState.interpolatedParamsValid;
+   return seq_getCurrentImageKitState()->interpolatedParamsValid;
 }
 
 //------------------------------------------------------------------------------
-static SeqTmpKitAutomation* seq_getIngressAutomationTarget()
+static SeqKitAutomationTargets* seq_getIngressAutomationTarget()
 {
-   if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_TMP_KIT_STATE)
-      return &seq_tmpKitState.automation;
-   else if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
-      return &seq_normalKitState.automation;
+   SeqKitState *kit = seq_getCurrentImageKitState();
 
-   return &seq_normalKitState.automation;
+   if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
+   {
+      kit = &seq_normalKitState;
+
+      /* RESTORE: During copy-to-temp, raw endpoint params are bracketed by
+         SEQ_TMP_KIT_ENDPOINT_BEGIN/END. Resolved automation target messages need
+         this additional phase selector so front endpoint assignments and morph
+         automation target endpoints cannot collapse into one storage image. */
+      if(seq_automationIngressTarget == SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT)
+         return &kit->frontPanelAutomationTargets;
+      if(seq_automationIngressTarget == SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT)
+         return &kit->morphParameterEndpointAutomationTargets;
+
+      return 0;
+   }
+   else if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_TMP_KIT_STATE)
+   {
+      kit = &seq_tmpKitState;
+
+      if(seq_automationIngressTarget == SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT)
+         return &kit->frontPanelAutomationTargets;
+      if(seq_automationIngressTarget == SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT)
+         return &kit->morphParameterEndpointAutomationTargets;
+
+      return 0;
+   }
+
+   return &kit->interpolatedAutomationTargets;
 }
 
 //------------------------------------------------------------------------------
@@ -256,6 +284,8 @@ void seq_setIngressTarget(uint8_t target)
    if(target <= SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
    {
       seq_paramIngressTarget = target;
+      if(target == SEQ_PARAM_INGRESS_CURRENT_IMAGE)
+         seq_automationIngressTarget = SEQ_AUTOMATION_INGRESS_NONE;
    }
 }
 
@@ -263,6 +293,13 @@ void seq_setIngressTarget(uint8_t target)
 uint8_t seq_getIngressTarget()
 {
    return (uint8_t)seq_paramIngressTarget;
+}
+
+//------------------------------------------------------------------------------
+void seq_setAutomationIngressTarget(uint8_t target)
+{
+   if(target <= SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT)
+      seq_automationIngressTarget = target;
 }
 
 //------------------------------------------------------------------------------
@@ -281,9 +318,9 @@ void seq_storeParameterIngress(uint16_t param, uint8_t value)
 //------------------------------------------------------------------------------
 void seq_storeLfoDestinationIngress(uint8_t voice, uint16_t destination)
 {
-   SeqTmpKitAutomation *target = seq_getIngressAutomationTarget();
+   SeqKitAutomationTargets *target = seq_getIngressAutomationTarget();
 
-   if(voice >= 6)
+   if(!target || voice >= 6)
       return;
 
    target->lfoDestination[voice] = destination;
@@ -293,9 +330,9 @@ void seq_storeLfoDestinationIngress(uint8_t voice, uint16_t destination)
 //------------------------------------------------------------------------------
 void seq_storeVelocityDestinationIngress(uint8_t voice, uint16_t destination)
 {
-   SeqTmpKitAutomation *target = seq_getIngressAutomationTarget();
+   SeqKitAutomationTargets *target = seq_getIngressAutomationTarget();
 
-   if(voice >= 6)
+   if(!target || voice >= 6)
       return;
 
    target->velocityDestination[voice] = destination;
@@ -305,9 +342,9 @@ void seq_storeVelocityDestinationIngress(uint8_t voice, uint16_t destination)
 //------------------------------------------------------------------------------
 void seq_storeMacroDestinationIngress(uint8_t destinationNr, uint16_t destination)
 {
-   SeqTmpKitAutomation *target = seq_getIngressAutomationTarget();
+   SeqKitAutomationTargets *target = seq_getIngressAutomationTarget();
 
-   if(destinationNr >= 4)
+   if(!target || destinationNr >= 4)
       return;
 
    target->macroDestination[destinationNr] = destination;
@@ -388,7 +425,7 @@ static ModulationNode* seq_getLfoModNode(uint8_t voice)
 }
 
 //------------------------------------------------------------------------------
-static void seq_applyAutomationTargets(const SeqTmpKitAutomation *source)
+static void seq_applyAutomationTargets(const SeqKitAutomationTargets *source)
 {
    uint8_t i;
 
@@ -457,15 +494,25 @@ static void seq_captureTmpKitState()
 {
    seq_snapshotCurrentParameterValues(seq_tmpKitState.interpolatedParams,
                                       seq_tmpKitState.interpolatedParamsValid);
-   memcpy(&seq_tmpKitState.automation, &seq_normalKitState.automation, sizeof(seq_tmpKitState.automation));
+   memcpy(&seq_tmpKitState.interpolatedAutomationTargets,
+          &seq_normalKitState.interpolatedAutomationTargets,
+          sizeof(seq_tmpKitState.interpolatedAutomationTargets));
 
-   /* RESTORE: Zero-out the temporary kit and morph endpoint arrays.
+   /* RESTORE: Zero-out the temporary kit and morph parameter endpoint arrays.
       The normal kit endpoints were just collected from the AVR dump and should be preserved.
-      Validity masks for temp kit are set to 1 so the zero values are pushed up on temp entry. */
+      Validity masks for temp kit are set to 1 so the zero values are pushed up on temp entry.
+      The matching endpoint automation target images are invalidated too, because zeroed
+      endpoint bytes should not carry stale resolved target assignments. */
    memset(seq_tmpKitState.frontPanelParams, 0, END_OF_SOUND_PARAMETERS);
    memset(seq_tmpKitState.frontPanelParamsValid, 1, END_OF_SOUND_PARAMETERS);
    memset(seq_tmpKitState.morphParams, 0, END_OF_SOUND_PARAMETERS);
    memset(seq_tmpKitState.morphParamsValid, 1, END_OF_SOUND_PARAMETERS);
+   memset(&seq_tmpKitState.frontPanelAutomationTargets,
+          0,
+          sizeof(seq_tmpKitState.frontPanelAutomationTargets));
+   memset(&seq_tmpKitState.morphParameterEndpointAutomationTargets,
+          0,
+          sizeof(seq_tmpKitState.morphParameterEndpointAutomationTargets));
 
    seq_tmpKitState.valid = 1;
 }
@@ -483,8 +530,8 @@ static void seq_captureTmpKitState()
         READY response byte arriving in the FIFO is only parsed by the frontPanelParser 
         when that function is executed.
    3. Once READY is received (indicating AVR has suppressed outbound traffic to prevent feedback),
-      STM iterates through END_OF_SOUND_PARAMETERS.
-   4. For each valid parameter, it calls seq_pushSingleParameterToFront().
+      STM sends kit/front endpoint bytes with PRF_RESTORE_PARAM_CC/CC2.
+   4. STM sends morph parameter endpoint bytes with PRF_RESTORE_MORPH_CC/CC2.
    5. STM sends PARAM_RESTORE_DONE.
    6. STM blocks and calls uart_processFront() while waiting for AVR to send PARAM_RESTORE_ACK.
    7. Normal operation resumes.
@@ -520,10 +567,35 @@ static void seq_pushSingleParameterToFront(uint16_t param, uint8_t value)
 }
 
 //------------------------------------------------------------------------------
-static void seq_pushParameterValuesToFront(const uint8_t *source, const uint8_t *valid)
+static void seq_pushSingleMorphParameterToFront(uint16_t param, uint8_t value)
+{
+   /* RESTORE: Skip internal STM indices < 2. */
+   if(param < 2)
+      return;
+
+   if(param < 128)
+   {
+      uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_MORPH_CC);
+      /* RESTORE OFFSET RULE: Apply -1 offset for low morph CCs. */
+      uart_sendFrontpanelPriorityByteWait((uint8_t)(param - 1));
+   }
+   else
+   {
+      uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_MORPH_CC2);
+      uart_sendFrontpanelPriorityByteWait((uint8_t)(param - 128));
+   }
+
+   uart_sendFrontpanelPriorityByteWait(value);
+}
+
+//------------------------------------------------------------------------------
+static void seq_pushKitEndpointsToFront(const SeqKitState *kit)
 {
    uint16_t param;
    uint32_t timeout;
+
+   if(!kit)
+      return;
 
    /* RESTORE: Handshake Phase 1 - BEGIN */
    seq_tmpKitHandshakeReady = 0;
@@ -531,10 +603,7 @@ static void seq_pushParameterValuesToFront(const uint8_t *source, const uint8_t 
    uart_sendFrontpanelPriorityByteWait(0);
    uart_sendFrontpanelPriorityByteWait(0);
 
-   /* RESTORE: Handshake Phase 2 - Wait for READY
-      We must loop uart_processFront() here. Handshake responses arrive via ISR 
-      but seq_tmpKitHandshakeReady is only set when the frontPanelParser 
-      (called by uart_processFront) interprets the byte. */
+   /* RESTORE: Handshake Phase 2 - Wait for READY */
    timeout = 0x000FFFFF;
    while(!seq_tmpKitHandshakeReady && timeout--)
    {
@@ -542,13 +611,25 @@ static void seq_pushParameterValuesToFront(const uint8_t *source, const uint8_t 
       __asm__("nop");
    }
 
-   /* RESTORE: Handshake Phase 3 - Data Transfer */
+   /* RESTORE: Handshake Phase 3a - kit/front endpoint bytes.
+      The PRF_RESTORE_PARAM_* opcodes restore AVR parameter_values[]. */
    for(param=0;param<END_OF_SOUND_PARAMETERS;param++)
    {
-      if(valid && !valid[param])
-         continue;
+      if(kit->frontPanelParamsValid[param])
+      {
+         seq_pushSingleParameterToFront(param, kit->frontPanelParams[param]);
+      }
+   }
 
-      seq_pushSingleParameterToFront(param, source[param]);
+   /* RESTORE: Handshake Phase 3b - morph parameter endpoint bytes.
+      The PRF_RESTORE_MORPH_* opcodes restore AVR parameters2[]. No resolved
+      automation target structs are sent to AVR; the AVR stores selector bytes. */
+   for(param=0;param<END_OF_SOUND_PARAMETERS;param++)
+   {
+      if(kit->morphParamsValid[param])
+      {
+         seq_pushSingleMorphParameterToFront(param, kit->morphParams[param]);
+      }
    }
 
    /* RESTORE: Handshake Phase 4 - DONE */
@@ -557,8 +638,7 @@ static void seq_pushParameterValuesToFront(const uint8_t *source, const uint8_t 
    uart_sendFrontpanelPriorityByteWait(0);
    uart_sendFrontpanelPriorityByteWait(0);
 
-   /* RESTORE: Handshake Phase 5 - Wait for ACK
-      Final synchronization ensuring the AVR has finished the repaint and is ready for normal traffic. */
+   /* RESTORE: Handshake Phase 5 - Wait for ACK */
    timeout = 0x000FFFFF;
    while(!seq_tmpKitHandshakeAck && timeout--)
    {
@@ -568,12 +648,12 @@ static void seq_pushParameterValuesToFront(const uint8_t *source, const uint8_t 
 }
 
 //------------------------------------------------------------------------------
-static void seq_maybePushParameterValuesToFront(const uint8_t *source, const uint8_t *valid)
+static void seq_maybePushKitEndpointsToFront(const SeqKitState *kit)
 {
    if(!seq_tmpKitPushParamsToFrontEnabled)
       return;
 
-   seq_pushParameterValuesToFront(source, valid);
+   seq_pushKitEndpointsToFront(kit);
 }
 
 //------------------------------------------------------------------------------
@@ -584,16 +664,13 @@ static void seq_setTmpKitActive(uint8_t active)
       if(seq_tmpKitActive || !seq_tmpKitState.valid)
          return;
 
-      memcpy(&seq_normalKitAutomation, &seq_normalKitState.automation, sizeof(seq_normalKitAutomation));
-      seq_normalKitAutomationValid = 1;
       seq_applyParameterValues(seq_tmpKitState.interpolatedParams,
                                seq_tmpKitState.interpolatedParamsValid);
-      seq_applyAutomationTargets(&seq_tmpKitState.automation);
+      seq_applyAutomationTargets(&seq_tmpKitState.interpolatedAutomationTargets);
 
-      /* RESTORE: Push the endpoint array (frontPanelParams) instead of the 
-         morphed sound image (interpolatedParams) as requested for this test step. */
-      seq_maybePushParameterValuesToFront(seq_tmpKitState.frontPanelParams,
-                                          seq_tmpKitState.frontPanelParamsValid);
+      /* RESTORE: Push the full temporary kit endpoints (Main + Morph) to the AVR.
+         Currently these are zeroed out in seq_captureTmpKitState() for verification. */
+      seq_maybePushKitEndpointsToFront(&seq_tmpKitState);
       seq_tmpKitActive = 1;
       return;
    }
@@ -602,12 +679,10 @@ static void seq_setTmpKitActive(uint8_t active)
       return;
 
    seq_applyParameterValues(seq_normalKitState.interpolatedParams, seq_normalKitState.interpolatedParamsValid);
-   if(seq_normalKitAutomationValid)
-      seq_applyAutomationTargets(&seq_normalKitAutomation);
+   seq_applyAutomationTargets(&seq_normalKitState.interpolatedAutomationTargets);
 
-   /* RESTORE: Push the normal kit endpoint array instead of the morphed sound image. */
-   seq_maybePushParameterValuesToFront(seq_normalKitState.frontPanelParams, 
-                                       seq_normalKitState.frontPanelParamsValid);
+   /* RESTORE: Push the full captured normal kit endpoints (Main + Morph) to the AVR. */
+   seq_maybePushKitEndpointsToFront(&seq_normalKitState);
    seq_tmpKitActive = 0;
 }
 
@@ -637,10 +712,9 @@ void seq_init()
    memset(seq_transpose_voiceAmount,63,NUM_TRACKS);
    memset(&seq_tmpKitState,0,sizeof(seq_tmpKitState));
    memset(&seq_normalKitState, 0, sizeof(seq_normalKitState));
-   memset(&seq_normalKitAutomation,0,sizeof(seq_normalKitAutomation));
    seq_paramIngressTarget = SEQ_PARAM_INGRESS_CURRENT_IMAGE;
+   seq_automationIngressTarget = SEQ_AUTOMATION_INGRESS_NONE;
    seq_tmpKitActive = 0;
-   seq_normalKitAutomationValid = 0;
    seq_tmpKitPushParamsToFrontEnabled = 1;
    midi_clearCache();
    seq_transposeOnOff = 0;

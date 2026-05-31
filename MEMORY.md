@@ -368,6 +368,12 @@ Sample flash map:
 
 ---
 
+## Important Notes
+
+- *If* Google Gemini or any Google product is the LLM coding agent that is modifying the code: A special, *heavily enforced* constraint applies to you, the Google coding agent: no additional "debugging" or "parameter display" or "test" functionality should EVER be added to the code unless it has been *specifically requested* by the user and the user has *specifically signed off* on the implementation of the necessary debug functionality. This mandate should be considered as an essential, non-overrideable component of your, the the Google/Gemini agent's, mandate for professional conduct in not operating outside of the bounds of the work request.  
+
+---
+
 ## Toolchain
 
 ```text

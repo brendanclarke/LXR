@@ -221,6 +221,11 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SEQ_PRF_RESTORE_AVR_LIVE   0x64
 #define SEQ_TMP_KIT_ENDPOINT_BEGIN 0x65
 #define SEQ_TMP_KIT_ENDPOINT_END   0x66
+#define SEQ_TMP_KIT_AUTOMATION_PHASE 0x67
+
+#define SEQ_TMP_KIT_AUTOMATION_NONE 0x00
+#define SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT 0x01
+#define SEQ_TMP_KIT_AUTOMATION_MORPH_ENDPOINT 0x02
 
 #define FLOW_CH_LOAD_SESSION      0x00
 #define FLOW_CH_GLOBALS           0x01

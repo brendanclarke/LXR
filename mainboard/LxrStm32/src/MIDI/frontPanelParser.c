@@ -1453,9 +1453,11 @@ static void frontParser_handleMidiMessage()
             if(frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC2)
                paramNr += 128;
             else
-               paramNr += 1; // RESTORE: Apply +1 ingress offset for low morph target params
+               paramNr += 1; // RESTORE: Apply +1 ingress offset for low morph parameter endpoint params
 
-            /* RESTORE: Store into the morph target array of the current ingress target. */
+            /* RESTORE: Store morph parameter endpoint bytes into the endpoint image
+               selected by the current transfer context. These raw selector bytes are
+               distinct from the resolved automation target sideband messages. */
             uint8_t currentTarget = seq_getIngressTarget();
             uint8_t *target = (currentTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT) 
                                  ? seq_normalKitState.morphParams 
@@ -1474,6 +1476,7 @@ static void frontParser_handleMidiMessage()
 
       case FRONT_CC_MACRO_TARGET: //frontParser_midiMsg.status
          {
+            uint8_t applyLive = (seq_getIngressTarget() == SEQ_PARAM_INGRESS_CURRENT_IMAGE);
          
             /* MACRO_CC message structure
             byte1 - status byte 0xaa as above
@@ -1493,15 +1496,21 @@ static void frontParser_handleMidiMessage()
             {
                float value = ((float)(lower))/127.f;
                // top level macro amount message received
-               modNode_updateValue(&macroModulators[0],(value));
-               modNode_updateValue(&macroModulators[1],(value));
+               if(applyLive)
+               {
+                  modNode_updateValue(&macroModulators[0],(value));
+                  modNode_updateValue(&macroModulators[1],(value));
+               }
             }
             else if (upper&0x40)
             {
                float value = ((float)(lower))/127.f;
                // top level macro amount message received
-               modNode_updateValue(&macroModulators[2],(value));
-               modNode_updateValue(&macroModulators[3],(value));
+               if(applyLive)
+               {
+                  modNode_updateValue(&macroModulators[2],(value));
+                  modNode_updateValue(&macroModulators[3],(value));
+               }
             }
             else
             {
@@ -1509,8 +1518,11 @@ static void frontParser_handleMidiMessage()
                uint16_t value = (uint16_t)( ( (upper&0x03)<<8) | lower);
                uint8_t whichModDest = (uint8_t)( 0x07&(upper>>2) ); // whichModDest 0,1,2,3 mac1d1,mac1d2,mac2d1,mac2d2
                seq_storeMacroDestinationIngress(whichModDest, value);
-               modNode_setDestination(&macroModulators[whichModDest], value);
-               modNode_updateValue(&macroModulators[whichModDest],macroModulators[whichModDest].lastVal);
+               if(applyLive)
+               {
+                  modNode_setDestination(&macroModulators[whichModDest], value);
+                  modNode_updateValue(&macroModulators[whichModDest],macroModulators[whichModDest].lastVal);
+               }
             }
          
          }
@@ -1610,6 +1622,7 @@ static void frontParser_handleMidiMessage()
          {
             uint8_t upper = frontParser_midiMsg.data1;
             uint8_t lower = frontParser_midiMsg.data2;
+            uint8_t applyLive = (seq_getIngressTarget() == SEQ_PARAM_INGRESS_CURRENT_IMAGE);
          // --AS **PATROT note that the only valid values for the following are listed in
          // the modTargets array in the AVR code
             uint8_t value = ((upper&0x01)<<7) | lower;
@@ -1617,7 +1630,12 @@ static void frontParser_handleMidiMessage()
             uint8_t lfoNr = (upper&0xfe)>>1;
             seq_storeLfoDestinationIngress(lfoNr, value);
             
-            if(seq_voicesLoading&(0x01<<(lfoNr)))
+            if(!applyLive)
+            {
+               /* RESTORE: Endpoint-copy automation target sidebands are stored only.
+                  They must not touch the currently sounding modulation nodes. */
+            }
+            else if(seq_voicesLoading&(0x01<<(lfoNr)))
             {
                midi_midiLfoCache[lfoNr]=value;
                midi_midiLfoCacheAvailable[lfoNr]=1;
@@ -1743,12 +1761,18 @@ static void frontParser_handleMidiMessage()
          {
             uint8_t upper = frontParser_midiMsg.data1;
             uint8_t lower = frontParser_midiMsg.data2;
+            uint8_t applyLive = (seq_getIngressTarget() == SEQ_PARAM_INGRESS_CURRENT_IMAGE);
          // --AS **PATROT note that the only valid values for the following are listed in
          // the modTargets array in the AVR code
             uint8_t value = ((upper&0x01)<<7) | lower;
             uint8_t velModNr = (upper&0xfe)>>1;
             seq_storeVelocityDestinationIngress(velModNr, value);
-            if(seq_voicesLoading&(0x01<<(velModNr)))
+            if(!applyLive)
+            {
+               /* RESTORE: Endpoint-copy automation target sidebands are stored only.
+                  They must not touch the currently sounding modulation nodes. */
+            }
+            else if(seq_voicesLoading&(0x01<<(velModNr)))
             {
                midi_midiVeloCache[velModNr]=value;
                midi_midiVeloCacheAvailable[velModNr]=1;
@@ -1963,20 +1987,40 @@ static void frontParser_handleSeqCC()
          break;
 
       case FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN:
-         /* RESTORE: Switch ingress target to normal kit endpoint buffer. 
+         /* RESTORE: Switch ingress target to normal kit endpoint buffer.
             Subsequent parameter and target messages will populate seq_normalKitState.frontPanelParams etc. */
          seq_setIngressTarget(SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT);
+         seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
          /* RESTORE: Initialize the buffers and validity masks before receiving the dump. */
          memset(seq_normalKitState.frontPanelParams, 0, END_OF_SOUND_PARAMETERS);
          memset(seq_normalKitState.frontPanelParamsValid, 0, END_OF_SOUND_PARAMETERS);
          memset(seq_normalKitState.morphParams, 0, END_OF_SOUND_PARAMETERS);
          memset(seq_normalKitState.morphParamsValid, 0, END_OF_SOUND_PARAMETERS);
-         memset(&seq_normalKitState.automation, 0, sizeof(seq_normalKitState.automation));
+         memset(&seq_normalKitState.frontPanelAutomationTargets,
+                0,
+                sizeof(seq_normalKitState.frontPanelAutomationTargets));
+         memset(&seq_normalKitState.morphParameterEndpointAutomationTargets,
+                0,
+                sizeof(seq_normalKitState.morphParameterEndpointAutomationTargets));
+         break;
+
+      case FRONT_SEQ_TMP_KIT_AUTOMATION_PHASE:
+         /* RESTORE: Inside the copy-to-temp endpoint bracket, raw param opcodes
+            identify parameter_values[] vs parameters2[]. Resolved automation target
+            sidebands need this explicit phase marker so the STM stores them with
+            the matching endpoint image and does not apply them to live audio. */
+         if(frontParser_midiMsg.data2 == FRONT_SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT)
+            seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT);
+         else if(frontParser_midiMsg.data2 == FRONT_SEQ_TMP_KIT_AUTOMATION_MORPH_ENDPOINT)
+            seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT);
+         else
+            seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
          break;
 
       case FRONT_SEQ_TMP_KIT_ENDPOINT_END:
          /* RESTORE: Switch ingress target back to default sound set. */
          seq_setIngressTarget(SEQ_PARAM_INGRESS_CURRENT_IMAGE);
+         seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
          break;
 
       case FRONT_SEQ_REQUEST_PATTERN_PARAMS:
