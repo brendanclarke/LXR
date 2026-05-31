@@ -56,11 +56,34 @@
 #include "ParameterArray.h"
 #include "modulationNode.h"
 
-#define VOICE_PARAM_LENGTH 37
+#define SEQ_VOICE_PARAM_LENGTH 36
+#define SEQ_SYNTH_VOICES 6
+#define SEQ_VOICE_SOURCE_NORMAL 1
+#define SEQ_VOICE_SOURCE_TMP 3
 #define SEQ_PRESCALER_MASK 	0x03
 #define MIDI_PRESCALER_MASK	0x04
 
 static uint8_t seq_prescaleCounter = 0;
+
+static const uint16_t seq_voiceParamMask[SEQ_SYNTH_VOICES][SEQ_VOICE_PARAM_LENGTH] =
+{
+   {1,8,9,20,      37,43,49,50,   62,70,74,78,  82,83,88,94,   102,108,115,121,     128,134,137,143,    149,155,161,167,    173,179,185,191,    197,203,209,215},
+   {2,10,11,21,    38,44,51,52,   63,71,75,79,  84,85,89,95,   103,109,116,122,     129,135,138,144,    150,156,162,168,    174,180,186,192,    198,204,210,216},
+   {3,12,13,22,    39,45,53,54,   64,72,76,80,  86,87,90,96,   104,110,117,123,     130,136,139,145,    151,157,163,169,    175,181,187,193,    199,205,211,217},
+   {4,14,15,27,28, 40,46,55,      56,65,68,73,  77,81,91,99,   105,111,118,124,     131,140,146,152,        158,164,170,    176,182,188,194,    200,206,212,218},
+   {6,16,17,23,    24,29,30,31,   32,41,47,57,  58,66,69,92,   100,106,112,119,125, 132,141,147,153,        159,165,171,    177,183,189,195,    201,207,213,219},
+   {7,18,19,25,    26,33,34,35,   36,42,48,59,  60,61,67,93,   101,107,113,120,126, 133,142,148,154,        160,166,172,    178,184,190,196,    202,208,214,220}
+};
+
+/* Voice masks are copied from the AVR/menu parameter numbers. STM storage uses
+   +1 canonical indices for low CC params; CC2 params already match. */
+static uint16_t seq_canonicalParamFromVoiceMask(uint16_t param)
+{
+   if(param < 128)
+      return param + 1;
+
+   return param;
+}
 
 uint8_t seq_masterStepCnt=0;				/** keeps track of the played steps between 0 and 127 independent from the track counters*/
 uint8_t seq_rollRate = 8;				// start with roll rate = 1/16
@@ -189,6 +212,11 @@ static uint8_t seq_tmpKitPushParamsToFrontEnabled = 1; // RESTORE: Enabled by de
 volatile uint8_t seq_tmpKitHandshakeReady = 0;
 volatile uint8_t seq_tmpKitHandshakeAck = 0;
 
+static uint8_t seq_voiceSourceState[SEQ_SYNTH_VOICES];
+static uint8_t seq_tmpBoundaryPatternSwitchAck = 0;
+static uint8_t seq_liveSharedParams[END_OF_SOUND_PARAMETERS];
+static uint8_t seq_liveSharedParamsValid[END_OF_SOUND_PARAMETERS];
+
 static uint8_t seq_paramIngressTarget = SEQ_PARAM_INGRESS_CURRENT_IMAGE;
 static uint8_t seq_automationIngressTarget = SEQ_AUTOMATION_INGRESS_NONE;
 
@@ -209,6 +237,9 @@ static void seq_nextStep();
 static void seq_captureTmpKitState();
 static void seq_setTmpKitActive(uint8_t active);
 static void seq_pushKitEndpointsToFront(const SeqKitState *kit);
+static void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask);
+static void seq_updateVoiceSourcesForPatternChange(const uint8_t *oldPatternForTrack,
+                                                   uint8_t pushEndpointUpdates);
 static uint8_t seq_isNextStepSyncStep();
 static uint8_t seq_intIsStepActive(uint8_t voice, uint8_t stepNr, uint8_t patternNr);
 static uint8_t seq_intIsMainStepActive(uint8_t voice, uint8_t mainStepNr, uint8_t pattern);
@@ -219,6 +250,45 @@ static void seq_setStepIndexToStart();
 static SeqKitState* seq_getCurrentImageKitState()
 {
    return seq_tmpKitActive ? &seq_tmpKitState : &seq_normalKitState;
+}
+
+static uint8_t seq_isVoiceParameter(uint16_t param)
+{
+   uint8_t voice;
+   uint8_t i;
+
+   for(voice=0;voice<SEQ_SYNTH_VOICES;voice++)
+   {
+      for(i=0;i<SEQ_VOICE_PARAM_LENGTH;i++)
+      {
+         if(seq_canonicalParamFromVoiceMask(seq_voiceParamMask[voice][i]) == param)
+            return 1;
+      }
+   }
+
+   return 0;
+}
+
+//------------------------------------------------------------------------------
+static uint8_t seq_trackPatternUsesTmp(uint8_t pattern)
+{
+   return seq_normalizePatternNumber(pattern) == SEQ_TMP_PATTERN;
+}
+
+//------------------------------------------------------------------------------
+static uint8_t seq_synthVoiceUsesTmpFromTrackPatterns(const uint8_t *patternForTrack,
+                                                      uint8_t synthVoice)
+{
+   if(synthVoice >= SEQ_SYNTH_VOICES)
+      return 0;
+
+   if(synthVoice == 5)
+   {
+      return seq_trackPatternUsesTmp(patternForTrack[5])
+          || seq_trackPatternUsesTmp(patternForTrack[6]);
+   }
+
+   return seq_trackPatternUsesTmp(patternForTrack[synthVoice]);
 }
 
 //------------------------------------------------------------------------------
@@ -342,6 +412,12 @@ void seq_storeParameterIngress(uint16_t param, uint8_t value)
 
    target[param] = value;
    valid[param] = 1;
+
+   if(seq_shouldApplyIngressToLive() && !seq_isVoiceParameter(param))
+   {
+      seq_liveSharedParams[param] = value;
+      seq_liveSharedParamsValid[param] = 1;
+   }
 }
 
 //------------------------------------------------------------------------------
@@ -454,25 +530,37 @@ static ModulationNode* seq_getLfoModNode(uint8_t voice)
 }
 
 //------------------------------------------------------------------------------
-static void seq_applyAutomationTargets(const SeqKitAutomationTargets *source)
+static void seq_applyVoiceAutomationTargets(const SeqKitAutomationTargets *source,
+                                            uint8_t synthVoice)
+{
+   ModulationNode *lfoNode;
+
+   if(!source || synthVoice >= SEQ_SYNTH_VOICES)
+      return;
+
+   lfoNode = seq_getLfoModNode(synthVoice);
+   if(source->lfoDestinationValid & (1 << synthVoice))
+   {
+      modNode_setDestination(lfoNode, source->lfoDestination[synthVoice]);
+      modNode_updateValue(lfoNode, lfoNode->lastVal);
+   }
+
+   if(source->velocityDestinationValid & (1 << synthVoice))
+   {
+      modNode_setDestination(&velocityModulators[synthVoice],
+                             source->velocityDestination[synthVoice]);
+      modNode_updateValue(&velocityModulators[synthVoice],
+                          velocityModulators[synthVoice].lastVal);
+   }
+}
+
+//------------------------------------------------------------------------------
+static void seq_applySharedAutomationTargets(const SeqKitAutomationTargets *source)
 {
    uint8_t i;
 
-   for(i=0;i<6;i++)
-   {
-      ModulationNode *lfoNode = seq_getLfoModNode(i);
-      if(source->lfoDestinationValid & (1 << i))
-      {
-         modNode_setDestination(lfoNode, source->lfoDestination[i]);
-         modNode_updateValue(lfoNode, lfoNode->lastVal);
-      }
-
-      if(source->velocityDestinationValid & (1 << i))
-      {
-         modNode_setDestination(&velocityModulators[i], source->velocityDestination[i]);
-         modNode_updateValue(&velocityModulators[i], velocityModulators[i].lastVal);
-      }
-   }
+   if(!source)
+      return;
 
    for(i=0;i<4;i++)
    {
@@ -492,33 +580,157 @@ static void seq_snapshotCurrentParameterValues(uint8_t *target, uint8_t *valid)
 }
 
 //------------------------------------------------------------------------------
-static void seq_applyParameterValues(const uint8_t *source, const uint8_t *valid)
+static void seq_applySingleParameterValue(uint16_t param, uint8_t value)
+{
+   MidiMsg msg;
+
+   if(param < 128)
+   {
+      msg.status = MIDI_CC;
+      msg.data1 = (uint8_t)param;
+   }
+   else
+   {
+      msg.status = FRONT_CC_2;
+      msg.data1 = (uint8_t)(param - 128);
+   }
+
+   msg.data2 = value;
+   midiParser_ccHandler(msg, 0);
+}
+
+//------------------------------------------------------------------------------
+static void seq_applySharedParameterValues(const SeqKitState *kit)
 {
    uint16_t param;
-   MidiMsg msg;
+
+   if(!kit)
+      return;
 
    for(param=1;param<END_OF_SOUND_PARAMETERS;param++)
    {
-      if(valid && !valid[param])
+      if(!kit->interpolatedParamsValid[param] || seq_isVoiceParameter(param))
          continue;
 
-      if(param < 128)
-      {
-         msg.status = MIDI_CC;
-         msg.data1 = (uint8_t)param;
-      }
-      else
-      {
-         msg.status = FRONT_CC_2;
-         msg.data1 = (uint8_t)(param - 128);
-      }
+      if(seq_liveSharedParamsValid[param]
+         && seq_liveSharedParams[param] == kit->interpolatedParams[param])
+         continue;
 
-      msg.data2 = source[param];
-      midiParser_ccHandler(msg, 0);
+      seq_applySingleParameterValue(param, kit->interpolatedParams[param]);
+      seq_liveSharedParams[param] = kit->interpolatedParams[param];
+      seq_liveSharedParamsValid[param] = 1;
    }
 }
 
 //------------------------------------------------------------------------------
+static void seq_applyVoiceParameterValues(const SeqKitState *kit, uint8_t synthVoice)
+{
+   uint8_t i;
+
+   if(!kit || synthVoice >= SEQ_SYNTH_VOICES)
+      return;
+
+   for(i=0;i<SEQ_VOICE_PARAM_LENGTH;i++)
+   {
+      uint16_t param = seq_canonicalParamFromVoiceMask(seq_voiceParamMask[synthVoice][i]);
+      if(param < END_OF_SOUND_PARAMETERS && kit->interpolatedParamsValid[param])
+         seq_applySingleParameterValue(param, kit->interpolatedParams[param]);
+   }
+}
+
+//------------------------------------------------------------------------------
+static void seq_applyVoiceSource(uint8_t synthVoice, uint8_t useTmp)
+{
+   const SeqKitState *kit = useTmp ? &seq_tmpKitState : &seq_normalKitState;
+
+   seq_applyVoiceParameterValues(kit, synthVoice);
+   seq_applyVoiceAutomationTargets(&kit->interpolatedAutomationTargets, synthVoice);
+}
+
+//------------------------------------------------------------------------------
+static void seq_markVoiceSourceTarget(uint8_t synthVoice, uint8_t useTmp)
+{
+   uint8_t targetState = useTmp ? SEQ_VOICE_SOURCE_TMP : SEQ_VOICE_SOURCE_NORMAL;
+
+   if(synthVoice >= SEQ_SYNTH_VOICES)
+      return;
+
+   if(seq_voiceSourceState[synthVoice] == targetState)
+      return;
+
+   if(useTmp)
+   {
+      if(!seq_tmpKitState.valid)
+      {
+         /* TEMP PATTERN: per-track temp playback can request temporary voice
+            params even when the global active pattern stays normal. Ensure the
+            temporary parameter image exists before applying that voice source. */
+         seq_captureTmpKitState();
+      }
+   }
+
+   /* TEMP PATTERN: source tracking remains per synth voice, but this experiment
+      drops the stale states 2/4 and applies the selected voice image immediately. */
+   seq_applyVoiceSource(synthVoice, useTmp);
+   seq_voiceSourceState[synthVoice] = targetState;
+}
+
+//------------------------------------------------------------------------------
+static uint8_t seq_allVoiceSourcesUseTmp()
+{
+   uint8_t synthVoice;
+
+   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
+   {
+      if(seq_voiceSourceState[synthVoice] != SEQ_VOICE_SOURCE_TMP)
+         return 0;
+   }
+
+   return 1;
+}
+
+//------------------------------------------------------------------------------
+static uint8_t seq_allVoiceSourcesUseNormal()
+{
+   uint8_t synthVoice;
+
+   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
+   {
+      if(seq_voiceSourceState[synthVoice] != SEQ_VOICE_SOURCE_NORMAL)
+         return 0;
+   }
+
+   return 1;
+}
+
+//------------------------------------------------------------------------------
+static void seq_updateVoiceSourcesForPatternChange(const uint8_t *oldPatternForTrack,
+                                                   uint8_t pushEndpointUpdates)
+{
+   uint8_t synthVoice;
+   uint8_t changedVoiceMask = 0;
+
+   if(!oldPatternForTrack)
+      return;
+
+   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
+   {
+      uint8_t oldUseTmp =
+         seq_synthVoiceUsesTmpFromTrackPatterns(oldPatternForTrack, synthVoice);
+      uint8_t newUseTmp =
+         seq_synthVoiceUsesTmpFromTrackPatterns(seq_perTrackActivePattern, synthVoice);
+
+      if(oldUseTmp != newUseTmp)
+      {
+         seq_markVoiceSourceTarget(synthVoice, newUseTmp);
+         changedVoiceMask |= (uint8_t)(1 << synthVoice);
+      }
+   }
+
+   if(pushEndpointUpdates && changedVoiceMask)
+      seq_pushEndpointUpdateForVoiceSourceChange(changedVoiceMask);
+}
+
 static void seq_captureTmpKitState()
 {
    seq_snapshotCurrentParameterValues(seq_tmpKitState.interpolatedParams,
@@ -685,6 +897,127 @@ static void seq_pushKitEndpointsToFront(const SeqKitState *kit)
 }
 
 //------------------------------------------------------------------------------
+static void seq_pushKitEndpointVoiceMaskToFront(const SeqKitState *kit,
+                                                uint8_t voiceMask)
+{
+   uint8_t synthVoice;
+   uint8_t i;
+   uint32_t timeout;
+
+   if(!kit || !voiceMask)
+      return;
+
+   /* RESTORE: Handshake Phase 1 - BEGIN */
+   seq_tmpKitHandshakeReady = 0;
+   uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_BEGIN);
+   uart_sendFrontpanelPriorityByteWait(0);
+   uart_sendFrontpanelPriorityByteWait(0);
+
+   /* RESTORE: Handshake Phase 2 - Wait for READY */
+   timeout = 0x000FFFFF;
+   while(!seq_tmpKitHandshakeReady && timeout--)
+   {
+      uart_processFront();
+      __asm__("nop");
+   }
+
+   /* TEMP PATTERN: For mixed normal/temp per-track playback, push only the
+      selected synth voice endpoint bytes so AVR menu storage follows the
+      voice whose track crossed the temporary-pattern boundary. */
+   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
+   {
+      if(!(voiceMask & (uint8_t)(1 << synthVoice)))
+         continue;
+
+      for(i=0;i<SEQ_VOICE_PARAM_LENGTH;i++)
+      {
+         uint16_t param = seq_canonicalParamFromVoiceMask(seq_voiceParamMask[synthVoice][i]);
+
+         if(param < END_OF_SOUND_PARAMETERS && kit->frontPanelParamsValid[param])
+            seq_pushSingleParameterToFront(param, kit->frontPanelParams[param]);
+      }
+   }
+
+   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
+   {
+      if(!(voiceMask & (uint8_t)(1 << synthVoice)))
+         continue;
+
+      for(i=0;i<SEQ_VOICE_PARAM_LENGTH;i++)
+      {
+         uint16_t param = seq_canonicalParamFromVoiceMask(seq_voiceParamMask[synthVoice][i]);
+
+         if(param < END_OF_SOUND_PARAMETERS && kit->morphParamsValid[param])
+            seq_pushSingleMorphParameterToFront(param, kit->morphParams[param]);
+      }
+   }
+
+   /* RESTORE: Handshake Phase 4 - DONE */
+   seq_tmpKitHandshakeAck = 0;
+   uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
+   uart_sendFrontpanelPriorityByteWait(0);
+   uart_sendFrontpanelPriorityByteWait(0);
+
+   /* RESTORE: Handshake Phase 5 - Wait for ACK */
+   timeout = 0x000FFFFF;
+   while(!seq_tmpKitHandshakeAck && timeout--)
+   {
+      uart_processFront();
+      __asm__("nop");
+   }
+}
+
+//------------------------------------------------------------------------------
+static void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask)
+{
+   uint8_t synthVoice;
+   uint8_t normalVoiceMask = 0;
+   uint8_t tmpVoiceMask = 0;
+
+   if(!seq_tmpKitPushParamsToFrontEnabled || !changedVoiceMask)
+      return;
+
+   if(seq_allVoiceSourcesUseTmp())
+   {
+      if(!seq_tmpKitState.valid)
+         seq_captureTmpKitState();
+
+      seq_pushKitEndpointsToFront(&seq_tmpKitState);
+      return;
+   }
+
+   if(seq_allVoiceSourcesUseNormal())
+   {
+      seq_pushKitEndpointsToFront(&seq_normalKitState);
+      return;
+   }
+
+   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
+   {
+      uint8_t bit = (uint8_t)(1 << synthVoice);
+
+      if(!(changedVoiceMask & bit))
+         continue;
+
+      if(seq_voiceSourceState[synthVoice] == SEQ_VOICE_SOURCE_TMP)
+         tmpVoiceMask |= bit;
+      else
+         normalVoiceMask |= bit;
+   }
+
+   if(tmpVoiceMask)
+   {
+      if(!seq_tmpKitState.valid)
+         seq_captureTmpKitState();
+
+      seq_pushKitEndpointVoiceMaskToFront(&seq_tmpKitState, tmpVoiceMask);
+   }
+
+   if(normalVoiceMask)
+      seq_pushKitEndpointVoiceMaskToFront(&seq_normalKitState, normalVoiceMask);
+}
+
+//------------------------------------------------------------------------------
 static void seq_maybePushKitEndpointsToFront(const SeqKitState *kit)
 {
    if(!seq_tmpKitPushParamsToFrontEnabled)
@@ -698,15 +1031,25 @@ static void seq_setTmpKitActive(uint8_t active)
 {
    if(active)
    {
-      if(seq_tmpKitActive || !seq_tmpKitState.valid)
+      if(seq_tmpKitActive)
          return;
 
-      seq_applyParameterValues(seq_tmpKitState.interpolatedParams,
-                               seq_tmpKitState.interpolatedParamsValid);
-      seq_applyAutomationTargets(&seq_tmpKitState.interpolatedAutomationTargets);
+      if(!seq_tmpKitState.valid)
+      {
+         /* TEMP PATTERN: A user can switch to the temporary pattern without
+            first copying a normal pattern into it. Create a parameter sandbox
+            from the current normal images so menu edits while the temp pattern
+            is active cannot land in normal parameter storage. */
+         seq_captureTmpKitState();
+      }
+
+      /* TEMP PATTERN: shared params/macros switch here. Voice-local params are
+         applied per synth voice after per-track pattern sources are committed. */
+      seq_applySharedParameterValues(&seq_tmpKitState);
+      seq_applySharedAutomationTargets(&seq_tmpKitState.interpolatedAutomationTargets);
 
       /* RESTORE: Push the full temporary kit endpoints (Main + Morph) to the AVR.
-         Currently these are zeroed out in seq_captureTmpKitState() for verification. */
+         These may come from copy-to-temp or from lazy temp-kit initialization. */
       seq_maybePushKitEndpointsToFront(&seq_tmpKitState);
       seq_tmpKitActive = 1;
       return;
@@ -715,8 +1058,10 @@ static void seq_setTmpKitActive(uint8_t active)
    if(!seq_tmpKitActive)
       return;
 
-   seq_applyParameterValues(seq_normalKitState.interpolatedParams, seq_normalKitState.interpolatedParamsValid);
-   seq_applyAutomationTargets(&seq_normalKitState.interpolatedAutomationTargets);
+   /* TEMP PATTERN: restore shared params/macros here. Voice-local params are
+      applied per synth voice after per-track pattern sources are committed. */
+   seq_applySharedParameterValues(&seq_normalKitState);
+   seq_applySharedAutomationTargets(&seq_normalKitState.interpolatedAutomationTargets);
 
    /* RESTORE: Push the full captured normal kit endpoints (Main + Morph) to the AVR. */
    seq_maybePushKitEndpointsToFront(&seq_normalKitState);
@@ -749,6 +1094,12 @@ void seq_init()
    memset(seq_transpose_voiceAmount,63,NUM_TRACKS);
    memset(&seq_tmpKitState,0,sizeof(seq_tmpKitState));
    memset(&seq_normalKitState, 0, sizeof(seq_normalKitState));
+   memset(seq_liveSharedParams, 0, sizeof(seq_liveSharedParams));
+   memset(seq_liveSharedParamsValid, 0, sizeof(seq_liveSharedParamsValid));
+   for(i=0;i<SEQ_SYNTH_VOICES;i++)
+   {
+      seq_voiceSourceState[i] = SEQ_VOICE_SOURCE_NORMAL;
+   }
    seq_paramIngressTarget = SEQ_PARAM_INGRESS_CURRENT_IMAGE;
    seq_automationIngressTarget = SEQ_AUTOMATION_INGRESS_NONE;
    seq_tmpKitActive = 0;
@@ -926,6 +1277,19 @@ void seq_setNextPattern(const uint8_t patNr, uint8_t voice)
          seq_perTrackPendingPattern[i]=nextPattern;
       }
    }
+   else if((voice == 5 || voice == 6)
+           && (nextPattern == SEQ_TMP_PATTERN
+               || seq_perTrackPendingPattern[5] == SEQ_TMP_PATTERN
+               || seq_perTrackPendingPattern[6] == SEQ_TMP_PATTERN
+               || seq_perTrackActivePattern[5] == SEQ_TMP_PATTERN
+               || seq_perTrackActivePattern[6] == SEQ_TMP_PATTERN))
+   {
+      /* TEMP PATTERN: closed/open hihat tracks share one synth voice and one
+         parameter mask. A normal/temp boundary change for either hihat track
+         must keep both tracks on the same source side. */
+      seq_perTrackPendingPattern[5] = nextPattern;
+      seq_perTrackPendingPattern[6] = nextPattern;
+   }
    else
       seq_perTrackPendingPattern[voice] = nextPattern;
    seq_loadPendigFlag = 1;
@@ -1039,7 +1403,6 @@ void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
             seq_newPatternExecuted=0;
       }
    }
-   
    
    stepData = seq_liveStepForTrack(voiceNr, seq_stepIndex[voiceNr]);
    seq_parseAutomationNodes(voiceNr, stepData);
@@ -1285,8 +1648,18 @@ static void seq_nextStep()
             seq_activateTmpPattern();
             seq_newPatternAvailable = 0;
          }
+
+         uint8_t oldTrackPattern[NUM_TRACKS];
+         for(i=0;i<NUM_TRACKS;i++)
+         {
+            oldTrackPattern[i] = seq_perTrackActivePattern[i];
+         }
+         uint8_t oldActivePattern = seq_activePattern;
+         uint8_t newActivePattern = seq_normalizePatternNumber(seq_pendingPattern);
+         uint8_t activePatternChanged = (oldActivePattern != newActivePattern);
+         uint8_t tmpBoundaryPatternChanged = 0;
          
-         seq_activePattern = seq_normalizePatternNumber(seq_pendingPattern);
+         seq_activePattern = newActivePattern;
          seq_setTmpKitActive(seq_activePattern == SEQ_TMP_PATTERN);
          seq_newPatternExecuted=1;
          if (seq_loadPendigFlag)
@@ -1310,6 +1683,21 @@ static void seq_nextStep()
             }
          
          }
+
+         seq_updateVoiceSourcesForPatternChange(oldTrackPattern, !activePatternChanged);
+         tmpBoundaryPatternChanged =
+            (seq_trackPatternUsesTmp(oldActivePattern)
+             != seq_trackPatternUsesTmp(newActivePattern));
+         for(i=0;i<NUM_TRACKS;i++)
+         {
+            if(seq_trackPatternUsesTmp(oldTrackPattern[i])
+               != seq_trackPatternUsesTmp(seq_perTrackActivePattern[i]))
+            {
+               tmpBoundaryPatternChanged = 1;
+            }
+         }
+         if(tmpBoundaryPatternChanged)
+            seq_tmpBoundaryPatternSwitchAck = 1;
       
       	//reset pattern position to pattern rotate starting position for the active pattern --AS **PATROT
          if (masterStepPos == 0){
@@ -1333,7 +1721,8 @@ static void seq_nextStep()
          uart_sendFrontpanelByte(seq_activePattern);
          
          seq_loadPendigFlag = 0;
-         seq_realign(); // realign at every pattern change
+         if(!tmpBoundaryPatternChanged)
+            seq_realign(); // realign at non-temp-boundary pattern changes
       }
    }
 
@@ -2813,6 +3202,13 @@ void seq_realign()
    uart_sendFrontpanelByte(0);
    
    seq_midiNoteOff(0xff);
+}
+
+uint8_t seq_consumeTmpBoundaryPatternSwitchAck()
+{
+   uint8_t ret = seq_tmpBoundaryPatternSwitchAck;
+   seq_tmpBoundaryPatternSwitchAck = 0;
+   return ret;
 }
 
 void sequencer_sendVMorph(uint8_t voiceArray, uint8_t morphAmount)

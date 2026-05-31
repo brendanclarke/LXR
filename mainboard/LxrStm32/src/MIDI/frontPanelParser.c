@@ -2057,22 +2057,36 @@ static void frontParser_handleSeqCC()
          break;
 
       case FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN:
+      {
+         uint8_t endpointMode = frontParser_midiMsg.data2;
+
          /* RESTORE: Switch ingress target to normal kit endpoint buffer.
-            Subsequent parameter and target messages will populate seq_normalKitState.frontPanelParams etc. */
+            Subsequent parameter and target messages will populate seq_normalKitState endpoint images.
+            The data byte selects which endpoint group is being refreshed, so file
+            loads can update only the kit/front endpoint or only the morph parameter
+            endpoint without clearing the other side. */
          seq_setIngressTarget(SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT);
          seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
-         /* RESTORE: Initialize the buffers and validity masks before receiving the dump. */
-         memset(seq_normalKitState.frontPanelParams, 0, END_OF_SOUND_PARAMETERS);
-         memset(seq_normalKitState.frontPanelParamsValid, 0, END_OF_SOUND_PARAMETERS);
-         memset(seq_normalKitState.morphParams, 0, END_OF_SOUND_PARAMETERS);
-         memset(seq_normalKitState.morphParamsValid, 0, END_OF_SOUND_PARAMETERS);
-         memset(&seq_normalKitState.frontPanelAutomationTargets,
-                0,
-                sizeof(seq_normalKitState.frontPanelAutomationTargets));
-         memset(&seq_normalKitState.morphParameterEndpointAutomationTargets,
-                0,
-                sizeof(seq_normalKitState.morphParameterEndpointAutomationTargets));
+
+         if(endpointMode != FRONT_SEQ_TMP_KIT_ENDPOINT_MORPH_ONLY)
+         {
+            memset(seq_normalKitState.frontPanelParams, 0, END_OF_SOUND_PARAMETERS);
+            memset(seq_normalKitState.frontPanelParamsValid, 0, END_OF_SOUND_PARAMETERS);
+            memset(&seq_normalKitState.frontPanelAutomationTargets,
+                   0,
+                   sizeof(seq_normalKitState.frontPanelAutomationTargets));
+         }
+
+         if(endpointMode != FRONT_SEQ_TMP_KIT_ENDPOINT_FRONT_ONLY)
+         {
+            memset(seq_normalKitState.morphParams, 0, END_OF_SOUND_PARAMETERS);
+            memset(seq_normalKitState.morphParamsValid, 0, END_OF_SOUND_PARAMETERS);
+            memset(&seq_normalKitState.morphParameterEndpointAutomationTargets,
+                   0,
+                   sizeof(seq_normalKitState.morphParameterEndpointAutomationTargets));
+         }
          break;
+      }
 
       case FRONT_SEQ_TMP_KIT_AUTOMATION_PHASE:
          /* RESTORE: Inside the copy-to-temp endpoint bracket, raw param opcodes
@@ -2088,8 +2102,11 @@ static void frontParser_handleSeqCC()
          break;
 
       case FRONT_SEQ_TMP_KIT_ENDPOINT_END:
-         /* RESTORE: Switch ingress target back to default sound set. */
-         seq_setIngressTarget(SEQ_PARAM_INGRESS_CURRENT_IMAGE);
+         /* RESTORE: Switch ingress target back to the surrounding context. During
+            file load, endpoint dumps are nested inside normal-interpolated ingress. */
+         seq_setIngressTarget(frontParser_fileLoadIngressActive
+                              ? SEQ_PARAM_INGRESS_NORMAL_INTERPOLATED
+                              : SEQ_PARAM_INGRESS_CURRENT_IMAGE);
          seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
          break;
 
@@ -2333,9 +2350,15 @@ static void frontParser_handleSeqCC()
    
       case FRONT_SEQ_SET_SHOWN_PATTERN:
          if (frontParser_midiMsg.data2==frontParser_shownPattern)
-            seq_realign();
+         {
+            if(!seq_consumeTmpBoundaryPatternSwitchAck())
+               seq_realign();
+         }
          else
+         {
+            (void)seq_consumeTmpBoundaryPatternSwitchAck();
             frontParser_shownPattern = seq_normalizePatternNumber(frontParser_midiMsg.data2);
+         }
          break;   
       case FRONT_SEQ_SET_ACTIVE_TRACK:
          if ( (frontParser_activeTrack==frontParser_midiMsg.data2)&&(!seq_isRunning()) )

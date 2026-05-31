@@ -113,6 +113,8 @@ char preset_currentSaveMenuName[8];
 
 uint8_t parameter_values_temp[END_OF_SOUND_PARAMETERS];
 uint8_t parameters2_temp[END_OF_SOUND_PARAMETERS];
+static uint8_t preset_savedParameterValues[END_OF_SOUND_PARAMETERS];
+static uint8_t preset_savedParameters2[END_OF_SOUND_PARAMETERS];
 
 static uint8_t voice1presetMask[VOICE_PARAM_LENGTH]={1,8,9,20,      37,43,49,50,   62,70,74,78,  82,83,88,94,   102,108,115,121,     128,134,137,143,    149,155,161,167,    173,179,185,191,    197,203,209,215}; 
 static uint8_t voice2presetMask[VOICE_PARAM_LENGTH]={2,10,11,21,    38,44,51,52,   63,71,75,79,  84,85,89,95,   103,109,116,122,     129,135,138,144,    150,156,162,168,    174,180,186,192,    198,204,210,216}; 
@@ -122,12 +124,36 @@ static uint8_t voice5presetMask[VOICE_PARAM_LENGTH]={6,16,17,23,    24,29,30,31,
 static uint8_t voice6presetMask[VOICE_PARAM_LENGTH]={7,18,19,25,    26,33,34,35,   36,42,48,59,  60,61,67,93,   101,107,113,120,126, 133,142,148,154,        160,166,172,    178,184,190,196,    202,208,214,220};         
 
 static void preset_makeFileName(char *buf, uint8_t num, uint8_t type);
+static void preset_dumpEndpointsToStm(uint8_t endpointMode);
+static uint8_t preset_shouldPreserveMenuEndpointsDuringFileLoad(void);
+static void preset_saveMenuEndpointsDuringFileLoad(void);
+static void preset_restoreMenuEndpointsDuringFileLoad(void);
 
 static void preset_showLoadingPerf()
 {
    lcd_clear();
    lcd_home();
    lcd_string_F(PSTR("Loading Perf"));
+}
+
+//----------------------------------------------------
+static uint8_t preset_shouldPreserveMenuEndpointsDuringFileLoad(void)
+{
+   return menu_playedPattern == SEQ_TMP_PATTERN;
+}
+
+//----------------------------------------------------
+static void preset_saveMenuEndpointsDuringFileLoad(void)
+{
+   memcpy(preset_savedParameterValues, parameter_values, END_OF_SOUND_PARAMETERS);
+   memcpy(preset_savedParameters2, parameters2, END_OF_SOUND_PARAMETERS);
+}
+
+//----------------------------------------------------
+static void preset_restoreMenuEndpointsDuringFileLoad(void)
+{
+   memcpy(parameter_values, preset_savedParameterValues, END_OF_SOUND_PARAMETERS);
+   memcpy(parameters2, preset_savedParameters2, END_OF_SOUND_PARAMETERS);
 }
 
 
@@ -532,12 +558,13 @@ void preset_readDrumsetMeta(uint8_t isMorph)
    
    if(isMorph)
    {
-      // bc: extra morph data not associated with a voice. Not sure anything other
-      // than voice decimation and version matters, but kept here for file parity
-      parameters2[PAR_VOICE_DECIMATION_ALL]=parameters2_temp[PAR_VOICE_DECIMATION_ALL];
-      parameters2[NRPN_FINE]=parameters2_temp[NRPN_FINE];
-      parameters2[NRPN_COARSE]=parameters2_temp[NRPN_COARSE];
-      parameters2[NRPN_DATA_ENTRY_COARSE]=parameters2_temp[NRPN_DATA_ENTRY_COARSE];
+      /* FILE LOAD: Keep the morph parameter endpoint image complete. This is
+         endpoint storage only; it does not change live morph destination behavior. */
+      for (i=0;i<END_OF_SOUND_PARAMETERS-END_OF_INDIVIDUAL_VOICE_PARAMS;i++)
+      {
+         parameters2[END_OF_INDIVIDUAL_VOICE_PARAMS+i]=
+            parameters2_temp[END_OF_INDIVIDUAL_VOICE_PARAMS+i];
+      }
       parameters2[PAR_KIT_VERSION]=preset_workingVersion; // version is updated in readToTemp
       
    }
@@ -626,38 +653,53 @@ static void preset_dumpAutomationTargetsToStm(const uint8_t *params)
 //----------------------------------------------------
 void preset_dumpNormalEndpointsToStm()
 {
+   preset_dumpEndpointsToStm(SEQ_TMP_KIT_ENDPOINT_BOTH);
+}
+
+//----------------------------------------------------
+static void preset_dumpEndpointsToStm(uint8_t endpointMode)
+{
    uint16_t i;
 
-   /* RESTORE: Handshake BEGIN. Inform STM we are about to dump the raw menu state. */
-   frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_ENDPOINT_BEGIN, 0);
+   /* RESTORE: Endpoint capture BEGIN. The data byte selects which normal
+      endpoint image the STM clears and receives. This is used both for
+      copy-to-temp full dumps and file-load normal endpoint storage. */
+   frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_ENDPOINT_BEGIN, endpointMode);
 
-   // 1. Send parameter_values[] (Original/Front Panel endpoints)
-   for (i = 0; i < END_OF_SOUND_PARAMETERS; i++)
+   if(endpointMode != SEQ_TMP_KIT_ENDPOINT_MORPH_ONLY)
    {
-      if (i < 128)
-         frontPanel_sendData(PRF_RESTORE_PARAM_CC, (uint8_t)i, parameter_values[i]);
-      else
-         frontPanel_sendData(PRF_RESTORE_PARAM_CC2, (uint8_t)(i - 128), parameter_values[i]);
+      // 1. Send parameter_values[] (Original/Front Panel endpoints)
+      for (i = 0; i < END_OF_SOUND_PARAMETERS; i++)
+      {
+         if (i < 128)
+            frontPanel_sendData(PRF_RESTORE_PARAM_CC, (uint8_t)i, parameter_values[i]);
+         else
+            frontPanel_sendData(PRF_RESTORE_PARAM_CC2, (uint8_t)(i - 128), parameter_values[i]);
+      }
+
+      /* RESTORE: Resolved automation targets for parameter_values[] are bracketed
+         immediately after the kit/front endpoint bytes they describe. */
+      frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT);
+      preset_dumpAutomationTargetsToStm(parameter_values);
    }
 
-   /* RESTORE: Resolved automation targets for parameter_values[] are bracketed
-      immediately after the kit/front endpoint bytes they describe. */
-   frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT);
-   preset_dumpAutomationTargetsToStm(parameter_values);
-
-   // 2. Send parameters2[] (Morph parameter endpoints)
-   for (i = 0; i < END_OF_SOUND_PARAMETERS; i++)
+   if(endpointMode != SEQ_TMP_KIT_ENDPOINT_FRONT_ONLY)
    {
-      if (i < 128)
-         frontPanel_sendData(PRF_RESTORE_MORPH_CC, (uint8_t)i, parameters2[i]);
-      else
-         frontPanel_sendData(PRF_RESTORE_MORPH_CC2, (uint8_t)(i - 128), parameters2[i]);
+      // 2. Send parameters2[] (Morph parameter endpoints)
+      for (i = 0; i < END_OF_SOUND_PARAMETERS; i++)
+      {
+         if (i < 128)
+            frontPanel_sendData(PRF_RESTORE_MORPH_CC, (uint8_t)i, parameters2[i]);
+         else
+            frontPanel_sendData(PRF_RESTORE_MORPH_CC2, (uint8_t)(i - 128), parameters2[i]);
+      }
+
+      /* RESTORE: Resolved automation targets for parameters2[] are sent as the
+         morph automation target endpoint image, separate from kit/front endpoints. */
+      frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_MORPH_ENDPOINT);
+      preset_dumpAutomationTargetsToStm(parameters2);
    }
 
-   /* RESTORE: Resolved automation targets for parameters2[] are sent as the
-      morph automation target endpoint image, separate from kit/front endpoints. */
-   frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_MORPH_ENDPOINT);
-   preset_dumpAutomationTargetsToStm(parameters2);
    frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_NONE);
 
    /* RESTORE: Handshake END. Inform STM we have finished the dump. */
@@ -720,6 +762,10 @@ uint8_t preset_loadDrumset(uint8_t presetNr, uint8_t voiceArray, uint8_t isMorph
    {
       preset_readDrumsetMeta(isMorph);
    }
+
+   preset_dumpEndpointsToStm(isMorph
+                             ? SEQ_TMP_KIT_ENDPOINT_MORPH_ONLY
+                             : SEQ_TMP_KIT_ENDPOINT_FRONT_ONLY);
    
    frontPanel_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_KIT);
    
@@ -2172,6 +2218,7 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
    uint8_t flowSessionOk=1;
    uint8_t fileBeginSent=0;
    uint8_t fileDoneSent=0;
+   uint8_t menuEndpointsSaved=0;
 
    uart_clearRxFifo();
    if(!frontPanel_flowBeginSession())
@@ -2207,6 +2254,12 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
    preset_workingVersion = version;
    frontPanel_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_ALL);
    fileBeginSent=1;
+
+   if(preset_shouldPreserveMenuEndpointsDuringFileLoad())
+   {
+      preset_saveMenuEndpointsDuringFileLoad();
+      menuEndpointsSaved=1;
+   }
    
    if( (preset_workingVoiceArray>=0x7f) || (preset_workingVoiceArray==0x7f) )
    {
@@ -2290,6 +2343,17 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
       preset_readDrumsetMeta(0);
       preset_readDrumsetMeta(1);
    }
+
+   preset_dumpEndpointsToStm(SEQ_TMP_KIT_ENDPOINT_BOTH);
+
+   /* TEMP PATTERN: .all/.prf loads still dump the loaded endpoints to STM normal
+      storage, but temp playback keeps AVR menu endpoint arrays from the active
+      temporary image until playback leaves the temporary pattern. */
+   if(menuEndpointsSaved)
+   {
+      preset_restoreMenuEndpointsDuringFileLoad();
+      menuEndpointsSaved=0;
+   }
    
    for (trkNum=0;trkNum<NUM_TRACKS;trkNum++)
    {
@@ -2314,6 +2378,12 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
 #endif
 
 closeFile:
+   if(menuEndpointsSaved)
+   {
+      preset_restoreMenuEndpointsDuringFileLoad();
+      menuEndpointsSaved=0;
+   }
+
 	//close the file handle
    f_close((FIL*)&preset_File);
 
@@ -2344,6 +2414,7 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
    uint8_t flowSessionOk=1;
    uint8_t fileBeginSent=0;
    uint8_t fileDoneSent=0;
+   uint8_t menuEndpointsSaved=0;
 
    uart_clearRxFifo();
    if(!frontPanel_flowBeginSession())
@@ -2381,6 +2452,12 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
 
    frontPanel_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PERFORMANCE);
    fileBeginSent=1;
+
+   if(preset_shouldPreserveMenuEndpointsDuringFileLoad())
+   {
+      preset_saveMenuEndpointsDuringFileLoad();
+      menuEndpointsSaved=1;
+   }
    
    if(preset_workingVoiceArray>=0x3f) // all voices - load perf metadata too
    {
@@ -2494,6 +2571,16 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
       preset_readDrumsetMeta(0);
       preset_readDrumsetMeta(1);
    }
+
+   preset_dumpEndpointsToStm(SEQ_TMP_KIT_ENDPOINT_BOTH);
+
+   /* TEMP PATTERN: forward loaded .prf endpoints to STM normal storage, then
+      restore AVR menu endpoint arrays for the currently-playing temporary kit. */
+   if(menuEndpointsSaved)
+   {
+      preset_restoreMenuEndpointsDuringFileLoad();
+      menuEndpointsSaved=0;
+   }
    
    for (trkNum=0;trkNum<NUM_TRACKS;trkNum++)
    {
@@ -2516,6 +2603,12 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
 #endif
 
 closeFile:
+   if(menuEndpointsSaved)
+   {
+      preset_restoreMenuEndpointsDuringFileLoad();
+      menuEndpointsSaved=0;
+   }
+
 	//close the file handle
    f_close((FIL*)&preset_File);
 
