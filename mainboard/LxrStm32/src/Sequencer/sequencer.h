@@ -254,6 +254,8 @@ uint8_t seq_isTmpKitActive();
 void seq_setAutomationIngressTarget(uint8_t target);
 
 void seq_tick();
+void seq_serviceEndpointRestore();
+uint8_t seq_endpointRestoreBusy();
 //------------------------------------------------------------------------------
 void seq_armAutomationStep(uint8_t stepNr, uint8_t track,uint8_t isArmed);
 //------------------------------------------------------------------------------

@@ -2004,6 +2004,10 @@ void preset_morph(uint8_t voiceArray, uint8_t morph)
 {
    uint8_t i, k;
    uint8_t *parArray;
+
+   if(frontParser_isRestoreActive())
+      return;
+
    if (morph>=127)
       morph=255;
    else

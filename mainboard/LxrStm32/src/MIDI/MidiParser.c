@@ -1543,7 +1543,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    }
    else if (MIDIparamNr==MOD_WHEEL)
    {  
-      if(seq_morphLoadDisabled)
+      if(seq_morphLoadDisabled || seq_endpointRestoreBusy())
          return;
 
       midiChannelCode=0;

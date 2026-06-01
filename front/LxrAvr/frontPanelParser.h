@@ -21,6 +21,7 @@ extern uint8_t frontPanel_sysexMode;
 extern uint8_t frontPanel_longOp;
 extern uint8_t frontPanel_longData;
 extern uint8_t frontParser_rxDisable;
+uint8_t frontParser_isRestoreActive(void);
 
 
 #define NOTE_ON 			0x90	// 2 data bytes

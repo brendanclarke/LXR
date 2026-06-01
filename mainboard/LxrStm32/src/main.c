@@ -291,8 +291,9 @@ int main(void)
 
 		//handle trigger outs
 		trigger_tick();
-    }
+
+		// Advance any queued AVR endpoint/menu restore outside the sequencer boundary path.
+		seq_serviceEndpointRestore();
+	    }
 #endif
 }
-
-

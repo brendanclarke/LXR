@@ -31,6 +31,11 @@ static uint16_t frontParser_restoreCount = 0;
 static uint16_t frontParser_restoreMorphCount = 0;
 // DEBUG
 
+uint8_t frontParser_isRestoreActive(void)
+{
+   return frontParser_restoreActive;
+}
+
 uint8_t frontPanel_sysexMode = 0;
 uint8_t frontParser_sysexCallback = 0;
 uint8_t frontParser_rxDisable=0;
@@ -1014,6 +1019,9 @@ void frontPanel_parseData(uint8_t data)
             // morph operation
             else if( (frontParser_midiMsg.status == MORPH_CC)||(frontParser_midiMsg.status == VOICE_MORPH) )
             {  
+               if(frontParser_restoreActive)
+                  return;
+
                // morph is a low-priority opertaion (because we might be getting a LOT
                // from the Mod Wheel) - if we get a bank change or program change, 
                // we cache Morph while those happen

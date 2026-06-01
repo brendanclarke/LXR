@@ -62,8 +62,24 @@
 #define SEQ_VOICE_SOURCE_TMP 3
 #define SEQ_PRESCALER_MASK 	0x03
 #define MIDI_PRESCALER_MASK	0x04
+#define SEQ_ENDPOINT_RESTORE_NONE 0
+#define SEQ_ENDPOINT_RESTORE_FULL 1
+#define SEQ_ENDPOINT_RESTORE_MASK 2
+#define SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH 4
+#define SEQ_ENDPOINT_RESTORE_PHASE_IDLE 0
+#define SEQ_ENDPOINT_RESTORE_PHASE_WAIT_READY 1
+#define SEQ_ENDPOINT_RESTORE_PHASE_SEND_FRONT 2
+#define SEQ_ENDPOINT_RESTORE_PHASE_SEND_MORPH 3
+#define SEQ_ENDPOINT_RESTORE_PHASE_WAIT_ACK 4
 
 static uint8_t seq_prescaleCounter = 0;
+
+typedef struct SeqEndpointRestoreRequestStruct
+{
+   const SeqKitState *kit;
+   uint8_t mode;
+   uint8_t voiceMask;
+} SeqEndpointRestoreRequest;
 
 static const uint16_t seq_voiceParamMask[SEQ_SYNTH_VOICES][SEQ_VOICE_PARAM_LENGTH] =
 {
@@ -211,6 +227,14 @@ static uint8_t seq_tmpKitActive = 0;
 static uint8_t seq_tmpKitPushParamsToFrontEnabled = 1; // RESTORE: Enabled by default now
 volatile uint8_t seq_tmpKitHandshakeReady = 0;
 volatile uint8_t seq_tmpKitHandshakeAck = 0;
+static SeqEndpointRestoreRequest seq_endpointRestoreQueue[SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH];
+static uint8_t seq_endpointRestoreQueueHead = 0;
+static uint8_t seq_endpointRestoreQueueCount = 0;
+static SeqEndpointRestoreRequest seq_endpointRestoreCurrent;
+static uint8_t seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_IDLE;
+static uint16_t seq_endpointRestoreParamCursor = 0;
+static uint8_t seq_endpointRestoreVoiceCursor = 0;
+static uint8_t seq_endpointRestoreVoiceParamCursor = 0;
 
 static uint8_t seq_voiceSourceState[SEQ_SYNTH_VOICES];
 static uint8_t seq_tmpBoundaryPatternSwitchAck = 0;
@@ -237,6 +261,8 @@ static void seq_nextStep();
 static void seq_captureTmpKitState();
 static void seq_setTmpKitActive(uint8_t active);
 static void seq_pushKitEndpointsToFront(const SeqKitState *kit);
+static void seq_pushKitEndpointVoiceMaskToFront(const SeqKitState *kit,
+                                                uint8_t voiceMask);
 static void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask);
 static void seq_updateVoiceSourcesForPatternChange(const uint8_t *oldPatternForTrack,
                                                    uint8_t pushEndpointUpdates);
@@ -840,130 +866,235 @@ static void seq_pushSingleMorphParameterToFront(uint16_t param, uint8_t value)
 //------------------------------------------------------------------------------
 static void seq_pushKitEndpointsToFront(const SeqKitState *kit)
 {
-   uint16_t param;
-   uint32_t timeout;
-
    if(!kit)
       return;
 
-   /* RESTORE: Handshake Phase 1 - BEGIN */
-   seq_tmpKitHandshakeReady = 0;
-   uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_BEGIN);
-   uart_sendFrontpanelPriorityByteWait(0);
-   uart_sendFrontpanelPriorityByteWait(0);
-
-   /* RESTORE: Handshake Phase 2 - Wait for READY */
-   timeout = 0x000FFFFF;
-   while(!seq_tmpKitHandshakeReady && timeout--)
-   {
-      uart_processFront();
-      __asm__("nop");
-   }
-
-   /* RESTORE: Handshake Phase 3a - kit/front endpoint bytes.
-      The PRF_RESTORE_PARAM_* opcodes restore AVR parameter_values[]. */
-   for(param=0;param<END_OF_SOUND_PARAMETERS;param++)
-   {
-      if(kit->frontPanelParamsValid[param])
-      {
-         seq_pushSingleParameterToFront(param, kit->frontPanelParams[param]);
-      }
-   }
-
-   /* RESTORE: Handshake Phase 3b - morph parameter endpoint bytes.
-      The PRF_RESTORE_MORPH_* opcodes restore AVR parameters2[]. No resolved
-      automation target structs are sent to AVR; the AVR stores selector bytes. */
-   for(param=0;param<END_OF_SOUND_PARAMETERS;param++)
-   {
-      if(kit->morphParamsValid[param])
-      {
-         seq_pushSingleMorphParameterToFront(param, kit->morphParams[param]);
-      }
-   }
-
-   /* RESTORE: Handshake Phase 4 - DONE */
-   seq_tmpKitHandshakeAck = 0;
-   uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
-   uart_sendFrontpanelPriorityByteWait(0);
-   uart_sendFrontpanelPriorityByteWait(0);
-
-   /* RESTORE: Handshake Phase 5 - Wait for ACK */
-   timeout = 0x000FFFFF;
-   while(!seq_tmpKitHandshakeAck && timeout--)
-   {
-      uart_processFront();
-      __asm__("nop");
-   }
+   seq_pushKitEndpointVoiceMaskToFront(kit, 0xff);
 }
 
 //------------------------------------------------------------------------------
 static void seq_pushKitEndpointVoiceMaskToFront(const SeqKitState *kit,
                                                 uint8_t voiceMask)
 {
-   uint8_t synthVoice;
-   uint8_t i;
-   uint32_t timeout;
+   SeqEndpointRestoreRequest request;
+   uint8_t tail;
+   uint8_t last;
 
    if(!kit || !voiceMask)
       return;
 
-   /* RESTORE: Handshake Phase 1 - BEGIN */
-   seq_tmpKitHandshakeReady = 0;
-   uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_BEGIN);
-   uart_sendFrontpanelPriorityByteWait(0);
-   uart_sendFrontpanelPriorityByteWait(0);
+   request.kit = kit;
+   request.mode = (voiceMask == 0xff) ? SEQ_ENDPOINT_RESTORE_FULL
+                                      : SEQ_ENDPOINT_RESTORE_MASK;
+   request.voiceMask = voiceMask;
 
-   /* RESTORE: Handshake Phase 2 - Wait for READY */
-   timeout = 0x000FFFFF;
-   while(!seq_tmpKitHandshakeReady && timeout--)
+   /* RESTORE RATE LIMIT: endpoint/menu restores are queued and sent by
+      seq_serviceEndpointRestore(), one endpoint parameter per STM main-loop
+      pass. This keeps temp/normal pattern switching from performing a large
+      blocking UART dump in the sequencer boundary path. */
+   if(seq_endpointRestoreQueueCount)
    {
-      uart_processFront();
-      __asm__("nop");
-   }
+      last = (uint8_t)((seq_endpointRestoreQueueHead +
+                        seq_endpointRestoreQueueCount - 1) %
+                       SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH);
 
-   /* TEMP PATTERN: For mixed normal/temp per-track playback, push only the
-      selected synth voice endpoint bytes so AVR menu storage follows the
-      voice whose track crossed the temporary-pattern boundary. */
-   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
-   {
-      if(!(voiceMask & (uint8_t)(1 << synthVoice)))
-         continue;
-
-      for(i=0;i<SEQ_VOICE_PARAM_LENGTH;i++)
+      if(seq_endpointRestoreQueue[last].kit == request.kit &&
+         seq_endpointRestoreQueue[last].mode == request.mode)
       {
-         uint16_t param = seq_canonicalParamFromVoiceMask(seq_voiceParamMask[synthVoice][i]);
-
-         if(param < END_OF_SOUND_PARAMETERS && kit->frontPanelParamsValid[param])
-            seq_pushSingleParameterToFront(param, kit->frontPanelParams[param]);
+         if(request.mode == SEQ_ENDPOINT_RESTORE_MASK)
+            seq_endpointRestoreQueue[last].voiceMask |= request.voiceMask;
+         return;
       }
    }
 
-   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
+   if(seq_endpointRestoreQueueCount >= SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH)
    {
-      if(!(voiceMask & (uint8_t)(1 << synthVoice)))
-         continue;
+      last = (uint8_t)((seq_endpointRestoreQueueHead +
+                        seq_endpointRestoreQueueCount - 1) %
+                       SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH);
+      seq_endpointRestoreQueue[last] = request;
+      return;
+   }
 
-      for(i=0;i<SEQ_VOICE_PARAM_LENGTH;i++)
+   tail = (uint8_t)((seq_endpointRestoreQueueHead + seq_endpointRestoreQueueCount) %
+                    SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH);
+   seq_endpointRestoreQueue[tail] = request;
+   seq_endpointRestoreQueueCount++;
+}
+
+//------------------------------------------------------------------------------
+static uint8_t seq_endpointRestorePopRequest()
+{
+   if(!seq_endpointRestoreQueueCount)
+      return 0;
+
+   seq_endpointRestoreCurrent = seq_endpointRestoreQueue[seq_endpointRestoreQueueHead];
+   seq_endpointRestoreQueueHead =
+      (uint8_t)((seq_endpointRestoreQueueHead + 1) % SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH);
+   seq_endpointRestoreQueueCount--;
+
+   seq_endpointRestoreParamCursor = 0;
+   seq_endpointRestoreVoiceCursor = 0;
+   seq_endpointRestoreVoiceParamCursor = 0;
+   return 1;
+}
+
+//------------------------------------------------------------------------------
+static uint8_t seq_endpointRestoreSendNextFull(uint8_t morphEndpoint)
+{
+   uint16_t param;
+   const SeqKitState *kit = seq_endpointRestoreCurrent.kit;
+   const uint8_t *valid = morphEndpoint ? kit->morphParamsValid
+                                        : kit->frontPanelParamsValid;
+   const uint8_t *values = morphEndpoint ? kit->morphParams
+                                         : kit->frontPanelParams;
+
+   for(param=seq_endpointRestoreParamCursor;param<END_OF_SOUND_PARAMETERS;param++)
+   {
+      if(valid[param])
       {
-         uint16_t param = seq_canonicalParamFromVoiceMask(seq_voiceParamMask[synthVoice][i]);
+         if(morphEndpoint)
+            seq_pushSingleMorphParameterToFront(param, values[param]);
+         else
+            seq_pushSingleParameterToFront(param, values[param]);
 
-         if(param < END_OF_SOUND_PARAMETERS && kit->morphParamsValid[param])
-            seq_pushSingleMorphParameterToFront(param, kit->morphParams[param]);
+         seq_endpointRestoreParamCursor = (uint16_t)(param + 1);
+         return 1;
       }
    }
 
-   /* RESTORE: Handshake Phase 4 - DONE */
-   seq_tmpKitHandshakeAck = 0;
-   uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
-   uart_sendFrontpanelPriorityByteWait(0);
-   uart_sendFrontpanelPriorityByteWait(0);
+   return 0;
+}
 
-   /* RESTORE: Handshake Phase 5 - Wait for ACK */
-   timeout = 0x000FFFFF;
-   while(!seq_tmpKitHandshakeAck && timeout--)
+//------------------------------------------------------------------------------
+static uint8_t seq_endpointRestoreSendNextMasked(uint8_t morphEndpoint)
+{
+   const SeqKitState *kit = seq_endpointRestoreCurrent.kit;
+   const uint8_t *valid = morphEndpoint ? kit->morphParamsValid
+                                        : kit->frontPanelParamsValid;
+   const uint8_t *values = morphEndpoint ? kit->morphParams
+                                         : kit->frontPanelParams;
+
+   while(seq_endpointRestoreVoiceCursor < SEQ_SYNTH_VOICES)
    {
-      uart_processFront();
-      __asm__("nop");
+      uint8_t synthVoice = seq_endpointRestoreVoiceCursor;
+
+      if(!(seq_endpointRestoreCurrent.voiceMask & (uint8_t)(1 << synthVoice)))
+      {
+         seq_endpointRestoreVoiceCursor++;
+         seq_endpointRestoreVoiceParamCursor = 0;
+         continue;
+      }
+
+      while(seq_endpointRestoreVoiceParamCursor < SEQ_VOICE_PARAM_LENGTH)
+      {
+         uint16_t param =
+            seq_canonicalParamFromVoiceMask(
+               seq_voiceParamMask[synthVoice][seq_endpointRestoreVoiceParamCursor]);
+
+         seq_endpointRestoreVoiceParamCursor++;
+
+         if(param < END_OF_SOUND_PARAMETERS && valid[param])
+         {
+            if(morphEndpoint)
+               seq_pushSingleMorphParameterToFront(param, values[param]);
+            else
+               seq_pushSingleParameterToFront(param, values[param]);
+
+            return 1;
+         }
+      }
+
+      seq_endpointRestoreVoiceCursor++;
+      seq_endpointRestoreVoiceParamCursor = 0;
+   }
+
+   return 0;
+}
+
+//------------------------------------------------------------------------------
+static uint8_t seq_endpointRestoreSendNext(uint8_t morphEndpoint)
+{
+   if(!seq_endpointRestoreCurrent.kit)
+      return 0;
+
+   if(seq_endpointRestoreCurrent.mode == SEQ_ENDPOINT_RESTORE_FULL)
+      return seq_endpointRestoreSendNextFull(morphEndpoint);
+
+   return seq_endpointRestoreSendNextMasked(morphEndpoint);
+}
+
+//------------------------------------------------------------------------------
+uint8_t seq_endpointRestoreBusy()
+{
+   return (uint8_t)((seq_endpointRestorePhase != SEQ_ENDPOINT_RESTORE_PHASE_IDLE) ||
+                   (seq_endpointRestoreQueueCount != 0));
+}
+
+//------------------------------------------------------------------------------
+void seq_serviceEndpointRestore()
+{
+   switch(seq_endpointRestorePhase)
+   {
+      case SEQ_ENDPOINT_RESTORE_PHASE_IDLE:
+         if(!seq_endpointRestorePopRequest())
+            return;
+
+         seq_tmpKitHandshakeReady = 0;
+         seq_tmpKitHandshakeAck = 0;
+         uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_BEGIN);
+         uart_sendFrontpanelPriorityByteWait(0);
+         uart_sendFrontpanelPriorityByteWait(0);
+         seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_WAIT_READY;
+         return;
+
+      case SEQ_ENDPOINT_RESTORE_PHASE_WAIT_READY:
+         if(seq_tmpKitHandshakeReady)
+         {
+            seq_endpointRestoreParamCursor = 0;
+            seq_endpointRestoreVoiceCursor = 0;
+            seq_endpointRestoreVoiceParamCursor = 0;
+            seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_SEND_FRONT;
+         }
+         return;
+
+      case SEQ_ENDPOINT_RESTORE_PHASE_SEND_FRONT:
+         if(seq_endpointRestoreSendNext(0))
+            return;
+
+         seq_endpointRestoreParamCursor = 0;
+         seq_endpointRestoreVoiceCursor = 0;
+         seq_endpointRestoreVoiceParamCursor = 0;
+         seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_SEND_MORPH;
+         return;
+
+      case SEQ_ENDPOINT_RESTORE_PHASE_SEND_MORPH:
+         if(seq_endpointRestoreSendNext(1))
+            return;
+
+         seq_tmpKitHandshakeAck = 0;
+         uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
+         uart_sendFrontpanelPriorityByteWait(0);
+         uart_sendFrontpanelPriorityByteWait(0);
+         seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_WAIT_ACK;
+         return;
+
+      case SEQ_ENDPOINT_RESTORE_PHASE_WAIT_ACK:
+         if(seq_tmpKitHandshakeAck)
+         {
+            seq_endpointRestoreCurrent.kit = 0;
+            seq_endpointRestoreCurrent.mode = SEQ_ENDPOINT_RESTORE_NONE;
+            seq_endpointRestoreCurrent.voiceMask = 0;
+            seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_IDLE;
+         }
+         return;
+
+      default:
+         seq_endpointRestoreCurrent.kit = 0;
+         seq_endpointRestoreCurrent.mode = SEQ_ENDPOINT_RESTORE_NONE;
+         seq_endpointRestoreCurrent.voiceMask = 0;
+         seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_IDLE;
+         return;
    }
 }
 
@@ -3213,7 +3344,7 @@ uint8_t seq_consumeTmpBoundaryPatternSwitchAck()
 
 void sequencer_sendVMorph(uint8_t voiceArray, uint8_t morphAmount)
 {
-   if(seq_morphLoadDisabled)
+   if(seq_morphLoadDisabled || seq_endpointRestoreBusy())
       return;
 
    uart_sendFrontpanelByte(FRONT_SEQ_VOICE_MORPH);

@@ -1392,6 +1392,220 @@ Observed warnings:
 
 ---
 
+## 36. Endpoint Restore Suppression Test Result and Next Design Direction
+
+Status: audit note after user hardware test on 2026-06-01.
+
+Result:
+
+- Test-only suppression of the STM-to-AVR endpoint/menu restore during temp/normal pattern switching removed the remaining chirp.
+- The user reset the code afterward, keeping this audit document only.
+- This strongly implicates the endpoint/menu restore transaction itself, not the normal/temp interpolated parameter source swap.
+
+Potential feedback routes checked:
+
+- AVR ordinary outbound traffic during restore is suppressed by `frontParser_restoreActive` in `frontPanel_sendData(...)`.
+- `PARAM_RESTORE_DONE` calls `menu_repaintAll()` before `PARAM_RESTORE_ACK` and before `frontParser_restoreActive` is cleared, so ordinary menu repaint traffic should also be suppressed.
+- `frontPanel_sendByte(...)` bypasses `frontPanel_sendData(...)` suppression. I did not identify a confirmed restore/menu repaint path that uses direct bytes during this transaction, but this remains a route to keep in mind if future direct-byte calls are added near menu repaint.
+- STM waits for `PARAM_RESTORE_READY` and `PARAM_RESTORE_ACK` by spinning inside the sequencer-side restore function while calling `uart_processFront()`. That means any queued front-panel RX can be parsed during the pattern-change transaction. This is not a clean "parameter values came back down" feedback loop, but it is a real timing/reentrancy route.
+- `UART_DEBUG_ECHO_MODE` would be a catastrophic echo route if enabled. Current normal code path is the non-echo parser path.
+
+Most likely mechanism:
+
+- Full endpoint restore sends a large burst of kit/front endpoint bytes and morph parameter endpoint bytes at the same moment the pattern source changes.
+- The STM function doing this is synchronous and blocking: it waits for AVR READY/ACK, pushes many priority bytes, and services front RX from inside the wait loops.
+- Even if audio interrupts continue, this can disturb control-rate scheduling around the sequencer boundary enough to produce the audible chirp.
+- Because suppressing the restore made the chirp disappear, this timing/transaction load is a better explanation than DSP phase reset or a parameter-value feedback loop.
+
+Recommended fix:
+
+- Do not push endpoint/menu restores synchronously from the temp/normal pattern switch path.
+- Pattern switching should update STM playback state immediately, but should only mark the AVR menu image as dirty.
+- Queue/coalesce the required endpoint/menu restore target: normal full image, temporary full image, or masked voice image for individual track switches.
+- Process the queued restore later from a non-boundary control/UI context, preferably after the immediate pattern-change work has completed.
+- If a second switch happens before the queued restore is sent, discard the stale queued restore and keep only the latest desired AVR menu image.
+
+Secondary options if deferral alone is not enough:
+
+- Rate-limit/chunk the restore payload across multiple UI/control ticks with a small byte or parameter budget.
+- Send only changed endpoint bytes by diffing against a cached AVR menu image.
+- Lazy-sync endpoint/menu values only when the user enters a sound/menu context that needs them.
+- Send only the currently visible voice/page immediately, then defer the full endpoint image.
+
+Design guardrails:
+
+- This change should affect only STM-to-AVR menu synchronization for endpoint images.
+- It must not change file-load ingress, copy-to-temp ingress, or the storage rules for normal/temporary parameter structs.
+- No extraneous LCD/debug writes should be added.
+- Do not alter the established morph behavior: morph parameter endpoint automation destination selectors are stored/restored for menu/state integrity, but current morph interpolation behavior around automation destination selection must not be changed as part of this glitch fix.
+
+---
+
+## 37. Correction: AVR Morph Use Limits "Lazy Menu Sync"
+
+Status: audit correction after user objection on 2026-06-01.
+
+Important correction:
+
+- The AVR endpoint arrays are not merely passive menu display state.
+- `preset_morph(...)` interpolates directly from `parameter_values[paramNumber]` and `parameters2[paramNumber]`, then sends the resolved values to STM.
+- `PAR_MORPH`, `MORPH_CC`, and `VOICE_MORPH` routes all eventually call `preset_morph(...)` on the AVR.
+- Therefore, leaving the AVR endpoint arrays stale after a temp/normal source switch is only safe if no AVR-side morph operation can occur before the endpoint arrays are made current.
+
+Implication:
+
+- A pure "sync only when menu needs it" strategy is too broad and could break morph behavior.
+- The endpoint restore cannot be treated as display-only state.
+- The safer framing is: avoid doing the restore synchronously at the exact pattern switch boundary, but ensure the AVR endpoint arrays are updated before any AVR-side morph computation that depends on them.
+
+Better design options:
+
+- Move the endpoint restore out of the sequencer boundary path, but complete it immediately afterward in a high-priority non-boundary service point before accepting/processing morph operations.
+- Add a short "morph blocked until endpoint restore clean" guard: if a morph command arrives while an endpoint restore is pending, restore endpoints first, then process morph.
+- Alternatively, make temp/normal switching send no AVR restore at the boundary, but also have STM perform or own the resolved morph/interpolation state so AVR-side `preset_morph(...)` cannot operate on stale endpoint arrays. This is a larger architecture change.
+- Rate-limit/chunking alone is not enough unless morph operations are either blocked or ordered behind the pending endpoint update.
+
+Revised likely fix:
+
+- Coalesce endpoint restore requests on temp/normal source switches.
+- Do not execute the restore from inside the pattern-change call path.
+- Execute the restore from a controlled point shortly after the boundary, before any AVR-side morph command is allowed to compute from `parameter_values[]`/`parameters2[]`.
+- If morph input arrives during the pending window, either flush the pending restore first or defer the morph command until restore completion.
+
+Implementation direction selected:
+
+- Rate-limit the STM-to-AVR endpoint restore to one endpoint parameter per STM main-loop cycle.
+- Keep the existing `PARAM_RESTORE_BEGIN` / `PARAM_RESTORE_DONE` bracket so the AVR can treat the endpoint image as in-flight.
+- Replace synchronous endpoint pushes from pattern switching with queued restore requests.
+- Block morph sends while an endpoint restore is queued or in-flight.
+- Also guard AVR `preset_morph(...)` while `frontParser_restoreActive` is set, so local/menu morph computation cannot run against a half-restored endpoint image.
+
+Implemented:
+
+- STM `seq_pushKitEndpointsToFront(...)` and masked endpoint pushes now enqueue restore requests instead of performing blocking dumps in the pattern-change path.
+- Added `seq_serviceEndpointRestore()`, called once per STM main loop after `seq_tick()` / `trigger_tick()`.
+- The service keeps the existing restore bracket:
+  - sends `PARAM_RESTORE_BEGIN`;
+  - waits for `PARAM_RESTORE_READY` via the normal front parser path;
+  - sends at most one kit/front endpoint parameter or one morph parameter endpoint per service call;
+  - sends `PARAM_RESTORE_DONE`;
+  - waits for `PARAM_RESTORE_ACK` via the normal front parser path.
+- Added a small restore-request queue with simple coalescing for adjacent matching masked requests.
+- Added `seq_endpointRestoreBusy()`.
+- STM voice morph sends and MIDI/mod-wheel morph sends return while endpoint restore is queued or active.
+- AVR ignores incoming `MORPH_CC` / `VOICE_MORPH` while `frontParser_restoreActive` is set.
+- AVR `preset_morph(...)` also returns while `frontParser_restoreActive` is set, guarding local/menu morph computations against half-restored endpoint arrays.
+
+Build check:
+
+- `make -C mainboard/LxrStm32 stm32` completed successfully.
+- `make -C front/LxrAvr avr` completed successfully.
+- Existing warnings remain: STM recursive `_exit`, existing fallthroughs, existing linker RWX segment, and existing AVR register/atomic warnings.
+
+Expected behavior to test:
+
+- Temp/normal pattern switching should no longer perform a large synchronous endpoint dump at the switch boundary.
+- AVR `parameter_values[]` and `parameters2[]` should still be brought current after the switch, but gradually.
+- Morph is intentionally suppressed while the endpoint image is in-flight; this avoids computing morph interpolation from a partial endpoint image.
+- During the longer restore bracket, ordinary AVR outbound UI traffic remains suppressed by `frontParser_restoreActive`, as before. This may be visible as brief UI/morph latency while the endpoint image catches up.
+
+---
+
+## 36. Test Result: Voice-Local Source Apply Is Not the Primary Chirp Source
+
+Status: investigation note on 2026-06-01. No code change in this section.
+
+User retest result:
+
+- With `SEQ_TMP_TEST_SKIP_VOICE_SOURCE_APPLY` enabled, the chirp/glitch is still present.
+
+Interpretation:
+
+- The remaining chirp is probably not caused by the masked voice-local interpolated parameter payload.
+- Specifically, it is unlikely to be caused primarily by:
+  - hard writes of the per-voice oscillator/filter/envelope/volume/pan/etc. parameter set;
+  - per-voice LFO automation target reassignment;
+  - per-voice velocity automation target reassignment.
+- Those paths are skipped by the test patch while the glitch remains.
+
+Remaining high-priority candidates:
+
+- STM-to-AVR endpoint menu restore transaction:
+  - full active-pattern temp/normal switches still push full kit/front endpoint and morph parameter endpoint images to AVR;
+  - mixed per-track temp/normal switches still push masked endpoint updates or full endpoint images when all voices collapse to one side;
+  - this path blocks in the pattern-change window waiting for `PARAM_RESTORE_READY` / `PARAM_RESTORE_ACK`.
+- Shared/global parameter apply in `seq_setTmpKitActive(...)`:
+  - full active-pattern normal-to-temporary or temporary-to-normal still applies shared interpolated parameters;
+  - this does not apply to purely per-track temp/normal switches when `seq_tmpKitActive` does not toggle.
+- Shared/global automation target apply:
+  - macro modulation target assignments still apply immediately on full active-pattern temp/normal switches;
+  - `modNode_setDestination(...)` can call `modNode_resetTargets()`.
+- Pattern-change housekeeping still active:
+  - `euklid_clearRotation()`;
+  - `seq_setStepIndexToStart()` at bar boundary;
+  - `seq_sendProgChg(seq_activePattern)`;
+  - `voiceControl_noteOff(0xFF)`, which clears MIDI active-voice bookkeeping and sends external MIDI note-offs but does not directly stop internal DSP voices.
+
+Useful diagnostic split:
+
+- If the chirp happens on full normal/temporary pattern switches but not individual per-track switches:
+  - suspect shared/global parameter apply, macro target apply, and full endpoint restore.
+- If the chirp also happens on individual per-track temp/normal switches:
+  - suspect endpoint restore transaction, pattern-change housekeeping, or note-off/program-change side effects.
+
+Recommended next isolation test:
+
+- Disable endpoint menu restore during temp-boundary switches while keeping the rest of the current test patch active.
+- This leaves pattern switching, source bookkeeping, and current no-voice-apply behavior in place.
+- If the chirp disappears or changes substantially, the restore handshake/traffic is implicated.
+- If the chirp remains unchanged, test suppressing temp-boundary `voiceControl_noteOff(0xFF)` / `seq_sendProgChg(...)` next.
+
+---
+
+## 37. Test Patch: Suppress Endpoint/Menu Restore on Temp-Boundary Switches
+
+Status: implemented on 2026-06-01 as a temporary isolation test.
+
+Context:
+
+- User reset code changes before this pass, keeping audit history.
+- This patch is therefore a fresh test focused only on endpoint/menu restore suppression.
+
+Goal:
+
+- Test whether the remaining chirp is caused by the STM-to-AVR endpoint/menu restore transaction during normal/temporary boundary switches.
+
+Implemented test behavior:
+
+- Added `SEQ_TMP_TEST_SUPPRESS_ENDPOINT_PUSH`.
+- For full active-pattern normal-to-temporary or temporary-to-normal switches:
+  - STM still changes the pattern source;
+  - STM still runs `seq_setTmpKitActive(...)`;
+  - but `seq_maybePushKitEndpointsToFront(...)` is suppressed while that temp-boundary switch is being processed.
+- For individual per-track normal/temporary switches:
+  - STM still updates per-voice source bookkeeping;
+  - STM still switches pattern data;
+  - but the partial/full endpoint menu sync from `seq_pushEndpointUpdateForVoiceSourceChange(...)` is skipped when the committed change crosses the temp boundary.
+
+Expected test interpretation:
+
+- If the chirp disappears or changes substantially, the endpoint restore handshake/traffic is implicated.
+- If the chirp remains unchanged, the next likely test is suppressing temp-boundary `voiceControl_noteOff(0xFF)` and possibly `seq_sendProgChg(...)`.
+
+Important:
+
+- This is intentionally not final behavior. With the test enabled, AVR menu endpoint arrays may be stale after normal/temporary boundary switches.
+
+Build check:
+
+- `make -C mainboard/LxrStm32 stm32` completed successfully.
+
+Observed warnings:
+
+- Existing sequencer init bounds warnings and linker RWX segment warning remain.
+
+---
+
 ## 24. Cross-Image Write Path Audit After Lazy Temp Kit Initialization
 
 Status: investigation note on 2026-05-31. No code change in this section.
@@ -2224,3 +2438,42 @@ Likely next experiments:
 - Second isolation test: apply voice-local parameters but skip automation target reassignment. If the chirp improves, `modNode_setDestination()` / `modNode_resetTargets()` is implicated.
 - Third isolation test: keep audio parameter swap but temporarily suppress STM-to-AVR endpoint menu restore. If the chirp improves, restore transaction timing is implicated.
 - Fourth experiment, if raw parameter discontinuity is confirmed: separate "trigger-safe" voice parameters from "tail-sensitive" voice parameters, applying the latter at note-on or with a short ramp/smoothing strategy.
+
+---
+
+## 35. Test Patch: Skip Live Voice-Local Source Apply on Temp-Boundary Switch
+
+Status: implemented on 2026-06-01 as a temporary isolation test.
+
+Goal:
+
+- Test whether the remaining chirp is caused by hard live DSP parameter writes when a synth voice changes normal/temporary source.
+
+Implemented test behavior:
+
+- Added `SEQ_TMP_TEST_SKIP_VOICE_SOURCE_APPLY`.
+- When enabled, `seq_markVoiceSourceTarget(...)` still updates the six-slot source bookkeeping.
+- It still allows endpoint/menu sync to use the new normal/temporary side.
+- It still allows pattern data to switch normally.
+- It does **not** call `seq_applyVoiceSource(...)`, so it does not apply the affected voice's interpolated parameters or voice-local automation target assignments to live DSP state at the temp-boundary switch.
+
+Expected test interpretation:
+
+- If the chirp disappears or changes substantially, the hard voice-local parameter apply is implicated.
+- If the chirp remains about the same, look next at:
+  - shared/global parameter apply in `seq_setTmpKitActive(...)`;
+  - shared macro modulation target reassignment;
+  - endpoint restore transaction timing;
+  - `voiceControl_noteOff(0xFF)` during the pattern-change block.
+
+Important:
+
+- This is intentionally not final musical behavior. It means temp/normal pattern source changes can switch pattern data and menu endpoint state without switching the live voice-local sound parameters.
+
+Build check:
+
+- `make -C mainboard/LxrStm32 stm32` completed successfully.
+
+Observed warnings:
+
+- Existing sequencer init bounds warnings and linker RWX segment warning remain.
