@@ -1509,6 +1509,81 @@ Expected behavior to test:
 - Morph is intentionally suppressed while the endpoint image is in-flight; this avoids computing morph interpolation from a partial endpoint image.
 - During the longer restore bracket, ordinary AVR outbound UI traffic remains suppressed by `frontParser_restoreActive`, as before. This may be visible as brief UI/morph latency while the endpoint image catches up.
 
+Follow-up bug observed with `P005.PRF`:
+
+- `P005.PRF` uses a per-voice morph operation where the audible result depends on the LFO1 destination routing being recomputed after the endpoint image is restored.
+- The menu endpoint bytes can be correct while the audible modulation routing remains stale if the morph command that should recompute the routed state is dropped during endpoint restore.
+- The first rate-limit implementation blocked STM-originated morph while restore was pending/active by returning early from `sequencer_sendVMorph(...)`.
+- That protected the AVR from half-restored endpoint arrays, but it also lost the morph operation.
+
+Implemented follow-up:
+
+- `sequencer_sendVMorph(...)` now queues the latest pending morph amount per voice when endpoint restore is busy instead of dropping it.
+- `seq_serviceEndpointRestore()` flushes the queued per-voice morph commands after the restore ACK returns and the restore state is idle.
+- MIDI/mod-wheel morph now routes through `sequencer_sendVMorph(...)`, so it gets the same defer-until-clean behavior instead of direct-send/drop behavior.
+- AVR-side guards still remain: incoming morph is ignored during `frontParser_restoreActive`, and `preset_morph(...)` returns during restore.
+
+Expected behavior:
+
+- No morph computation should occur against a half-restored AVR endpoint image.
+- A morph command that arrives during endpoint restore should be replayed after the endpoint restore completes, so loaded `.prf` files that depend on per-voice morph should recover audible routing after the restore window.
+
+Build check:
+
+- `make -C mainboard/LxrStm32 stm32` completed successfully.
+- AVR source compile for touched files completed during the attempted AVR build.
+- Full `make -C front/LxrAvr avr` is currently blocked by untracked files named `encoder copy.c` / `encoder copy.h`; the AVR Makefile's unquoted `find` source list splits the filename at the space and creates a bogus `build/encoder` target. Those files were not touched in this pass.
+
+---
+
+## 38. Audit: What The AVR Front Panel Knows About Morph State
+
+Status: audit note after `P005.PRF` retest on 2026-06-01. No additional code change in this section.
+
+Correction to previous assumption:
+
+- It is not enough to say "defer the morph command" unless we know the AVR actually has all morph state needed to replay it correctly.
+- The AVR front panel does not appear to own a complete canonical per-voice morph state model.
+
+Current global morph amount:
+
+- AVR has `morphValue` in `menu.c`.
+- AVR also stores `parameter_values[PAR_MORPH]`.
+- Editing `PAR_MORPH` in the menu sets `morphValue = value` and calls `preset_morph(0x7f, value)`, i.e. all voices.
+- Incoming `MORPH_CC` / `VOICE_MORPH` is reduced to `frontPanel_morphArray` plus `frontPanel_longData`.
+- When the pending morph operation runs, AVR sets `parameter_values[PAR_MORPH] = frontPanel_longData`, calls `preset_morph(frontPanel_morphArray, frontPanel_longData)`, then sets `morphValue = frontPanel_longData`.
+- Therefore the AVR's stored "current morph" value is effectively the last processed morph amount, even if the operation was voice-scoped. It is not a full per-voice state vector.
+
+Current per-voice morph amounts:
+
+- AVR receives voice-scoped morph operations via `VOICE_MORPH` / `MORPH_CC` with a voice bitmask and one amount.
+- AVR uses that pair to call `preset_morph(...)` for the addressed voices.
+- AVR does not appear to store six independent current per-voice morph values.
+- The only queued AVR-side morph state is one pending `frontPanel_morphArray` / `frontPanel_longData` pair plus `frontPanel_morphAvail`.
+- If multiple per-voice morph operations occur close together, this is a coalesced/pending operation model, not a canonical per-voice state model.
+
+STM-side per-voice morph amounts:
+
+- STM has `seq_vMorphAmount[7]` and `seq_vMorphFlag`.
+- `modNode_vMorph(...)` writes `seq_vMorphAmount[0..5]` and sets bits in `seq_vMorphFlag` when a modulation node destination is one of `PAR_MORPH_DRUM1` through `PAR_MORPH_HIHAT`.
+- `seq_nextStep()` periodically checks `frontParser_prfCacheTakeLiveVMorphFlag()` and sends the flagged values to the AVR with `sequencer_sendVMorph(...)`.
+- Step automation for `PAR_MORPH_DRUM*` calls `sequencer_sendVMorph(...)` directly from `seq_parseAutomationNodes(...)`; that path sends the amount but does not make the AVR store a per-voice current amount.
+
+Modulation depth of morph:
+
+- For AVR macro-driven voice morph, the AVR knows the macro destination selector and amount bytes in `parameter_values[]`, such as `PAR_MAC*_DST*` and `PAR_MAC*_DST*_AMT`.
+- `menu_processSpecialCaseValues(...)` calls `menu_vMorph(...)` when `PAR_MAC1` or `PAR_MAC2` changes.
+- `menu_vMorph(...)` combines the current macro value and macro amount, then calls `preset_morph(...)` for the selected voice bit.
+- For STM modulation-node-driven voice morph, the modulation depth lives on the STM in the modulation node (`vm->amount`). AVR receives only the resulting voice bitmask and computed morph amount.
+- Therefore the AVR generally does not know the source modulation depth for STM-originated per-voice morph. It only sees the computed morph amount.
+
+Implication for `P005.PRF`:
+
+- The menu can show the correct LFO1 morph parameter endpoint assignment because `parameters2[]` / endpoint restore is correct.
+- The audible modulation routing can still remain stale if no valid morph computation is performed after both endpoint arrays are current.
+- Replaying only a dropped command may not be sufficient if the source command was not a complete canonical state, or if the relevant per-voice morph amount/modulation depth was never stored on the AVR.
+- A robust fix likely needs an explicit post-restore recompute from a canonical STM-side morph state, or an AVR-side canonical per-voice morph state array, rather than relying on the AVR's global `morphValue` / last-operation state.
+
 ---
 
 ## 36. Test Result: Voice-Local Source Apply Is Not the Primary Chirp Source

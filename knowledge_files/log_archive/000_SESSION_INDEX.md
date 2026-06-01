@@ -10,8 +10,7 @@
 | # | Date | Source at end | Topic |
 |---|------|----------------|-------|
 | 001 | 2026-05-21 | local branch `custom-develop-patload-envmod` (commit `3698612`) | build-break triage, source compatibility fixes (A1/A2/A3/B1/B2/B3), full firmware build verified |
-| 002 | 2026-05-29 | local branch `custom-develop-patload-envmod` (HEAD `b9703ab` plus restored/verified WIP) | encoder completion, `.ALL`/`.PRF` load checkpoint, functional parameter pushback handshake, SEQ16 temp-pattern/temp-parameter baseline |
-| 003 | 2026-05-31 | local branch `custom-develop-patload-envmod` (restored and extended) | symmetric kit structs, AVR endpoint dump handshake, mod target capture |
+| 002 | 2026-05-29 to 2026-06-01 | local branch `custom-develop-patload-envmod` (merged temp-pattern WIP) | temp-pattern parameter isolation, symmetric kit states, endpoint/automation storage, normal-only file loads, rate-limited endpoint restore, morph-to-STM plan |
 
 ---
 
@@ -21,13 +20,9 @@
 Session 001 established project context docs, audited build failures, applied the requested source-level compatibility fixes, and verified a successful end-to-end `make clean && make firmware` build in the active repository. Session closeout added the first formal handoff log and a full MEMORY baseline for subsequent sessions.
 - **Find here**: build failure root cause, A/B fix groups, toolchain requirements draft, repository-path mismatch lesson, successful firmware image output
 
-### 002 — Encoder, Load Fixes, Comms Flow, Verified Temp Pattern Handshake (2026-05-29)
-Session 002 completed the encoder work, brought `.ALL` / `.PRF` loading to a checkpointed working state, and implemented a robust handshake-based parameter pushback for the temporary pattern slot. SEQ16 was successfully reassigned as a temp-pattern selector with functional sound and menu sync. Key fixes included resolving handshake blocking in the STM main loop, AVR whitelisting for restore messages, and applying the correct index offset for low sound parameters. The session established a verified functional baseline for temp-slot isolation, with suspect endpoint-aware switching proposals marked for cautious re-evaluation.
-- **Find here**: encoder completion, functional parameter pushback handshake, index offset fix (+1/-1), STM handshake blocking fix, AVR whitelisting, SEQ16 temp pattern selection, STM canonical parameter image, cleanup docs
-
-### 003 — Symmetric Kit Structs and AVR Endpoint Dump (2026-05-31)
-Session 003 advanced the parameter synchronization model by refactoring the STM32 to use symmetric `SeqKitState` structs for normal and temporary kits. A specialized AVR-to-STM dump protocol (Opcodes 0x65/0x66) was implemented to capture raw menu endpoints and mod targets during pattern copy operations. The session verified that switching between patterns correctly pushes the appropriate endpoint set to the AVR while maintaining sound stability via separate interpolation buffers. Historical deadlock and feedback issues were permanently resolved via blocking handshakes and parser whitelisting.
-- **Find here**: symmetric SeqKitState, AVR endpoint dump handshake, mod target capture (LFO/Velo/Macro), sound-stable menu synchronization, ingress redirection logic
+### 002 — Temp Pattern Parameter Isolation + Morph Move Prep (2026-05-29 to 2026-06-01)
+Session 002 completed encoder work, restored the `.ALL` / `.PRF` load and parameter-pushback baseline, then advanced the temporary-pattern model: symmetric normal/temp `SeqKitState` storage, kit/front and morph parameter endpoint capture, three resolved automation-target images per kit, normal-only file-load routing, lazy temp initialization, per-track endpoint sync, low-CC offset fixes, endpoint/menu restore chirp isolation, queued/rate-limited endpoint restore, and the audit plan for moving morph computation fully onto STM.
+- **Find here**: encoder completion, comms/load checkpoint, restore handshake, +1/-1 parameter offset, SEQ16 temp pattern, symmetric `SeqKitState`, endpoint dump/copy-to-temp, automation target image storage, normal-only file loads, temp edit isolation, per-track temp/normal endpoint sync, endpoint restore chirp, rate-limited restore, AVR morph-state audit, STM morph move plan
 
 
 ---
@@ -39,9 +34,10 @@ Session 003 advanced the parameter synchronization model by refactoring the STM3
 | Header/global-definition and inline-linkage compatibility fixes for modern GCC toolchains | 001 |
 | Session memory baseline and directory map bootstrapped | 001 |
 | Encoder work completed successfully | 002 |
-| `.ALL` / `.PRF` load checkpoint works only under stated constraints; background `.PRF` temp-slot isolation remains WIP | 002 |
+| `.ALL` / `.PRF` load checkpoint and normal-only file-load routing for temp playback | 002 |
 | Comms flow-control checkpoint uses load sessions, quiet mode, and credit-metered globals/voice/meta bursts; old callback waits still need timeouts | 002 |
-| SEQ16 temp pattern selector/copy/play works; STM-to-AVR parameter pushback is the current broken WIP | 002 |
+| SEQ16 temp pattern selector/copy/play, symmetric STM parameter images, and endpoint/menu restore behavior | 002 |
+| Morph computation should move fully to STM; see `AUDIT_MORPH_MOVE.md` | 002 |
 
 
 ---

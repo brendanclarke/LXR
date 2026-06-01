@@ -235,6 +235,8 @@ static uint8_t seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_IDLE;
 static uint16_t seq_endpointRestoreParamCursor = 0;
 static uint8_t seq_endpointRestoreVoiceCursor = 0;
 static uint8_t seq_endpointRestoreVoiceParamCursor = 0;
+static uint8_t seq_pendingVMorphMask = 0;
+static uint8_t seq_pendingVMorphAmount[NUM_TRACKS];
 
 static uint8_t seq_voiceSourceState[SEQ_SYNTH_VOICES];
 static uint8_t seq_tmpBoundaryPatternSwitchAck = 0;
@@ -264,6 +266,9 @@ static void seq_pushKitEndpointsToFront(const SeqKitState *kit);
 static void seq_pushKitEndpointVoiceMaskToFront(const SeqKitState *kit,
                                                 uint8_t voiceMask);
 static void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask);
+static void seq_sendVMorphNow(uint8_t voiceArray, uint8_t morphAmount);
+static void seq_queueVMorph(uint8_t voiceArray, uint8_t morphAmount);
+static void seq_flushPendingVMorph();
 static void seq_updateVoiceSourcesForPatternChange(const uint8_t *oldPatternForTrack,
                                                    uint8_t pushEndpointUpdates);
 static uint8_t seq_isNextStepSyncStep();
@@ -1032,13 +1037,61 @@ uint8_t seq_endpointRestoreBusy()
 }
 
 //------------------------------------------------------------------------------
+static void seq_sendVMorphNow(uint8_t voiceArray, uint8_t morphAmount)
+{
+   uart_sendFrontpanelByte(FRONT_SEQ_VOICE_MORPH);
+   uart_sendFrontpanelByte(voiceArray);
+   uart_sendFrontpanelByte(morphAmount);
+}
+
+//------------------------------------------------------------------------------
+static void seq_queueVMorph(uint8_t voiceArray, uint8_t morphAmount)
+{
+   uint8_t voice;
+
+   for(voice=0;voice<NUM_TRACKS;voice++)
+   {
+      uint8_t bit = (uint8_t)(1 << voice);
+
+      if(voiceArray & bit)
+      {
+         seq_pendingVMorphAmount[voice] = morphAmount;
+         seq_pendingVMorphMask |= bit;
+      }
+   }
+}
+
+//------------------------------------------------------------------------------
+static void seq_flushPendingVMorph()
+{
+   uint8_t voice;
+
+   if(!seq_pendingVMorphMask || seq_endpointRestoreBusy() || seq_morphLoadDisabled)
+      return;
+
+   for(voice=0;voice<NUM_TRACKS;voice++)
+   {
+      uint8_t bit = (uint8_t)(1 << voice);
+
+      if(seq_pendingVMorphMask & bit)
+      {
+         seq_sendVMorphNow(bit, seq_pendingVMorphAmount[voice]);
+         seq_pendingVMorphMask &= (uint8_t)~bit;
+      }
+   }
+}
+
+//------------------------------------------------------------------------------
 void seq_serviceEndpointRestore()
 {
    switch(seq_endpointRestorePhase)
    {
       case SEQ_ENDPOINT_RESTORE_PHASE_IDLE:
          if(!seq_endpointRestorePopRequest())
+         {
+            seq_flushPendingVMorph();
             return;
+         }
 
          seq_tmpKitHandshakeReady = 0;
          seq_tmpKitHandshakeAck = 0;
@@ -1086,6 +1139,7 @@ void seq_serviceEndpointRestore()
             seq_endpointRestoreCurrent.mode = SEQ_ENDPOINT_RESTORE_NONE;
             seq_endpointRestoreCurrent.voiceMask = 0;
             seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_IDLE;
+            seq_flushPendingVMorph();
          }
          return;
 
@@ -3344,11 +3398,15 @@ uint8_t seq_consumeTmpBoundaryPatternSwitchAck()
 
 void sequencer_sendVMorph(uint8_t voiceArray, uint8_t morphAmount)
 {
-   if(seq_morphLoadDisabled || seq_endpointRestoreBusy())
+   if(seq_morphLoadDisabled)
       return;
 
-   uart_sendFrontpanelByte(FRONT_SEQ_VOICE_MORPH);
-   uart_sendFrontpanelByte(voiceArray);
-   uart_sendFrontpanelByte(morphAmount);
+   if(seq_endpointRestoreBusy())
+   {
+      seq_queueVMorph(voiceArray, morphAmount);
+      return;
+   }
+
+   seq_sendVMorphNow(voiceArray, morphAmount);
 
 }

@@ -26,17 +26,18 @@ make firmware
 
 **Session 001 close status**: full top-level build succeeds in this repo with `make clean && make firmware` (warnings remain, no fatal errors).
 
-**Current status after Session 003 (2026-05-31)**: repository is at a functional baseline where symmetric parameter storage and endpoint dumps are implemented. HEAD is a restored and extended version of the previous branch.
+**Current status after merged Session 002 closeout (2026-06-01)**: temporary-pattern parameter isolation is the active WIP baseline. Symmetric normal/temp `SeqKitState` storage, endpoint images, resolved automation-target images, normal-only file-load routing, lazy temp initialization, per-track endpoint sync, and rate-limited endpoint restore have been documented/implemented across the session. The next clean session should focus on moving morph computation fully onto the STM.
 
 Canonical current WIP docs:
-- `COMMS_FLOW_AUDIT-IN_FLIGHT.md`
-- `PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`
-- `TMP_VARS_AUDIT.md` (Verbose technical reference for symmetric kits)
-- `knowledge_files/log_archive/003_SESSION_HANDOFF_LOG.md`
+- `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT.md`
+- `knowledge_files/session_in_flight/PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`
+- `TMP_VARS_AUDIT.md` (verbose technical reference for temp-pattern parameter storage and endpoint restore work)
+- `AUDIT_MORPH_MOVE.md` (next-session plan for moving morph computation fully onto STM)
+- `knowledge_files/log_archive/002_SESSION_HANDOFF_LOG.md`
 
 These two root audits were expanded on 2026-05-29 from source diffs:
-- `COMMS_FLOW_AUDIT-IN_FLIGHT.md`: compares `LXR-9120ea7620f1a9a4a924f029cdaf3ae71df303fd/front|mainboard` against `LXR-custom-develop-patload-envmod-90d3f08/front|mainboard`.
-- `PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`: compares `LXR-custom-develop-patload-envmod-90d3f08/front|mainboard` against the current `front|mainboard`.
+- `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT.md`: compares `LXR-9120ea7620f1a9a4a924f029cdaf3ae71df303fd/front|mainboard` against `LXR-custom-develop-patload-envmod-90d3f08/front|mainboard`.
+- `knowledge_files/session_in_flight/PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`: compares `LXR-custom-develop-patload-envmod-90d3f08/front|mainboard` against the current `front|mainboard`.
 
 User-referenced checkpoint:
 - Commit `90d3f08` is the checkpoint where `.ALL` and `.PRF` load their parameters correctly provided there is no morph automation and background loading into the temp slot is turned off for `.PRF`.
@@ -165,8 +166,10 @@ User-referenced checkpoint:
 | Confirmed hardware/protocol notes? | `knowledge_files/hardware_archive/` |
 | Current known issues and reminders? | `MEMORY.md` |
 | Session 001 build triage details | `BUILD_AUDIT.md` |
-| Current comms/flow checkpoint and deferred hardening plan | `COMMS_FLOW_AUDIT-IN_FLIGHT.md` |
-| Current `.PRF`/`.ALL` load checkpoint and temp-slot WIP | `PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md` |
+| Current comms/flow checkpoint and deferred hardening plan | `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT.md` |
+| Current `.PRF`/`.ALL` load checkpoint and temp-slot WIP | `knowledge_files/session_in_flight/PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md` |
+| Current temp-pattern parameter storage and endpoint restore audit | `TMP_VARS_AUDIT.md` |
+| Next-session morph move plan | `AUDIT_MORPH_MOVE.md` |
 
 ---
 
@@ -305,7 +308,7 @@ Sample flash map:
 
 - Inter-MCU UART protocol uses MIDI-like status/data framing and sysex-like bulk transfer behavior.
 - Communications audit warns about silent FIFO overflow and blocking ACK wait patterns; review `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` before touching parser/transport logic.
-- Current flow-control checkpoint details are in `COMMS_FLOW_AUDIT-IN_FLIGHT.md`. Implemented checkpoint behavior includes acknowledged load sessions, STM32 quiet mode, and credit-metered globals/voice/meta bursts. Old SysEx/callback waits still need timeout recovery in a later pass.
+- Current flow-control checkpoint details are in `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT.md`. Implemented checkpoint behavior includes acknowledged load sessions, STM32 quiet mode, and credit-metered globals/voice/meta bursts. Old SysEx/callback waits still need timeout recovery in a later pass.
 - If build errors reference functions/line numbers missing in local files, treat as snapshot mismatch and confirm active repository first.
 
 ---
@@ -327,10 +330,10 @@ Sample flash map:
 
 ### High Priority
 
-- Current repository state is at a verified functional baseline with symmetric `SeqKitState` implemented.
-- Next phase: Implement Morph Harmony (synchronizing `parameters2[]` during transitions) and re-integrate the background `.PRF` file loader to target the temporary kit struct.
-- Hardware verified for SEQ16 temp pattern selection/copy/play and full endpoint dump/sync.
-- Suspect experimental proposals (endpoint-aware switching) from Transcript 3 are documented in `PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`.
+- Current repository state is a temp-pattern parameter WIP baseline with symmetric `SeqKitState` implemented.
+- Next phase: move morph computation fully onto STM using `AUDIT_MORPH_MOVE.md`.
+- Hardware verified for SEQ16 temp pattern selection/copy/play, endpoint dump/sync, normal/temp edit isolation, and the endpoint-restore chirp diagnosis/rate-limit direction.
+- Suspect older experimental proposals are documented in `knowledge_files/session_in_flight/PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`; rely on the merged session 002 handoff and current audits for the active plan.
 
 ### Current Temp Pattern / `.PRF` WIP Reminders
 
@@ -338,12 +341,26 @@ Sample flash map:
 - Temp pattern select/play/copy/paste works and was user-tested.
 - AVR-to-STM endpoint dump (Opcodes 0x65/0x66) is implemented and captures `parameter_values`, `parameters2`, and all 16 mod targets.
 - STM-side `seq_normalKitState` and `seq_tmpKitState` are the source of truth for menu pushbacks.
-- STM-to-AVR parameter pushback on temp-pattern transitions is functional and verified. It uses a 5-phase handshake to ensure sync.
+- STM-to-AVR parameter pushback on temp-pattern transitions uses a 5-phase handshake. The chirp source was traced to synchronous endpoint/menu restore at temp-boundary switching; the WIP direction is queued/rate-limited restore, one endpoint parameter per STM main-loop service.
 - The correct -1 offset for low sound parameters is applied on egress.
 - Sound engine uses `interpolatedParams` buffer; menu uses `frontPanelParams` buffer.
+- File loads must target normal parameter storage and normal pattern storage only; they must never touch temporary parameter storage or temporary pattern data.
+- No extraneous LCD/debug writes should occur during copy/paste, temp/normal switching, endpoint restore, or file-load operations.
 - Do not make the temp pattern loadable/saveable unless explicitly requested.
 - The current `front`/`mainboard` diff also contains a suspect PRF cache state-machine experiment (`SEQ_PRF_CACHE_*`, live-pattern getters, pending counters). Treat it as WIP until reconciled with the temp-slot plan.
 - Current-only backup files `front/LxrAvr/config.h.bak`, `front/LxrAvr/encoder.c.bak`, and `front/LxrAvr/encoder.h.bak` exist in the diff and should not be committed as canonical code without an explicit decision.
+
+### Morph Move Reminders
+
+- Move morph computation fully onto STM; AVR should only retain global morph/menu/file endpoint responsibilities.
+- Use exact terms: "morph parameter endpoint" and "morph automation target endpoint"; do not use ambiguous shorthand for these concepts.
+- Per-voice morph is never displayed or directly set in the AVR menu.
+- Global morph writes all six STM per-voice morph amounts; actual interpolation uses per-voice amounts.
+- Per-voice morph may come from MIDI, step automation, or modulation via destinations such as velocity automation target or LFO automation target.
+- Per-voice morph value conversion: `0` is valid, `0-126` maps to `value * 2`, and `127` maps to exact full morph `255`.
+- STM-side morph interpolation/modulation is always serviced; pending morph work gets exactly one parameter interpolation per STM main-loop pass.
+- During normal/temp pattern changeover, receipt of AVR/front-panel global morph may be blocked, but STM-side morph interpolation/modulation must not be paused.
+- STM needs an equivalent of the AVR `modTargets[]` selector mapping before interpolated automation destination selectors can be fully resolved and applied on STM.
 
 ### Medium Priority
 

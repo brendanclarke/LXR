@@ -1543,7 +1543,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    }
    else if (MIDIparamNr==MOD_WHEEL)
    {  
-      if(seq_morphLoadDisabled || seq_endpointRestoreBusy())
+      if(seq_morphLoadDisabled)
          return;
 
       midiChannelCode=0;
@@ -1573,9 +1573,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          
       if (midiChannelCode!=0)
       {
-         uart_sendFrontpanelByte(MORPH_CC); 
-         uart_sendFrontpanelByte(midiChannelCode); // voice numbers
-         uart_sendFrontpanelByte(msg.data2);
+         sequencer_sendVMorph(midiChannelCode, msg.data2);
       }
       
    }
