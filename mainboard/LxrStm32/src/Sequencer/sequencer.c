@@ -241,6 +241,9 @@ static uint8_t seq_globalMorphAmount = 0;
 static uint8_t seq_voiceMorphBaseAmount[SEQ_SYNTH_VOICES];
 static uint8_t seq_voiceMorphAmount[SEQ_SYNTH_VOICES];
 static uint16_t seq_morphScanParam = 0;
+/* This is a live-DSP apply cache, not a parameter validity model. It lets the
+   first computed zero value land in DSP after file load, but suppresses repeated
+   identical setter calls on later morph scan passes. */
 static uint8_t seq_liveMorphAppliedValue[SEQ_MORPH_IMAGE_COUNT][END_OF_SOUND_PARAMETERS];
 static uint8_t seq_liveMorphAppliedKnown[SEQ_MORPH_IMAGE_COUNT][END_OF_SOUND_PARAMETERS];
 
@@ -768,6 +771,8 @@ void seq_setGlobalMorphAmount(uint8_t morphAmount)
 {
    uint8_t voice;
 
+   /* Global/menu morph is only a convenience input on STM: it resets all
+      per-voice morph bases. Actual interpolation always reads per-voice state. */
    seq_globalMorphAmount = morphAmount;
    seq_vMorphAmount[0] = morphAmount;
 
@@ -836,6 +841,9 @@ void seq_modulateVoiceMorphAmount(uint8_t synthVoice, float amount, float value)
    if(synthVoice >= SEQ_SYNTH_VOICES)
       return;
 
+   /* LFO/velocity morph modulation is a live overlay. It moves between the
+      stored interpolation baseline and the morph endpoint, then applies DSP.
+      It must not write the stored interpolatedParams[] baseline. */
    travel = amount * value;
    if(travel < 0.f)
       travel = 0.f;
@@ -887,6 +895,8 @@ void seq_serviceMorphInterpolation()
    if(seq_morphScanParam >= END_OF_SOUND_PARAMETERS)
       seq_morphScanParam = 0;
 
+   /* Background morph worker: exactly one parameter is considered per STM main
+      loop pass. There is intentionally no dirty/restart cursor protocol. */
    param = seq_morphScanParam;
    voiceMask = seq_voiceMaskForParameter(param);
 
@@ -909,6 +919,9 @@ void seq_serviceMorphInterpolation()
                                                 seq_voiceMorphAmount[synthVoice]);
       uint8_t liveValue = value;
 
+      /* Stored interpolation is the baseline owned by this worker. Selector
+         parameters are carved out to the kit/front endpoint so a modulation
+         destination cannot also be morphed by its own generator. */
       kit->interpolatedParams[param] = value;
       seq_updateInterpolatedAutomationTarget(kit, param, value);
       seq_applyLiveMorphParameterValue(image, synthVoice, param, liveValue);
@@ -960,6 +973,8 @@ void seq_storeMorphParameterIngress(uint16_t param, uint8_t value)
    if(param >= END_OF_SOUND_PARAMETERS)
       return;
 
+   /* Morph endpoint ingress stores raw endpoint bytes only. It does not compute
+      or apply live morph, and it does not touch interpolatedParams[]. */
    voiceMask = seq_voiceMaskForParameter(param);
 
    if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_CURRENT_IMAGE && voiceMask)
@@ -1096,6 +1111,9 @@ void seq_storeParameterIngress(uint16_t param, uint8_t value)
    if(param >= END_OF_SOUND_PARAMETERS)
       return;
 
+   /* Current-image ingress is a live/menu edit. Normal-kit-endpoint ingress is
+      file/front endpoint restore and must only overwrite normal endpoint state;
+      the morph worker will rebuild interpolatedParams[] in the background. */
    if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_CURRENT_IMAGE)
    {
       SeqKitState *kit = &seq_normalKitState;
@@ -1344,6 +1362,8 @@ static void seq_applySingleParameterValue(uint16_t param, uint8_t value)
 {
    MidiMsg msg;
 
+   /* This is the only low-parameter +1 conversion point for ordinary live DSP
+      application. Endpoint storage and PRF_RESTORE_* traffic use raw indices. */
    if(param < 128)
    {
       msg.status = MIDI_CC;
@@ -2169,6 +2189,9 @@ static void seq_parseAutomationNodes(uint8_t track, Step* stepData)
    {
       if(param1>=PAR_MORPH_DRUM1&&param1<=PAR_MORPH_HIHAT)
       {
+         /* Voice morph step automation only sets the per-voice morph amount.
+            It is consumed here so the generic automation node does not also
+            treat PAR_MORPH_* as an ordinary DSP parameter target. */
          seq_setVoiceMorphAutomationValue((uint8_t)(param1-PAR_MORPH_DRUM1), val1);
          param1 = 0;
       }
@@ -2177,6 +2200,7 @@ static void seq_parseAutomationNodes(uint8_t track, Step* stepData)
    {
       if(param2>=PAR_MORPH_DRUM1&&param2<=PAR_MORPH_HIHAT)
       {
+         /* See param1 path above: morph automation is control-state only. */
          seq_setVoiceMorphAutomationValue((uint8_t)(param2-PAR_MORPH_DRUM1), val2);
          param2 = 0;
       }

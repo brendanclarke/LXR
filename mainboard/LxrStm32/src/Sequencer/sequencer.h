@@ -218,6 +218,12 @@ typedef struct SeqKitAutomationTargetsStruct
 
 typedef struct SeqKitStateStruct
 {
+   /* Session 003 morph move:
+      These arrays are always-defined sound state from zero init. File/front
+      ingress writes frontPanelParams[] and morphParams[] endpoint bytes.
+      Only seq_serviceMorphInterpolation() should write interpolatedParams[].
+      Do not add per-parameter "valid" arrays back here; transfer errors belong
+      in the transfer layer, not in the sound-state model. */
    uint8_t frontPanelParams[END_OF_SOUND_PARAMETERS];
    uint8_t morphParams[END_OF_SOUND_PARAMETERS];
    uint8_t interpolatedParams[END_OF_SOUND_PARAMETERS];
@@ -238,6 +244,9 @@ void seq_init();
 #define SEQ_PARAM_INGRESS_CURRENT_IMAGE 0
 #define SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT 1
 
+/* Endpoint automation target sidebands arrive as resolved destinations, not raw
+   parameter bytes. The phase keeps kit/front endpoint targets separate from
+   morph endpoint targets while file loads are writing normal endpoint storage. */
 #define SEQ_AUTOMATION_INGRESS_NONE 0
 #define SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT 1
 #define SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT 2

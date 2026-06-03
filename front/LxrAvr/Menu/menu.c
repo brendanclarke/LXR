@@ -2750,6 +2750,8 @@ static void menu_encoderChangeParameter(int8_t inc)
 //-----------------------------------------------------------------
 static void menu_sendMorphParameterEndpoint(uint16_t paramNr, uint8_t value)
 {
+   /* Morph endpoint edits send raw endpoint bytes to STM storage. They do not
+      request AVR-side live morph computation. */
    if(paramNr < 128)
       frontPanel_sendData(PRF_RESTORE_MORPH_CC, (uint8_t)paramNr, value);
    else if(paramNr < END_OF_SOUND_PARAMETERS)
@@ -3468,6 +3470,8 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 	{
 		//value += (value==127)*1;
       morphValue = value;
+      /* Global morph is a control value now. STM caches it and copies it to all
+         six per-voice morph amounts; STM performs the interpolation work. */
 		frontPanel_sendData(SEQ_CC, SEQ_SET_GLOBAL_MORPH, value);
 	}
 	break;

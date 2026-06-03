@@ -283,6 +283,9 @@ void modNode_vMorph(ModulationNode* vm, float val)
    if(seq_morphLoadDisabled)
       return;
 
+   /* Voice morph destinations are control inputs into the STM morph engine.
+      The modulation node does not write parameter storage; it asks sequencer.c
+      to apply a live overlay between interpolated baseline and morph endpoint. */
    switch(vm->destination)
    {
       case PAR_MORPH_DRUM1:

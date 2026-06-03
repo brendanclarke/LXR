@@ -1490,6 +1490,8 @@ static void frontParser_handleMidiMessage()
             if(frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC2)
                paramNr += 128;
 
+            /* PRF_RESTORE_PARAM_* carries raw kit/front endpoint bytes. These
+               are not live low MIDI CC numbers, so do not apply the +1 offset. */
             seq_storeParameterIngress(paramNr, frontParser_midiMsg.data2);
          }
          break;
@@ -2100,6 +2102,9 @@ static void frontParser_handleSeqCC()
          break;
 
       case FRONT_SEQ_SET_GLOBAL_MORPH:
+         /* AVR menu/global morph resets all STM per-voice morph amounts. Per
+            voice step automation or modulation may later overwrite individual
+            voices without asking AVR to recompute morph. */
          seq_setGlobalMorphAmount(frontParser_midiMsg.data2);
          break;
 
