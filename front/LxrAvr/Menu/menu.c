@@ -2748,6 +2748,15 @@ static void menu_encoderChangeParameter(int8_t inc)
 
 
 //-----------------------------------------------------------------
+static void menu_sendMorphParameterEndpoint(uint16_t paramNr, uint8_t value)
+{
+   if(paramNr < 128)
+      frontPanel_sendData(PRF_RESTORE_MORPH_CC, (uint8_t)paramNr, value);
+   else if(paramNr < END_OF_SOUND_PARAMETERS)
+      frontPanel_sendData(PRF_RESTORE_MORPH_CC2, (uint8_t)(paramNr - 128), value);
+}
+
+//-----------------------------------------------------------------
 // -bc- called when edit mode is active
 // and shift is pressed - we can add some
 // special functions here, primarily
@@ -2817,8 +2826,6 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 		lower = value&0x7f;
       if (!isMorphParam)
 		   frontPanel_sendData(CC_VELO_TARGET,upper,lower);
-      else
-         preset_morph(0x7f,morphValue);
 		//return;
 	}
 		break;
@@ -2836,7 +2843,11 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 		const uint8_t newTargVal=getModTargetIdxFromGapIdx((uint8_t)(*paramValue-1),menu_TargetVoiceGapIndex);
 		// update the lfo mod target in the same endpoint image being edited
       if(isMorphParam)
+      {
          parameters2[PAR_TARGET_LFO1 + (paramNr - PAR_VOICE_LFO1)] = newTargVal;
+         menu_sendMorphParameterEndpoint((uint16_t)(PAR_TARGET_LFO1 + (paramNr - PAR_VOICE_LFO1)),
+                                         newTargVal);
+      }
       else
 		   parameter_values[PAR_TARGET_LFO1 + (paramNr - PAR_VOICE_LFO1)] = newTargVal;
 
@@ -2852,8 +2863,6 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 		lower = value&0x7f;
       if (!isMorphParam)
 		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
-      else
-         preset_morph(0x7f,morphValue);
 		//return;
 	}
 		break;
@@ -2882,8 +2891,6 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 		lower = value&0x7f;
       if (!isMorphParam)
 		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
-      else
-         preset_morph(0x7f,morphValue);
 		//--AS fall thru to update display
 	}
 		break;
@@ -2951,14 +2958,14 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
       if (!isMorphParam)
 		frontPanel_sendData(MIDI_CC,(uint8_t)paramNr,*paramValue);
       else
-         preset_morph(0x7f,morphValue);
+         menu_sendMorphParameterEndpoint(paramNr, *paramValue);
    }
 	else if(paramNr > 127 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
    {
       if (!isMorphParam)
 		frontPanel_sendData(CC_2,(uint8_t)(paramNr-128),*paramValue);
       else
-         preset_morph(0x7f,morphValue);
+         menu_sendMorphParameterEndpoint(paramNr, *paramValue);
    }
 	else // non sound parameters (ie current step data, etc)
 		menu_parseGlobalParam(paramNr,parameter_values[paramNr]);
@@ -3461,7 +3468,7 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 	{
 		//value += (value==127)*1;
       morphValue = value;
-		preset_morph(0x7f,value);
+		frontPanel_sendData(SEQ_CC, SEQ_SET_GLOBAL_MORPH, value);
 	}
 	break;
 
@@ -3662,77 +3669,9 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 //-----------------------------------------------------------------
 void menu_vMorph(uint8_t dest, uint8_t val, uint8_t amt)
 {
-   switch(dest)
-   {
-      case MACRO_VMORPH_DRUM1:
-      {
-         float morphValue;
-         morphValue = ((float)amt/64)-1;
-         if(morphValue>0)
-            morphValue = val*morphValue;
-         else
-            morphValue = 127+(val*morphValue);  
-         preset_morph(0x01,(uint8_t)morphValue);
-         break;
-      }
-      case MACRO_VMORPH_DRUM2:
-      {
-         float morphValue;
-         morphValue = ((float)amt/64)-1;
-         if(morphValue>0)
-            morphValue = val*morphValue;
-         else
-            morphValue = 127+(val*morphValue);  
-         preset_morph(0x02,(uint8_t)morphValue);
-         break;
-      }
-      case MACRO_VMORPH_DRUM3:
-      {
-         float morphValue;
-         morphValue = ((float)amt/64)-1;
-         if(morphValue>0)
-            morphValue = val*morphValue;
-         else
-            morphValue = 127+(val*morphValue);  
-         preset_morph(0x04,(uint8_t)morphValue);
-         break;
-      }
-      case MACRO_VMORPH_SNARE:
-      {
-         float morphValue;
-         morphValue = ((float)amt/64)-1;
-         if(morphValue>0)
-            morphValue = val*morphValue;
-         else
-            morphValue = 127+(val*morphValue);  
-         preset_morph(0x08,(uint8_t)morphValue);
-         break;
-      }   
-      case MACRO_VMORPH_CYM:
-      {
-         float morphValue;
-         morphValue = ((float)amt/64)-1;
-         if(morphValue>0)
-            morphValue = val*morphValue;
-         else
-            morphValue = 127+(val*morphValue);  
-         preset_morph(0x10,(uint8_t)morphValue);
-         break;
-      }
-      case MACRO_VMORPH_HIHAT:
-      {
-         float morphValue;
-         morphValue = ((float)amt/64)-1;
-         if(morphValue>0)
-            morphValue = val*morphValue;
-         else
-            morphValue = 127+(val*morphValue);  
-         preset_morph(0x20,(uint8_t)morphValue);
-         break;
-      }
-      default:
-         break;               
-   }   
+   (void)dest;
+   (void)val;
+   (void)amt;
 }
 //-----------------------------------------------------------------
 static void menu_processSpecialCaseValues(uint16_t paramNr/*, const uint8_t *value*/)

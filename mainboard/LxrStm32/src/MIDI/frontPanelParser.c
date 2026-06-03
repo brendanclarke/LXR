@@ -265,7 +265,7 @@ static void frontParser_beginFileLoadIngress(uint8_t bracketed)
    frontParser_fileLoadIngressActive = 1;
    if(bracketed)
       frontParser_fileLoadBracketActive = 1;
-   seq_setIngressTarget(SEQ_PARAM_INGRESS_NORMAL_INTERPOLATED);
+   seq_setIngressTarget(SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT);
    seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
 }
 
@@ -812,7 +812,7 @@ void frontParser_uncacheVoice(uint8_t voice)
    {
       if(midi_midiCacheAvailable[presetMask[i]])
       {
-         midiParser_ccHandler(midi_midiCache[presetMask[i]],1);
+         midiParser_ccHandler(midi_midiCache[presetMask[i]],0);
          midi_midiCacheAvailable[presetMask[i]]=0;
       }
    }
@@ -1489,8 +1489,6 @@ static void frontParser_handleMidiMessage()
             uint16_t paramNr = frontParser_midiMsg.data1;
             if(frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC2)
                paramNr += 128;
-            else
-               paramNr += 1; // RESTORE: Apply +1 ingress offset for low sound params
 
             seq_storeParameterIngress(paramNr, frontParser_midiMsg.data2);
          }
@@ -1502,24 +1500,21 @@ static void frontParser_handleMidiMessage()
             uint16_t paramNr = frontParser_midiMsg.data1;
             if(frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC2)
                paramNr += 128;
-            else
-               paramNr += 1; // RESTORE: Apply +1 ingress offset for low morph parameter endpoint params
 
             /* RESTORE: Store morph parameter endpoint bytes into the endpoint image
                selected by the current transfer context. These raw selector bytes are
                distinct from the resolved automation target sideband messages. */
             uint8_t currentTarget = seq_getIngressTarget();
-            uint8_t *target = (currentTarget == SEQ_PARAM_INGRESS_TMP_KIT_STATE)
-                                 ? seq_tmpKitState.morphParams
-                                 : seq_normalKitState.morphParams;
-            uint8_t *valid = (currentTarget == SEQ_PARAM_INGRESS_TMP_KIT_STATE)
-                                 ? seq_tmpKitState.morphParamsValid
-                                 : seq_normalKitState.morphParamsValid;
-
             if(paramNr < END_OF_SOUND_PARAMETERS)
             {
-               target[paramNr] = frontParser_midiMsg.data2;
-               valid[paramNr] = 1;
+               if(currentTarget == SEQ_PARAM_INGRESS_CURRENT_IMAGE)
+               {
+                  seq_storeMorphParameterIngress(paramNr, frontParser_midiMsg.data2);
+               }
+               else
+               {
+                  seq_normalKitState.morphParams[paramNr] = frontParser_midiMsg.data2;
+               }
             }
          }
          break;
@@ -1610,44 +1605,38 @@ static void frontParser_handleMidiMessage()
       case MIDI_CC: //frontParser_midiMsg.status
          // this is for parameters below 128
          {
+            uint8_t rawParam = frontParser_midiMsg.data1;
+            MidiMsg liveMsg = frontParser_midiMsg;
+
+            liveMsg.data1 = (uint8_t)((rawParam + 1) & 0x7f);
+
             // are receiving a file transmit for voice?
             // message is for loading voice, or if all voices loading, always hold message
             if(seq_voicesLoading)
             {
-               uint8_t paramNr=frontParser_midiMsg.data1;
-               // fix offset between front an cortex
-               // front params start at 1, cortex at 2 (because of midi in mod wheel==0x1
-               // correct parameter number offset
-               frontParser_midiMsg.data1 += 1;
-               
-               //because hh slope on front is 127 and on cortex is 0 wrap data1 at 127
-               frontParser_midiMsg.data1 &= 0x7f;
-               
-               seq_storeParameterIngress(frontParser_midiMsg.data1, frontParser_midiMsg.data2);
-               
-               midi_midiCache[paramNr]=frontParser_midiMsg;
-               midi_midiCacheAvailable[paramNr]=1;
+               seq_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
+
+               midi_midiCache[rawParam]=liveMsg;
+               midi_midiCacheAvailable[rawParam]=1;
                // message is cached for voice release. 
                // we can do: midiParser_ccHandler(seq_midiCache[voice1PresetMask[i]],1)
                // for i=0:37 to release a voice. no need to split CC and CC2.
             }
             else
             {
-               frontParser_midiMsg.data1 += 1;
-               frontParser_midiMsg.data1 &= 0x7f;
-
                if(seq_shouldApplyIngressToLive())
                {
-                  midiParser_ccHandler(frontParser_midiMsg,1);
+                  seq_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
+                  midiParser_ccHandler(liveMsg,0);
 
                //record automation if record is turned on
-                  seq_recordAutomation(frontParser_activeTrack, frontParser_midiMsg.data1, frontParser_midiMsg.data2);
+                  seq_recordAutomation(frontParser_activeTrack, rawParam, frontParser_midiMsg.data2);
                }
                else
                {
                   /* FILE LOAD: Store normal-image params without changing the
                      temporary sound when the temporary pattern is active. */
-                  seq_storeParameterIngress(frontParser_midiMsg.data1, frontParser_midiMsg.data2);
+                  seq_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
                }
             }
          }
@@ -2071,7 +2060,6 @@ static void frontParser_handleSeqCC()
          if(endpointMode != FRONT_SEQ_TMP_KIT_ENDPOINT_MORPH_ONLY)
          {
             memset(seq_normalKitState.frontPanelParams, 0, END_OF_SOUND_PARAMETERS);
-            memset(seq_normalKitState.frontPanelParamsValid, 0, END_OF_SOUND_PARAMETERS);
             memset(&seq_normalKitState.frontPanelAutomationTargets,
                    0,
                    sizeof(seq_normalKitState.frontPanelAutomationTargets));
@@ -2080,7 +2068,6 @@ static void frontParser_handleSeqCC()
          if(endpointMode != FRONT_SEQ_TMP_KIT_ENDPOINT_FRONT_ONLY)
          {
             memset(seq_normalKitState.morphParams, 0, END_OF_SOUND_PARAMETERS);
-            memset(seq_normalKitState.morphParamsValid, 0, END_OF_SOUND_PARAMETERS);
             memset(&seq_normalKitState.morphParameterEndpointAutomationTargets,
                    0,
                    sizeof(seq_normalKitState.morphParameterEndpointAutomationTargets));
@@ -2102,12 +2089,18 @@ static void frontParser_handleSeqCC()
          break;
 
       case FRONT_SEQ_TMP_KIT_ENDPOINT_END:
+         seq_applyNormalEndpointAutomationTargets();
+
          /* RESTORE: Switch ingress target back to the surrounding context. During
-            file load, endpoint dumps are nested inside normal-interpolated ingress. */
+            file load, endpoint dumps are nested inside normal kit-endpoint ingress. */
          seq_setIngressTarget(frontParser_fileLoadIngressActive
-                              ? SEQ_PARAM_INGRESS_NORMAL_INTERPOLATED
+                              ? SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT
                               : SEQ_PARAM_INGRESS_CURRENT_IMAGE);
          seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
+         break;
+
+      case FRONT_SEQ_SET_GLOBAL_MORPH:
+         seq_setGlobalMorphAmount(frontParser_midiMsg.data2);
          break;
 
       case FRONT_SEQ_REQUEST_PATTERN_PARAMS:
@@ -2665,6 +2658,8 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_FILE_BEGIN:
          frontParser_beginFileLoadIngress(1);
          frontParser_clearDeferredPerfLoad();
+         seq_resetVoiceMorphAmountsToGlobal();
+         seq_resetLiveMorphApplyCache();
          if((frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
             || (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_ALL))
          {

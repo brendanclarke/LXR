@@ -15,6 +15,8 @@
 - `front/LxrAvr/Preset/presetManager.c`  
 - `front/LxrAvr/main.c`  
 
+**Post-audit updates folded in:** Session 002 communication flow-control work and Session 003 STM morph move, through 2026-06-03.
+
 ---
 
 ## 1. System Overview
@@ -766,7 +768,7 @@ USART3->BRR = (2 << 4) | 1;
 
 The dominant latency in the current protocol is not transmission time — it is the STM32 processing only one byte per `uart_processFront()` call while audio DSP shares the same main loop. If the main loop iteration takes 700 µs (one audio block at 44.1 kHz, 32 samples), bytes arriving every 8 µs at 1.25 Mbaud will saturate the 256-byte RX FIFO in about 2 ms. Increasing the baud rate without also increasing the drain rate **raises the probability of FIFO overflow** rather than lowering it.
 
-The fix on the STM32 side is straightforward: drain all available bytes in `uart_processFront()` rather than just one:
+Earlier versions of this audit recommended draining all available bytes in `uart_processFront()` rather than just one:
 
 ```c
 void uart_processFront() {
@@ -777,14 +779,267 @@ void uart_processFront() {
 }
 ```
 
-This is safe because `frontParser_parseUartData()` is a pure state machine with no unbounded loops of its own. Draining the full FIFO per call eliminates the per-byte main-loop-iteration penalty entirely and makes the actual round-trip time a function of STM32 response latency rather than FIFO drain rate.
+That recommendation is now known to be unsafe as a blind change in this firmware branch. During later temp-load work, an unbounded STM32 front-RX drain caused a previously known-good `.ALL` load to freeze at `Loading All`. The likely issue is not just raw parser cost; draining an arbitrarily large burst can starve other main-loop services, alter ACK timing, and interact badly with the existing SysEx/callback load state machines.
+
+Current recommendation:
+
+- Keep the single-byte drain unless a bounded experiment is explicitly being performed.
+- If RX throughput is revisited, test a small fixed maximum per main-loop pass, not an unbounded `while(...)`.
+- Do not combine RX-drain changes with file-layout fixes, parameter-index fixes, morph changes, or temp-cache semantics. The result becomes impossible to diagnose.
+- Re-test `.ALL`, `.PRF`, stopped playback, running playback, and temp-cache transitions after any drain-rate change.
 
 ### 12.4 Recommended Sequence
 
 1. **Fix correctness bugs first** (§7 items 1–5: FIFO overflow handling, `ATOMIC_BLOCK` deadlock, `uart_waitAck()` timeout, SD error hard-locks, `seq_loadFastMode` atomicity). A faster baud rate with these bugs present amplifies their severity.
-2. **Fix the single-byte drain** on the STM32 (`uart_processFront()` while-loop). This alone may reduce preset load time more than any baud rate change.
+2. **Only revisit the STM32 drain rate with bounded tests.** Do not use an unbounded `while(...)` drain; it already caused a known-good `.ALL` load freeze in this branch.
 3. **Bump to 625 kbaud** as a conservative, low-risk improvement.
 4. **Evaluate 1.25 Mbaud** once the protocol is stable and correct. At that point the lower per-byte time translates directly to reduced round-trip latency and measurable preset load speed improvement.
 5. **Leave 2.5 Mbaud** as a future option pending hardware signal integrity verification.
+
+---
+
+## 13. Session 002/003 Protocol Updates: Flow Control, Endpoint Traffic, And STM-Owned Morph
+
+This section records later communication changes made after the original hardware audit. Treat this section as current for the `custom-develop-patload-envmod` branch as of Session 003 closeout on 2026-06-03.
+
+### 13.1 Flow-Control Additions Implemented So Far
+
+The protocol still has no hardware RTS/CTS and still uses the same UART byte-stream parser. However, later work added a software flow-control layer for selected high-volume message families.
+
+Current flow opcodes:
+
+- `SEQ_FLOW_BEGIN` / `FRONT_SEQ_FLOW_BEGIN` (`0x5a`)
+- `SEQ_FLOW_GRANT` / `FRONT_SEQ_FLOW_GRANT` (`0x5b`)
+- `SEQ_FLOW_END` / `FRONT_SEQ_FLOW_END` (`0x5c`)
+- `SEQ_FLOW_ABORT` / `FRONT_SEQ_FLOW_ABORT` (`0x5d`)
+
+Current flow channels:
+
+- `FLOW_CH_LOAD_SESSION` (`0x00`)
+- `FLOW_CH_GLOBALS` (`0x01`)
+- `FLOW_CH_VOICE_PARAM` (`0x02`)
+- `FLOW_CH_DRUM_META` (`0x03`)
+
+Implemented behavior:
+
+- AVR 3-byte sends were adjusted so they do not wait for TX FIFO space inside a global `ATOMIC_BLOCK`. This removes the most direct deadlock where interrupts are disabled while waiting for the TX-empty ISR to make progress.
+- Load sessions can be bracketed by `SEQ_FLOW_BEGIN` and `SEQ_FLOW_END`.
+- STM can enter a quiet/load mode during load sessions so optional UI/status chatter is suppressed while priority traffic still passes.
+- STM grants receive budget with `SEQ_FLOW_GRANT`; globals, voice-param, and drum-meta bursts can be credit-metered.
+- `SEQ_FLOW_ABORT` exists for cleanup if a flow wait times out or an incompatible state is detected.
+
+Limitations still present:
+
+- Old SysEx/callback waits still exist and many still lack full timeout recovery.
+- Flow control is not universal; it is layered over selected message families.
+- Silent FIFO overflow and STM USART overrun remain real hazards.
+- Broad transport hardening should not be mixed with Session 004 temp-cache repair unless a transport fault is proven.
+
+### 13.2 Current Endpoint Transport Meaning After STM Morph Move
+
+Session 003 changed the meaning of several parameter messages. They are no longer just "restore menu value" or "push live morph result" messages; they are now endpoint-storage messages.
+
+Endpoint byte transport:
+
+- `PRF_RESTORE_PARAM_CC` (`0xc1`)
+- `PRF_RESTORE_PARAM_CC2` (`0xc2`)
+- `PRF_RESTORE_MORPH_CC` (`0xc3`)
+- `PRF_RESTORE_MORPH_CC2` (`0xc4`)
+
+Current semantics:
+
+- `PRF_RESTORE_PARAM_CC/CC2` transport kit/front endpoint bytes.
+- `PRF_RESTORE_MORPH_CC/CC2` transport morph parameter endpoint bytes.
+- These messages use raw AVR/menu parameter indices.
+- They must not apply the old low-parameter `+1/-1` live-CC offset.
+- During file load, they write STM normal endpoint storage only.
+- During file load, they must not write STM temporary endpoint storage.
+- They must not write `interpolatedParams[]`.
+
+The low-parameter offset rule is now:
+
+- File bytes, AVR `parameter_values[]`, AVR `parameters2[]`, STM endpoint arrays, and PRF restore opcodes all use raw AVR/menu parameter indices.
+- Raw low parameter `N < 128` becomes live STM MIDI CC `N + 1` only when calling the ordinary `midiParser_ccHandler(...)` / DSP apply path.
+- Do not apply this offset to endpoint storage, endpoint restore, morph endpoint storage, or file-load endpoint dumps.
+
+This rule is critical. A Session 003 example was `PAR_OSC_WAVE_DRUM2`: the file/menu value was raw parameter 2 with value 0, but a misapplied live/endpoint distinction left DSP initialized at waveform 2. The eventual fix was not an offset correction; it was making sure first-time zero endpoint values are applied to DSP by the STM morph worker/live-apply path.
+
+### 13.3 Endpoint Brackets And Automation Target Phases
+
+Endpoint byte dumps are bracketed so the STM knows that incoming parameter/target traffic is endpoint storage, not ordinary live edits.
+
+Endpoint bracket/control opcodes:
+
+- `SEQ_TMP_KIT_ENDPOINT_BEGIN`
+- `SEQ_TMP_KIT_ENDPOINT_END`
+- `SEQ_TMP_KIT_ENDPOINT_MORPH_ONLY`
+- `FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN`
+- `FRONT_SEQ_TMP_KIT_ENDPOINT_END`
+- `FRONT_SEQ_TMP_KIT_ENDPOINT_MORPH_ONLY`
+
+Automation target phase opcode:
+
+- `SEQ_TMP_KIT_AUTOMATION_PHASE`
+- `FRONT_SEQ_TMP_KIT_AUTOMATION_PHASE`
+
+Automation phase values:
+
+- `SEQ_TMP_KIT_AUTOMATION_NONE` / `FRONT_SEQ_TMP_KIT_AUTOMATION_NONE`
+- `SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT` / `FRONT_SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT`
+- `SEQ_TMP_KIT_AUTOMATION_MORPH_ENDPOINT` / `FRONT_SEQ_TMP_KIT_AUTOMATION_MORPH_ENDPOINT`
+
+Reason for the phase sideband:
+
+- AVR files store raw selector bytes such as `PAR_TARGET_LFO1`.
+- STM now needs resolved automation destinations so modulation can be applied without asking AVR to compute live morph.
+- AVR therefore sends resolved target sidebands such as `CC_LFO_TARGET`, `CC_VELO_TARGET`, and related target messages while an endpoint automation phase is active.
+- STM stores those resolved destinations into the corresponding endpoint automation target image.
+
+Current STM target images:
+
+- front/kit endpoint automation targets;
+- morph endpoint automation targets;
+- interpolated automation targets.
+
+File-load rule:
+
+- Front endpoint sidebands refresh both the front endpoint target cache and the interpolated target cache, so loaded modulation destinations take effect immediately when normal is live.
+- Morph endpoint sidebands refresh the morph endpoint target cache.
+- This target-cache refresh is allowed at file load; it is not the same as writing interpolated parameter bytes.
+
+### 13.4 STM-Owned Morph Communication Model
+
+Standard morph is now STM-owned.
+
+AVR responsibilities:
+
+- Display and edit global morph in the menu.
+- Store file/menu kit endpoint bytes in `parameter_values[]`.
+- Store file/menu morph endpoint bytes in `parameters2[]`.
+- Send endpoint byte dumps and automation target sidebands.
+- Send global morph value to STM when the menu/global changes.
+
+STM responsibilities:
+
+- Store normal/temp kit endpoint images.
+- Store normal/temp morph endpoint images.
+- Store per-voice morph amounts.
+- Run one morphable parameter interpolation per STM main-loop pass.
+- Write `interpolatedParams[]`.
+- Apply live DSP values for whichever normal/temp image is sounding.
+- Handle step automation and LFO/velocity modulation of per-voice morph.
+
+Global morph opcode:
+
+- AVR sends `SEQ_CC, SEQ_SET_GLOBAL_MORPH, value`.
+- STM receives `FRONT_SEQ_SET_GLOBAL_MORPH`.
+- STM caches the global morph value and copies it to all six per-voice morph amounts.
+
+Important distinctions:
+
+- AVR no longer performs standard live morph computation.
+- AVR `preset_morph(...)` may still exist as legacy/helper code, but standard operation should not rely on it.
+- Do not reintroduce a live AVR morph stream to work around temp-cache bugs.
+- Per-voice morph is not directly displayed/set in the AVR menu.
+
+### 13.5 Per-Voice Morph Automation And Modulation
+
+Per-voice morph can be changed by:
+
+- global morph menu value, which sets all six voices;
+- MIDI/automation target writes to `PAR_MORPH_DRUM1..PAR_MORPH_HIHAT`;
+- step automation targeting those parameters;
+- LFO or velocity modulation whose resolved destination is one of those parameters.
+
+Value conversion:
+
+- `0` is valid.
+- `0..126` maps to `value * 2`.
+- `127` maps to exact full morph `255`.
+
+Step automation behavior:
+
+- If a step automation target is `PAR_MORPH_DRUM1..PAR_MORPH_HIHAT`, it sets the STM per-voice morph amount.
+- It does not directly write endpoint arrays.
+- It does not directly write interpolation arrays.
+- Later step automation or a later global morph command may overwrite the per-voice amount.
+
+LFO/velocity modulation behavior:
+
+- Modulation destinations `PAR_MORPH_DRUM1..PAR_MORPH_HIHAT` route through STM morph modulation.
+- The modulation amount is applied between the stored interpolation baseline and the full morph endpoint.
+- Modulation does not overwrite `interpolatedParams[]`.
+- A modulation depth of zero should therefore leave the sound at the stored interpolation baseline, which at global/voice morph zero is the kit/front endpoint.
+
+### 13.6 Example: `P005.PRF` LFO1 Targeting Voice 6 Morph
+
+The Session 003 hardware test used `P005.PRF`, where LFO1 targets voice 6 morph.
+
+Decoded values during the session:
+
+- `.PRF` version 5.
+- Perf kit endpoint offset: `74`.
+- Perf morph endpoint offset: `586`.
+- `PAR_VOICE_LFO1 = 6`
+- `PAR_TARGET_LFO1 = 210`
+- current AVR/STM `modTargets[210] -> PAR_MORPH_HIHAT`
+- `PAR_AMOUNT_LFO1 = 115`
+- `PAR_FREQ_LFO1 = 94`
+- `PAR_WAVE_LFO1 = 2`
+
+Load/apply path:
+
+1. AVR reads the `.PRF` and populates `parameter_values[]` / `parameters2[]`.
+2. AVR sends endpoint bytes to STM normal endpoint storage.
+3. AVR enters `SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT`.
+4. AVR sends resolved `CC_LFO_TARGET` for LFO1 based on `parameter_values[PAR_TARGET_LFO1]`.
+5. STM receives `FRONT_CC_LFO_TARGET` during endpoint ingress and stores the destination instead of immediately treating it as a live menu edit.
+6. STM writes `seq_normalKitState.frontPanelAutomationTargets.lfoDestination[0]`.
+7. STM also refreshes `seq_normalKitState.interpolatedAutomationTargets.lfoDestination[0]`.
+8. At endpoint end, STM applies normal endpoint automation targets if the normal image is live.
+9. LFO1's modulation node destination becomes `PAR_MORPH_HIHAT`.
+10. When LFO1 runs, `modulationNode.c` routes the modulation to STM voice 6 morph.
+11. STM computes live DSP values between the stored interpolation baseline and morph endpoint without overwriting `interpolatedParams[]`.
+
+The user confirmed this path sounded correct after the Session 003 fixes.
+
+### 13.7 Parameter Validity Model After Session 003
+
+The sound parameter framework no longer uses per-parameter validity flags.
+
+Removed from `SeqKitState`:
+
+- `frontPanelParamsValid[]`
+- `morphParamsValid[]`
+- `interpolatedParamsValid[]`
+
+Current rule:
+
+- Parameter arrays are always-defined from zero initialization.
+- If `P000.SND` is absent, the zeroed array is still valid sound state.
+- File loads overwrite endpoint arrays.
+- The morph worker overwrites interpolation arrays.
+- Transfer completeness bugs should be fixed in transfer/routing code, not hidden by sound-state validity flags.
+
+Live DSP apply uses a separate cache:
+
+- `seq_liveMorphAppliedValue[image][param]`
+- `seq_liveMorphAppliedKnown[image][param]`
+
+This cache is not a transport or parameter validity mechanism. It only prevents unchanged values from being repeatedly sent to DSP while still allowing first-time zero values to land. This fixed the Session 003 Drum 2 waveform case and avoided the loud continuous low-Hz overlay caused by applying every parameter on every morph scan.
+
+### 13.8 Session 004 Communication Cautions
+
+The current broken area is normal/temporary pattern and parameter exchange after morph moved to STM. Do not assume this is first a UART transport bug. The normal file-load and LFO-target-to-morph paths proved that endpoint bytes and automation sidebands can arrive correctly in at least the normal live path.
+
+For Session 004:
+
+- Start by tracing one parameter through copy/load/temp storage/menu restore/live DSP.
+- Do not change baud rate, RX drain rate, or SysEx ACK behavior unless the temp-cache trace proves transport loss.
+- Do not restore AVR live morph.
+- Do not reintroduce per-parameter valid arrays.
+- Do not allow file load or AVR endpoint restore to write `interpolatedParams[]`.
+- Remember that endpoint restore now sends whole arrays; zeros are authoritative.
+- The SEQ16 button bodge to observe the temporary cache remains in place.
 
 *Audit completed. Working tree extracted and verified at `/home/claude/LXR_project/LXR-custom-develop-patload-envmod`.*

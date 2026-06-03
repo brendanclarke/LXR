@@ -1019,29 +1019,8 @@ void frontPanel_parseData(uint8_t data)
             // morph operation
             else if( (frontParser_midiMsg.status == MORPH_CC)||(frontParser_midiMsg.status == VOICE_MORPH) )
             {  
-               if(frontParser_restoreActive)
-                  return;
-
-               // morph is a low-priority opertaion (because we might be getting a LOT
-               // from the Mod Wheel) - if we get a bank change or program change, 
-               // we cache Morph while those happen
-               
-               if(frontPanel_longOp!=NULL_OP)
-               {
-                  frontPanel_morphArray = frontParser_midiMsg.data1;
-                  frontPanel_longData=(uint8_t)(frontParser_midiMsg.data2<<1);
-                  frontPanel_morphAvail=1;
-               }
-               else
-               {
-                  // this is a time-consuming operation, cache it and deal
-                  // with only one per loop of main()
-                  frontPanel_longOp=MORPH_OP;
-                  
-                  frontPanel_morphArray = frontParser_midiMsg.data1;
-                  // bit shift from MIDI CC values
-                  frontPanel_longData=(uint8_t)(frontParser_midiMsg.data2<<1);
-               }
+               /* STM owns live morph computation. Keep these legacy opcodes
+                  inert so they cannot trigger AVR-side preset_morph(). */
             }
             
             
@@ -1270,17 +1249,8 @@ void midiMsg_checkLongOps()
       
       else if (frontPanel_longOp==MORPH_OP)
       {
-         parameter_values[PAR_MORPH]=frontPanel_longData;
-         preset_morph(frontPanel_morphArray,frontPanel_longData);
-         morphValue=frontPanel_longData;
-         menu_repaint();
-         if(frontPanel_morphAvail)
-         {
-            frontPanel_longOp=MORPH_OP;
-            frontPanel_morphAvail=0;
-         }
-         else
-            frontPanel_longOp=NULL_OP;
+         frontPanel_morphAvail=0;
+         frontPanel_longOp=NULL_OP;
       }
       
       else

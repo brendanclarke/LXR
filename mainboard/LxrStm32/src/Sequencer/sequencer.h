@@ -219,11 +219,8 @@ typedef struct SeqKitAutomationTargetsStruct
 typedef struct SeqKitStateStruct
 {
    uint8_t frontPanelParams[END_OF_SOUND_PARAMETERS];
-   uint8_t frontPanelParamsValid[END_OF_SOUND_PARAMETERS];
    uint8_t morphParams[END_OF_SOUND_PARAMETERS];
-   uint8_t morphParamsValid[END_OF_SOUND_PARAMETERS];
    uint8_t interpolatedParams[END_OF_SOUND_PARAMETERS];
-   uint8_t interpolatedParamsValid[END_OF_SOUND_PARAMETERS];
    SeqKitAutomationTargets frontPanelAutomationTargets;
    SeqKitAutomationTargets morphParameterEndpointAutomationTargets;
    SeqKitAutomationTargets interpolatedAutomationTargets;
@@ -239,9 +236,7 @@ void seq_init();
 //------------------------------------------------------------------------------
 /** call periodically to check if the next step has to be processed */
 #define SEQ_PARAM_INGRESS_CURRENT_IMAGE 0
-#define SEQ_PARAM_INGRESS_TMP_KIT_STATE 1
-#define SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT 2
-#define SEQ_PARAM_INGRESS_NORMAL_INTERPOLATED 3
+#define SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT 1
 
 #define SEQ_AUTOMATION_INGRESS_NONE 0
 #define SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT 1
@@ -254,8 +249,19 @@ uint8_t seq_isTmpKitActive();
 void seq_setAutomationIngressTarget(uint8_t target);
 
 void seq_tick();
+void seq_serviceMorphInterpolation();
 void seq_serviceEndpointRestore();
 uint8_t seq_endpointRestoreBusy();
+void seq_setGlobalMorphAmount(uint8_t morphAmount);
+void seq_resetVoiceMorphAmountsToGlobal();
+void seq_resetLiveMorphApplyCache();
+void seq_setGlobalMorphAutomationValue(uint8_t morphValue);
+void seq_setVoiceMorphAmount(uint8_t synthVoice, uint8_t morphAmount);
+void seq_setVoiceMorphAutomationValue(uint8_t synthVoice, uint8_t morphValue);
+void seq_setVoiceMorphMaskAutomationValue(uint8_t voiceMask, uint8_t morphValue);
+void seq_modulateVoiceMorphAmount(uint8_t synthVoice, float amount, float value);
+void seq_applyNormalEndpointAutomationTargets();
+void seq_storeMorphParameterIngress(uint16_t param, uint8_t value);
 //------------------------------------------------------------------------------
 void seq_armAutomationStep(uint8_t stepNr, uint8_t track,uint8_t isArmed);
 //------------------------------------------------------------------------------

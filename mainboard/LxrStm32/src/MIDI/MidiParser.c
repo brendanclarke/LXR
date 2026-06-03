@@ -90,6 +90,46 @@ uint8_t midi_envPosition[6];
 
 uint8_t midi_unused;
 
+static ModulationNode* midiParser_getLfoModNode(uint8_t voice)
+{
+   switch(voice)
+   {
+      case 0:
+      case 1:
+      case 2:
+         return &voiceArray[voice].lfo.modTarget;
+      case 3:
+         return &snareVoice.lfo.modTarget;
+      case 4:
+         return &cymbalVoice.lfo.modTarget;
+      case 5:
+      default:
+         return &hatVoice.lfo.modTarget;
+   }
+}
+
+static void midiParser_setLfoModAmount(uint8_t voice, uint8_t value)
+{
+   ModulationNode *node;
+
+   if(voice >= 6)
+      return;
+
+   node = midiParser_getLfoModNode(voice);
+   node->amount = value / 127.f;
+   modNode_updateValue(node, node->lastVal);
+}
+
+static void midiParser_setVelocityModAmount(uint8_t voice, uint8_t value)
+{
+   if(voice >= 6)
+      return;
+
+   velocityModulators[voice].amount = value / 127.f;
+   modNode_updateValue(&velocityModulators[voice],
+                       velocityModulators[voice].lastVal);
+}
+
 // this will be set to some value if we are ignoring all mtc messages until the next 0 message
 static uint8_t midiParser_mtcIgnore=1;
 static uint32_t volatile midiParser_lastMtcReceived=0x0;
@@ -816,16 +856,16 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          case AMOUNT_LFO1:
          case AMOUNT_LFO2:
          case AMOUNT_LFO3:
-            voiceArray[msg.data1-AMOUNT_LFO1].lfo.modTarget.amount = msg.data2/127.f;
+            midiParser_setLfoModAmount((uint8_t)(msg.data1-AMOUNT_LFO1), msg.data2);
             break;
          case AMOUNT_LFO4:
-            snareVoice.lfo.modTarget.amount = msg.data2/127.f;
+            midiParser_setLfoModAmount(3, msg.data2);
             break;
          case AMOUNT_LFO5:
-            cymbalVoice.lfo.modTarget.amount = msg.data2/127.f;
+            midiParser_setLfoModAmount(4, msg.data2);
             break;
          case AMOUNT_LFO6:
-            hatVoice.lfo.modTarget.amount = msg.data2/127.f;
+            midiParser_setLfoModAmount(5, msg.data2);
             break;
       
          case VOICE_DECIMATION1:
@@ -1012,7 +1052,8 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          case CC2_VELO_MOD_AMT_4:
          case CC2_VELO_MOD_AMT_5:
          case CC2_VELO_MOD_AMT_6:
-            velocityModulators[msg.data1-CC2_VELO_MOD_AMT_1].amount = msg.data2/127.f;
+            midiParser_setVelocityModAmount((uint8_t)(msg.data1-CC2_VELO_MOD_AMT_1),
+                                            msg.data2);
             break;
       
          case CC2_WAVE_LFO1:
@@ -1573,7 +1614,10 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
          
       if (midiChannelCode!=0)
       {
-         sequencer_sendVMorph(midiChannelCode, msg.data2);
+         if(midiChannelCode == 0x3f)
+            seq_setGlobalMorphAutomationValue(msg.data2);
+         else
+            seq_setVoiceMorphMaskAutomationValue(midiChannelCode, msg.data2);
       }
       
    }
@@ -1660,7 +1704,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF1;
                break;
             case UNDEF_24: // velo mod amount, voice 1-6
-               velocityModulators[0].amount = msg.data2/127.f;
+               midiParser_setVelocityModAmount(0, msg.data2);
                LXRparamNr=128+CC2_VELO_MOD_AMT_1;
                break;
             case UNDEF_25: // velocity mod destination 1-6
@@ -1700,7 +1744,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=FREQ_LFO1;
                break;
             case SOUND_VIB_DEPTH: // AMOUNT_LFO* (1-6)
-               voiceArray[0].lfo.modTarget.amount = msg.data2/127.f;
+               midiParser_setLfoModAmount(0, msg.data2);
                LXRparamNr=AMOUNT_LFO1;
                break;
             case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
@@ -1917,7 +1961,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF2;
                break;
             case UNDEF_24: // velo mod amount, voice 1-6
-               velocityModulators[1].amount = msg.data2/127.f;
+               midiParser_setVelocityModAmount(1, msg.data2);
                LXRparamNr=128+CC2_VELO_MOD_AMT_2;
                break;
             case UNDEF_25: // velocity mod destination 1-6
@@ -1957,7 +2001,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=FREQ_LFO2;
                break;
             case SOUND_VIB_DEPTH: // AMOUNT_LFO* (1-6)
-               voiceArray[1].lfo.modTarget.amount = msg.data2/127.f;
+               midiParser_setLfoModAmount(1, msg.data2);
                LXRparamNr=AMOUNT_LFO2;
                break;
             case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
@@ -2174,7 +2218,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF3;
                break;
             case UNDEF_24: // velo mod amount, voice 1-6
-               velocityModulators[2].amount = msg.data2/127.f;
+               midiParser_setVelocityModAmount(2, msg.data2);
                LXRparamNr=128+CC2_VELO_MOD_AMT_3;
                break;
             case UNDEF_25: // velocity mod destination 1-6
@@ -2214,7 +2258,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=FREQ_LFO3;
                break;
             case SOUND_VIB_DEPTH: // AMOUNT_LFO* (1-6)
-               voiceArray[2].lfo.modTarget.amount = msg.data2/127.f;
+               midiParser_setLfoModAmount(2, msg.data2);
                LXRparamNr=AMOUNT_LFO3;
                break;
             case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
@@ -2436,7 +2480,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF4;
                break;
             case UNDEF_24: // velo mod amount, voice 1-6
-               velocityModulators[3].amount = msg.data2/127.f;
+               midiParser_setVelocityModAmount(3, msg.data2);
                LXRparamNr=128+CC2_VELO_MOD_AMT_4;
                break;
             case UNDEF_25: // velocity mod destination 1-6
@@ -2482,7 +2526,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=FREQ_LFO4;
                break;
             case SOUND_VIB_DEPTH: // AMOUNT_LFO* (1-6)
-               snareVoice.lfo.modTarget.amount = msg.data2/127.f;
+               midiParser_setLfoModAmount(3, msg.data2);
                LXRparamNr=AMOUNT_LFO4;
                break;
             case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
@@ -2683,7 +2727,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF5;
                break;
             case UNDEF_24: // velo mod amount, voice 1-6
-               velocityModulators[4].amount = msg.data2/127.f;
+               midiParser_setVelocityModAmount(4, msg.data2);
                LXRparamNr=128+CC2_VELO_MOD_AMT_5;
                break;
             case UNDEF_25: // velocity mod destination 1-6
@@ -2729,7 +2773,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=FREQ_LFO5;
                break;
             case SOUND_VIB_DEPTH: // AMOUNT_LFO* (1-6)
-               cymbalVoice.lfo.modTarget.amount = msg.data2/127.f;
+               midiParser_setLfoModAmount(4, msg.data2);
                LXRparamNr=AMOUNT_LFO5;
                break;
             case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
@@ -2943,7 +2987,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF6;
                break;
             case UNDEF_24: // velo mod amount, voice 1-6
-               velocityModulators[5].amount = msg.data2/127.f;
+               midiParser_setVelocityModAmount(5, msg.data2);
                LXRparamNr=128+CC2_VELO_MOD_AMT_6;
                break;
             case UNDEF_25: // velocity mod destination 1-6
@@ -2985,7 +3029,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=FREQ_LFO6;
                break;
             case SOUND_VIB_DEPTH: // AMOUNT_LFO* (1-6)
-               hatVoice.lfo.modTarget.amount = msg.data2/127.f;
+               midiParser_setLfoModAmount(5, msg.data2);
                LXRparamNr=AMOUNT_LFO6;
                break;
             case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
@@ -3198,7 +3242,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=128+CC2_VOLUME_MOD_ON_OFF6;
                break;
             case UNDEF_24: // velo mod amount, voice 1-6
-               velocityModulators[5].amount = msg.data2/127.f;
+               midiParser_setVelocityModAmount(5, msg.data2);
                LXRparamNr=128+CC2_VELO_MOD_AMT_6;
                break;
             case UNDEF_25: // velocity mod destination 1-6
@@ -3240,7 +3284,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                LXRparamNr=FREQ_LFO6;
                break;
             case SOUND_VIB_DEPTH: // AMOUNT_LFO* (1-6)
-               hatVoice.lfo.modTarget.amount = msg.data2/127.f;
+               midiParser_setLfoModAmount(5, msg.data2);
                LXRparamNr=AMOUNT_LFO6;
                break;
             case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)

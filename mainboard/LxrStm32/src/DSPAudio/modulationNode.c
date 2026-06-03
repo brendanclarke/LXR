@@ -144,6 +144,12 @@ void modNode_reassignVeloMod()
 // The target's actual value needs to be preserved because it will be modulated.
 void modNode_setDestination(ModulationNode* vm, uint16_t dest)
 {
+   if(vm->destination < END_OF_SOUND_PARAMETERS
+      && parameterArray[vm->destination].type == TYPE_UINT8_VMORPH)
+   {
+      modNode_vMorph(vm, 0.f);
+   }
+
 	//TODO check if this interrupts other modulations too much
 	//is needed to really get the original value
 	modNode_resetTargets();
@@ -183,6 +189,9 @@ void modNode_setDestination(ModulationNode* vm, uint16_t dest)
 		default:
 			break;
 	}
+
+   if(p->type == TYPE_UINT8_VMORPH)
+      modNode_vMorph(vm, vm->lastVal);
 }
 //-----------------------------------------------------------------------
 // This is called to actually modulate the value for a modulation node
@@ -277,28 +286,22 @@ void modNode_vMorph(ModulationNode* vm, float val)
    switch(vm->destination)
    {
       case PAR_MORPH_DRUM1:
-         seq_vMorphFlag|=(0x01<<0);
-         seq_vMorphAmount[0]=(uint8_t)( (vm->amount * val * 128)  );
+         seq_modulateVoiceMorphAmount(0, vm->amount, val);
          break;
       case PAR_MORPH_DRUM2:
-         seq_vMorphFlag|=(0x01<<1);
-         seq_vMorphAmount[1]=(uint8_t)( (vm->amount * val * 128)  );
+         seq_modulateVoiceMorphAmount(1, vm->amount, val);
          break;
       case PAR_MORPH_DRUM3:
-         seq_vMorphFlag|=(0x01<<2);
-         seq_vMorphAmount[2]=(uint8_t)( (vm->amount * val * 128)  );
+         seq_modulateVoiceMorphAmount(2, vm->amount, val);
          break;
       case PAR_MORPH_SNARE:
-         seq_vMorphFlag|=(0x01<<3);
-         seq_vMorphAmount[3]=(uint8_t)( (vm->amount * val * 128)  );
+         seq_modulateVoiceMorphAmount(3, vm->amount, val);
          break;
       case PAR_MORPH_CYM:
-         seq_vMorphFlag|=(0x01<<4);
-         seq_vMorphAmount[4]=(uint8_t)( (vm->amount * val * 128)  );
+         seq_modulateVoiceMorphAmount(4, vm->amount, val);
          break;
       case PAR_MORPH_HIHAT:
-         seq_vMorphFlag|=(0x01<<5);
-         seq_vMorphAmount[5]=(uint8_t)( (vm->amount * val * 128)  );
+         seq_modulateVoiceMorphAmount(5, vm->amount, val);
          break;
       default:
          break;               

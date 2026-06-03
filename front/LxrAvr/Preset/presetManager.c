@@ -539,7 +539,6 @@ void preset_readDrumVoice(uint8_t track, uint8_t isMorph)
    // bc: output dests aren't morphed anymore - they need to be a special case
    frontPanel_sendData(CC_2,(uint8_t)(PAR_AUDIO_OUT1+track-128),parameter_values[track+PAR_AUDIO_OUT1]);
    frontPanel_holdForBuffer();
-   preset_morph((uint8_t)(0x01<<track),parameter_values[PAR_MORPH]);  
    
    frontPanel_holdForBuffer();
    frontPanel_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,track);
