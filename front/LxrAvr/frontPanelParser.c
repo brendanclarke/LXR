@@ -974,10 +974,10 @@ void frontPanel_parseData(uint8_t data)
                // lcd_setcursor(0,0);
                // lcd_string(text);
 
+               frontParser_restoreActive = 0;
                menu_repaintAll();
                // Inform STM we have finished and re-enabled normal operation.
                frontPanel_sendData(PARAM_RESTORE_ACK, 0, 0);
-               frontParser_restoreActive = 0;
             }
             else if(frontParser_midiMsg.status == PRF_CACHE_STATUS)
             {

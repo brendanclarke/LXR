@@ -1461,6 +1461,20 @@ static void frontParser_handleSysexData(unsigned char data)
 // This is called when we've received a full midi message
 static void frontParser_handleMidiMessage()
 {
+   switch(frontParser_midiMsg.status)
+   {
+      case PARAM_RESTORE_READY:
+         seq_tmpKitHandshakeReady = 1;
+         return;
+
+      case PARAM_RESTORE_ACK:
+         seq_tmpKitHandshakeAck = 1;
+         return;
+
+      default:
+         break;
+   }
+
    if(frontParser_cachePrfLiveSnapshotMessage())
    {
       frontParser_flowMessageApplied();
@@ -1475,14 +1489,6 @@ static void frontParser_handleMidiMessage()
 
    switch(frontParser_midiMsg.status)
    {
-      case PARAM_RESTORE_READY:
-         seq_tmpKitHandshakeReady = 1;
-         break;
-
-      case PARAM_RESTORE_ACK:
-         seq_tmpKitHandshakeAck = 1;
-         break;
-
       case PRF_RESTORE_PARAM_CC:
       case PRF_RESTORE_PARAM_CC2:
          {

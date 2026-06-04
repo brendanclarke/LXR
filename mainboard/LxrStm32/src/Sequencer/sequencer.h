@@ -51,6 +51,7 @@
   * 1 hiHat
   * track 7 is the open hh... it triggers the highhat voice but with longer decay. it chokes the closed hihat*/
 #define NUM_TRACKS 7
+#define SEQ_SYNTH_VOICES 6
 #define NUM_PATTERN 8
 #define SEQ_TMP_PATTERN 8
 #define NUM_STEPS 128
@@ -230,6 +231,9 @@ typedef struct SeqKitStateStruct
    SeqKitAutomationTargets frontPanelAutomationTargets;
    SeqKitAutomationTargets morphParameterEndpointAutomationTargets;
    SeqKitAutomationTargets interpolatedAutomationTargets;
+   uint8_t globalMorphAmount;
+   uint8_t voiceMorphBaseAmount[SEQ_SYNTH_VOICES];
+   uint8_t voiceMorphAmount[SEQ_SYNTH_VOICES];
    uint8_t valid;
 } SeqKitState;
 

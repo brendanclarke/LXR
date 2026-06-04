@@ -124,13 +124,6 @@ void copyClear_copyPattern()
       return;
    }
 
-   /* RESTORE: If we are copying to the temporary sequence slot, first dump the current
-      AVR raw menu endpoints to the STM so it can populate its symmetric kit structures. */
-   if (buttonHandler_copyDst == SEQ_TMP_PATTERN)
-   {
-      preset_dumpNormalEndpointsToStm();
-   }
-
    uint8_t value = (uint8_t)(((buttonHandler_copySrc&0xf)<<4) | (buttonHandler_copyDst&0xf));
    led_clearSequencerLeds();
    frontPanel_sendData(SEQ_CC,SEQ_COPY_PATTERN,value);
