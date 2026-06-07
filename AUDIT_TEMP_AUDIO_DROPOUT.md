@@ -2753,6 +2753,64 @@ Expected hardware result:
   parameter payload during the file load, and STM owns the normal/temp kit
   images post-morph-move.
 
+Hardware result:
+
+- User reports the front-panel freeze is gone.
+- New regression: after copy-to-temp, switch-to-temp, load another `.all`, and
+  switch back to normal, the front-panel sequence LEDs can remain stuck on the
+  old temp pattern and stop updating on subsequent pattern switches.
+
+Follow-up UI fix:
+
+- The old first-ack held-voice replay was removed correctly, but the ack handler
+  still needed to make its UI state coherent without relying on that hidden
+  delay/work.
+- `SEQ_CHANGE_PAT` ack handling now:
+  - snapshots whether `preset_workingVoiceArray` was nonzero;
+  - clears `preset_workingVoiceArray` without replaying voices;
+  - updates `menu_playedPattern` before follow-mode `menu_setShownPattern(...)`
+    and LED queries;
+  - if this was the first post-load held-voice ack, forces one extra pattern LED
+    refresh from the acknowledged pattern state.
+
+Expected hardware result:
+
+- The freeze should remain gone.
+- Sequence LEDs should resume following the acknowledged normal/temp pattern
+  after the first post-load switch.
+
+Hardware result:
+
+- User reports the freeze remains gone, but the sequence LEDs and chaselight
+  still do not recover after:
+  - copy-to-temp;
+  - switch-to-temp;
+  - load another `.all`;
+  - switch back to normal.
+- The chaselight detail is important: AVR only calls `led_setActive_step(...)`
+  when `menu_getViewedPattern() == menu_playedPattern`. If the viewed pattern
+  remains temp while playback has returned to normal, incoming current-step
+  messages are deliberately suppressed.
+
+Follow-up UI fix:
+
+- Treat normal/temp boundary acks as stronger than ordinary follow-mode
+  browsing.
+- `SEQ_CHANGE_PAT` ack handling now detects whether the acknowledged played
+  pattern crossed the temp boundary:
+  - previous `menu_playedPattern == SEQ_TMP_PATTERN`;
+  - new `patMsg == SEQ_TMP_PATTERN`.
+- If the ack enters or leaves temp, AVR forces the viewed pattern to the
+  acknowledged played pattern even if `.all` loaded `PAR_FOLLOW` off.
+- Ordinary normal-to-normal pattern changes still respect `PAR_FOLLOW`.
+
+Expected hardware result:
+
+- After loading a `.all` while playing temp, switching back to normal should
+  set `menu_shownPattern == menu_playedPattern` again.
+- The chaselight should resume because current-step messages are no longer
+  filtered out by a stale temp viewed pattern.
+
 ## Envelope Position Restore Policy
 
 Current finding:

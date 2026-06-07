@@ -807,18 +807,24 @@ void frontPanel_parseData(uint8_t data)
                         return;
                  	//ack message that the sequencer changed to the requested pattern
                      uint8_t patMsg = frontParser_midiMsg.data2;
+                     uint8_t hadHeldVoiceAck = preset_workingVoiceArray ? 1 : 0;
+                     uint8_t oldPlayedPattern = menu_playedPattern;
                      if(patMsg != SEQ_TMP_PATTERN)
                         patMsg &= 0x07;
+                     uint8_t tempBoundaryAck =
+                        (uint8_t)((oldPlayedPattern == SEQ_TMP_PATTERN)
+                                  != (patMsg == SEQ_TMP_PATTERN));
                  	// Post-morph-move, STM owns the loaded kit images. Do not
                  	// replay AVR-side held voice loads on the first pattern ack.
-                     if(preset_workingVoiceArray)
+                     if(hadHeldVoiceAck)
                      {
                         preset_workingVoiceArray = 0;
                      }
                      led_setBlinkLed((uint8_t)((patMsg == SEQ_TMP_PATTERN) ? LED_STEP16 : (LED_PART_SELECT1+patMsg)),0);
                   	//clear last pattern led
+                     menu_playedPattern = patMsg;
                   	
-                     if( (parameter_values[PAR_FOLLOW]) ) {
+                     if(parameter_values[PAR_FOLLOW] || tempBoundaryAck) {
                      	
                         if( menu_activePage != PATTERN_SETTINGS_PAGE)
                         {
@@ -833,7 +839,11 @@ void frontPanel_parseData(uint8_t data)
                            menu_shownPattern = frontParser_midiMsg.data2;
                         }								
                      }	
-                     menu_playedPattern = patMsg;						
+                     if(hadHeldVoiceAck && (parameter_values[PAR_FOLLOW] || tempBoundaryAck) && (menu_activePage != PATTERN_SETTINGS_PAGE))
+                     {
+                        led_clearSequencerLeds();
+                        frontPanel_updatePatternLeds();
+                     }
                   	
                      if( (buttonHandler_getMode() == SELECT_MODE_PERF) || (buttonHandler_getMode() == SELECT_MODE_PAT_GEN) )
                      {
