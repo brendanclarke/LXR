@@ -651,16 +651,29 @@ static void frontParser_markDeferredPatternPending()
       frontParser_deferredPerfPatternPending = 1;
 }
 
-static void frontParser_deferPerfUnholdVoice(uint8_t voice)
+static void frontParser_clearHeldVoiceLoad(uint8_t voice)
 {
    if(voice > 6)
       return;
 
+   frontParser_clearVoiceCache(voice);
+
    if(voice == 6)
       voice = 5;
 
-   frontParser_deferredPerfUnholdPending |= (uint8_t)(0x01 << voice);
-   seq_voicesLoading &= (uint8_t)~(0x01 << voice);
+   if(voice == 5)
+   {
+      seq_voicesLoading &= (uint8_t)~0x60;
+      seq_newVoiceAvailable &= (uint8_t)~0x60;
+      frontParser_deferredPerfUnholdPending &= (uint8_t)~0x60;
+   }
+   else
+   {
+      uint8_t bit = (uint8_t)(0x01 << voice);
+      seq_voicesLoading &= (uint8_t)~bit;
+      seq_newVoiceAvailable &= (uint8_t)~bit;
+      frontParser_deferredPerfUnholdPending &= (uint8_t)~bit;
+   }
 }
 
 //a counter for the received bytes
@@ -677,6 +690,7 @@ uint8_t frontParser_activeFrontTrack=0;
 uint8_t frontParser_sysexActive=0;
 /** used to collect 2 7 bit messages and combine them to a 14 bit message*/
 uint16_t frontParser_twoByteData=0;
+static uint8_t frontParser_globalMorphLsb = 0;
 
 uint8_t frontParser_sysexBuffer[16];
 
@@ -821,26 +835,12 @@ void frontParser_uncacheVoice(uint8_t voice)
 
 static void frontParser_releaseVoiceCache(uint8_t voice)
 {
-   /* FILE LOAD: When the temporary pattern is sounding, cached voice payload
-      has already populated normal STM storage. Clear the delayed live cache
-      instead of applying it to the temporary sound. */
-   if(seq_isTmpKitActive())
-      frontParser_clearVoiceCache(voice);
-   else
-      frontParser_uncacheVoice(voice);
+   frontParser_clearHeldVoiceLoad(voice);
 }
 
 static void frontParser_unholdLoadedVoice(uint8_t voice)
 {
-   /* FILE LOAD: While the temporary kit is active, unhold must not promote
-      loaded voice cache into midi_midiKit or mark it for trigger-time apply. */
-   if(seq_isTmpKitActive())
-   {
-      frontParser_clearVoiceCache(voice);
-      return;
-   }
-
-   frontParser_unholdVoice(voice);
+   frontParser_clearHeldVoiceLoad(voice);
 }
 
 static uint8_t frontParser_voiceCachePending(uint8_t voice)
@@ -871,7 +871,7 @@ static void frontParser_applyPendingVoiceCache()
    {
       if(frontParser_deferredPerfUnholdPending & (0x01<<voice))
       {
-         frontParser_unholdLoadedVoice(voice);
+         frontParser_clearHeldVoiceLoad(voice);
          frontParser_deferredPerfUnholdPending &= (uint8_t)~(0x01<<voice);
       }
 
@@ -1623,12 +1623,6 @@ static void frontParser_handleMidiMessage()
             if(seq_voicesLoading)
             {
                seq_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
-
-               midi_midiCache[rawParam]=liveMsg;
-               midi_midiCacheAvailable[rawParam]=1;
-               // message is cached for voice release. 
-               // we can do: midiParser_ccHandler(seq_midiCache[voice1PresetMask[i]],1)
-               // for i=0:37 to release a voice. no need to split CC and CC2.
             }
             else
             {
@@ -1658,11 +1652,6 @@ static void frontParser_handleMidiMessage()
             if(seq_voicesLoading)
             {
                seq_storeParameterIngress(frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
-               midi_midiCache[frontParser_midiMsg.data1+128]=frontParser_midiMsg;
-               midi_midiCacheAvailable[frontParser_midiMsg.data1+128]=1;
-            // message is cached for voice release. 
-            // we can do: midiParser_ccHandler(seq_midiCache[voice1PresetMask[i]],1)
-            // for i=0:37 to release a voice. no need to split CC and CC2.     
             }
             else
             {
@@ -1702,8 +1691,8 @@ static void frontParser_handleMidiMessage()
             }
             else if(seq_voicesLoading&(0x01<<(lfoNr)))
             {
-               midi_midiLfoCache[lfoNr]=value;
-               midi_midiLfoCacheAvailable[lfoNr]=1;
+               /* Post-morph-move file load stores endpoint state on STM.
+                  Do not populate the legacy release cache. */
             }
             else
             {
@@ -1839,8 +1828,8 @@ static void frontParser_handleMidiMessage()
             }
             else if(seq_voicesLoading&(0x01<<(velModNr)))
             {
-               midi_midiVeloCache[velModNr]=value;
-               midi_midiVeloCacheAvailable[velModNr]=1;
+               /* Post-morph-move file load stores endpoint state on STM.
+                  Do not populate the legacy release cache. */
             }
             else
             {
@@ -2113,6 +2102,19 @@ static void frontParser_handleSeqCC()
             voices without asking AVR to recompute morph. */
          seq_setGlobalMorphAmount(frontParser_midiMsg.data2);
          break;
+
+      case FRONT_SEQ_SET_GLOBAL_MORPH_LSB:
+         frontParser_globalMorphLsb = (uint8_t)(frontParser_midiMsg.data2 & 0x7f);
+         break;
+
+      case FRONT_SEQ_SET_GLOBAL_MORPH_MSB:
+      {
+         uint8_t morphAmount =
+            (uint8_t)(frontParser_globalMorphLsb
+               | ((frontParser_midiMsg.data2 & 0x01) << 7));
+         seq_setGlobalMorphAmount(morphAmount);
+         break;
+      }
 
       case FRONT_SEQ_REQUEST_PATTERN_PARAMS:
 
@@ -2653,13 +2655,12 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_UNHOLD_VOICE:
          if(frontParser_deferredPerfLoadActive)
          {
-            frontParser_deferPerfUnholdVoice(frontParser_midiMsg.data2);
-            break;
+            frontParser_clearHeldVoiceLoad(frontParser_midiMsg.data2);
          }
-         frontParser_unholdLoadedVoice(frontParser_midiMsg.data2);
-         seq_voicesLoading &= ~(0x01<<frontParser_midiMsg.data2);
-         if(!seq_isRunning())
-            frontParser_releaseVoiceCache(frontParser_midiMsg.data2);
+         else
+         {
+            frontParser_unholdLoadedVoice(frontParser_midiMsg.data2);
+         }
          if(!frontParser_fileLoadBracketActive && !seq_voicesLoading)
             frontParser_endFileLoadIngress();
          break;
@@ -2698,8 +2699,7 @@ static void frontParser_handleSeqCC()
          else if(frontParser_deferredPerfLoadActive
             && (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE))
          {
-            frontParser_deferredPerfVoiceCachePending = 1;
-            frontParser_deferredPerfLoadActive = 0;
+            frontParser_clearDeferredPerfLoad();
          }
          else
          {

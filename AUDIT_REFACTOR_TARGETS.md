@@ -1,0 +1,944 @@
+# AUDIT_REFACTOR_TARGETS
+
+Date: 2026-06-04
+Status: deferred refactor targets for after temp background loading is functional
+
+This document is intentionally not a Session 004 implementation plan. Session 004 should stay focused on making temp-backed `.ALL` / `.PRF` loading and switching work. These notes collect cleanup targets for a later pass, likely around Session 006/007.
+
+Core assumption for the later refactor:
+
+- STM owns sound-state authority: normal/temp endpoint params, morph endpoint params, interpolated params, automation target images, global morph amount, and per-voice morph amounts.
+- AVR owns UI, file I/O, menu arrays, and requests. AVR temp-named arrays are file-read/menu-preservation buffers, not temp playback storage.
+- Endpoint push-up to AVR is still required at every audible normal/temp boundary so the menu follows the currently selected sound image.
+
+## High-Value Refactor Targets
+
+### 1. Split `frontParser_applyDeferredVoiceCache()`
+
+Current location:
+
+- `mainboard/LxrStm32/src/MIDI/frontPanelParser.c`
+
+Current callers observed:
+
+- `seq_tick()` calls `frontParser_applyDeferredVoiceCache()` when `seq_loadPendigFlag` is set during manual pattern change.
+- `seq_setRunning(0)` calls it when stopping playback.
+- STM parser/file-load paths set the deferred/cache state that this later drains.
+
+Related functions and state:
+
+- `frontParser_applyDeferredVoiceCache()`
+- `frontParser_applyPendingVoiceCache()`
+- `frontParser_releaseVoiceCache()`
+- `frontParser_unholdLoadedVoice()`
+- `frontParser_uncacheVoice()`
+- `frontParser_unholdVoice()`
+- `frontParser_applyDeferredPerfMessages()`
+- `frontParser_cacheDeferredPerfMessage()`
+- `frontParser_shouldDeferPerfMessage()`
+- `frontParser_clearDeferredPerfLoad()`
+- `frontParser_clearPrfRuntimeFlags()`
+- `frontParser_clearPrfCacheSession()`
+- `frontParser_prfCacheCanExit()`
+- `frontParser_prfCacheSessionActive()`
+- state: `seq_voicesLoading`, `seq_newVoiceAvailable`, `midi_midiCacheAvailable[]`, `midi_midiCache[]`, `midi_midiLfoCacheAvailable[]`, `midi_midiVeloCacheAvailable[]`, `frontParser_deferredPerfVoiceCachePending`, `frontParser_deferredPerfPatternPending`, `frontParser_deferredPerfUnholdPending`, PRF cache state.
+
+Problem:
+
+- The function name says "apply deferred voice cache", but the function is now a mixed finalizer.
+- It can promote legacy held voice cache into live DSP, replay deferred performance messages, apply staged temp pattern data, clear deferred perf flags, clear PRF runtime flags, and exit a PRF cache session.
+- For temp-backed `.PRF` / `.ALL` background loading, the live application part is probably not supposed to be the source of truth. The normal `SeqKitState` should already contain the loaded endpoint/interpolated/automation state, while playback can continue from temp. A switch should select a `SeqKitState`, not replay `midi_midiCache`.
+- The current implementation partly acknowledges this: `frontParser_releaseVoiceCache()` and `frontParser_unholdLoadedVoice()` clear voice cache instead of applying it when `seq_isTmpKitActive()` is true.
+- The first switch after file load can still hang if this mixed function drains all deferred cleanup in one foreground burst.
+- Session 004 functional branch note: the old file-load voice hold/unhold promotion path has now been disabled for temp-background loading. `FRONT_SEQ_LOAD_VOICE` still uses `seq_voicesLoading` as an ingress/cache guard so incoming file bytes store into STM normal endpoint state instead of becoming live menu edits, but `FRONT_SEQ_UNHOLD_VOICE`, deferred unhold cleanup, and release-cache paths now clear the legacy cache instead of promoting it to `midi_midiKit`, setting `seq_newVoiceAvailable`, or replaying cached messages through `midiParser_ccHandler()`.
+
+Refactor direction:
+
+- Split into a legacy direct-load voice-cache operation and a temp-background-load finalizer.
+- Candidate API:
+  - `presetLoad_applyLegacyVoiceCacheToLive()`
+  - `presetLoad_finalizeTempBackgroundLoad()`
+  - `presetLoad_clearDeferredSession()`
+  - `presetLoad_hasPendingDeferredWork()`
+- The legacy/direct path should remain available for `.SND`, direct kit/voice loads, and any non-temp mode that still relies on held-cache promotion.
+- The temp-background path should clear cache/session bookkeeping and release locks without applying cached voice params into live DSP.
+- Re-evaluate whether the legacy/direct path is still needed after STM-side `/Preset/` owns all kit state. If needed, rebuild it as an explicit preset-load mode rather than an implicit voice hold/unhold side channel.
+- Do not delete the remaining session cleanup blindly. It is also holding old PRF cache session cleanup and deferred pattern bookkeeping.
+
+Redundancy to remove later:
+
+- Voice parameter masks are duplicated on AVR and STM in separate files.
+- `midi_midiCache` is acting as a second preset image for file loads, while `SeqKitState` is now the intended image authority.
+- `seq_newVoiceAvailable` overlaps with more explicit load/session state and should be documented or replaced by a clearer "legacy cache pending" bitset.
+- `frontParser_unholdVoice()` and `frontParser_uncacheVoice()` still exist as legacy live-cache promotion helpers, but the temp-background branch should not depend on them. During the refactor, either move them into a clearly named legacy loader module or remove them once all direct kit/voice load modes have a new STM-side preset API.
+- The current name `seq_voicesLoading` is now overloaded: it means "file voice payload is being received; store/cache instead of live apply", not necessarily "a voice is held awaiting later live promotion." Rename or replace it in the preset load API.
+
+### 2. Rename AVR temp read buffers
+
+Current AVR arrays:
+
+- `parameter_values_temp[]`
+- `parameters2_temp[]`
+
+Reason to rename:
+
+- The names now collide mentally with the STM temp playback kit.
+- In current intended architecture, these AVR arrays are not temp playback storage. They are file-read buffers used while reading `.SND`, `.PRF`, and `.ALL`, plus temporary preservation buffers for restoring the active menu image while temp is sounding.
+
+Candidate names:
+
+- `parameter_values_fileBuffer[]`
+- `parameters2_fileBuffer[]`
+- If one use remains specifically for UI preservation, split that into `parameter_values_menuSnapshot[]` / `parameters2_menuSnapshot[]`.
+
+### 3. Split STM preset state out of `Sequencer`
+
+The sequencer now contains a large amount of preset-state and morph-state service code. Some of it is used by sequencing, but the ownership boundary is no longer clean.
+
+Proposed new concrete directory:
+
+- `mainboard/LxrStm32/src/Preset/`
+
+The user shorthand "mainboard/src/Preset/" should probably map to this repo's actual STM path above.
+
+Suggested files:
+
+- `Preset/KitState.h`
+  - Owns `SeqKitState` or a renamed `PresetKitState`.
+  - Owns `SeqKitAutomationTargets` or renamed `PresetAutomationTargets`.
+  - Owns constants for normal/temp images, voice count, endpoint image kinds, and ingress target kinds.
+
+- `Preset/KitState.c`
+  - Owns `seq_normalKitState` / `seq_tmpKitState`, or renamed equivalents.
+  - Owns current-image selection helpers.
+  - Owns temp image capture and validity.
+  - Candidate moved functions:
+    - `seq_getCurrentImageKitState()`
+    - `seq_getMorphKitForImage()`
+    - `seq_captureTmpKitState()`
+    - `seq_isTmpKitActive()`
+    - STM-side parts of `seq_setTmpKitActive()` that only select kit images and invalidate caches.
+
+- `Preset/ParameterMap.h/.c`
+  - Owns voice parameter masks and parameter classification helpers.
+  - Candidate moved data/functions:
+    - `seq_voiceParamMask`
+    - `seq_canonicalParamFromVoiceMask()`
+    - `seq_isVoiceParameter()`
+    - `seq_voiceMaskForParameter()`
+    - `seq_firstVoiceForMask()`
+    - `seq_isAutomationTargetSelectorParam()`
+    - `seq_isMorphAmountParam()`
+  - Longer-term target: generate or share the AVR and STM voice mask tables from one source to remove duplication.
+
+- `Preset/AutomationTargets.h/.c`
+  - Owns resolved destination storage and application.
+  - Candidate moved functions:
+    - `seq_resolveAutomationTargetSelector()`
+    - `seq_updateInterpolatedAutomationTarget()`
+    - `seq_updateFrontAndInterpolatedAutomationTargets()`
+    - `seq_applyLiveAutomationTargetSelector()`
+    - `seq_storeLfoDestinationIngress()`
+    - `seq_storeVelocityDestinationIngress()`
+    - `seq_storeMacroDestinationIngress()`
+    - `seq_applyVoiceAutomationTargets()`
+    - `seq_applySharedAutomationTargets()`
+    - `seq_applyNormalEndpointAutomationTargets()`
+
+- `Preset/ParameterIngress.h/.c`
+  - Owns raw endpoint byte ingress and live-edit routing.
+  - Candidate moved functions:
+    - `seq_setIngressTarget()`
+    - `seq_getIngressTarget()`
+    - `seq_shouldApplyIngressToLive()`
+    - `seq_setAutomationIngressTarget()`
+    - `seq_storeParameterIngress()`
+    - `seq_storeMorphParameterIngress()`
+    - `seq_applySingleParameterValueWithFlags()`
+    - `seq_applySingleParameterValue()`
+  - API goal: MIDI/front parser should call "store param into selected preset image" and not know about normal/temp arrays directly.
+
+- `Preset/MorphEngine.h/.c`
+  - Owns STM-side morph state and interpolation service.
+  - Candidate moved functions:
+    - `seq_syncVMorphAmountMirrorsFromLiveSources()`
+    - `seq_selectVoiceMorphAmountFromKit()`
+    - `seq_setVoiceMorphLiveAmount()`
+    - `seq_morphImageVoiceIsLive()`
+    - `seq_getMorphImageForVoice()`
+    - `seq_invalidateLiveMorphApplyCache()`
+    - `seq_invalidateAllLiveMorphApplyCaches()`
+    - `seq_resetLiveMorphApplyCache()`
+    - `seq_liveMorphApplyNeeded()`
+    - `seq_interpolateMorphValue()`
+    - `seq_morphAutomationValueToAmount()`
+    - `seq_advanceMorphScanCursor()`
+    - `seq_setGlobalMorphAmount()`
+    - `seq_setGlobalMorphAutomationValue()`
+    - `seq_resetVoiceMorphAmountsToGlobal()`
+    - `seq_setVoiceMorphAmount()`
+    - `seq_setVoiceMorphAutomationValue()`
+    - `seq_setVoiceMorphMaskAutomationValue()`
+    - `seq_modulateVoiceMorphAmount()`
+    - `seq_serviceMorphInterpolation()`
+  - API goal: sequencer and modulation nodes set morph amounts; morph engine updates preset image and DSP.
+
+- `Preset/EndpointRestore.h/.c`
+  - Owns STM-to-AVR endpoint/menu push-up.
+  - Candidate moved functions/state:
+    - `seq_pushSingleParameterToFront()`
+    - `seq_pushSingleMorphParameterToFront()`
+    - `seq_pushKitEndpointsToFront()`
+    - `seq_pushKitEndpointVoiceMaskToFront()`
+    - endpoint restore queue and cursors
+    - `seq_endpointRestorePopRequest()`
+    - `seq_endpointRestoreClearCurrent()`
+    - `seq_endpointRestoreWaitTimedOut()`
+    - `seq_endpointRestoreSendNextFull()`
+    - `seq_endpointRestoreSendNextMasked()`
+    - `seq_endpointRestoreSendNext()`
+    - `seq_endpointRestoreBusy()`
+    - `seq_serviceEndpointRestore()`
+    - `seq_pushEndpointUpdateForVoiceSourceChange()`
+    - `seq_maybePushKitEndpointsToFront()`
+  - API goal: sequencer requests "restore full current image" or "restore these voices"; restore module handles protocol handshake and rate limiting.
+
+- `Preset/TempPlaybackSwitch.h/.c`
+  - Owns normal/temp per-voice source tracking.
+  - Candidate moved functions:
+    - `seq_trackPatternUsesTmp()`
+    - `seq_synthVoiceUsesTmpFromTrackPatterns()`
+    - `seq_applyVoiceSource()`
+    - `seq_markVoiceSourceTarget()`
+    - `seq_allVoiceSourcesUseTmp()`
+    - `seq_allVoiceSourcesUseNormal()`
+    - `seq_updateVoiceSourcesForPatternChange()`
+    - source-selection parts of `seq_setTmpKitActive()`
+  - API goal: sequencer reports pattern source changes; module applies correct parameter/morph/automation source per synth voice.
+
+- `Preset/PresetLoadCache.h/.c`
+  - Owns PRF/deferred file load cache state now living in `frontPanelParser.c`.
+  - Candidate moved functions:
+    - `frontParser_beginFileLoadIngress()`
+    - `frontParser_endFileLoadIngress()`
+    - `frontParser_clearDeferredPerfLoad()`
+    - `frontParser_resetPrfPendingCounters()`
+    - `frontParser_clearPrfCacheSession()`
+    - `frontParser_clearPrfRuntimeFlags()`
+    - `frontParser_prfCacheSessionActive()`
+    - `frontParser_prfCacheCanExit()`
+    - `frontParser_prfCacheCountPatternWrite()`
+    - `frontParser_prfPendingCountsValid()`
+    - `frontParser_capturePrfStmLiveSnapshot()`
+    - `frontParser_prfCacheUseLivePattern()`
+    - `frontParser_prfCacheTrackUsesLivePattern()`
+    - `frontParser_prfCacheLiveStep()`
+    - `frontParser_prfCacheLiveMainSteps()`
+    - `frontParser_prfCacheLiveLengthRotate()`
+    - `frontParser_prfCacheLivePatternSetting()`
+    - `frontParser_prfCacheLiveMidiChannel()`
+    - `frontParser_prfCacheLiveNoteOverrideValue()`
+    - `frontParser_prfCacheTakeLiveVMorphFlag()`
+    - `frontParser_prfCacheLiveVMorphAmountValue()`
+    - the split replacement for `frontParser_applyDeferredVoiceCache()`
+  - API goal: `frontPanelParser.c` should parse protocol and delegate load/cache semantics.
+
+- `Preset/ProtocolEndpoint.h/.c`
+  - Optional thin layer for endpoint transport packet encoding/decoding.
+  - Candidate moved responsibilities:
+    - raw PRF restore param/morph opcode encoding
+    - restore begin/done/ready/ack handshake state
+    - endpoint dump begin/end and automation phase interpretation
+  - This may overlap with a later broader `Comms/` split; keep small if introduced.
+
+- `Preset/PassiveApply.h/.c` or part of `Preset/ParameterIngress.h/.c`
+  - Owns the distinction between performance/actionful parameter application and passive preset-image reconstruction.
+  - Candidate moved APIs/functions:
+    - `midiParser_ccHandlerWithFlags(...)`
+    - `MIDI_PARSER_CC_APPLY_NORMAL`
+    - `MIDI_PARSER_CC_APPLY_PASSIVE`
+    - `modNode_updateValueWithFlags(...)`
+    - `MOD_NODE_UPDATE_NORMAL`
+    - `MOD_NODE_UPDATE_PASSIVE`
+    - `seq_applyVoiceAutomationTargetsWithFlags(...)`
+    - `seq_applySharedAutomationTargetsWithFlags(...)`
+    - passive handling for `CC2_ENVELOPE_POSITION_1..6`
+    - passive handling for modulation-node envelope-position destinations reached through LFO, velocity, or macro restore
+    - future passive handling for any other actionful DSP setters discovered during temp switching.
+  - API goal: source switching should be able to rebuild DSP state from a preset image without firing actionful setters such as envelope triggers. Live edits and automation should keep actionful behavior.
+
+### 4. Comment upgrade for new STM functions
+
+Several new or heavily modified functions in `sequencer.c/.h` are under-documented relative to the complexity they now carry. During the refactor, add comments beside the code before or while moving the functions.
+
+Comment descriptions that can be turned into code comments:
+
+- `seq_getCurrentImageKitState()`
+  - Returns the kit image currently selected by the global normal/temp kit flag. Use for shared/global menu edits, not necessarily for per-voice playback when tracks are split between normal and temp.
+
+- `seq_getMorphKitForImage(image)`
+  - Converts a morph image id to the corresponding kit state. This is the stable lookup used by morph code and temp switching.
+
+- `seq_syncVMorphAmountMirrorsFromLiveSources()`
+  - Rebuilds the compatibility `seq_vMorphAmount[]` mirror from the normal/temp kit images currently sounding per synth voice. This mirror exists for legacy `ParameterArray` / PRF cache paths and is not the authoritative morph state.
+
+- `seq_selectVoiceMorphAmountFromKit(synthVoice, kit)`
+  - Copies one voice's active morph amount from a selected kit image into the compatibility mirror after a normal/temp voice source switch.
+
+- `seq_setVoiceMorphLiveAmount(synthVoice, morphAmount)`
+  - Writes the live per-voice morph amount into the currently sounding kit image for that synth voice, without changing the stored base amount.
+
+- `seq_morphImageVoiceIsLive(image, synthVoice)`
+  - Tests whether a given normal/temp image is the live source for a synth voice. Used to prevent inactive image interpolation or modulation from touching DSP.
+
+- `seq_getMorphImageForVoice(synthVoice)`
+  - Resolves which normal/temp kit image owns a synth voice based on current per-voice source state.
+
+- `seq_liveMorphApplyNeeded(image, param, value)`
+  - Per-image DSP apply cache. Allows first-time zero values to be applied while suppressing repeated unchanged morph writes.
+
+- `seq_interpolateMorphValue(a, b, x)`
+  - Fixed-point 0..255 interpolation helper for endpoint A/B morph values.
+
+- `seq_setGlobalMorphAmount(morphAmount)`
+  - Menu/global morph command. Stores global amount in the current kit image and resets every per-voice base/live morph amount in that same image.
+
+- `seq_setGlobalMorphAutomationValue(morphValue)`
+  - Automation/global morph command. Converts 0..127 automation value to 0..255 morph amount and writes live per-voice amounts for the currently sounding voice images.
+
+- `seq_setVoiceMorphAmount(synthVoice, morphAmount)`
+  - Direct per-voice morph setter. Updates both base and live morph amount in the currently sounding image for that voice. Per-voice morph is not currently exposed in the AVR menu.
+
+- `seq_setVoiceMorphAutomationValue(synthVoice, morphValue)`
+  - Automation value entry point for one voice. Updates live amount only, preserving base morph amount.
+
+- `seq_modulateVoiceMorphAmount(synthVoice, amount, value)`
+  - LFO/velocity live overlay. Interpolates between stored interpolation baseline and morph endpoint for the selected voice, applies DSP, and deliberately does not write `interpolatedParams[]`.
+
+- `seq_serviceMorphInterpolation()`
+  - Background morph worker. Processes exactly one parameter per STM main-loop pass, updates the selected kit image's interpolation baseline, refreshes interpolated automation target cache, and applies DSP only if that image/voice is live.
+
+- `seq_storeParameterIngress(param, value)`
+  - Stores a raw AVR/menu endpoint parameter according to the current ingress mode. Current-image mode is live/menu edit routing; normal-kit-endpoint mode is file/restore ingress and must not change temp sound.
+
+- `seq_storeMorphParameterIngress(param, value)`
+  - Stores raw morph endpoint bytes only. Does not compute morph and does not write interpolation state.
+
+- `seq_getIngressAutomationTarget()` / `seq_getIngressInterpolatedAutomationTarget()`
+  - Resolves where resolved automation sideband messages should be stored based on endpoint phase: front endpoint, morph endpoint, or interpolated target cache.
+
+- `seq_storeLfoDestinationIngress()` / `seq_storeVelocityDestinationIngress()` / `seq_storeMacroDestinationIngress()`
+  - Stores resolved automation destinations into the active target image. These functions receive resolved destination params, not raw menu selector bytes.
+
+- `seq_applyNormalEndpointAutomationTargets()`
+  - Applies normal endpoint automation targets to currently live normal voices and shared macro targets when normal is globally active.
+
+- `seq_applySingleParameterValue(param, value)`
+  - The canonical raw-endpoint-to-live-DSP conversion point. This is where low raw params get `+1` before calling `midiParser_ccHandler()`. Endpoint transport itself must not apply that offset.
+
+- `seq_applySingleParameterValueWithFlags(param, value, applyFlags)`
+  - Flagged variant of the raw-endpoint-to-live-DSP conversion point. Used when preset-image application needs passive behavior for actionful parameters while preserving the raw low-param `+1` conversion.
+
+- `seq_applyVoiceSource(synthVoice, useTmp)`
+  - Applies the selected normal/temp image's interpolated voice parameters and automation destinations to one synth voice.
+
+- `seq_markVoiceSourceTarget(synthVoice, useTmp)`
+  - Commits a normal/temp source change for one synth voice, ensuring temp image exists, publishing source state before modulation callbacks, syncing morph mirror, and applying voice source.
+
+- `seq_updateVoiceSourcesForPatternChange(oldPatternForTrack, pushEndpointUpdates)`
+  - Compares old vs new per-track pattern sources, handles hi-hat paired track behavior, applies changed synth voice sources, and optionally queues AVR endpoint restore for menu sync.
+
+- `seq_captureTmpKitState()`
+  - Direct STM-side copy-to-temp image clone: front endpoint, morph endpoint, interpolated baseline, all automation target images, global morph, base per-voice morph, live per-voice morph, and validity.
+
+- `seq_setTmpKitActive(active)`
+  - Selects global temp/normal kit mode for full-pattern switching, initializes temp image if needed, invalidates live apply cache, syncs morph mirrors, and queues full endpoint restore.
+
+- `seq_pushKitEndpointVoiceMaskToFront(kit, voiceMask)`
+  - Queues full or masked endpoint restore to AVR. The queue coalesces adjacent compatible requests and rate-limits actual transmission through `seq_serviceEndpointRestore()`.
+
+- `seq_serviceEndpointRestore()`
+  - STM endpoint push-up state machine. Performs restore begin/ready, front endpoint bytes, morph endpoint bytes, done/ack, timeout cleanup, and one-parameter-per-service pacing.
+
+## Communication Modes Audit
+
+This section folds forward still-relevant material from `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT-POST_MORPH_MOVE.md` and the hardware comms audit, then adds the current code-level mode tree.
+
+Common physical/protocol layer:
+
+- Link: UART, 500000 baud, 8N1, no RTS/CTS.
+- Framing: MIDI-like byte stream. Status bytes have high bit set; data bytes are 7-bit.
+- Normal messages are usually 3 bytes: `status, data1, data2`.
+- Bulk pattern traffic uses fake SysEx: `SYSEX_START`, one mode byte, payload data bytes, `SYSEX_END`.
+- Priority endpoint restore bytes can bypass normal quiet/sysex suppression on the STM side.
+- Current risk retained from hardware audit: RX/TX FIFO overflow and some old waits are still fragile; broad transport hardening should remain deferred until temp loading works.
+
+### Mode Tree
+
+#### A. Idle/live control mode
+
+Purpose:
+
+- User edits, sequencer commands, LED requests, BPM, macro/target changes, simple parameter edits.
+
+AVR to STM initializing messages:
+
+- None beyond the status byte of each 3-byte message.
+- Examples:
+  - `MIDI_CC, rawParam, value`
+  - `CC_2, rawParamMinus128, value`
+  - `SEQ_CC, SEQ_SET_GLOBAL_MORPH, value`
+  - `SEQ_CC, SEQ_CHANGE_PAT or SEQ_CHANGE_TMP_PAT, pattern`
+  - `LED_CC, LED_QUERY_SEQ_TRACK, trackPattern`
+  - `CC_LFO_TARGET`, `CC_VELO_TARGET`, `MACRO_CC`
+
+STM behavior:
+
+- Parses single messages in `frontParser_handleMidiMessage()`.
+- Parameter ingress goes through `seq_storeParameterIngress()` / live DSP apply depending on ingress mode.
+- Automation target sidebands go through target ingress and optionally live mod-node apply.
+- Sequencer commands go through `frontParser_handleSeqCC()`.
+
+Concluding messages:
+
+- Usually none.
+- Some commands cause STM-to-AVR status updates, such as pattern change ACK or track LED/length/rotation replies.
+
+Rough length:
+
+- 3 bytes per command.
+- LED query response can be multiple 3-byte messages, depending on main/substep LED state and track metadata.
+
+Variations/refactor notes:
+
+- `MIDI_CC` is reused as front-panel parameter update even though it is also real MIDI CC vocabulary on STM.
+- Low raw params need `+1` only at live DSP application, not at endpoint storage.
+- Many control/status opcodes are symmetric by value but differently named between headers.
+
+#### B. STM-to-AVR live UI/status reflection
+
+Purpose:
+
+- Keep the front panel updated after sequencer changes, external MIDI edits, bank changes, pattern ACKs, and menu-related state changes.
+
+STM initializing messages:
+
+- 3-byte messages such as:
+  - `FRONT_SEQ_CC, FRONT_SEQ_CHANGE_PAT, pat`
+  - `FRONT_SEQ_CC, FRONT_SEQ_RUN_STOP, state`
+  - `FRONT_STEP_LED_STATUS_BYTE, FRONT_LED_* , value`
+  - `PARAM_CC/PARAM_CC2` for live parameter reflection from external MIDI paths
+  - `BANK_CHANGE_CC`
+
+AVR behavior:
+
+- `frontPanel_parseData()` updates menu arrays, LEDs, pattern state, long-op flags, or repaint requests.
+
+Concluding messages:
+
+- Usually none.
+
+Rough length:
+
+- 3 bytes per event. Beat/step LED traffic repeats during playback.
+
+Variations/refactor notes:
+
+- UI/status traffic is suppressed in STM quiet mode except for priority messages.
+- `PRESET_NAME` and `VOICE_CC` collide at `0xb4` on AVR; `SET_BPM` and `PRESET` collide at `0xb5`.
+
+#### C. Callback flush / hold-for-buffer mode
+
+Purpose:
+
+- AVR waits for STM to catch up before continuing selected preset operations.
+
+AVR initializing message:
+
+- `CALLBACK_ACK` / `FRONT_CALLBACK_ACK` as a single byte `0xfd`.
+
+STM behavior:
+
+- On `FRONT_CALLBACK_ACK`, STM clears front FIFOs and sends `FRONT_CALLBACK_ACK` back via SysEx byte path.
+
+AVR concluding condition:
+
+- `frontPanel_wait` clears when AVR receives `CALLBACK_ACK`.
+
+Rough length:
+
+- 1 byte AVR to STM, 1 byte STM to AVR, plus FIFO flush side effects.
+
+Variations/refactor notes:
+
+- This is a very blunt synchronization primitive. It can discard queued outbound and inbound data on STM.
+- Later refactor should replace this with a scoped drain/ack that does not clear unrelated traffic.
+
+#### D. Flow-control session mode
+
+Purpose:
+
+- Software flow control for high-volume transfers and load sessions.
+
+Messages:
+
+- `SEQ_FLOW_BEGIN` / `FRONT_SEQ_FLOW_BEGIN`
+- `SEQ_FLOW_GRANT` / `FRONT_SEQ_FLOW_GRANT`
+- `SEQ_FLOW_END` / `FRONT_SEQ_FLOW_END`
+- `SEQ_FLOW_ABORT` / `FRONT_SEQ_FLOW_ABORT`
+
+Channels:
+
+- `FLOW_CH_LOAD_SESSION`
+- `FLOW_CH_GLOBALS`
+- `FLOW_CH_VOICE_PARAM`
+- `FLOW_CH_DRUM_META`
+
+AVR initializing message:
+
+- `SEQ_CC, SEQ_FLOW_BEGIN, channel`
+
+STM status response:
+
+- `FRONT_SEQ_CC, FRONT_SEQ_FLOW_GRANT, encodedChannelCredits`
+- For load-session begin, STM sets quiet/load mode.
+
+Concluding messages:
+
+- AVR sends `SEQ_CC, SEQ_FLOW_END, channel`.
+- STM replies with grant/ack.
+- Abort path: either side can send `SEQ_FLOW_ABORT`.
+
+Rough length:
+
+- 3 bytes for begin, 3 bytes for grant.
+- 3 bytes for end, 3 bytes for grant/ack.
+- Credit-metered bursts add a grant every N accepted messages.
+
+Variations/refactor notes:
+
+- This partially overlaps with old SysEx per-step ACKs and restore handshakes.
+- Later protocol cleanup could make this the one general transfer/session mechanism.
+
+#### E. File-load semantic mode
+
+Purpose:
+
+- Tell STM that incoming traffic belongs to file load, voice load, pattern load, or endpoint load.
+
+AVR initializing messages:
+
+- `SEQ_CC, SEQ_FILE_BEGIN, fileType`
+- Optional `SEQ_CC, SEQ_LOAD_VOICE, voice`
+- Optional `SEQ_CC, SEQ_LOAD_FAST, value`
+
+STM behavior:
+
+- `frontParser_beginFileLoadIngress(...)` routes parameter ingress to normal endpoint storage.
+- `FRONT_SEQ_FILE_BEGIN` resets or prepares file-load/morph/cache state.
+- Voice loads set `seq_voicesLoading` and cache relevant live-apply messages.
+- Pattern data can be staged to `seq_tmpPattern` or written into normal pattern storage depending on current protected/live pattern rules.
+
+Concluding messages:
+
+- `SEQ_CC, SEQ_UNHOLD_VOICE, voice`
+- `SEQ_CC, SEQ_FILE_DONE, fileType`
+- On abort or flow timeout, `SEQ_FLOW_ABORT`.
+
+Rough length:
+
+- Framing commands are small 3-byte messages.
+- Actual file load length depends on included globals, pattern data, voices, metadata, and endpoint dump modes.
+
+Variations:
+
+- `.SND` kit load: may send one endpoint group only, front or morph.
+- `.ALL`: globals, pattern data, both kit endpoint images, drum meta, and all or selected voices.
+- `.PRF`: performance metadata, pattern data, both kit endpoint images, drum meta as needed, selected voices.
+- Background temp flow should update STM normal storage while temp sound continues from temp storage.
+
+Refactor notes:
+
+- File-load semantic mode overlaps with PRF cache mode, deferred voice cache mode, endpoint dump mode, and flow session mode.
+- With STM normal/temp preset images in place, PRF/ALL background load should not need a second cache-as-sound-authority path.
+
+#### F. AVR-to-STM endpoint dump mode
+
+Purpose:
+
+- Send AVR kit/front and morph endpoint arrays to STM normal endpoint storage.
+
+AVR initializing message:
+
+- `SEQ_CC, SEQ_TMP_KIT_ENDPOINT_BEGIN, endpointMode`
+
+Endpoint modes:
+
+- `SEQ_TMP_KIT_ENDPOINT_BOTH`
+- `SEQ_TMP_KIT_ENDPOINT_FRONT_ONLY`
+- `SEQ_TMP_KIT_ENDPOINT_MORPH_ONLY`
+
+Payload:
+
+- Front endpoint bytes:
+  - `PRF_RESTORE_PARAM_CC, rawParam, value` for params `< 128`
+  - `PRF_RESTORE_PARAM_CC2, rawParamMinus128, value` for params `>= 128`
+- Morph endpoint bytes:
+  - `PRF_RESTORE_MORPH_CC, rawParam, value`
+  - `PRF_RESTORE_MORPH_CC2, rawParamMinus128, value`
+- Automation target sidebands:
+  - `SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, FRONT_ENDPOINT`
+  - 6 velocity destination messages
+  - 6 LFO destination messages
+  - 4 macro destination messages
+  - repeat with `MORPH_ENDPOINT` phase for morph endpoint targets
+
+Concluding messages:
+
+- `SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, NONE`
+- `SEQ_CC, SEQ_TMP_KIT_ENDPOINT_END, 0`
+
+Rough length:
+
+- `END_OF_SOUND_PARAMETERS` / `NUM_PARAMS` is 310.
+- Front-only: begin 3 + 310 param messages * 3 + phase 3 + 16 target sidebands * 3 + none 3 + end 3 = about 987 bytes.
+- Morph-only: about 987 bytes.
+- Both: begin 3 + 930 front bytes + 3 + 48 front targets + 930 morph bytes + 3 + 48 morph targets + 3 + 3 = about 1968 bytes.
+
+Variations/refactor notes:
+
+- The opcode names `PRF_RESTORE_*` are misleading for AVR-to-STM endpoint dump. They are not only PRF and not only restore.
+- Endpoint bytes and automation target sidebands are separate streams glued together by phase state. A future packet could combine parameter bytes and resolved destination metadata in one explicit endpoint transfer.
+
+#### G. STM-to-AVR endpoint restore / menu sync mode
+
+Purpose:
+
+- Push STM canonical normal/temp endpoint image back to AVR so the menu follows audible source.
+
+STM initializing message:
+
+- `PARAM_RESTORE_BEGIN, 0, 0`
+
+AVR status response:
+
+- Sets `frontParser_restoreActive = 1`.
+- Suppresses outbound front-panel traffic except restore handshake.
+- Sends `PARAM_RESTORE_READY, 0, 0`.
+
+STM payload:
+
+- Front endpoint bytes via `PRF_RESTORE_PARAM_CC/CC2`.
+- Morph endpoint bytes via `PRF_RESTORE_MORPH_CC/CC2`.
+
+STM concluding message:
+
+- `PARAM_RESTORE_DONE, 0, 0`
+
+AVR concluding response:
+
+- Updates menu arrays during payload.
+- On done, clears restore active, repaints menu, sends `PARAM_RESTORE_ACK, 0, 0`.
+
+Rough length:
+
+- Full restore: begin 3 + ready 3 + 310 front messages * 3 + 310 morph messages * 3 + done 3 + ack 3 = about 1872 bytes on the link.
+- Masked per-voice restore: current STM `SEQ_VOICE_PARAM_LENGTH` is 37. One voice is about begin/ready/done/ack 12 bytes + 37 front * 3 + 37 morph * 3 = about 234 bytes. Multiple voices scale by mask.
+- Current implementation rate-limits payload to one parameter per `seq_serviceEndpointRestore()` service step.
+
+Variations:
+
+- Full restore when all voices use temp or all use normal.
+- Masked restore when only some synth voices switch normal/temp source.
+- Hi-hat has two tracks but one synth voice; both hi-hat tracks and voice parameters should switch together.
+
+Refactor notes:
+
+- This mode reuses the same `PRF_RESTORE_*` opcodes as AVR-to-STM endpoint dump in the opposite direction.
+- It has its own begin/ready/done/ack handshake separate from flow-control mode.
+- Later cleanup could define direction-specific names or one explicit `ENDPOINT_IMAGE_TRANSFER` mode with direction and image id.
+
+#### H. SysEx pattern query modes
+
+Purpose:
+
+- AVR asks STM for pattern/step data during save/query operations.
+
+Common initializing sequence:
+
+- AVR sends `SYSEX_START`.
+- STM echoes/acknowledges `SYSEX_START`.
+- AVR sends a mode byte.
+
+Modes:
+
+- `SYSEX_REQUEST_STEP_DATA`
+  - AVR sends 2 data bytes of step number.
+  - STM sends 8 data bytes per step: 7 lower values plus packed MSB byte.
+  - AVR reconstructs one `StepData`.
+  - Concludes with `SYSEX_END`.
+
+- `SYSEX_REQUEST_MAIN_STEP_DATA`
+  - AVR sends 2 data bytes of step/main-step index.
+  - STM sends 5 data bytes: 3 bytes main step data, 1 length, 1 scale.
+  - Concludes with `SYSEX_END`.
+
+- `SYSEX_REQUEST_PATTERN_DATA`
+  - AVR sends 1 pattern number.
+  - STM sends 2 data bytes: next pattern and repeat/change bar.
+  - Concludes with `SYSEX_END`.
+
+Rough length:
+
+- Step query: about 1 start + 1 mode + 2 request + 8 response + 1 end, plus echoes/callback waits.
+- Main step query: about 1 + 1 + 2 + 5 + 1.
+- Pattern info query: about 1 + 1 + 1 + 2 + 1.
+
+Refactor notes:
+
+- These are tiny request/response packets. They do not need the same machinery as 64 KB pattern loads.
+- Could become framed `PATTERN_QUERY` messages with explicit payload length.
+
+#### I. SysEx pattern write/load modes
+
+Purpose:
+
+- AVR sends pattern data from SD to STM during `.PAT`, `.ALL`, and `.PRF` loads.
+
+Common initializing sequence:
+
+- AVR sends `SYSEX_START`.
+- STM echoes/acknowledges start.
+- AVR sends a mode byte.
+
+Modes:
+
+- `SYSEX_RECEIVE_MAIN_STEP_DATA` / AVR name `SYSEX_SEND_MAIN_STEP_DATA`
+  - Per track/pattern payload: 4 bytes, info byte plus 3 bytes main step bitfield.
+  - STM ACK: mode byte after each 4-byte packet.
+  - Full all-pattern rough payload: 7 tracks * 8 patterns * 4 = 224 data bytes plus 56 ACK bytes.
+
+- `SYSEX_RECEIVE_PAT_LEN_DATA`
+  - Per track/pattern payload: 2 bytes, info byte plus length.
+  - STM ACK after each pair.
+  - Full all-pattern rough payload: 112 data bytes plus 56 ACK bytes.
+
+- `SYSEX_RECEIVE_PAT_SCALE_DATA`
+  - Per track/pattern payload: 2 bytes, info byte plus scale.
+  - STM ACK after each pair.
+  - Full all-pattern rough payload: 112 data bytes plus 56 ACK bytes.
+
+- `SYSEX_RECEIVE_PAT_CHAIN_DATA`
+  - Current AVR sends next and repeat as two separately ACKed bytes per pattern.
+  - Full rough payload: 16 data bytes plus 16 ACK waits.
+  - Hardware audit notes current ACK placement is fragile/redundant.
+
+- `SYSEX_BEGIN_PATTERN_TRANSMIT`
+  - Per track/pattern block: 128 steps * 9 data bytes = 1152 data bytes.
+  - STM sends `SYSEX_STEP_ACK` after each step and a final mode callback when block is complete.
+  - Full all-pattern payload: 7 * 8 * 128 * 9 = 64512 AVR-to-STM data bytes, plus 7168 per-step ACK bytes.
+
+Concluding sequence:
+
+- AVR sends `SYSEX_END`.
+- STM exits sysex mode and echoes/acknowledges end.
+
+Variations/refactor notes:
+
+- Pattern metadata is split across mainstep, length, scale, chain, and step-data modes.
+- This could be one framed `PATTERN_BLOCK` transfer with type, pattern, track, length, checksum, and ACK/NACK.
+- Current per-step ACK prevents FIFO overflow but creates high latency. A future flow-controlled packet could ACK per chunk instead of per step.
+- Do not reintroduce unbounded STM RX drain; a prior attempt froze known-good `.ALL` loading.
+
+#### J. PRF cache / deferred performance mode
+
+Purpose:
+
+- Preserve or defer live performance state while loading a performance during playback.
+
+Messages:
+
+- `SEQ_PRF_CACHE_BEGIN`
+- `SEQ_PRF_PENDING_BEGIN`
+- `SEQ_PRF_PENDING_DONE`
+- `SEQ_PRF_CACHE_ABORT`
+- `SEQ_PRF_AVR_SNAPSHOT_BEGIN`
+- `SEQ_PRF_AVR_SNAPSHOT_END`
+- `SEQ_PRF_RESTORE_AVR_LIVE`
+- `PRF_CACHE_STATUS`
+
+Initializing/status:
+
+- AVR sends cache control with `SEQ_CC`.
+- STM replies with `PRF_CACHE_STATUS, command, accepted/rejected`.
+- Flow grants are also used on the load-session channel.
+
+Payload variations:
+
+- STM live snapshot captured from current pattern/kit state.
+- AVR live snapshot phase can receive endpoint bytes.
+- Pending pattern writes counted by STM to validate expected mainstep/step/length/scale/chain counts.
+- Restore AVR live sends endpoint restore messages back to the AVR.
+
+Concluding messages:
+
+- `SEQ_PRF_PENDING_DONE` for pending validity.
+- `SEQ_PRF_CACHE_ABORT` or flow abort for failure.
+- `frontParser_applyDeferredVoiceCache()` currently exits some cache sessions when conditions are met.
+
+Rough length:
+
+- Control messages are 3 bytes each plus 3-byte status/grants.
+- Snapshot/restore payload can approach endpoint restore size, depending on whether full endpoints are sent.
+- Pending pattern data length is the same as the relevant SysEx pattern write modes above.
+
+Refactor notes:
+
+- Treat this as WIP after the STM morph move.
+- It overlaps strongly with temp-backed normal storage. Once temp background loading is stable, some PRF cache modes may collapse into: load into normal image while temp image plays, then switch on demand.
+- The snapshot/restore pieces should be separated from legacy deferred voice-cache promotion.
+
+#### K. Sample upload/count mode
+
+Purpose:
+
+- Sample memory operations.
+
+Messages:
+
+- `SAMPLE_CC, SAMPLE_START_UPLOAD, 0`
+- `SAMPLE_CC, SAMPLE_COUNT, 0`
+
+STM behavior:
+
+- Start upload stops sequencer, initializes sample memory, loads samples, locks flash, then sends `ACK`.
+- Count request returns `SAMPLE_CC, FRONT_SAMPLE_COUNT, numSamples`.
+
+Rough length:
+
+- Control is 3 bytes each direction plus sample operation time.
+
+Refactor notes:
+
+- This uses bare `ACK`/`NACK` concepts from UART code and should be documented separately from preset transfer ACKs.
+
+## Protocol Cleanup Targets
+
+1. Rename or replace `PRF_RESTORE_*`.
+   - They now carry endpoint bytes in both directions.
+   - They are used for file-load ingress, temp endpoint dump, and menu restore.
+   - Candidate names: `ENDPOINT_FRONT_CC`, `ENDPOINT_FRONT_CC2`, `ENDPOINT_MORPH_CC`, `ENDPOINT_MORPH_CC2`.
+
+2. Collapse endpoint dump and endpoint restore into one explicit endpoint transfer concept.
+   - Direction, image, endpoint group, and mask should be explicit.
+   - Automation target sidebands should be part of the endpoint transfer, not an ambient phase.
+
+3. Collapse pattern metadata SysEx modes.
+   - Mainstep, length, scale, and chain can be one pattern metadata packet.
+   - Step data can be chunked by track/pattern with length and checksum.
+
+4. Unify handshakes.
+   - Current system has flow grants, SysEx callbacks, per-step ACKs, `CALLBACK_ACK`, sample `ACK`, and parameter restore ready/ack.
+   - Later protocol should pick one session/packet ACK model with timeout and abort cleanup.
+
+5. Add explicit transfer lengths and integrity checks.
+   - The fake SysEx stream has no CRC/checksum and weak resync.
+   - A single dropped data byte in bulk payload can silently corrupt pattern data.
+
+6. Keep STM RX drain changes deferred and bounded.
+   - Hardware audit recommends more drain throughput, but this branch already saw unbounded drain freeze `.ALL` load.
+   - If revisited, use a small fixed max bytes per pass with full `.ALL`, `.PRF`, stopped/running, and temp-switch tests.
+
+7. Centralize parameter index conversion.
+   - Raw endpoint/menu params use raw AVR indices.
+   - Live DSP low params require `+1`.
+   - High params do not follow the same offset rule.
+   - One conversion helper would reduce off-by-one regressions.
+
+8. Generate shared protocol constants or headers.
+   - AVR and STM headers duplicate status bytes and subcommands.
+   - Some names differ for the same byte.
+   - Some names collide on AVR (`VOICE_CC` / `PRESET_NAME`, `SET_BPM` / `PRESET`).
+
+9. Generate or share voice parameter masks.
+   - AVR `voice*presetMask[]`, STM `voice*presetMask[]`, and STM `seq_voiceParamMask[][]` are related but duplicated.
+   - Later refactor should derive them from one source table.
+
+10. Replace hard waits and hard locks.
+   - Old SysEx/callback waits and SD error `while(1)` paths remain.
+   - Add one timeout family at a time after temp exchange is stable.
+
+## Relevant Stale Comms Audit Material Folded Forward
+
+The post-morph in-flight comms audit remains useful for these points:
+
+- The immediate Session 004 goal is semantic/temp storage correctness, not broad transport hardening.
+- Endpoint traffic after morph move is endpoint storage traffic, not live morph result traffic.
+- File loads should write normal endpoint storage, not temp endpoint storage.
+- File loads should not write `interpolatedParams[]` directly; the morph worker owns interpolation.
+- Ordinary live low CC uses the old low-parameter `+1` offset only when calling live DSP apply.
+- `SEQ_FILE_BEGIN` / `SEQ_FILE_DONE`, endpoint brackets, automation target phases, and PRF cache controls remain active protocol surfaces.
+- Old SysEx/callback waits remain deferred hardening.
+- Do not change PAT_CHAIN ACK placement, baud rate, or STM RX drain casually during temp-cache debugging.
+- PRF cache/deferred state remains WIP and should be reconciled with the post-morph temp storage model.
+
+The stale or misleading part to avoid carrying forward:
+
+- Do not describe AVR temp-named arrays as temp playback staging.
+- Do not assume copy-to-temp should dump AVR endpoints to STM. In the current intended model, copy-to-temp is an STM-side clone of normal pattern and parameter images.
+- Do not move endpoint push-up away from temp boundaries; AVR menu sync must still happen on every transition into or out of temp.
+
+## Additional Refactor Targets From Temp Delay / Envelope Audit
+
+### Retire legacy load voice release caches
+
+Current state:
+
+- File-load voice payloads are now intended to populate STM-side normal endpoint
+  storage, not create a later live release/promotion event.
+- The old cache names and structures remain in `MidiParser.c/.h` and
+  `frontPanelParser.c`:
+  - `midi_midiCache[]`
+  - `midi_midiCacheAvailable[]`
+  - `midi_midiLfoCache[]`
+  - `midi_midiLfoCacheAvailable[]`
+  - `midi_midiVeloCache[]`
+  - `midi_midiVeloCacheAvailable[]`
+  - `midi_midiKit[]`
+  - `midi_kitLfoCache[]`
+  - `midi_kitVeloCache[]`
+
+Refactor target:
+
+- Remove or quarantine the legacy cache promotion API:
+  - `frontParser_unholdVoice(...)`
+  - `frontParser_uncacheVoice(...)`
+  - `frontParser_releaseVoiceCache(...)`
+  - `frontParser_unholdLoadedVoice(...)`
+  - `frontParser_applyPendingVoiceCache(...)`
+  - `frontParser_applyDeferredVoiceCache(...)`
+- Replace it with an explicit preset-load/session finalizer in the future
+  STM-side `/Preset/` service.
+- Future hold/unhold behavior, if needed for direct kit loads, should be a
+  deliberate preset API policy rather than ambient MIDI parser cache state.
+
+### Envelope position mirror ownership
+
+Current state:
+
+- `PAR_ENVELOPE_POSITION_1..6` maps to `midi_envPosition[0..5]`.
+- The same parameter path can call DSP envelope setters immediately.
+- This makes envelope position unsuitable for broad bulk live apply during
+  normal/temp source switching.
+
+Refactor target:
+
+- Move envelope-position ownership out of the generic MIDI parser path and into
+  the future STM-side `/Preset/`/parameter service.
+- Separate three operations:
+  - store endpoint value;
+  - update compatibility mirror (`midi_envPosition[]`);
+  - perform the actionful DSP envelope setter.
+- Add a passive mirror update API, optionally with an
+  `envPositionMirrorDirty[]` / `envelopes_dirty[]` side array, so bulk restore
+  can keep mirrors coherent without triggering envelopes.

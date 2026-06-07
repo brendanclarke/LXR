@@ -809,20 +809,11 @@ void frontPanel_parseData(uint8_t data)
                      uint8_t patMsg = frontParser_midiMsg.data2;
                      if(patMsg != SEQ_TMP_PATTERN)
                         patMsg &= 0x07;
-                  	// if a 'perf' or 'all' load locked the kit, un-lock and load
+                 	// Post-morph-move, STM owns the loaded kit images. Do not
+                 	// replay AVR-side held voice loads on the first pattern ack.
                      if(preset_workingVoiceArray)
                      {
-                        for (i=0;i<(NUM_TRACKS-1);i++)
-                     {
-                      if(preset_workingVoiceArray&(0x01<<i))
-                        {  
-                           preset_readDrumVoice(i, 0);
-                           preset_readDrumVoice(i, 1);
-                           preset_workingVoiceArray = (uint8_t)(preset_workingVoiceArray&(~(0x01<<i)));
-                        }
-                       
-                     }
-                     preset_workingVoiceArray = 0;
+                        preset_workingVoiceArray = 0;
                      }
                      led_setBlinkLed((uint8_t)((patMsg == SEQ_TMP_PATTERN) ? LED_STEP16 : (LED_PART_SELECT1+patMsg)),0);
                   	//clear last pattern led

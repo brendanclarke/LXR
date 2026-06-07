@@ -1424,6 +1424,47 @@ static void seq_applySingleParameterValue(uint16_t param, uint8_t value)
 {
    MidiMsg msg;
 
+   /* Diagnostic: reintroduce live DSP apply by low-risk parameter families.
+      All other stored/morphed params remain blocked from the old live MIDI
+      parameter API while we isolate the retrigger-like glitch. */
+   if(!((param >= PAR_VOL1 && param <= PAR_VOL6)
+      || (param >= PAR_OSC_WAVE_DRUM1 && param <= PAR_OSC_WAVE_SNARE)
+      || param == PAR_WAVE1_CYM
+      || param == PAR_WAVE1_HH
+      || (param >= PAR_PAN1 && param <= PAR_PAN3)
+      || (param >= PAR_PAN4 && param <= PAR_PAN6)
+      || (param >= PAR_AUDIO_OUT1 && param <= PAR_AUDIO_OUT6)
+      || (param >= PAR_COARSE1 && param <= PAR_FINE6)
+      || (param >= PAR_MOD_WAVE_DRUM1 && param <= PAR_WAVE3_HH)
+      || (param >= PAR_NOISE_FREQ1 && param <= PAR_MIX1)
+      || (param >= PAR_MOD_OSC_F1_CYM && param <= PAR_MOD_OSC_GAIN2)
+      || (param >= PAR_FILTER_FREQ_1 && param <= PAR_RESO_6)
+      || (param >= PAR_VELOA1 && param <= PAR_VELOD6_OPEN)
+      || (param >= PAR_VOL_SLOPE1 && param <= PAR_VOL_SLOPE6)
+      || (param >= PAR_REPEAT4 && param <= PAR_REPEAT5)
+      || (param >= PAR_MOD_EG1 && param <= PAR_MODAMNT4)
+      || (param >= PAR_PITCH_SLOPE1 && param <= PAR_PITCH_SLOPE4)
+      || (param >= PAR_FMAMNT1 && param <= PAR_FM_FREQ3)
+      || (param >= PAR_DRIVE1 && param <= PAR_HAT_DISTORTION)
+      || (param >= PAR_VOICE_DECIMATION1 && param <= PAR_VOICE_DECIMATION_ALL)
+      || (param >= PAR_FREQ_LFO1 && param <= PAR_AMOUNT_LFO6)
+      || (param >= PAR_FILTER_DRIVE_1 && param <= PAR_FILTER_DRIVE_6)
+      || (param >= PAR_MIX_MOD_1 && param <= PAR_MIX_MOD_3)
+      || (param >= PAR_VOLUME_MOD_ON_OFF1 && param <= PAR_VOLUME_MOD_ON_OFF6)
+      || (param >= PAR_VELO_MOD_AMT_1 && param <= PAR_VELO_MOD_AMT_6)
+      || (param >= PAR_WAVE_LFO1 && param <= PAR_WAVE_LFO6)
+      || (param >= PAR_RETRIGGER_LFO1 && param <= PAR_OFFSET_LFO6)
+      || (param >= PAR_FILTER_TYPE_1 && param <= PAR_FILTER_TYPE_6)
+      || (param >= PAR_TRANS1_VOL && param <= PAR_TRANS6_FREQ)
+      || (param >= PAR_VEL_DEST_1 && param <= PAR_VEL_DEST_6)
+      || (param >= PAR_VOICE_LFO1 && param <= PAR_VOICE_LFO6)
+      || (param >= PAR_TARGET_LFO1 && param <= PAR_TARGET_LFO6)
+      || (param >= PAR_MAC1_DST1 && param <= PAR_MAC2_DST2_AMT)
+      || (param >= PAR_MORPH_DRUM1 && param <= PAR_MORPH_HIHAT)))
+   {
+      return;
+   }
+
    /* This is the only low-parameter +1 conversion point for ordinary live DSP
       application. Endpoint storage and PRF_RESTORE_* traffic use raw indices. */
    if(param < 128)
@@ -2373,8 +2414,11 @@ void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
    {
       if(seq_loadFastMode||seq_newPatternExecuted)
       {
-         frontParser_uncacheVoice(voiceNr);
-         seq_newVoiceAvailable &= ~(0x01<<voiceNr);
+         if(voiceNr>=5)
+            seq_newVoiceAvailable &= (uint8_t)~0x60;
+         else
+            seq_newVoiceAvailable &= (uint8_t)~(0x01<<voiceNr);
+
          if(seq_newVoiceAvailable==0)
             seq_newPatternExecuted=0;
       }
@@ -2640,7 +2684,6 @@ static void seq_nextStep()
          seq_newPatternExecuted=1;
          if (seq_loadPendigFlag)
          {
-            frontParser_applyDeferredVoiceCache();
             // manual switching - button switch sets all per track pending
             euklid_clearRotation();
             for (i=0;i<NUM_TRACKS;i++)

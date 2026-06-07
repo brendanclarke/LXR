@@ -3471,8 +3471,11 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 		//value += (value==127)*1;
       morphValue = value;
       /* Global morph is a control value now. STM caches it and copies it to all
-         six per-voice morph amounts; STM performs the interpolation work. */
-		frontPanel_sendData(SEQ_CC, SEQ_SET_GLOBAL_MORPH, value);
+         six per-voice morph amounts; STM performs the interpolation work.
+         Send as two 7-bit-safe messages because raw values >= 128 look like
+         status bytes to the STM MIDI-style parser. */
+		frontPanel_sendData(SEQ_CC, SEQ_SET_GLOBAL_MORPH_LSB, (uint8_t)(value & 0x7f));
+		frontPanel_sendData(SEQ_CC, SEQ_SET_GLOBAL_MORPH_MSB, (uint8_t)((value >> 7) & 0x01));
 	}
 	break;
 
