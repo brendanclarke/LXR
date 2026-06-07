@@ -26,18 +26,33 @@ make firmware
 
 **Session 001 close status**: full top-level build succeeds in this repo with `make clean && make firmware` (warnings remain, no fatal errors).
 
-**Current status after Session 003 closeout (2026-06-03)**: standard morph operation has been moved fully onto STM and was hardware-verified by the user. STM owns global/per-voice morph state, one-parameter-per-main-loop interpolation, live DSP morph application, and LFO/velocity modulation of per-voice morph. The normal/temporary pattern and parameter exchange is now broken after the morph move; Session 004 should focus on fixing temp cache loading/exchange without restoring AVR live morph or per-parameter validity flags.
+**Current status after Session 004 closeout (2026-06-07)**: post-morph temp/background loading is functional again. STM owns normal/temp pattern and parameter images; switching between normal and temp playback selects which STM image is read and pushes endpoint/menu state back up to the AVR. Session 004 fixed the temp-switch audio dropout, retrigger-sounding DSP glitch, first-switch front-panel freeze, sequence LED/chase-light stale state, automation target persistence across normal/temp switches, velocity-to-voice-morph crash, LFO-to-voice-morph breakup, and global morph scaling. Session 005 should focus on small remaining workflow issues, not the larger preset/morph refactor.
 
 Canonical current WIP docs:
-- `knowledge_files/log_archive/003_SESSION_HANDOFF_LOG.md`
-- `knowledge_files/session_in_flight/TEMP_CACHE_LOAD-IN_FLIGHT-POST_MORPH_MOVE.md`
-- `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT-POST_MORPH_MOVE.md`
+- `knowledge_files/log_archive/004_SESSION_HANDOFF_LOG.md`
+- `AUDIT_PRESET-MORPH_REFACTOR.md`
+- `AUDIT_REFACTOR_TARGETS.md`
+- `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md`
+
+Session 005 expected queue:
+- Encoder phase is slightly unbalanced and may need a small fix.
+- Global morph still does not push up to the AVR menu on normal/temp switch.
+- Automate the temp-pattern switch/background-load process.
+- Add global parameter switches for background loading.
+- Keep the temporary SEQ16 pattern keyhole in place until after the future preset/morph refactor.
 
 These older in-flight audits are stale after Session 003 and should not be treated as current:
 - `knowledge_files/session_in_flight/AUDIT_MORPH_MOVE.md`
 - `knowledge_files/session_in_flight/TMP_VARS_AUDIT.md`
 - `knowledge_files/session_in_flight/PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`
 - `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT.md`
+- `knowledge_files/session_in_flight/TEMP_CACHE_LOAD-IN_FLIGHT-POST_MORPH_MOVE.md`
+- `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT-POST_MORPH_MOVE.md`
+
+These root-level Session 004 working audits may be deleted after their contents are consolidated into `AUDIT_PRESET-MORPH_REFACTOR.md` and the session handoff:
+- `MORPH_AUTOMATION_ASSIGN_DROPPED_BUG.md`
+- `TEMP_SWITCH_WALK.md`
+- `AUDIT_TEMP_AUDIO_DROPOUT.md`
 
 The two pre-morph load/comms audits were expanded on 2026-05-29 from source diffs:
 - `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT.md`: compares `LXR-9120ea7620f1a9a4a924f029cdaf3ae71df303fd/front|mainboard` against `LXR-custom-develop-patload-envmod-90d3f08/front|mainboard`.
@@ -172,8 +187,9 @@ User-referenced checkpoints:
 | Current known issues and reminders? | `MEMORY.md` |
 | Session 001 build triage details | `BUILD_AUDIT.md` |
 | Session 003 STM morph move details | `knowledge_files/log_archive/003_SESSION_HANDOFF_LOG.md` |
-| Current temp-cache/load audit after morph move | `knowledge_files/session_in_flight/TEMP_CACHE_LOAD-IN_FLIGHT-POST_MORPH_MOVE.md` |
-| Current comms/flow checkpoint after morph move | `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT-POST_MORPH_MOVE.md` |
+| Session 004 temp/background loading closeout | `knowledge_files/log_archive/004_SESSION_HANDOFF_LOG.md` |
+| Current preset/morph refactor knowledge | `AUDIT_PRESET-MORPH_REFACTOR.md` |
+| Current comms/protocol knowledge | `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
 
 ---
 
@@ -312,7 +328,7 @@ Sample flash map:
 
 - Inter-MCU UART protocol uses MIDI-like status/data framing and sysex-like bulk transfer behavior.
 - Communications audit warns about silent FIFO overflow and blocking ACK wait patterns; review `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` before touching parser/transport logic.
-- Current post-morph flow-control checkpoint details are in `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT-POST_MORPH_MOVE.md`. Implemented checkpoint behavior includes acknowledged load sessions, STM32 quiet mode, and credit-metered globals/voice/meta bursts. Old SysEx/callback waits still need timeout recovery in a later pass.
+- Session 004 comms knowledge is consolidated in `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md`. Implemented checkpoint behavior includes acknowledged load sessions, STM32 quiet mode, credit-metered globals/voice/meta bursts, endpoint restore on every normal/temp switch, and removal/bypass of obsolete first-switch voice hold/unhold delays. Old SysEx/callback waits still need timeout recovery in a later pass.
 - If build errors reference functions/line numbers missing in local files, treat as snapshot mismatch and confirm active repository first.
 
 ---
@@ -320,13 +336,16 @@ Sample flash map:
 ### Morph / Endless-Pot Reminders
 
 - Standard morph operation is STM-owned after Session 003.
-- AVR/front panel still owns menu display, file I/O, and endpoint bytes, but must not compute or stream standard live morph.
+- Normal/temp parameter switching is STM-owned after Session 004. AVR/front panel owns menu display, file I/O, and endpoint-byte transport/display, but must not compute or stream standard live morph or own canonical temp staging.
 - Raw endpoint parameter storage uses AVR/menu indices on both MCUs. Low `+1` is only for sending an ordinary low live CC to `midiParser_ccHandler(...)`.
 - Global morph writes all six STM per-voice morph amounts; actual interpolation uses per-voice morph amounts.
 - Per-voice morph may come from global morph, MIDI, step automation, or LFO/velocity modulation destinations.
-- LFO/velocity modulation of `PAR_MORPH_*` should modulate live DSP between the stored interpolation baseline and the morph endpoint; it must not overwrite `interpolatedParams[]`.
+- Velocity-to-voice-morph is a one-shot trigger-time write to the active normal/temp per-voice morph value. Do not route velocity-to-voice-morph through the generic modulation matrix.
+- LFO-to-voice-morph is serviced by the sequencer morph drain using `modNode_lastVal` style LFO state. Do not route it through generic high-frequency modulation paths; that caused audio breakup.
 - `seq_serviceMorphInterpolation()` runs one parameter per STM main-loop pass and is the only intended writer of `interpolatedParams[]`.
+- `seq_serviceMorphInterpolation()` now has phase 0 for standard morph and optional later phases for source voices whose LFO targets voice morph. Each main-loop pass must still perform at most one interpolation/application unit.
 - Automation selector parameters, morph amount parameters, and LFO target voice selector parameters are carved out of ordinary interpolation and return kit/front endpoint values.
+- Automation target endpoint bytes and resolved sideband structures must stay coherent. For LFO target ingress, raw selector bytes must be written to `frontPanelParams[]` for kit endpoints or `morphParams[]` for morph endpoints, and the matching `SeqKitAutomationTargets` sideband must be refreshed. If only the sideband is changed, normal/temp switching can later restore stale/off raw bytes and drop the assignment.
 
 ---
 
@@ -341,19 +360,19 @@ Sample flash map:
 
 ### High Priority
 
-- Current repository state is a post-morph temp-pattern/load WIP baseline.
-- Standard morph is STM-owned and hardware-verified for ordinary operation, including LFO target to voice morph.
-- Next phase: fix normal/temporary pattern and parameter exchange after the morph move using `knowledge_files/session_in_flight/TEMP_CACHE_LOAD-IN_FLIGHT-POST_MORPH_MOVE.md`.
-- SEQ16 temp pattern observation bodge remains in place.
-- Preserve STM morph invariants while fixing temp exchange: no AVR live morph fallback, no per-parameter valid arrays, no direct file/AVR writes into interpolation arrays.
+- Current repository state is a functional post-morph temp/background-load baseline after Session 004.
+- Standard morph and normal/temp switching are STM-owned and hardware-verified for ordinary operation, including LFO target to voice morph.
+- Session 005 should handle the remaining small workflow issues listed near the top of this file before the larger preset/morph refactor.
+- SEQ16 temp pattern observation bodge remains in place until after the future refactor.
+- Preserve STM morph invariants while making Session 005 fixes: no AVR live morph fallback, no per-parameter valid arrays, no direct file/AVR writes into interpolation arrays.
 
 ### Current Temp Pattern / `.PRF` WIP Reminders
 
 - SEQ16 is used as a SELECT button for `SEQ_TMP_PATTERN`.
-- Session 002 temp pattern select/play/copy/paste worked and was user-tested, but normal/temporary pattern and parameter exchange is currently broken after the Session 003 morph move.
+- Session 004 made normal/temporary pattern and parameter exchange functional again after the Session 003 morph move.
 - AVR-to-STM endpoint dump (Opcodes 0x65/0x66) is implemented and captures `parameter_values`, `parameters2`, and all 16 mod targets.
 - STM-side `seq_normalKitState` and `seq_tmpKitState` are the source of truth for menu pushbacks.
-- STM-to-AVR parameter pushback on temp-pattern transitions uses a 5-phase handshake. Re-audit this handshake against the post-morph storage model before adding more fixes.
+- STM-to-AVR parameter pushback on temp-pattern transitions must happen on every normal/temp switch so the menu stays in sync. Global morph push-up is still a known Session 005 issue.
 - Endpoint storage uses raw AVR/menu parameter indices. Do not apply low `+1/-1` offsets to endpoint arrays or PRF restore opcodes.
 - Sound engine live morph path uses `interpolatedParams` after the STM worker writes it; menu pushback uses `frontPanelParams`.
 - File loads must target normal parameter storage and normal pattern storage only; they must never touch temporary parameter storage or temporary pattern data.
@@ -361,7 +380,8 @@ Sample flash map:
 - Sound parameter arrays are always valid from zero init. Do not reintroduce `frontPanelParamsValid[]`, `morphParamsValid[]`, or `interpolatedParamsValid[]`.
 - No extraneous LCD/debug writes should occur during copy/paste, temp/normal switching, endpoint restore, or file-load operations.
 - Do not make the temp pattern loadable/saveable unless explicitly requested.
-- The current `front`/`mainboard` diff contains PRF cache/state-machine work (`SEQ_PRF_CACHE_*`, live-pattern getters, pending counters). Treat it as WIP until reconciled with the post-morph temp-slot plan.
+- Future background-load automation should build on the Session 004 STM-owned normal/temp image model and should not revive AVR-owned temp staging.
+- The current `front`/`mainboard` diff may contain PRF cache/state-machine work (`SEQ_PRF_CACHE_*`, live-pattern getters, pending counters). Treat it as WIP until reconciled with the post-morph temp-slot plan.
 - Current-only backup files `front/LxrAvr/config.h.bak`, `front/LxrAvr/encoder.c.bak`, and `front/LxrAvr/encoder.h.bak` exist in the diff and should not be committed as canonical code without an explicit decision.
 
 ### Morph Move Completed In Session 003
