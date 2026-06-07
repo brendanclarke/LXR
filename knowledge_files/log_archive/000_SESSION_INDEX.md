@@ -12,6 +12,7 @@
 | 001 | 2026-05-21 | local branch `custom-develop-patload-envmod` (commit `3698612`) | build-break triage, source compatibility fixes (A1/A2/A3/B1/B2/B3), full firmware build verified |
 | 002 | 2026-05-29 to 2026-06-01 | local branch `custom-develop-patload-envmod` (merged temp-pattern WIP) | temp-pattern parameter isolation, symmetric kit states, endpoint/automation storage, normal-only file loads, rate-limited endpoint restore, morph-to-STM plan |
 | 003 | 2026-06-03 | local branch `custom-develop-patload-envmod` (STM morph WIP, dirty tree) | morph computation moved fully to STM for standard operation; normal/temp exchange broken and queued for session 004 |
+| 004 | 2026-06-07 | local repo, user will commit/push after review | temp background loading made functional; normal/temp parameter switching, endpoint sync, retrigger glitch, automation target persistence, and phased LFO-to-morph drain fixed |
 
 ---
 
@@ -29,6 +30,10 @@ Session 002 completed encoder work, restored the `.ALL` / `.PRF` load and parame
 Session 003 moved standard morph computation fully onto STM: STM now owns global/per-voice morph state, one-parameter-per-main-loop interpolation, live DSP morph application, LFO/velocity modulation of voice morph, raw endpoint-index storage, automation-target image refresh, and the live-apply cache needed for zero-valued file parameters to land in DSP. The session also removed per-parameter valid arrays from `SeqKitState`; sound parameter arrays are always-defined from zero init, file loads write normal endpoint arrays only, and the morph worker is the only intended writer of interpolation arrays. Standard morph was hardware-confirmed, but the normal/temporary pattern and parameter exchange is broken after the move and is the recommended Session 004 goal.
 - **Find here**: STM-owned morph, per-voice morph, global morph command, raw endpoint indexing, automation target sidebands, LFO target to voice morph, valid-array removal, file-load endpoint-to-DSP flow, live-apply cache, zero-valued parameter apply bug, waveform Drum 2 fix, temp exchange broken, SEQ16 temp cache observation bodge, post-morph Session 004 audit plan
 
+### 004 — Temp Background Loading Stabilization + Morph/Automation Repair (2026-06-07)
+Session 004 made the post-morph temp/background-load model functional: copy-to-temp became an STM-side pattern/parameter snapshot, switching normal/temp became source selection rather than staging, AVR endpoint restore now keeps the menu synced on boundaries, legacy load hold/cache paths were neutralized for temp loading, the retrigger-like glitch was removed by rebuilding the live-apply path, LFO target assignments to voice morph now survive normal/temp switches, velocity-to-morph is a trigger-time one-shot, and LFO-to-morph is serviced by a phased morph drain so only one interpolation/apply runs per STM main-loop pass. Session 004 also identified the future `/Preset/` refactor boundary and created canonical refactor/comms knowledge for Session 006/007.
+- **Find here**: STM-only copy-to-temp, normal/temp source switching, endpoint push-up/menu sync, first-switch freeze removal, sequence LED restore after load, retrigger glitch diagnostics/fix, raw selector vs resolved automation target coherence, LFO/velocity target to voice morph, phased morph drain, AVR temp buffer naming, preset/morph refactor plan, UART/protocol redundancy notes
+
 
 ---
 
@@ -45,7 +50,11 @@ Session 003 moved standard morph computation fully onto STM: STM now owns global
 | Morph computation is STM-owned for standard operation; AVR keeps global morph/menu/file endpoint responsibilities only | 003 |
 | `SeqKitState` no longer has per-parameter valid arrays; parameter arrays are always-defined sound state from zero init | 003 |
 | Endpoint storage uses raw AVR/menu parameter indices; low `+1` only applies when sending ordinary live low CC to STM MIDI/DSP apply | 003 |
-| Session 004 should fix normal/temp cache loading from the post-morph audits | 003 |
+| Temp/background `.ALL` / `.PRF` loading can proceed while playback uses temp; normal/temp switching is STM source selection plus AVR endpoint push-up | 004 |
+| Raw automation selector bytes and resolved automation target structs must be kept coherent, especially for `FRONT_CC_LFO_TARGET` sidebands | 004 |
+| LFO-to-voice-morph is serviced by phased morph drain, not immediate full voice-parameter interpolation from LFO callbacks | 004 |
+| Velocity-to-voice-morph is a trigger-time one-shot value set, not a generic modulation-node destination | 004 |
+| Future preset/morph refactor target is `mainboard/LxrStm32/src/Preset/`; SEQ16 temp keyhole remains intentionally bodged until after that refactor | 004 |
 
 
 ---

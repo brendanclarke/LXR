@@ -47,9 +47,23 @@ INCCMZ ModulationNode velocityModulators[6];
 //INCCMZ ModulationNode macroModulators[4];
 ModulationNode macroModulators[4];
 
- //-----------------------------------------------------------------------
-void modNode_init(ModulationNode* vm)
+//-----------------------------------------------------------------------
+/* LFO-to-voice-morph is serviced by the sequencer morph drain from lastVal.
+   Letting LFO ticks call the generic VMORPH path recalculates too much audio
+   state inside the LFO update. */
+static uint8_t modNode_isLfoModTarget(ModulationNode* vm)
 {
+   return vm == &voiceArray[0].lfo.modTarget
+       || vm == &voiceArray[1].lfo.modTarget
+       || vm == &voiceArray[2].lfo.modTarget
+       || vm == &snareVoice.lfo.modTarget
+       || vm == &cymbalVoice.lfo.modTarget
+       || vm == &hatVoice.lfo.modTarget;
+}
+
+	 //-----------------------------------------------------------------------
+	void modNode_init(ModulationNode* vm)
+	{
 	vm->lastVal = 0;
 	vm->amount = 0.f;
 	modNode_setDestination(vm,0);
@@ -281,6 +295,9 @@ void modNode_updateValue(ModulationNode* vm, float val)
 void modNode_vMorph(ModulationNode* vm, float val)
 {
    if(seq_morphLoadDisabled)
+      return;
+
+   if(modNode_isLfoModTarget(vm))
       return;
 
    /* Voice morph destinations are control inputs into the STM morph engine.

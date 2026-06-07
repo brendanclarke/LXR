@@ -5,6 +5,21 @@ Status: deferred refactor targets for after temp background loading is functiona
 
 This document is intentionally not a Session 004 implementation plan. Session 004 should stay focused on making temp-backed `.ALL` / `.PRF` loading and switching work. These notes collect cleanup targets for a later pass, likely around Session 006/007.
 
+Session 004 consolidation note:
+
+- Detailed preset storage, morph engine, temp playback, automation target, and
+  STM `/Preset/` migration knowledge has been moved into
+  `AUDIT_PRESET-MORPH_REFACTOR.md`.
+- This document should remain the broader "other refactors" list:
+  - legacy load/cache cleanup;
+  - AVR scratch-buffer naming;
+  - comms/protocol redundancy;
+  - code comment cleanup;
+  - non-preset parser/transport risks.
+- Some older preset/morph notes may remain below as historical context, but the
+  canonical refactor plan for STM-side preset/morph ownership is now
+  `AUDIT_PRESET-MORPH_REFACTOR.md`.
+
 Core assumption for the later refactor:
 
 - STM owns sound-state authority: normal/temp endpoint params, morph endpoint params, interpolated params, automation target images, global morph amount, and per-voice morph amounts.
@@ -942,3 +957,165 @@ Refactor target:
 - Add a passive mirror update API, optionally with an
   `envPositionMirrorDirty[]` / `envelopes_dirty[]` side array, so bulk restore
   can keep mirrors coherent without triggering envelopes.
+
+### Rename preset endpoint arrays in `SeqKitState`
+
+Current state:
+
+- `SeqKitState.frontPanelParams[]` stores the kit/front endpoint parameter
+  image on the STM.
+- `SeqKitState.morphParams[]` stores the morph endpoint parameter image on the
+  STM.
+- Both endpoint images appear in the front-panel menu through restore/push-up,
+  so the name `frontPanelParams` is misleading.
+- The front panel is no longer the canonical owner of preset data after the
+  STM-side morph move.
+
+Refactor target:
+
+- Rename `SeqKitState.frontPanelParams[]` to `kitEndpointParams[]`.
+- Rename `SeqKitState.morphParams[]` to `morphEndpointParams[]`.
+- Do this during the future STM-side `/Preset/` refactor, not during the current
+  temp-switch stabilization pass.
+- Update comments and APIs to describe endpoint ownership in preset terms, not
+  AVR/front-panel terms.
+
+### Unify raw automation selector bytes with resolved destinations
+
+Current state:
+
+- LFO destination sideband messages can carry resolved destination parameters
+  into STM through `FRONT_CC_LFO_TARGET` / `seq_storeLfoDestinationIngress(...)`.
+- Endpoint arrays store raw selector bytes:
+  - current name `frontPanelParams[PAR_TARGET_LFOx]`;
+  - current name `morphParams[PAR_TARGET_LFOx]`.
+- Automation target structs store resolved destinations:
+  - `frontPanelAutomationTargets.lfoDestination[]`;
+  - `morphParameterEndpointAutomationTargets.lfoDestination[]`;
+  - `interpolatedAutomationTargets.lfoDestination[]`.
+- These two representations must stay coherent. A bug in session 004 allowed
+  live LFO destination sidebands to update the resolved destination structs and
+  DSP while leaving the raw endpoint selector bytes stale/off.
+
+Refactor target:
+
+- Future `/Preset/` API should expose one authoritative setter for LFO
+  destination updates that updates both representations together:
+  - raw endpoint voice selector;
+  - raw endpoint target selector;
+  - resolved automation destination;
+  - interpolated target cache when appropriate.
+- Avoid callers directly writing one half of the state.
+- Keep an inverse resolver from resolved destination parameter back to selector
+  index, or better, transport both raw selector and resolved destination in one
+  explicit endpoint/update packet.
+- Apply the same review to velocity and macro destination sidebands, even though
+  the confirmed bug was LFO-specific.
+
+## Communication / Protocol Redundancy Targets From Session 004
+
+Canonical comms reference:
+
+- `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md`
+
+### Raw endpoint params plus resolved automation sidebands
+
+Current state:
+
+- Automation target information can be transported twice:
+  - raw selector endpoint bytes, such as `PAR_TARGET_LFOx`;
+  - resolved sideband destination messages, such as `FRONT_CC_LFO_TARGET`.
+- Session 004 confirmed that these can diverge and cause wrong normal/temp
+  restore behavior.
+
+Refactor target:
+
+- Introduce one authoritative target-assignment transfer/update surface.
+- Ideal packet should include:
+  - endpoint image kind: kit/front vs morph;
+  - source modulator kind: LFO, velocity, macro;
+  - source index;
+  - raw selector byte;
+  - target voice selector where relevant;
+  - resolved destination parameter.
+- STM should update raw endpoint storage and resolved automation target structs
+  in one API call.
+- AVR should not need to send a separate sideband phase solely to reconstruct
+  destination metadata.
+
+### Endpoint bracket naming
+
+Current state:
+
+- `FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN`
+- `FRONT_SEQ_TMP_KIT_AUTOMATION_PHASE`
+- `FRONT_SEQ_TMP_KIT_ENDPOINT_END`
+
+Problem:
+
+- Names imply writing temp playback kit.
+- In the Session 004 model, file/background endpoint dumps refresh normal
+  endpoint storage while temp may be playing.
+
+Refactor target:
+
+- Rename protocol concepts around "endpoint restore/load session" rather than
+  "tmp kit".
+- Keep temp playback state separate from background file-load destination state.
+
+### Legacy voice hold/unhold protocol
+
+Current state:
+
+- `FRONT_SEQ_LOAD_VOICE`
+- `FRONT_SEQ_UNHOLD_VOICE`
+- `seq_voicesLoading`
+- `seq_newVoiceAvailable`
+- old MIDI cache arrays.
+
+Problem:
+
+- These names imply a held voice cache will be promoted into live DSP.
+- Temp-background loading now wants file bytes stored into STM normal endpoint
+  images while temp continues sounding.
+
+Refactor target:
+
+- Split direct/legacy voice-load promotion from temp-background file-load
+  finalization.
+- Rename ingress flags around "file payload receiving" and "legacy live
+  promotion pending".
+- Remove temp-background dependency on old unhold/release-cache semantics.
+
+### Endpoint restore queue API
+
+Current state:
+
+- Full and masked endpoint restore work but are implemented inside sequencer
+  code.
+
+Refactor target:
+
+- Move restore queue/handshake/rate limiting into a preset endpoint or comms
+  service.
+- API should be:
+  - restore full selected image;
+  - restore selected voice mask;
+  - restore global/shared params as needed.
+
+### Transport reliability remains unresolved
+
+Current state:
+
+- Original comms audit risks remain:
+  - 256-byte FIFOs;
+  - silent overflow;
+  - blocking waits;
+  - AVR atomic send deadlock risk;
+  - no packet length/CRC/sequence numbers.
+
+Refactor target:
+
+- Do not mix this with the preset/morph move unless needed.
+- When background loading is automated more deeply, revisit flow-control and
+  integrity checks as a separate comms hardening pass.

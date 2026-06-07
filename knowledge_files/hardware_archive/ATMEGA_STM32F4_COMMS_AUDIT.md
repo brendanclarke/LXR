@@ -15,7 +15,7 @@
 - `front/LxrAvr/Preset/presetManager.c`  
 - `front/LxrAvr/main.c`  
 
-**Post-audit updates folded in:** Session 002 communication flow-control work and Session 003 STM morph move, through 2026-06-03.
+**Post-audit updates folded in:** Session 002 communication flow-control work, Session 003 STM morph move, and Session 004 temp/background-load stabilization, through 2026-06-07.
 
 ---
 
@@ -1042,4 +1042,218 @@ For Session 004:
 - Remember that endpoint restore now sends whole arrays; zeros are authoritative.
 - The SEQ16 button bodge to observe the temporary cache remains in place.
 
-*Audit completed. Working tree extracted and verified at `/home/claude/LXR_project/LXR-custom-develop-patload-envmod`.*
+## 14. Session 004 Protocol Knowledge: Temp Playback, Endpoint Restore, And Automation Targets
+
+Session 004 clarified that the main temp/background-load failures were state
+ownership and apply-order problems, not primarily UART byte-loss problems.
+However, the session exposed important protocol semantics and redundancy.
+
+### 14.1 Temp Playback Request Surface
+
+The AVR does not send temp playback parameter data during a normal/temp switch.
+It only requests pattern/source changes.
+
+Normal pattern request:
+
+- status: `FRONT_SEQ_CC`
+- command/data1: `FRONT_SEQ_CHANGE_PAT`
+- data2:
+  - low bits select normal pattern `0..7`;
+  - upper bits select whole-pattern vs per-track target.
+
+Temporary pattern request:
+
+- status: `FRONT_SEQ_CC`
+- command/data1: `FRONT_SEQ_CHANGE_TMP_PAT`
+- data2:
+  - upper bits select whole-pattern vs per-track target;
+  - STM maps the requested pattern to `SEQ_TMP_PATTERN`.
+
+Both call `seq_setNextPattern(...)` on STM.
+
+STM-side consumption:
+
+- request sets pending pattern/per-track state;
+- later `seq_tick()` commits the switch;
+- normal/temp kit selection and per-voice source switching happen on STM;
+- endpoint/menu restore is queued after the STM source state changes.
+
+Important rule:
+
+- Switching to temp or normal must not require AVR to resend the selected kit.
+- Copy-to-temp is an STM-side clone; switch-to-temp is source selection.
+
+### 14.2 Endpoint Restore From STM To AVR
+
+STM pushes endpoint bytes back to AVR so the front-panel menu follows the
+currently selected normal/temp sound image.
+
+Restore opcodes:
+
+- `PARAM_RESTORE_BEGIN`
+- `PARAM_RESTORE_READY`
+- `PRF_RESTORE_PARAM_CC`
+- `PRF_RESTORE_PARAM_CC2`
+- `PRF_RESTORE_MORPH_CC`
+- `PRF_RESTORE_MORPH_CC2`
+- `PARAM_RESTORE_DONE`
+- `PARAM_RESTORE_ACK`
+
+Kit/front endpoint bytes:
+
+- `PRF_RESTORE_PARAM_CC/CC2`
+- AVR writes to `parameter_values[]`.
+
+Morph endpoint bytes:
+
+- `PRF_RESTORE_MORPH_CC/CC2`
+- AVR writes to `parameters2[]`.
+
+Important Session 004 rule:
+
+- Endpoint restore carries raw endpoint selector bytes.
+- It does not carry resolved automation sidebands.
+- Therefore STM must keep raw endpoint bytes coherent before restore begins.
+
+### 14.3 Raw Selector Bytes Vs Resolved Sideband Destinations
+
+The protocol currently carries automation target information in two forms.
+
+Raw endpoint bytes:
+
+- examples:
+  - `PAR_VOICE_LFO1..PAR_VOICE_LFO6`;
+  - `PAR_TARGET_LFO1..PAR_TARGET_LFO6`;
+  - `PAR_VEL_DEST_1..PAR_VEL_DEST_6`;
+  - macro target selector params.
+- transported by raw endpoint restore opcodes or ordinary parameter CC paths.
+- stored in STM endpoint arrays and AVR menu arrays.
+
+Resolved sideband messages:
+
+- `FRONT_CC_LFO_TARGET`
+- `FRONT_CC_VELO_TARGET`
+- `FRONT_CC_MACRO_TARGET`
+- carry destination parameter metadata already resolved through AVR
+  `modTargets[]`.
+- used to update STM `SeqKitAutomationTargets` and/or live modulation nodes.
+
+Confirmed bug:
+
+- `FRONT_CC_LFO_TARGET` updated the resolved STM automation target state and
+  live sound, but did not update raw STM endpoint selector bytes.
+- Normal/temp restore later read stale/off raw bytes and lost the LFO target to
+  voice morph.
+
+Fix principle:
+
+- Any sideband ingress that updates resolved automation targets must also update
+  the matching raw endpoint selector storage for the selected image/endpoint.
+
+Future protocol simplification:
+
+- Combine raw selector byte and resolved destination in one explicit target
+  update packet.
+- This would eliminate inverse lookup from resolved destination back to raw
+  selector and reduce AVR/STM `modTargets[]` coupling risk.
+
+### 14.4 Endpoint Dump Brackets And Automation Phases
+
+File/background endpoint loads use STM ingress brackets:
+
+- `FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN`
+- `FRONT_SEQ_TMP_KIT_AUTOMATION_PHASE`
+- `FRONT_SEQ_TMP_KIT_ENDPOINT_END`
+
+Automation phase values distinguish:
+
+- front/kit endpoint automation target sidebands;
+- morph endpoint automation target sidebands.
+
+Why this still matters:
+
+- `parameter_values[]` and `parameters2[]` both contain automation selector
+  bytes.
+- Their resolved sidebands must land in different STM target images:
+  - kit/front endpoint targets;
+  - morph endpoint targets.
+
+Redundancy:
+
+- The same semantic target assignment is transported as both raw params and
+  resolved sidebands.
+- This is currently necessary because AVR menu selector values and STM resolved
+  destination values are different representations.
+- A future packet format could include both forms in one transfer and remove the
+  need for separate automation phase streams.
+
+### 14.5 Legacy Hold/Unhold And Voice Cache Signaling
+
+Session 004 showed that legacy load-cache release paths are poor foundations for
+temp-background loading.
+
+Legacy signals/functions still exist:
+
+- `FRONT_SEQ_LOAD_VOICE`
+- `FRONT_SEQ_UNHOLD_VOICE`
+- `seq_voicesLoading`
+- `seq_newVoiceAvailable`
+- `midi_midiCache[]`
+- `midi_midiLfoCache[]`
+- `midi_midiVeloCache[]`
+- `frontParser_unholdVoice(...)`
+- `frontParser_uncacheVoice(...)`
+- `frontParser_applyDeferredVoiceCache(...)`
+
+Session 004 temp-background rule:
+
+- File payload receipt may still use "loading" state to route incoming bytes to
+  storage instead of live apply.
+- The old release/promotion behavior should not be used to apply temp/background
+  file data to live DSP.
+- Normal/temp switching should select STM `SeqKitState`, not replay legacy
+  caches.
+
+Future simplification:
+
+- Split direct/legacy load cache promotion from temp-background-load finalizer.
+- Rename `seq_voicesLoading` to describe ingress/cache routing rather than
+  implying a held voice must later be released.
+- Remove legacy hold/unhold protocol dependence from background loading.
+
+### 14.6 Redundant Or Confusing Communication Surfaces
+
+Targets for future protocol cleanup:
+
+- Raw endpoint params plus resolved sidebands:
+  - combine or make a single authoritative setter packet.
+- `FRONT_SEQ_TMP_KIT_ENDPOINT_*` naming:
+  - currently means "normal endpoint refresh for temp-background workflow", not
+    "write temp playback kit".
+  - rename when protocol is refactored.
+- AVR `parameter_values_temp[]` / `parameters2_temp[]`:
+  - names imply temp playback but they are file-read scratch buffers.
+- Endpoint restore full vs masked restore:
+  - keep behavior but centralize in a preset endpoint service.
+- Legacy voice hold/unhold:
+  - separate direct kit/voice load protocol from temp-background file-load
+    protocol.
+- Global morph push-up:
+  - Session 005 should add/fix menu push-up for global morph on normal/temp
+    switch without reintroducing live AVR morph ownership.
+
+### 14.7 Keep The Old Transport Risks In Mind
+
+Session 004 did not remove the original UART hazards:
+
+- 256-byte FIFOs;
+- silent overflow;
+- blocking waits without robust timeouts;
+- `ATOMIC_BLOCK` around FIFO-full send loops on AVR;
+- no CRC/sequence numbers;
+- sysex-like streams that assume no interleaving.
+
+The temp/morph bugs were mostly state-model bugs, but future larger background
+load automation should not forget these transport risks.
+
+*Audit completed and updated through Session 004 in repo `/Users/bc/LXR01/LXR-current/LXR-custom-develop-patload-envmod`.*

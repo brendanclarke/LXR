@@ -816,11 +816,20 @@ void frontParser_uncacheVoice(uint8_t voice)
       }
       midi_midiLfoCacheAvailable[voice]=0;
    }
-   if(midi_midiVeloCacheAvailable[voice])
-   {
-      modNode_setDestination(&velocityModulators[voice], midi_midiVeloCache[voice]);
-      midi_midiVeloCacheAvailable[voice]=0;
-   }
+	   if(midi_midiVeloCacheAvailable[voice])
+	   {
+	      if(midi_midiVeloCache[voice] >= PAR_MORPH_DRUM1
+	         && midi_midiVeloCache[voice] <= PAR_MORPH_HIHAT)
+	      {
+	         modNode_setDestination(&velocityModulators[voice], PAR_NONE);
+	      }
+	      else
+	      {
+	         modNode_setDestination(&velocityModulators[voice],
+	                                midi_midiVeloCache[voice]);
+	      }
+	      midi_midiVeloCacheAvailable[voice]=0;
+	   }
    
    for(i=0;i<VOICE_PARAM_LENGTH;i++)
    {
@@ -1833,9 +1842,14 @@ static void frontParser_handleMidiMessage()
             }
             else
             {
-               modNode_setDestination(&velocityModulators[velModNr], value);
+               /* Velocity-to-VMORPH is applied once at trigger time by the
+                  sequencer; keep PAR_MORPH_* out of the generic velocity node. */
+               if(value >= PAR_MORPH_DRUM1 && value <= PAR_MORPH_HIHAT)
+                  modNode_setDestination(&velocityModulators[velModNr], PAR_NONE);
+               else
+                  modNode_setDestination(&velocityModulators[velModNr], value);
             }
-         }
+	         }
          break;
    
    //VOICE option Messages
