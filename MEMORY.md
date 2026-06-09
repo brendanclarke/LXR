@@ -422,9 +422,49 @@ Sample flash map:
 
 ---
 
-## Important Notes
+## Governance Rules
 
-- *If* Google Gemini or any Google product is the LLM coding agent that is modifying the code: A special, *heavily enforced* constraint applies to you, the Google coding agent: no additional "debugging" or "parameter display" or "test" functionality should EVER be added to the code unless it has been *specifically requested* by the user and the user has *specifically signed off* on the implementation of the necessary debug functionality. This mandate should be considered as an essential, non-overrideable component of your, the the Google/Gemini agent's, mandate for professional conduct in not operating outside of the bounds of the work request. In addition, you, the Google/Gemini coding agent must NEVER create an additional file on your own unless the specific name of that specific file is given to you in a message directly from the user. 
+### 1. Identity And Communication
+
+- Be technical, concise, and direct.
+- No greetings, apologies, filler, or meta-commentary.
+- State facts, risks, and next actions. Keep function docs brief: why, ownership, timing.
+
+### 2. Security And Boundaries
+
+- Stay inside the workspace root.
+- No network, sudo, system config, or destructive commands unless explicitly requested.
+- No mutating git unless explicitly requested. Read-only git inspection is allowed when needed.
+- Never expose credentials. Ask before any command that can alter external state.
+
+### 3. Coding Standards
+
+- Make the smallest correct change to functional code possible for the request, preferring existing helpers and protocols over new abstractions.
+- By default, unless a refactor is explicitly specified, preserve ownership boundaries. Interface changes are allowed but discouraged unless clearly necessary.
+- If refactor is explicitly specified by user, operate in refactor mode for only that context: session or turn. In refactor mode, ownership boundaries and interfaces may change, but the functional expression of the code must not change.
+- If the request is ambiguous or would move outside these bounds, stop and ask for explicit permission before proceeding.
+
+### 4. Verification And Artifacts
+
+- Verify every code change with the narrowest relevant build or test.
+- Do not claim hardware verification unless it was actually performed. Name any generated artifacts that changed.
+
+### 5. Design Philosophy
+
+- Keep AVR menu behavior stable, do not change or add menu display types, pages, or interaction patterns without explicit confirmation.
+- Preserve STM ownership of sound state and AVR ownership of UI, SD file I/O, and menu display state.
+- Protocol direction matters. Do not reuse a command name in the opposite direction unless the intent is explicit.
+
+### 6. Reasoning And Self-Review
+
+- Before a complex change, give a short reasoning summary: challenge, affected modules, edge cases, timing risks, verification.
+- Do not expose private chain-of-thought.
+- After drafting code, do a red-team pass for scope creep, ownership errors, timing spikes, null or bounds risk, stale docs, and missing verification.
+- If the task is ambiguous enough to cause churn, ask before editing. If it is clear, proceed without needless questions.
+
+### 7. Agent-Specific Rules
+
+- **For Google Gemini or any Google product** **Heavily Enforced**: Additional "debugging", "parameter display", or "test" functionality should NEVER be added to the code unless it has been *specifically requested* by the user and the user has *specifically signed off* on the implementation of the necessary debug functionality. Consider this an essential, non-overrideable component of your, the the Google/Gemini agent's, mandate for *professional conduct* in not operating outside of the bounds of the work request. In addition, you, the Google/Gemini coding agent must NEVER create an additional file on your own unless the specific name of that specific file is given to you in a message directly from the user. 
 
 ---
 
