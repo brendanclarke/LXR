@@ -717,6 +717,8 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_SEQ_SET_GLOBAL_MORPH       0x68
 #define FRONT_SEQ_SET_GLOBAL_MORPH_LSB   0x69
 #define FRONT_SEQ_SET_GLOBAL_MORPH_MSB   0x6a
+#define FRONT_SEQ_REPORT_GLOBAL_MORPH_LSB 0x6b
+#define FRONT_SEQ_REPORT_GLOBAL_MORPH_MSB 0x6c
 
 #define FRONT_SEQ_TMP_KIT_ENDPOINT_BOTH 0x00
 #define FRONT_SEQ_TMP_KIT_ENDPOINT_FRONT_ONLY 0x01

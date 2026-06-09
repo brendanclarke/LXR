@@ -82,6 +82,7 @@ typedef struct SeqEndpointRestoreRequestStruct
    const SeqKitState *kit;
    uint8_t mode;
    uint8_t voiceMask;
+   uint8_t reportGlobalMorph;
 } SeqEndpointRestoreRequest;
 
 static const uint16_t seq_voiceParamMask[SEQ_SYNTH_VOICES][SEQ_VOICE_PARAM_LENGTH] =
@@ -275,10 +276,14 @@ static uint8_t seq_getMorphImageForVoice(uint8_t synthVoice);
 static void seq_captureTmpKitState();
 static void seq_setTmpKitActive(uint8_t active);
 static void seq_pushKitEndpointsToFront(const SeqKitState *kit);
+static void seq_pushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit);
 static void seq_pushKitEndpointVoiceMaskToFront(const SeqKitState *kit,
                                                 uint8_t voiceMask);
+static void seq_pushKitEndpointVoiceMaskToFrontInternal(const SeqKitState *kit,
+                                                        uint8_t voiceMask,
+                                                        uint8_t reportGlobalMorph);
 static void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask);
-static void seq_maybePushKitEndpointsToFront(const SeqKitState *kit);
+static void seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit);
 static void seq_syncVMorphAmountMirrorsFromLiveSources();
 static void seq_selectVoiceMorphAmountFromKit(uint8_t synthVoice,
                                               const SeqKitState *kit);
@@ -2015,17 +2020,53 @@ static void seq_pushSingleMorphParameterToFront(uint16_t param, uint8_t value)
 }
 
 //------------------------------------------------------------------------------
+static void seq_pushGlobalMorphToFront(const SeqKitState *kit)
+{
+   uint8_t amount;
+
+   if(!kit)
+      return;
+
+   amount = kit->globalMorphAmount;
+
+   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_CC);
+   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_REPORT_GLOBAL_MORPH_LSB);
+   uart_sendFrontpanelPriorityByteWait((uint8_t)(amount & 0x7f));
+
+   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_CC);
+   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_REPORT_GLOBAL_MORPH_MSB);
+   uart_sendFrontpanelPriorityByteWait((uint8_t)((amount >> 7) & 0x01));
+}
+
+//------------------------------------------------------------------------------
 static void seq_pushKitEndpointsToFront(const SeqKitState *kit)
 {
    if(!kit)
       return;
 
-   seq_pushKitEndpointVoiceMaskToFront(kit, 0xff);
+   seq_pushKitEndpointVoiceMaskToFrontInternal(kit, 0xff, 0);
+}
+
+//------------------------------------------------------------------------------
+static void seq_pushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit)
+{
+   if(!kit)
+      return;
+
+   seq_pushKitEndpointVoiceMaskToFrontInternal(kit, 0xff, 1);
 }
 
 //------------------------------------------------------------------------------
 static void seq_pushKitEndpointVoiceMaskToFront(const SeqKitState *kit,
                                                 uint8_t voiceMask)
+{
+   seq_pushKitEndpointVoiceMaskToFrontInternal(kit, voiceMask, 0);
+}
+
+//------------------------------------------------------------------------------
+static void seq_pushKitEndpointVoiceMaskToFrontInternal(const SeqKitState *kit,
+                                                        uint8_t voiceMask,
+                                                        uint8_t reportGlobalMorph)
 {
    SeqEndpointRestoreRequest request;
    uint8_t tail;
@@ -2038,6 +2079,7 @@ static void seq_pushKitEndpointVoiceMaskToFront(const SeqKitState *kit,
    request.mode = (voiceMask == 0xff) ? SEQ_ENDPOINT_RESTORE_FULL
                                       : SEQ_ENDPOINT_RESTORE_MASK;
    request.voiceMask = voiceMask;
+   request.reportGlobalMorph = reportGlobalMorph;
 
    /* RESTORE RATE LIMIT: endpoint/menu restores are queued and sent by
       seq_serviceEndpointRestore(), one endpoint parameter per STM main-loop
@@ -2054,6 +2096,8 @@ static void seq_pushKitEndpointVoiceMaskToFront(const SeqKitState *kit,
       {
          if(request.mode == SEQ_ENDPOINT_RESTORE_MASK)
             seq_endpointRestoreQueue[last].voiceMask |= request.voiceMask;
+         if(request.reportGlobalMorph)
+            seq_endpointRestoreQueue[last].reportGlobalMorph = 1;
          return;
       }
    }
@@ -2097,6 +2141,7 @@ static void seq_endpointRestoreClearCurrent()
    seq_endpointRestoreCurrent.kit = 0;
    seq_endpointRestoreCurrent.mode = SEQ_ENDPOINT_RESTORE_NONE;
    seq_endpointRestoreCurrent.voiceMask = 0;
+   seq_endpointRestoreCurrent.reportGlobalMorph = 0;
    seq_endpointRestoreParamCursor = 0;
    seq_endpointRestoreVoiceCursor = 0;
    seq_endpointRestoreVoiceParamCursor = 0;
@@ -2255,6 +2300,8 @@ void seq_serviceEndpointRestore()
             return;
 
          seq_tmpKitHandshakeAck = 0;
+         if(seq_endpointRestoreCurrent.reportGlobalMorph)
+            seq_pushGlobalMorphToFront(seq_endpointRestoreCurrent.kit);
          uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
          uart_sendFrontpanelPriorityByteWait(0);
          uart_sendFrontpanelPriorityByteWait(0);
@@ -2330,12 +2377,12 @@ static void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask)
 }
 
 //------------------------------------------------------------------------------
-static void seq_maybePushKitEndpointsToFront(const SeqKitState *kit)
+static void seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit)
 {
    if(!seq_tmpKitPushParamsToFrontEnabled)
       return;
 
-   seq_pushKitEndpointsToFront(kit);
+   seq_pushKitEndpointsToFrontWithGlobalMorphReport(kit);
 }
 
 //------------------------------------------------------------------------------
@@ -2364,7 +2411,7 @@ static void seq_setTmpKitActive(uint8_t active)
 
       /* RESTORE: Push the full temporary kit endpoints (Main + Morph) to the AVR.
          These may come from copy-to-temp or from lazy temp-kit initialization. */
-      seq_maybePushKitEndpointsToFront(&seq_tmpKitState);
+      seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(&seq_tmpKitState);
       return;
    }
 
@@ -2379,7 +2426,7 @@ static void seq_setTmpKitActive(uint8_t active)
    seq_invalidateLiveMorphApplyCache(SEQ_MORPH_IMAGE_NORMAL);
 
    /* RESTORE: Push the full captured normal kit endpoints (Main + Morph) to the AVR. */
-   seq_maybePushKitEndpointsToFront(&seq_normalKitState);
+   seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(&seq_normalKitState);
 }
 
 //------------------------------------------------------------------------------

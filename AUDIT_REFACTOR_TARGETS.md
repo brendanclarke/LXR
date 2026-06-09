@@ -26,6 +26,13 @@ Core assumption for the later refactor:
 - AVR owns UI, file I/O, menu arrays, and requests. AVR temp-named arrays are file-read/menu-preservation buffers, not temp playback storage.
 - Endpoint push-up to AVR is still required at every audible normal/temp boundary so the menu follows the currently selected sound image.
 
+Session 005 note:
+
+- The missing global morph menu-sync on normal/temp switch is now handled by
+  display-only STM-to-AVR report traffic during the restore boundary. Keep the
+  boundary push-up path in place, but do not treat this as a future refactor
+  target.
+
 ## High-Value Refactor Targets
 
 ### 1. Split `frontParser_applyDeferredVoiceCache()`

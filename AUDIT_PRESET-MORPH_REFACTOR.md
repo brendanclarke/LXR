@@ -337,8 +337,8 @@ Important:
 - Endpoint restore pushes raw endpoint bytes, not resolved sidebands.
 - AVR menu correctness depends on raw selector bytes being coherent before
   restore.
-- Global morph amount still needs a small Session 005 fix so it pushes up to the
-  AVR menu on normal/temp switch.
+- Session 005 fixed the missing global morph menu sync on normal/temp switch
+  with display-only STM-to-AVR report traffic.
 
 ## Morph Engine
 
@@ -820,7 +820,7 @@ Could overlap with a future broader `Comms/` split; keep small if introduced.
 User identified likely Session 005 work:
 
 - encoder phase is slightly unbalanced and needs adjustment;
-- global morph does not push up to AVR menu on normal/temp switch;
+- global morph menu sync on normal/temp switch was fixed in Session 005;
 - automate temp pattern switch/background-load process;
 - add global parameter switches for background loading;
 - keep SEQ16 keyhole until after refactor.
@@ -829,7 +829,8 @@ User identified likely Session 005 work:
 
 Begin the large `/Preset/` move only after:
 
-- Session 005 small bugs are handled;
+- Session 005 global morph closeout is documented and the remaining small
+  workflow items are either handled or explicitly deferred;
 - hardware confirms current normal/temp background loading remains stable;
 - the code is committed by the user;
 - the stale Session 004 working audits have been deleted or archived;

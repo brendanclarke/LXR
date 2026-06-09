@@ -26,19 +26,19 @@ make firmware
 
 **Session 001 close status**: full top-level build succeeds in this repo with `make clean && make firmware` (warnings remain, no fatal errors).
 
-**Current status after Session 004 closeout (2026-06-07)**: post-morph temp/background loading is functional again. STM owns normal/temp pattern and parameter images; switching between normal and temp playback selects which STM image is read and pushes endpoint/menu state back up to the AVR. Session 004 fixed the temp-switch audio dropout, retrigger-sounding DSP glitch, first-switch front-panel freeze, sequence LED/chase-light stale state, automation target persistence across normal/temp switches, velocity-to-voice-morph crash, LFO-to-voice-morph breakup, and global morph scaling. Session 005 should focus on small remaining workflow issues, not the larger preset/morph refactor.
+**Current status after Session 005 closeout (2026-06-09)**: post-morph temp/background loading is functional again, and the remaining global morph menu-sync bug is closed. STM owns normal/temp pattern and parameter images; switching between normal and temp playback selects which STM image is read and pushes endpoint/menu state back up to the AVR. Session 005 added a narrow display-only STM-to-AVR report path so `PAR_MORPH` follows the active normal/temp image without touching file loading or live edit semantics. Hardware validation of that report path is still pending.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/005_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/004_SESSION_HANDOFF_LOG.md`
 - `AUDIT_PRESET-MORPH_REFACTOR.md`
 - `AUDIT_REFACTOR_TARGETS.md`
 - `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md`
 
-Session 005 expected queue:
-- Encoder phase is slightly unbalanced and may need a small fix.
-- Global morph still does not push up to the AVR menu on normal/temp switch.
-- Automate the temp-pattern switch/background-load process.
-- Add global parameter switches for background loading.
+Session 005 closeout / remaining follow-up:
+- Encoder phase is slightly unbalanced and may still need a small fix.
+- Automate the temp-pattern switch/background-load process if it remains desired.
+- Add global parameter switches for background loading if that work is revived.
 - Keep the temporary SEQ16 pattern keyhole in place until after the future preset/morph refactor.
 
 These older in-flight audits are stale after Session 003 and should not be treated as current:
@@ -362,7 +362,7 @@ Sample flash map:
 
 - Current repository state is a functional post-morph temp/background-load baseline after Session 004.
 - Standard morph and normal/temp switching are STM-owned and hardware-verified for ordinary operation, including LFO target to voice morph.
-- Session 005 should handle the remaining small workflow issues listed near the top of this file before the larger preset/morph refactor.
+- Session 005 closed the remaining global morph menu-sync issue; the remaining small workflow items are tracked below and before the larger preset/morph refactor.
 - SEQ16 temp pattern observation bodge remains in place until after the future refactor.
 - Preserve STM morph invariants while making Session 005 fixes: no AVR live morph fallback, no per-parameter valid arrays, no direct file/AVR writes into interpolation arrays.
 
@@ -372,7 +372,7 @@ Sample flash map:
 - Session 004 made normal/temporary pattern and parameter exchange functional again after the Session 003 morph move.
 - AVR-to-STM endpoint dump (Opcodes 0x65/0x66) is implemented and captures `parameter_values`, `parameters2`, and all 16 mod targets.
 - STM-side `seq_normalKitState` and `seq_tmpKitState` are the source of truth for menu pushbacks.
-- STM-to-AVR parameter pushback on temp-pattern transitions must happen on every normal/temp switch so the menu stays in sync. Global morph push-up is still a known Session 005 issue.
+- STM-to-AVR parameter pushback on temp-pattern transitions must happen on every normal/temp switch so the menu stays in sync. Global morph push-up on those boundaries is now handled by display-only report traffic.
 - Endpoint storage uses raw AVR/menu parameter indices. Do not apply low `+1/-1` offsets to endpoint arrays or PRF restore opcodes.
 - Sound engine live morph path uses `interpolatedParams` after the STM worker writes it; menu pushback uses `frontPanelParams`.
 - File loads must target normal parameter storage and normal pattern storage only; they must never touch temporary parameter storage or temporary pattern data.

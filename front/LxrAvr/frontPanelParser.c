@@ -29,6 +29,7 @@ static uint16_t frontParser_nrpnNr = 0;
 volatile uint8_t frontParser_restoreActive = 0; // RESTORE: True during a canonical parameter dump from STM
 static uint16_t frontParser_restoreCount = 0;
 static uint16_t frontParser_restoreMorphCount = 0;
+static uint8_t frontParser_reportGlobalMorphLsb = 0;
 // DEBUG
 
 uint8_t frontParser_isRestoreActive(void)
@@ -717,6 +718,22 @@ void frontPanel_parseData(uint8_t data)
                   case SEQ_FLOW_ABORT:
                      frontPanel_handleFlowMessage();
                      break;
+
+                  case SEQ_REPORT_GLOBAL_MORPH_LSB:
+                     frontParser_reportGlobalMorphLsb =
+                        (uint8_t)(frontParser_midiMsg.data2 & 0x7f);
+                     break;
+
+                  case SEQ_REPORT_GLOBAL_MORPH_MSB:
+                  {
+                     uint8_t amount =
+                        (uint8_t)(frontParser_reportGlobalMorphLsb
+                           | ((frontParser_midiMsg.data2 & 0x01) << 7));
+                     parameter_values[PAR_MORPH] = amount;
+                     morphValue = amount;
+                     menu_repaint();
+                     break;
+                  }
 
                   case SEQ_SET_PAT_BEAT:
                      parameter_values[PAR_PATTERN_BEAT] = frontParser_midiMsg.data2;

@@ -13,6 +13,7 @@
 | 002 | 2026-05-29 to 2026-06-01 | local branch `custom-develop-patload-envmod` (merged temp-pattern WIP) | temp-pattern parameter isolation, symmetric kit states, endpoint/automation storage, normal-only file loads, rate-limited endpoint restore, morph-to-STM plan |
 | 003 | 2026-06-03 | local branch `custom-develop-patload-envmod` (STM morph WIP, dirty tree) | morph computation moved fully to STM for standard operation; normal/temp exchange broken and queued for session 004 |
 | 004 | 2026-06-07 | local repo, user will commit/push after review | temp background loading made functional; normal/temp parameter switching, endpoint sync, retrigger glitch, automation target persistence, and phased LFO-to-morph drain fixed |
+| 005 | 2026-06-09 | local repo after reset, uncommitted docs/code | targeted global morph menu-sync fix; display-only STM report on normal/temp boundary; session 005 closeout docs updated |
 
 ---
 
@@ -33,6 +34,10 @@ Session 003 moved standard morph computation fully onto STM: STM now owns global
 ### 004 — Temp Background Loading Stabilization + Morph/Automation Repair (2026-06-07)
 Session 004 made the post-morph temp/background-load model functional: copy-to-temp became an STM-side pattern/parameter snapshot, switching normal/temp became source selection rather than staging, AVR endpoint restore now keeps the menu synced on boundaries, legacy load hold/cache paths were neutralized for temp loading, the retrigger-like glitch was removed by rebuilding the live-apply path, LFO target assignments to voice morph now survive normal/temp switches, velocity-to-morph is a trigger-time one-shot, and LFO-to-morph is serviced by a phased morph drain so only one interpolation/apply runs per STM main-loop pass. Session 004 also identified the future `/Preset/` refactor boundary and created canonical refactor/comms knowledge for Session 006/007.
 - **Find here**: STM-only copy-to-temp, normal/temp source switching, endpoint push-up/menu sync, first-switch freeze removal, sequence LED restore after load, retrigger glitch diagnostics/fix, raw selector vs resolved automation target coherence, LFO/velocity target to voice morph, phased morph drain, AVR temp buffer naming, preset/morph refactor plan, UART/protocol redundancy notes
+
+### 005 — Global Morph Menu Sync Closeout + Audit Cleanup (2026-06-09)
+Session 005 closed the remaining global morph menu-sync bug after the reset: STM now reports the selected kit image's `globalMorphAmount` back to AVR only on actual normal/temp boundary restores, and AVR updates menu state without echoing the change back into STM sound state. The session kept the scope narrow, documented the fix in the session logs, and left the broader preset/background-load refactor for later.
+- **Find here**: display-only global morph report opcodes, normal/temp boundary restore behavior, AVR menu update without STM echo, session 005 closeout logs and audit notes
 
 
 ---
@@ -55,6 +60,7 @@ Session 004 made the post-morph temp/background-load model functional: copy-to-t
 | LFO-to-voice-morph is serviced by phased morph drain, not immediate full voice-parameter interpolation from LFO callbacks | 004 |
 | Velocity-to-voice-morph is a trigger-time one-shot value set, not a generic modulation-node destination | 004 |
 | Future preset/morph refactor target is `mainboard/LxrStm32/src/Preset/`; SEQ16 temp keyhole remains intentionally bodged until after that refactor | 004 |
+| Global morph menu sync on normal/temp switch is handled by display-only STM-to-AVR report traffic, not file-load routing | 005 |
 
 
 ---

@@ -226,6 +226,8 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SEQ_SET_GLOBAL_MORPH       0x68
 #define SEQ_SET_GLOBAL_MORPH_LSB   0x69
 #define SEQ_SET_GLOBAL_MORPH_MSB   0x6a
+#define SEQ_REPORT_GLOBAL_MORPH_LSB 0x6b
+#define SEQ_REPORT_GLOBAL_MORPH_MSB 0x6c
 
 #define SEQ_TMP_KIT_AUTOMATION_NONE 0x00
 #define SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT 0x01

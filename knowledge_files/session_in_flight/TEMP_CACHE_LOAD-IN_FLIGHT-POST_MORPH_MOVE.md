@@ -14,6 +14,13 @@ The old audits contain useful history but are stale in two major ways:
 
 Do not use those old documents as the source of truth for current code.
 
+Session 005 note:
+
+- The remaining global morph menu-sync issue is separate from temp cache/load.
+  STM now reports `globalMorphAmount` back to AVR only on actual normal/temp
+  boundary restores using display-only report opcodes, so do not treat that
+  path as file-load or temp-cache state.
+
 ## Current Architectural Truth
 
 ### STM owns live sound interpolation

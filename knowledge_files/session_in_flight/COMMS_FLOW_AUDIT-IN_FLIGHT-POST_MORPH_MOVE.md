@@ -70,6 +70,10 @@ Global morph:
 
 - AVR sends `SEQ_CC, SEQ_SET_GLOBAL_MORPH, value`.
 - STM receives `FRONT_SEQ_SET_GLOBAL_MORPH` and updates all six per-voice morph amounts.
+- Session 005 added `SEQ_REPORT_GLOBAL_MORPH_LSB/MSB` and
+  `FRONT_SEQ_REPORT_GLOBAL_MORPH_LSB/MSB` for display-only menu sync when the
+  active normal/temp kit image changes. These opcodes do not alter STM morph
+  state and should not be routed back through the edit path.
 
 File load:
 
