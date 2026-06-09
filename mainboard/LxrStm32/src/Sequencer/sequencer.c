@@ -56,9 +56,6 @@
 #include "ParameterArray.h"
 #include "modulationNode.h"
 
-#define SEQ_VOICE_PARAM_LENGTH 37
-#define SEQ_VOICE_SOURCE_NORMAL 1
-#define SEQ_VOICE_SOURCE_TMP 3
 #define SEQ_PRESCALER_MASK 	0x03
 #define MIDI_PRESCALER_MASK	0x04
 #define SEQ_ENDPOINT_RESTORE_NONE 0
@@ -71,9 +68,6 @@
 #define SEQ_ENDPOINT_RESTORE_PHASE_SEND_MORPH 3
 #define SEQ_ENDPOINT_RESTORE_PHASE_WAIT_ACK 4
 #define SEQ_ENDPOINT_RESTORE_WAIT_TIMEOUT 30000
-#define SEQ_MORPH_IMAGE_NORMAL 0
-#define SEQ_MORPH_IMAGE_TMP 1
-#define SEQ_MORPH_IMAGE_COUNT 2
 
 static uint8_t seq_prescaleCounter = 0;
 
@@ -84,24 +78,6 @@ typedef struct SeqEndpointRestoreRequestStruct
    uint8_t voiceMask;
    uint8_t reportGlobalMorph;
 } SeqEndpointRestoreRequest;
-
-static const uint16_t seq_voiceParamMask[SEQ_SYNTH_VOICES][SEQ_VOICE_PARAM_LENGTH] =
-{
-   {1,8,9,20,      37,43,49,50,   62,70,74,78,  82,83,88,94,   102,108,115,121,     128,134,137,143,    149,155,161,167,    173,179,185,191,    197,203,209,215,221},
-   {2,10,11,21,    38,44,51,52,   63,71,75,79,  84,85,89,95,   103,109,116,122,     129,135,138,144,    150,156,162,168,    174,180,186,192,    198,204,210,216,222},
-   {3,12,13,22,    39,45,53,54,   64,72,76,80,  86,87,90,96,   104,110,117,123,     130,136,139,145,    151,157,163,169,    175,181,187,193,    199,205,211,217,223},
-   {4,14,15,27,28, 40,46,55,      56,65,68,73,  77,81,91,99,   105,111,118,124,     131,140,146,152,        158,164,170,    176,182,188,194,    200,206,212,218,224},
-   {6,16,17,23,    24,29,30,31,   32,41,47,57,  58,66,69,92,   100,106,112,119,125, 132,141,147,153,        159,165,171,    177,183,189,195,    201,207,213,219,225},
-   {7,18,19,25,    26,33,34,35,   36,42,48,59,  60,61,67,93,   101,107,113,120,126, 133,142,148,154,        160,166,172,    178,184,190,196,    202,208,214,220,226}
-};
-
-/* Voice masks are copied from the AVR/menu parameter numbers. Endpoint storage
-   uses the same raw parameter indices on AVR and STM. Ordinary live MIDI CC
-   keeps its historical +1 handling in the MIDI parser only. */
-static uint16_t seq_canonicalParamFromVoiceMask(uint16_t param)
-{
-   return param;
-}
 
 uint8_t seq_masterStepCnt=0;				/** keeps track of the played steps between 0 and 127 independent from the track counters*/
 uint8_t seq_rollRate = 8;				// start with roll rate = 1/16
@@ -222,10 +198,6 @@ PatternSet seq_patternSet;
 
 TempPattern seq_tmpPattern;
 
-SeqKitState seq_tmpKitState;
-SeqKitState seq_normalKitState; // -bc- full mirror for normal parameters
-
-static uint8_t seq_tmpKitActive = 0;
 static uint8_t seq_tmpKitPushParamsToFrontEnabled = 1; // RESTORE: Enabled by default now
 volatile uint8_t seq_tmpKitHandshakeReady = 0;
 volatile uint8_t seq_tmpKitHandshakeAck = 0;
@@ -250,13 +222,20 @@ static uint8_t seq_morphDrainPhase = 0;
 static uint8_t seq_liveMorphAppliedValue[SEQ_MORPH_IMAGE_COUNT][END_OF_SOUND_PARAMETERS];
 static uint8_t seq_liveMorphAppliedKnown[SEQ_MORPH_IMAGE_COUNT][END_OF_SOUND_PARAMETERS];
 
-static uint8_t seq_voiceSourceState[SEQ_SYNTH_VOICES];
 static uint8_t seq_tmpBoundaryPatternSwitchAck = 0;
 static uint8_t seq_liveSharedParams[END_OF_SOUND_PARAMETERS];
 static uint8_t seq_liveSharedParamsValid[END_OF_SOUND_PARAMETERS];
 
-static uint8_t seq_paramIngressTarget = SEQ_PARAM_INGRESS_CURRENT_IMAGE;
-static uint8_t seq_automationIngressTarget = SEQ_AUTOMATION_INGRESS_NONE;
+/* Keep the transitional live-apply cache in Sequencer while Preset owns the
+   ingress policy and raw parameter routing. */
+void seq_updateLiveSharedParameterCache(uint16_t param, uint8_t value)
+{
+   if(!seq_isVoiceParameter(param))
+   {
+      seq_liveSharedParams[param] = value;
+      seq_liveSharedParamsValid[param] = 1;
+   }
+}
 
 uint8_t seq_transpose_voiceAmount[7];
 uint8_t seq_transposeOnOff;
@@ -272,7 +251,6 @@ static void seq_sendRealtime(const uint8_t status);
 static void seq_sendProgChg(const uint8_t ptn);
 static void seq_eraseStepAndSubSteps(const uint8_t voice, const uint8_t mainStep);
 static void seq_nextStep();
-static uint8_t seq_getMorphImageForVoice(uint8_t synthVoice);
 static void seq_captureTmpKitState();
 static void seq_setTmpKitActive(uint8_t active);
 static void seq_pushKitEndpointsToFront(const SeqKitState *kit);
@@ -291,7 +269,6 @@ static void seq_applySingleParameterValue(uint16_t param, uint8_t value);
 static void seq_applyVoiceAutomationTargets(const SeqKitAutomationTargets *source,
                                             uint8_t synthVoice);
 static ModulationNode* seq_getLfoModNode(uint8_t voice);
-static uint8_t seq_voiceMaskForParameter(uint16_t param);
 static void seq_updateVoiceSourcesForPatternChange(const uint8_t *oldPatternForTrack,
                                                    uint8_t pushEndpointUpdates);
 static uint8_t seq_isNextStepSyncStep();
@@ -300,19 +277,6 @@ static uint8_t seq_intIsMainStepActive(uint8_t voice, uint8_t mainStepNr, uint8_
 static void seq_resetNote(Step *step);
 static void seq_setStepIndexToStart();
 
-//------------------------------------------------------------------------------
-static SeqKitState* seq_getCurrentImageKitState()
-{
-   return seq_tmpKitActive ? &seq_tmpKitState : &seq_normalKitState;
-}
-
-//------------------------------------------------------------------------------
-static SeqKitState* seq_getMorphKitForImage(uint8_t image)
-{
-   return (image == SEQ_MORPH_IMAGE_TMP) ? &seq_tmpKitState : &seq_normalKitState;
-}
-
-//------------------------------------------------------------------------------
 static void seq_syncVMorphAmountMirrorsFromLiveSources()
 {
    uint8_t synthVoice;
@@ -366,31 +330,6 @@ static uint8_t seq_morphImageVoiceIsLive(uint8_t image, uint8_t synthVoice)
    return seq_voiceSourceState[synthVoice] == sourceState;
 }
 
-//------------------------------------------------------------------------------
-static uint8_t seq_getMorphImageForVoice(uint8_t synthVoice)
-{
-   if(synthVoice < SEQ_SYNTH_VOICES
-      && seq_voiceSourceState[synthVoice] == SEQ_VOICE_SOURCE_TMP)
-      return SEQ_MORPH_IMAGE_TMP;
-
-   return SEQ_MORPH_IMAGE_NORMAL;
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_firstVoiceForMask(uint8_t voiceMask)
-{
-   uint8_t synthVoice;
-
-   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
-   {
-      if(voiceMask & (uint8_t)(1 << synthVoice))
-         return synthVoice;
-   }
-
-   return 0xff;
-}
-
-//------------------------------------------------------------------------------
 static void seq_invalidateLiveMorphApplyCache(uint8_t image)
 {
    if(image < SEQ_MORPH_IMAGE_COUNT)
@@ -447,269 +386,6 @@ static uint8_t seq_interpolateMorphValue(uint8_t a, uint8_t b, uint8_t x)
    return (uint8_t)((fixedPointValue & 0xff) < 0x7f ? result : result + 1);
 }
 
-/* Mirrors the AVR modTargets[].param selector map so STM morph can resolve
-   interpolated automation destination selector bytes without AVR compute help. */
-static const uint16_t seq_modTargetParams[] =
-{
-   PAR_NONE,
-   PAR_VOICE_DECIMATION_ALL,
-   PAR_COARSE1,
-   PAR_FINE1,
-   PAR_OSC_WAVE_DRUM1,
-   PAR_VELOA1,
-   PAR_VELOD1,
-   PAR_VOL_SLOPE1,
-   PAR_MOD_EG1,
-   PAR_PITCH_SLOPE1,
-   PAR_MODAMNT1,
-   PAR_VEL_DEST_1,
-   PAR_VELO_MOD_AMT_1,
-   PAR_VOLUME_MOD_ON_OFF1,
-   PAR_FMAMNT1,
-   PAR_FM_FREQ1,
-   PAR_MOD_WAVE_DRUM1,
-   PAR_MIX_MOD_1,
-   PAR_TRANS1_WAVE,
-   PAR_TRANS1_VOL,
-   PAR_TRANS1_FREQ,
-   PAR_FILTER_FREQ_1,
-   PAR_RESO_1,
-   PAR_FILTER_TYPE_1,
-   PAR_FILTER_DRIVE_1,
-   PAR_FREQ_LFO1,
-   PAR_SYNC_LFO1,
-   PAR_AMOUNT_LFO1,
-   PAR_WAVE_LFO1,
-   PAR_RETRIGGER_LFO1,
-   PAR_OFFSET_LFO1,
-   PAR_VOL1,
-   PAR_PAN1,
-   PAR_VOICE_DECIMATION1,
-   PAR_DRIVE1,
-   PAR_ENVELOPE_POSITION_1,
-   PAR_MORPH_DRUM1,
-   PAR_COARSE2,
-   PAR_FINE2,
-   PAR_OSC_WAVE_DRUM2,
-   PAR_VELOA2,
-   PAR_VELOD2,
-   PAR_VOL_SLOPE2,
-   PAR_MOD_EG2,
-   PAR_PITCH_SLOPE2,
-   PAR_MODAMNT2,
-   PAR_VEL_DEST_2,
-   PAR_VELO_MOD_AMT_2,
-   PAR_VOLUME_MOD_ON_OFF2,
-   PAR_FMAMNT2,
-   PAR_FM_FREQ2,
-   PAR_MOD_WAVE_DRUM2,
-   PAR_MIX_MOD_2,
-   PAR_TRANS2_WAVE,
-   PAR_TRANS2_VOL,
-   PAR_TRANS2_FREQ,
-   PAR_FILTER_FREQ_2,
-   PAR_RESO_2,
-   PAR_FILTER_TYPE_2,
-   PAR_FILTER_DRIVE_2,
-   PAR_FREQ_LFO2,
-   PAR_SYNC_LFO2,
-   PAR_AMOUNT_LFO2,
-   PAR_WAVE_LFO2,
-   PAR_RETRIGGER_LFO2,
-   PAR_OFFSET_LFO2,
-   PAR_VOL2,
-   PAR_PAN2,
-   PAR_VOICE_DECIMATION2,
-   PAR_DRIVE2,
-   PAR_ENVELOPE_POSITION_2,
-   PAR_MORPH_DRUM2,
-   PAR_COARSE3,
-   PAR_FINE3,
-   PAR_OSC_WAVE_DRUM3,
-   PAR_VELOA3,
-   PAR_VELOD3,
-   PAR_VOL_SLOPE3,
-   PAR_MOD_EG3,
-   PAR_PITCH_SLOPE3,
-   PAR_MODAMNT3,
-   PAR_VEL_DEST_3,
-   PAR_VELO_MOD_AMT_3,
-   PAR_VOLUME_MOD_ON_OFF3,
-   PAR_FMAMNT3,
-   PAR_FM_FREQ3,
-   PAR_MOD_WAVE_DRUM3,
-   PAR_MIX_MOD_3,
-   PAR_TRANS3_WAVE,
-   PAR_TRANS3_VOL,
-   PAR_TRANS3_FREQ,
-   PAR_FILTER_FREQ_3,
-   PAR_RESO_3,
-   PAR_FILTER_TYPE_3,
-   PAR_FILTER_DRIVE_3,
-   PAR_FREQ_LFO3,
-   PAR_SYNC_LFO3,
-   PAR_AMOUNT_LFO3,
-   PAR_WAVE_LFO3,
-   PAR_RETRIGGER_LFO3,
-   PAR_OFFSET_LFO3,
-   PAR_VOL3,
-   PAR_PAN3,
-   PAR_VOICE_DECIMATION3,
-   PAR_DRIVE3,
-   PAR_ENVELOPE_POSITION_3,
-   PAR_MORPH_DRUM3,
-   PAR_COARSE4,
-   PAR_FINE4,
-   PAR_NOISE_FREQ1,
-   PAR_MIX1,
-   PAR_OSC_WAVE_SNARE,
-   PAR_VELOA4,
-   PAR_VELOD4,
-   PAR_REPEAT4,
-   PAR_VOL_SLOPE4,
-   PAR_MOD_EG4,
-   PAR_PITCH_SLOPE4,
-   PAR_MODAMNT4,
-   PAR_VEL_DEST_4,
-   PAR_VELO_MOD_AMT_4,
-   PAR_VOLUME_MOD_ON_OFF4,
-   PAR_TRANS4_WAVE,
-   PAR_TRANS4_VOL,
-   PAR_TRANS4_FREQ,
-   PAR_FILTER_FREQ_4,
-   PAR_RESO_4,
-   PAR_FILTER_TYPE_4,
-   PAR_FILTER_DRIVE_4,
-   PAR_FREQ_LFO4,
-   PAR_SYNC_LFO4,
-   PAR_AMOUNT_LFO4,
-   PAR_WAVE_LFO4,
-   PAR_RETRIGGER_LFO4,
-   PAR_OFFSET_LFO4,
-   PAR_VOL4,
-   PAR_PAN4,
-   PAR_VOICE_DECIMATION4,
-   PAR_SNARE_DISTORTION,
-   PAR_ENVELOPE_POSITION_4,
-   PAR_MORPH_SNARE,
-   PAR_COARSE5,
-   PAR_FINE5,
-   PAR_WAVE1_CYM,
-   PAR_VELOA5,
-   PAR_VELOD5,
-   PAR_REPEAT5,
-   PAR_VOL_SLOPE5,
-   PAR_VEL_DEST_5,
-   PAR_VELO_MOD_AMT_5,
-   PAR_VOLUME_MOD_ON_OFF5,
-   PAR_MOD_OSC_F1_CYM,
-   PAR_MOD_OSC_F2_CYM,
-   PAR_MOD_OSC_GAIN1_CYM,
-   PAR_MOD_OSC_GAIN2_CYM,
-   PAR_WAVE2_CYM,
-   PAR_WAVE3_CYM,
-   PAR_TRANS5_WAVE,
-   PAR_TRANS5_VOL,
-   PAR_TRANS5_FREQ,
-   PAR_FILTER_FREQ_5,
-   PAR_RESO_5,
-   PAR_FILTER_TYPE_5,
-   PAR_FILTER_DRIVE_5,
-   PAR_FREQ_LFO5,
-   PAR_SYNC_LFO5,
-   PAR_AMOUNT_LFO5,
-   PAR_WAVE_LFO5,
-   PAR_RETRIGGER_LFO5,
-   PAR_OFFSET_LFO5,
-   PAR_VOL5,
-   PAR_PAN5,
-   PAR_VOICE_DECIMATION5,
-   PAR_CYMBAL_DISTORTION,
-   PAR_ENVELOPE_POSITION_5,
-   PAR_MORPH_CYM,
-   PAR_COARSE6,
-   PAR_FINE6,
-   PAR_WAVE1_HH,
-   PAR_VELOA6,
-   PAR_VELOD6_CLOSED,
-   PAR_VELOD6_OPEN,
-   PAR_VOL_SLOPE6,
-   PAR_VEL_DEST_6,
-   PAR_VELO_MOD_AMT_6,
-   PAR_VOLUME_MOD_ON_OFF6,
-   PAR_MOD_OSC_F1,
-   PAR_MOD_OSC_F2,
-   PAR_MOD_OSC_GAIN1,
-   PAR_MOD_OSC_GAIN2,
-   PAR_WAVE2_HH,
-   PAR_WAVE3_HH,
-   PAR_TRANS6_WAVE,
-   PAR_TRANS6_VOL,
-   PAR_TRANS6_FREQ,
-   PAR_FILTER_FREQ_6,
-   PAR_RESO_6,
-   PAR_FILTER_TYPE_6,
-   PAR_FILTER_DRIVE_6,
-   PAR_FREQ_LFO6,
-   PAR_SYNC_LFO6,
-   PAR_AMOUNT_LFO6,
-   PAR_WAVE_LFO6,
-   PAR_RETRIGGER_LFO6,
-   PAR_OFFSET_LFO6,
-   PAR_VOL6,
-   PAR_PAN6,
-   PAR_VOICE_DECIMATION6,
-   PAR_HAT_DISTORTION,
-   PAR_ENVELOPE_POSITION_6,
-   PAR_MORPH_HIHAT,
-};
-
-//------------------------------------------------------------------------------
-static uint16_t seq_resolveAutomationTargetSelector(uint8_t selector)
-{
-   if(selector >= (sizeof(seq_modTargetParams) / sizeof(seq_modTargetParams[0])))
-      return PAR_NONE;
-
-   return seq_modTargetParams[selector];
-}
-
-//------------------------------------------------------------------------------
-/* Inverse of the AVR/STM modTargets selector map. Sideband target messages carry
-   resolved destinations, but endpoint/menu storage must keep raw selectors. */
-static uint8_t seq_selectorForAutomationTargetDestination(uint16_t destination)
-{
-   uint16_t selector;
-
-   for(selector=0;
-       selector<(sizeof(seq_modTargetParams) / sizeof(seq_modTargetParams[0]));
-       selector++)
-   {
-      if(seq_modTargetParams[selector] == destination)
-         return (uint8_t)selector;
-   }
-
-   return 0;
-}
-
-//------------------------------------------------------------------------------
-/* For voice-specific destinations, recover the 1-based target voice selector
-   stored beside PAR_TARGET_LFOx in endpoint/menu arrays. */
-static uint8_t seq_voiceSelectorForAutomationTargetDestination(uint16_t destination,
-                                                               uint8_t fallback)
-{
-   uint8_t voiceMask = seq_voiceMaskForParameter(destination);
-   uint8_t synthVoice = seq_firstVoiceForMask(voiceMask);
-
-   if(synthVoice < SEQ_SYNTH_VOICES)
-      return (uint8_t)(synthVoice + 1);
-
-   if(fallback >= 1 && fallback <= SEQ_SYNTH_VOICES)
-      return fallback;
-
-   return 1;
-}
-
-//------------------------------------------------------------------------------
 static uint8_t seq_synthVoiceFromTriggerVoice(uint8_t voiceNr)
 {
    if(voiceNr >= 5)
@@ -718,98 +394,6 @@ static uint8_t seq_synthVoiceFromTriggerVoice(uint8_t voiceNr)
    return voiceNr;
 }
 
-//------------------------------------------------------------------------------
-static uint8_t seq_isAutomationTargetSelectorParam(uint16_t param)
-{
-   return (param >= PAR_VEL_DEST_1 && param <= PAR_VEL_DEST_6)
-       || (param >= PAR_VOICE_LFO1 && param <= PAR_VOICE_LFO6)
-       || (param >= PAR_TARGET_LFO1 && param <= PAR_TARGET_LFO6);
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_isMorphAmountParam(uint16_t param)
-{
-   return param >= PAR_MORPH_DRUM1 && param <= PAR_MORPH_HIHAT;
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_morphVoiceForParam(uint16_t param)
-{
-   if(param >= PAR_MORPH_DRUM1 && param <= PAR_MORPH_HIHAT)
-      return (uint8_t)(param - PAR_MORPH_DRUM1);
-
-   return 0xff;
-}
-
-//------------------------------------------------------------------------------
-static void seq_updateInterpolatedAutomationTarget(SeqKitState *kit,
-                                                   uint16_t param,
-                                                   uint8_t selector)
-{
-   uint8_t synthVoice;
-
-   if(!kit)
-      return;
-
-   if(param >= PAR_VEL_DEST_1 && param <= PAR_VEL_DEST_6)
-   {
-      synthVoice = (uint8_t)(param - PAR_VEL_DEST_1);
-      kit->interpolatedAutomationTargets.velocityDestination[synthVoice] =
-         seq_resolveAutomationTargetSelector(selector);
-      kit->interpolatedAutomationTargets.velocityDestinationValid |=
-         (uint8_t)(1 << synthVoice);
-   }
-   else if(param >= PAR_TARGET_LFO1 && param <= PAR_TARGET_LFO6)
-   {
-      synthVoice = (uint8_t)(param - PAR_TARGET_LFO1);
-      kit->interpolatedAutomationTargets.lfoDestination[synthVoice] =
-         seq_resolveAutomationTargetSelector(selector);
-      kit->interpolatedAutomationTargets.lfoDestinationValid |=
-         (uint8_t)(1 << synthVoice);
-   }
-}
-
-//------------------------------------------------------------------------------
-static void seq_updateFrontAndInterpolatedAutomationTargets(SeqKitState *kit,
-                                                            uint16_t param,
-                                                            uint8_t selector)
-{
-   if(!kit)
-      return;
-
-   seq_updateInterpolatedAutomationTarget(kit, param, selector);
-
-   if(param >= PAR_VEL_DEST_1 && param <= PAR_VEL_DEST_6)
-   {
-      uint8_t synthVoice = (uint8_t)(param - PAR_VEL_DEST_1);
-      uint16_t destination = seq_resolveAutomationTargetSelector(selector);
-
-      kit->frontPanelAutomationTargets.velocityDestination[synthVoice] =
-         destination;
-      kit->frontPanelAutomationTargets.velocityDestinationValid |=
-         (uint8_t)(1 << synthVoice);
-      kit->interpolatedAutomationTargets.velocityDestination[synthVoice] =
-         destination;
-      kit->interpolatedAutomationTargets.velocityDestinationValid |=
-         (uint8_t)(1 << synthVoice);
-   }
-   else if(param >= PAR_TARGET_LFO1 && param <= PAR_TARGET_LFO6)
-   {
-      uint8_t synthVoice = (uint8_t)(param - PAR_TARGET_LFO1);
-      uint16_t destination = seq_resolveAutomationTargetSelector(selector);
-
-      kit->frontPanelAutomationTargets.lfoDestination[synthVoice] =
-         destination;
-      kit->frontPanelAutomationTargets.lfoDestinationValid |=
-         (uint8_t)(1 << synthVoice);
-      kit->interpolatedAutomationTargets.lfoDestination[synthVoice] =
-         destination;
-      kit->interpolatedAutomationTargets.lfoDestinationValid |=
-         (uint8_t)(1 << synthVoice);
-   }
-}
-
-//------------------------------------------------------------------------------
 static void seq_applyLiveAutomationTargetSelector(uint8_t image,
                                                   uint16_t param,
                                                   uint8_t selector)
@@ -1235,85 +819,6 @@ void seq_serviceMorphInterpolation()
    seq_advanceMorphDrainPhase();
 }
 
-static uint8_t seq_isVoiceParameter(uint16_t param)
-{
-   uint8_t voice;
-   uint8_t i;
-
-   for(voice=0;voice<SEQ_SYNTH_VOICES;voice++)
-   {
-      for(i=0;i<SEQ_VOICE_PARAM_LENGTH;i++)
-      {
-         if(seq_canonicalParamFromVoiceMask(seq_voiceParamMask[voice][i]) == param)
-            return 1;
-      }
-   }
-
-   return 0;
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_voiceMaskForParameter(uint16_t param)
-{
-   uint8_t voice;
-   uint8_t i;
-   uint8_t voiceMask = 0;
-
-   for(voice=0;voice<SEQ_SYNTH_VOICES;voice++)
-   {
-      for(i=0;i<SEQ_VOICE_PARAM_LENGTH;i++)
-      {
-         if(seq_canonicalParamFromVoiceMask(seq_voiceParamMask[voice][i]) == param)
-            voiceMask |= (uint8_t)(1 << voice);
-      }
-   }
-
-   return voiceMask;
-}
-
-//------------------------------------------------------------------------------
-void seq_storeMorphParameterIngress(uint16_t param, uint8_t value)
-{
-   SeqKitState *kit;
-   uint8_t voiceMask;
-
-   if(param >= END_OF_SOUND_PARAMETERS)
-      return;
-
-   /* Morph endpoint ingress stores raw endpoint bytes only. It does not compute
-      or apply live morph, and it does not touch interpolatedParams[]. */
-   voiceMask = seq_voiceMaskForParameter(param);
-
-   if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_CURRENT_IMAGE && voiceMask)
-   {
-      uint8_t synthVoice;
-      uint8_t useTmp = 0;
-
-      for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
-      {
-         if((voiceMask & (uint8_t)(1 << synthVoice))
-            && seq_voiceSourceState[synthVoice] == SEQ_VOICE_SOURCE_TMP)
-         {
-            useTmp = 1;
-            break;
-         }
-      }
-
-      kit = useTmp ? &seq_tmpKitState : &seq_normalKitState;
-   }
-   else if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_CURRENT_IMAGE && seq_tmpKitActive)
-   {
-      kit = &seq_tmpKitState;
-   }
-   else
-   {
-      kit = &seq_normalKitState;
-   }
-
-   kit->morphParams[param] = value;
-}
-
-//------------------------------------------------------------------------------
 static uint8_t seq_trackPatternUsesTmp(uint8_t pattern)
 {
    return seq_normalizePatternNumber(pattern) == SEQ_TMP_PATTERN;
@@ -1336,257 +841,9 @@ static uint8_t seq_synthVoiceUsesTmpFromTrackPatterns(const uint8_t *patternForT
 }
 
 //------------------------------------------------------------------------------
-static SeqKitAutomationTargets* seq_getIngressAutomationTarget()
-{
-   SeqKitState *kit = seq_getCurrentImageKitState();
-
-   if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
-   {
-      kit = &seq_normalKitState;
-
-      /* RESTORE: During copy-to-temp, raw endpoint params are bracketed by
-         SEQ_TMP_KIT_ENDPOINT_BEGIN/END. Resolved automation target messages need
-         this additional phase selector so front endpoint assignments and morph
-         automation target endpoints cannot collapse into one storage image. */
-      if(seq_automationIngressTarget == SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT)
-         return &kit->frontPanelAutomationTargets;
-      if(seq_automationIngressTarget == SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT)
-         return &kit->morphParameterEndpointAutomationTargets;
-
-      return 0;
-   }
-
-   return &kit->frontPanelAutomationTargets;
-}
-
-//------------------------------------------------------------------------------
-static SeqKitAutomationTargets* seq_getIngressInterpolatedAutomationTarget()
-{
-   if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
-   {
-      if(seq_automationIngressTarget == SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT)
-         return &seq_normalKitState.interpolatedAutomationTargets;
-
-      return 0;
-   }
-
-   return &seq_getCurrentImageKitState()->interpolatedAutomationTargets;
-}
-
-//------------------------------------------------------------------------------
-void seq_setIngressTarget(uint8_t target)
-{
-   if(target <= SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
-   {
-      seq_paramIngressTarget = target;
-      if(target == SEQ_PARAM_INGRESS_CURRENT_IMAGE)
-         seq_automationIngressTarget = SEQ_AUTOMATION_INGRESS_NONE;
-   }
-}
-
-//------------------------------------------------------------------------------
-uint8_t seq_getIngressTarget()
-{
-   return (uint8_t)seq_paramIngressTarget;
-}
-
-//------------------------------------------------------------------------------
-uint8_t seq_shouldApplyIngressToLive()
-{
-   if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_CURRENT_IMAGE)
-      return 1;
-
-   return 0;
-}
-
-//------------------------------------------------------------------------------
 uint8_t seq_isTmpKitActive()
 {
    return seq_tmpKitActive;
-}
-
-//------------------------------------------------------------------------------
-void seq_setAutomationIngressTarget(uint8_t target)
-{
-   if(target <= SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT)
-      seq_automationIngressTarget = target;
-}
-
-//------------------------------------------------------------------------------
-void seq_storeParameterIngress(uint16_t param, uint8_t value)
-{
-   if(param >= END_OF_SOUND_PARAMETERS)
-      return;
-
-   /* Current-image ingress is a live/menu edit. Normal-kit-endpoint ingress is
-      file/front endpoint restore and must only overwrite normal endpoint state;
-      the morph worker will rebuild interpolatedParams[] in the background. */
-   if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_CURRENT_IMAGE)
-   {
-      SeqKitState *kit = &seq_normalKitState;
-      uint8_t voiceMask = seq_voiceMaskForParameter(param);
-
-      if(voiceMask)
-      {
-         uint8_t synthVoice;
-         uint8_t useTmp = 0;
-
-         for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
-         {
-            if((voiceMask & (uint8_t)(1 << synthVoice))
-               && seq_voiceSourceState[synthVoice] == SEQ_VOICE_SOURCE_TMP)
-            {
-               useTmp = 1;
-               break;
-            }
-         }
-
-         kit = useTmp ? &seq_tmpKitState : &seq_normalKitState;
-      }
-      else if(seq_tmpKitActive)
-      {
-         kit = &seq_tmpKitState;
-      }
-
-      kit->frontPanelParams[param] = value;
-
-      if(!seq_isVoiceParameter(param))
-      {
-         seq_liveSharedParams[param] = value;
-         seq_liveSharedParamsValid[param] = 1;
-      }
-
-      return;
-   }
-
-   seq_normalKitState.frontPanelParams[param] = value;
-   seq_updateFrontAndInterpolatedAutomationTargets(&seq_normalKitState,
-                                                   param,
-                                                   value);
-
-   if(seq_shouldApplyIngressToLive() && !seq_isVoiceParameter(param))
-   {
-      seq_liveSharedParams[param] = value;
-      seq_liveSharedParamsValid[param] = 1;
-   }
-}
-
-//------------------------------------------------------------------------------
-void seq_storeLfoDestinationIngress(uint8_t voice, uint16_t destination)
-{
-   SeqKitAutomationTargets *target = seq_getIngressAutomationTarget();
-   SeqKitAutomationTargets *interpolatedTarget =
-      seq_getIngressInterpolatedAutomationTarget();
-   SeqKitState *kit = 0;
-   uint16_t voiceParam;
-   uint16_t targetParam;
-   uint8_t selector;
-   uint8_t voiceSelector;
-
-   if(!target || voice >= 6)
-      return;
-
-   voiceParam = (uint16_t)(PAR_VOICE_LFO1 + voice);
-   targetParam = (uint16_t)(PAR_TARGET_LFO1 + voice);
-   selector = seq_selectorForAutomationTargetDestination(destination);
-
-   if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_CURRENT_IMAGE)
-   {
-      kit = (seq_voiceSourceState[voice] == SEQ_VOICE_SOURCE_TMP)
-          ? &seq_tmpKitState
-          : &seq_normalKitState;
-
-      target = &kit->frontPanelAutomationTargets;
-      interpolatedTarget = &kit->interpolatedAutomationTargets;
-   }
-   else if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
-   {
-      kit = &seq_normalKitState;
-   }
-
-   if(seq_paramIngressTarget == SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT
-      && seq_automationIngressTarget == SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT)
-   {
-      voiceSelector =
-         seq_voiceSelectorForAutomationTargetDestination(
-            destination,
-            kit ? kit->morphParams[voiceParam] : 0);
-
-      if(kit)
-      {
-         kit->morphParams[voiceParam] = voiceSelector;
-         kit->morphParams[targetParam] = selector;
-      }
-   }
-   else
-   {
-      voiceSelector =
-         seq_voiceSelectorForAutomationTargetDestination(
-            destination,
-            kit ? kit->frontPanelParams[voiceParam] : 0);
-
-      if(kit)
-      {
-         kit->frontPanelParams[voiceParam] = voiceSelector;
-         kit->frontPanelParams[targetParam] = selector;
-
-         if(interpolatedTarget)
-         {
-            kit->interpolatedParams[voiceParam] = voiceSelector;
-            kit->interpolatedParams[targetParam] = selector;
-         }
-      }
-   }
-
-   target->lfoDestination[voice] = destination;
-   target->lfoDestinationValid |= (uint8_t)(1 << voice);
-
-   if(interpolatedTarget && interpolatedTarget != target)
-   {
-      interpolatedTarget->lfoDestination[voice] = destination;
-      interpolatedTarget->lfoDestinationValid |= (uint8_t)(1 << voice);
-   }
-}
-
-//------------------------------------------------------------------------------
-void seq_storeVelocityDestinationIngress(uint8_t voice, uint16_t destination)
-{
-   SeqKitAutomationTargets *target = seq_getIngressAutomationTarget();
-   SeqKitAutomationTargets *interpolatedTarget =
-      seq_getIngressInterpolatedAutomationTarget();
-
-   if(!target || voice >= 6)
-      return;
-
-   target->velocityDestination[voice] = destination;
-   target->velocityDestinationValid |= (uint8_t)(1 << voice);
-
-   if(interpolatedTarget && interpolatedTarget != target)
-   {
-      interpolatedTarget->velocityDestination[voice] = destination;
-      interpolatedTarget->velocityDestinationValid |= (uint8_t)(1 << voice);
-   }
-}
-
-//------------------------------------------------------------------------------
-void seq_storeMacroDestinationIngress(uint8_t destinationNr, uint16_t destination)
-{
-   SeqKitAutomationTargets *target = seq_getIngressAutomationTarget();
-   SeqKitAutomationTargets *interpolatedTarget =
-      seq_getIngressInterpolatedAutomationTarget();
-
-   if(!target || destinationNr >= 4)
-      return;
-
-   target->macroDestination[destinationNr] = destination;
-   target->macroDestinationValid |= (uint8_t)(1 << destinationNr);
-
-   if(interpolatedTarget && interpolatedTarget != target)
-   {
-      interpolatedTarget->macroDestination[destinationNr] = destination;
-      interpolatedTarget->macroDestinationValid |=
-         (uint8_t)(1 << destinationNr);
-   }
 }
 
 //------------------------------------------------------------------------------
@@ -2465,8 +1722,7 @@ void seq_init()
    {
       seq_voiceSourceState[i] = SEQ_VOICE_SOURCE_NORMAL;
    }
-   seq_paramIngressTarget = SEQ_PARAM_INGRESS_CURRENT_IMAGE;
-   seq_automationIngressTarget = SEQ_AUTOMATION_INGRESS_NONE;
+   preset_setIngressTarget(PRESET_PARAM_INGRESS_CURRENT_IMAGE);
    seq_tmpKitActive = 0;
    seq_tmpKitPushParamsToFrontEnabled = 1;
    midi_clearCache();

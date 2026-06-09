@@ -40,6 +40,7 @@
 #include "MidiParser.h"
 #include "ParameterArray.h"
 #include "sequencer.h"
+#include "Preset/ParameterIngress.h"
 #include "Uart.h"
 #include "SD_Manager.h"
 #include "EuklidGenerator.h"
@@ -265,16 +266,16 @@ static void frontParser_beginFileLoadIngress(uint8_t bracketed)
    frontParser_fileLoadIngressActive = 1;
    if(bracketed)
       frontParser_fileLoadBracketActive = 1;
-   seq_setIngressTarget(SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT);
-   seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
+   preset_setIngressTarget(SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT);
+   preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
 }
 
 static void frontParser_endFileLoadIngress()
 {
    frontParser_fileLoadIngressActive = 0;
    frontParser_fileLoadBracketActive = 0;
-   seq_setIngressTarget(SEQ_PARAM_INGRESS_CURRENT_IMAGE);
-   seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
+   preset_setIngressTarget(SEQ_PARAM_INGRESS_CURRENT_IMAGE);
+   preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
 }
 
 static void frontParser_resetPrfPendingCounters()
@@ -1507,7 +1508,7 @@ static void frontParser_handleMidiMessage()
 
             /* PRF_RESTORE_PARAM_* carries raw kit/front endpoint bytes. These
                are not live low MIDI CC numbers, so do not apply the +1 offset. */
-            seq_storeParameterIngress(paramNr, frontParser_midiMsg.data2);
+            preset_storeParameterIngress(paramNr, frontParser_midiMsg.data2);
          }
          break;
 
@@ -1521,12 +1522,12 @@ static void frontParser_handleMidiMessage()
             /* RESTORE: Store morph parameter endpoint bytes into the endpoint image
                selected by the current transfer context. These raw selector bytes are
                distinct from the resolved automation target sideband messages. */
-            uint8_t currentTarget = seq_getIngressTarget();
+            uint8_t currentTarget = preset_getIngressTarget();
             if(paramNr < END_OF_SOUND_PARAMETERS)
             {
                if(currentTarget == SEQ_PARAM_INGRESS_CURRENT_IMAGE)
                {
-                  seq_storeMorphParameterIngress(paramNr, frontParser_midiMsg.data2);
+                  preset_storeMorphParameterIngress(paramNr, frontParser_midiMsg.data2);
                }
                else
                {
@@ -1538,7 +1539,7 @@ static void frontParser_handleMidiMessage()
 
       case FRONT_CC_MACRO_TARGET: //frontParser_midiMsg.status
          {
-            uint8_t applyLive = seq_shouldApplyIngressToLive();
+            uint8_t applyLive = preset_shouldApplyIngressToLive();
          
             /* MACRO_CC message structure
             byte1 - status byte 0xaa as above
@@ -1579,7 +1580,7 @@ static void frontParser_handleMidiMessage()
                // macro destination message
                uint16_t value = (uint16_t)( ( (upper&0x03)<<8) | lower);
                uint8_t whichModDest = (uint8_t)( 0x07&(upper>>2) ); // whichModDest 0,1,2,3 mac1d1,mac1d2,mac2d1,mac2d2
-               seq_storeMacroDestinationIngress(whichModDest, value);
+               preset_storeMacroDestinationIngress(whichModDest, value);
                if(applyLive)
                {
                   modNode_setDestination(&macroModulators[whichModDest], value);
@@ -1631,13 +1632,13 @@ static void frontParser_handleMidiMessage()
             // message is for loading voice, or if all voices loading, always hold message
             if(seq_voicesLoading)
             {
-               seq_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
+               preset_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
             }
             else
             {
-               if(seq_shouldApplyIngressToLive())
+               if(preset_shouldApplyIngressToLive())
                {
-                  seq_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
+                  preset_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
                   midiParser_ccHandler(liveMsg,0);
 
                //record automation if record is turned on
@@ -1647,7 +1648,7 @@ static void frontParser_handleMidiMessage()
                {
                   /* FILE LOAD: Store normal-image params without changing the
                      temporary sound when the temporary pattern is active. */
-                  seq_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
+                  preset_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
                }
             }
          }
@@ -1660,11 +1661,11 @@ static void frontParser_handleMidiMessage()
             // message is for loading voice, or if all voices loading, always hold message
             if(seq_voicesLoading)
             {
-               seq_storeParameterIngress(frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
+               preset_storeParameterIngress(frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
             }
             else
             {
-               if(seq_shouldApplyIngressToLive())
+               if(preset_shouldApplyIngressToLive())
                {
                   midiParser_ccHandler(frontParser_midiMsg,1);
                   //record automation if record is turned on
@@ -1674,7 +1675,7 @@ static void frontParser_handleMidiMessage()
                {
                   /* FILE LOAD: Store normal-image params without changing the
                      temporary sound when the temporary pattern is active. */
-                  seq_storeParameterIngress(frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
+                  preset_storeParameterIngress(frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
                }
             }
          }
@@ -1685,13 +1686,13 @@ static void frontParser_handleMidiMessage()
          {
             uint8_t upper = frontParser_midiMsg.data1;
             uint8_t lower = frontParser_midiMsg.data2;
-            uint8_t applyLive = seq_shouldApplyIngressToLive();
+            uint8_t applyLive = preset_shouldApplyIngressToLive();
          // --AS **PATROT note that the only valid values for the following are listed in
          // the modTargets array in the AVR code
             uint8_t value = ((upper&0x01)<<7) | lower;
          
             uint8_t lfoNr = (upper&0xfe)>>1;
-            seq_storeLfoDestinationIngress(lfoNr, value);
+            preset_storeLfoDestinationIngress(lfoNr, value);
             
             if(!applyLive)
             {
@@ -1824,12 +1825,12 @@ static void frontParser_handleMidiMessage()
          {
             uint8_t upper = frontParser_midiMsg.data1;
             uint8_t lower = frontParser_midiMsg.data2;
-            uint8_t applyLive = seq_shouldApplyIngressToLive();
+            uint8_t applyLive = preset_shouldApplyIngressToLive();
          // --AS **PATROT note that the only valid values for the following are listed in
          // the modTargets array in the AVR code
             uint8_t value = ((upper&0x01)<<7) | lower;
             uint8_t velModNr = (upper&0xfe)>>1;
-            seq_storeVelocityDestinationIngress(velModNr, value);
+            preset_storeVelocityDestinationIngress(velModNr, value);
             if(!applyLive)
             {
                /* RESTORE: Endpoint-copy automation target sidebands are stored only.
@@ -2065,8 +2066,8 @@ static void frontParser_handleSeqCC()
             The data byte selects which endpoint group is being refreshed, so file
             loads can update only the kit/front endpoint or only the morph parameter
             endpoint without clearing the other side. */
-         seq_setIngressTarget(SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT);
-         seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
+         preset_setIngressTarget(SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT);
+         preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
 
          if(endpointMode != FRONT_SEQ_TMP_KIT_ENDPOINT_MORPH_ONLY)
          {
@@ -2092,11 +2093,11 @@ static void frontParser_handleSeqCC()
             sidebands need this explicit phase marker so the STM stores them with
             the matching endpoint image and does not apply them to live audio. */
          if(frontParser_midiMsg.data2 == FRONT_SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT)
-            seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT);
+            preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT);
          else if(frontParser_midiMsg.data2 == FRONT_SEQ_TMP_KIT_AUTOMATION_MORPH_ENDPOINT)
-            seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT);
+            preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT);
          else
-            seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
+            preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
          break;
 
       case FRONT_SEQ_TMP_KIT_ENDPOINT_END:
@@ -2104,10 +2105,10 @@ static void frontParser_handleSeqCC()
 
          /* RESTORE: Switch ingress target back to the surrounding context. During
             file load, endpoint dumps are nested inside normal kit-endpoint ingress. */
-         seq_setIngressTarget(frontParser_fileLoadIngressActive
-                              ? SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT
-                              : SEQ_PARAM_INGRESS_CURRENT_IMAGE);
-         seq_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
+         preset_setIngressTarget(frontParser_fileLoadIngressActive
+                                ? SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT
+                                : SEQ_PARAM_INGRESS_CURRENT_IMAGE);
+         preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
          break;
 
       case FRONT_SEQ_SET_GLOBAL_MORPH:

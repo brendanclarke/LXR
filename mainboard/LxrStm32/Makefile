@@ -67,6 +67,7 @@ vpath %.c ./src/Hardware/SD_FAT
 vpath %.c ./src/Hardware/USB
 vpath %.c ./src/MIDI
 vpath %.c ./src/SampleRom
+vpath %.c ./src/Preset
 vpath %.c ./src/Sequencer 
 
 ###############################################################################
@@ -97,6 +98,7 @@ INCLUDES += -I"./src/Hardware"
 INCLUDES += -I"./src/Hardware/SD_FAT"
 INCLUDES += -I"./src/Hardware/USB"
 INCLUDES += -I"./src/MIDI"
+INCLUDES += -I"./src/Preset"
 INCLUDES += -I"./src/Sequencer" 
 
 ARCHFLAGS = -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16

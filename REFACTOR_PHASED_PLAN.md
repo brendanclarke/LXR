@@ -1,7 +1,7 @@
 # REFACTOR_PHASED_PLAN
 
 Date: 2026-06-09
-Status: draft for Session 006 handoff
+Status: Phase 1 in progress for Session 007
 
 ## Purpose
 
@@ -229,11 +229,96 @@ Deliverables:
 - fold passive-vs-actionful apply policy into `ParameterIngress` unless the
   refactor proves a separate `PassiveApply` helper is still needed
 
+Session 007 implementation result:
+
+- Added the new `mainboard/LxrStm32/src/Preset/` folder and the three Phase 1
+  modules listed above.
+- Kept `Sequencer` as a compatibility façade while the public `preset_*` API
+  is brought online, so the tree can still compile without a wide rename blast.
+- Updated `MidiParser.c` and `frontPanelParser.c` to include
+  `Preset/ParameterIngress.h` directly and call the new ingress entry points.
+- Preserved the transitional live-apply cache inside `Sequencer` via the new
+  `seq_updateLiveSharedParameterCache()` bridge so the ingress split does not
+  change runtime behavior yet.
+- Expanded the comment blocks across the new `Preset` headers and sources, and
+  on the new compatibility wrappers in `sequencer.h`, so every public function
+  and module-level table now explains ownership, internal state, and intent.
+- Verified the STM32 firmware build with `make stm32 -j4`.
+
+Implementation notes:
+
+- `KitState.*` becomes the canonical home for `SeqKitAutomationTargets`,
+  `SeqKitState`, `seq_normalKitState`, `seq_tmpKitState`, and the active-image
+  selection helpers that decide which sound-state image is being read or
+  written.
+- `ParameterMap.*` absorbs the pure parameter classification and
+  selector-resolution helpers currently embedded in `sequencer.c`, including
+  the voice-mask lookup, voice-parameter detection, automation-target selector
+  predicates, morph-parameter predicates, and the helper that resolves raw
+  selector bytes into destination IDs.
+- `ParameterIngress.*` owns the ingress mode state
+  (`SEQ_PARAM_INGRESS_*` and `SEQ_AUTOMATION_INGRESS_*`), the live/current-
+  image vs normal-kit-endpoint switch, and the raw store functions that route
+  endpoint bytes into the correct kit image.
+- The private helper functions that update front-panel and interpolated
+  automation target images should move with the ingress code so the parser and
+  protocol layer no longer need to know how `SeqKitState` is laid out.
+- `sequencer.h` should stay as a compatibility façade for this phase, but only
+  long enough to re-export the new `Preset` API and keep existing includes
+  compiling while the call graph is moved over.
+- `mainboard/LxrStm32/Makefile` will need the new `src/Preset` vpath/include
+  wiring so the first pass can compile the relocated sources without renaming
+  the entire build graph at once.
+- Do not move morph interpolation, live-apply cache ownership, endpoint
+  restore, temp switching, pattern data, or UART/parser code yet; Phase 1 is
+  only about carving out the sound-state boundary and ingress policy without
+  changing runtime behavior.
+- Preserve the current raw endpoint-index semantics. Ordinary MIDI CC `+1`
+  conversion stays in the MIDI parser only, while endpoint storage and PRF
+  restore traffic continue to use raw AVR/menu parameter indices.
+- Keep the always-defined zero-init sound-state model intact. No per-parameter
+  validity arrays should come back into `SeqKitState`; transport/session errors
+  remain outside the preset model.
+- Add file-level and function-level comments to the new modules so every
+  exported function explains both ownership and side effects. The first pass
+  should prioritize readability and future wrapper removal over aggressive API
+  churn.
+- The first implementation pass should be narrow enough that a successful
+  build proves only the ownership split, not any behavioral change.
+
 Exit criteria:
 
 - The repo still builds.
 - The old `sequencer.h` include path can remain as a façade, but the actual
   ownership of `SeqKitState` is now in `Preset`.
+- Existing callers can still compile without immediately knowing the new
+  folder layout.
+
+Phase 1 verification targets:
+
+- `seq_storeParameterIngress()` still routes raw endpoint bytes to the same
+  image it did before the move.
+- `seq_storeMorphParameterIngress()` still records morph endpoint bytes without
+  triggering live interpolation.
+- `seq_storeLfoDestinationIngress()`, `seq_storeVelocityDestinationIngress()`,
+  and `seq_storeMacroDestinationIngress()` still keep raw selector bytes and
+  resolved destination images coherent.
+- `seq_setIngressTarget()` and `seq_getIngressTarget()` continue to gate
+  live-vs-restore behavior exactly as before.
+- The STM32 build picks up the new files through the updated makefile
+  include/vpath wiring.
+
+Phase 1 follow-up decisions from Session 007:
+
+- Use `Preset/*.h` includes as soon as a file actually needs the new module.
+  That keeps the new ownership boundaries visible in the files we are testing.
+- Finalize the `preset_*` public names alongside compatibility wrappers.
+  `sequencer.h` remains the façade for old callers, but the new names are now
+  the primary API for the migrated call sites.
+- Every new or moved function, extern, and key module-level table must carry a
+  preceding block comment that explains what it owns, which internal state it
+  touches, and why the abstraction exists. This is now part of the refactor
+  acceptance criteria for later phases too.
 
 ### Phase 2: Move Morph And Live-Apply Ownership
 

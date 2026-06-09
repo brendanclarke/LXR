@@ -41,17 +41,19 @@
 
 #include "stm32f4xx.h"
 #include "globals.h"
+#include "Preset/KitState.h"
+#include "Preset/ParameterMap.h"
+#include "Preset/ParameterIngress.h"
 #include "EuklidGenerator.h"
 
  /**<
   * we have 6 voices
   * 3 drums
   * 1 snare/claps
-  * 1 cymbal/snare
-  * 1 hiHat
-  * track 7 is the open hh... it triggers the highhat voice but with longer decay. it chokes the closed hihat*/
+ * 1 cymbal/snare
+ * 1 hiHat
+ * track 7 is the open hh... it triggers the highhat voice but with longer decay. it chokes the closed hihat*/
 #define NUM_TRACKS 7
-#define SEQ_SYNTH_VOICES 6
 #define NUM_PATTERN 8
 #define SEQ_TMP_PATTERN 8
 #define NUM_STEPS 128
@@ -205,61 +207,221 @@ Step* seq_getStepPtr(uint8_t pattern, uint8_t track, uint8_t step);
 LengthRotate* seq_getLengthRotatePtr(uint8_t pattern, uint8_t track);
 PatternSetting* seq_getPatternSettingPtr(uint8_t pattern);
 uint16_t seq_getMainSteps(uint8_t pattern, uint8_t track);
-#include "../MIDI/ParameterArray.h"
+/* Preset now owns the core sound-state images and parameter routing logic.
+   Keep the old seq_* names alive here as compatibility wrappers while the
+   rest of the tree migrates to the new Preset public API. */
+#define SEQ_SYNTH_VOICES PRESET_SYNTH_VOICES
+#define SEQ_VOICE_PARAM_LENGTH PRESET_VOICE_PARAM_LENGTH
+#define SEQ_MORPH_IMAGE_NORMAL PRESET_MORPH_IMAGE_NORMAL
+#define SEQ_MORPH_IMAGE_TMP PRESET_MORPH_IMAGE_TMP
+#define SEQ_MORPH_IMAGE_COUNT PRESET_MORPH_IMAGE_COUNT
+#define SEQ_VOICE_SOURCE_NORMAL PRESET_VOICE_SOURCE_NORMAL
+#define SEQ_VOICE_SOURCE_TMP PRESET_VOICE_SOURCE_TMP
+#define SEQ_PARAM_INGRESS_CURRENT_IMAGE PRESET_PARAM_INGRESS_CURRENT_IMAGE
+#define SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT PRESET_PARAM_INGRESS_NORMAL_KIT_ENDPOINT
+#define SEQ_AUTOMATION_INGRESS_NONE PRESET_AUTOMATION_INGRESS_NONE
+#define SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT PRESET_AUTOMATION_INGRESS_FRONT_ENDPOINT
+#define SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT PRESET_AUTOMATION_INGRESS_MORPH_ENDPOINT
 
-typedef struct SeqKitAutomationTargetsStruct
+#define seq_normalKitState preset_normalKitState
+#define seq_tmpKitState preset_tmpKitState
+#define seq_tmpKitActive preset_tmpKitActive
+#define seq_voiceSourceState preset_voiceSourceState
+#define seq_voiceParamMask preset_voiceParamMask
+
+/* Compatibility wrapper for the active kit-image selector. This preserves the
+   old `seq_*` name while delegating the actual temp-vs-normal choice to
+   `Preset`, which now owns the routing policy. */
+static inline SeqKitState* seq_getCurrentImageKitState(void)
 {
-   uint16_t lfoDestination[6];
-   uint16_t velocityDestination[6];
-   uint16_t macroDestination[4];
-   uint8_t lfoDestinationValid;
-   uint8_t velocityDestinationValid;
-   uint8_t macroDestinationValid;
-} SeqKitAutomationTargets;
+   return preset_getCurrentImageKitState();
+}
 
-typedef struct SeqKitStateStruct
+/* Compatibility wrapper for the image-to-kit lookup helper. It keeps callers
+   from learning the new file layout while still routing through `Preset`. */
+static inline SeqKitState* seq_getMorphKitForImage(uint8_t image)
 {
-   /* Session 003 morph move:
-      These arrays are always-defined sound state from zero init. File/front
-      ingress writes frontPanelParams[] and morphParams[] endpoint bytes.
-      Only seq_serviceMorphInterpolation() should write interpolatedParams[].
-      Do not add per-parameter "valid" arrays back here; transfer errors belong
-      in the transfer layer, not in the sound-state model. */
-   uint8_t frontPanelParams[END_OF_SOUND_PARAMETERS];
-   uint8_t morphParams[END_OF_SOUND_PARAMETERS];
-   uint8_t interpolatedParams[END_OF_SOUND_PARAMETERS];
-   SeqKitAutomationTargets frontPanelAutomationTargets;
-   SeqKitAutomationTargets morphParameterEndpointAutomationTargets;
-   SeqKitAutomationTargets interpolatedAutomationTargets;
-   uint8_t globalMorphAmount;
-   uint8_t voiceMorphBaseAmount[SEQ_SYNTH_VOICES];
-   uint8_t voiceMorphAmount[SEQ_SYNTH_VOICES];
-   uint8_t valid;
-} SeqKitState;
+   return preset_getMorphKitForImage(image);
+}
 
-extern SeqKitState seq_tmpKitState;
-extern SeqKitState seq_normalKitState;
+/* Compatibility wrapper for the per-voice image selection helper. The voice
+   source state is now owned by `Preset`, but the old name remains available for
+   callers that have not switched over yet. */
+static inline uint8_t seq_getMorphImageForVoice(uint8_t synthVoice)
+{
+   return preset_getMorphImageForVoice(synthVoice);
+}
+
+/* Compatibility wrapper for reading a voice's source marker. This keeps the
+   old `seq_*` entry point alive while the source-state array physically lives
+   in `Preset`. */
+static inline uint8_t seq_getVoiceSourceState(uint8_t synthVoice)
+{
+   return preset_getVoiceSourceState(synthVoice);
+}
+
+/* Compatibility wrapper for updating a voice source marker. Later phases can
+   keep using the same call shape while `Preset` remains the owner of the array
+   that the router consults. */
+static inline void seq_setVoiceSourceState(uint8_t synthVoice, uint8_t sourceState)
+{
+   preset_setVoiceSourceState(synthVoice, sourceState);
+}
+
+/* Compatibility wrapper for the canonical-parameter hook. The function is
+   currently an identity mapping, but keeping the wrapper makes future table
+   normalization a single change in `Preset`. */
+static inline uint16_t seq_canonicalParamFromVoiceMask(uint16_t param)
+{
+   return preset_canonicalParamFromVoiceMask(param);
+}
+
+/* Compatibility wrapper for the first-bit scan helper used by the voice-mask
+   logic. */
+static inline uint8_t seq_firstVoiceForMask(uint8_t voiceMask)
+{
+   return preset_firstVoiceForMask(voiceMask);
+}
+
+/* Compatibility wrapper for the parameter-to-voice-mask lookup. */
+static inline uint8_t seq_voiceMaskForParameter(uint16_t param)
+{
+   return preset_voiceMaskForParameter(param);
+}
+
+/* Compatibility wrapper for the voice-parameter predicate used by the live
+   cache and restore code. */
+static inline uint8_t seq_isVoiceParameter(uint16_t param)
+{
+   return preset_isVoiceParameter(param);
+}
+
+/* Compatibility wrapper that maps selector bytes back to canonical destination
+   parameters. */
+static inline uint16_t seq_resolveAutomationTargetSelector(uint8_t selector)
+{
+   return preset_resolveAutomationTargetSelector(selector);
+}
+
+/* Compatibility wrapper for the reverse destination-to-selector lookup. */
+static inline uint8_t seq_selectorForAutomationTargetDestination(uint16_t destination)
+{
+   return preset_selectorForAutomationTargetDestination(destination);
+}
+
+/* Compatibility wrapper that preserves the old voice-selector helper name
+   while delegating the actual lookup into `Preset`. */
+static inline uint8_t seq_voiceSelectorForAutomationTargetDestination(uint16_t destination,
+                                                                      uint8_t fallback)
+{
+   return preset_voiceSelectorForAutomationTargetDestination(destination,
+                                                             fallback);
+}
+
+/* Compatibility wrapper for the selector-parameter predicate. */
+static inline uint8_t seq_isAutomationTargetSelectorParam(uint16_t param)
+{
+   return preset_isAutomationTargetSelectorParam(param);
+}
+
+/* Compatibility wrapper for the morph-amount predicate. */
+static inline uint8_t seq_isMorphAmountParam(uint16_t param)
+{
+   return preset_isMorphAmountParam(param);
+}
+
+/* Compatibility wrapper that maps morph parameters back to voice indices. */
+static inline uint8_t seq_morphVoiceForParam(uint16_t param)
+{
+   return preset_morphVoiceForParam(param);
+}
+
+/* Compatibility wrapper for the helper that updates interpolated automation
+   targets only. The real implementation now lives in `Preset`, but the old
+   call shape stays intact for callers migrating in smaller steps. */
+static inline void seq_updateInterpolatedAutomationTarget(SeqKitState *kit,
+                                                          uint16_t param,
+                                                          uint8_t selector)
+{
+   preset_updateInterpolatedAutomationTarget(kit, param, selector);
+}
+
+/* Compatibility wrapper for the helper that keeps the front-panel and
+   interpolated automation targets coherent together. */
+static inline void seq_updateFrontAndInterpolatedAutomationTargets(SeqKitState *kit,
+                                                                   uint16_t param,
+                                                                   uint8_t selector)
+{
+   preset_updateFrontAndInterpolatedAutomationTargets(kit, param, selector);
+}
+
+/* Sequencer still owns the transitional live-apply cache while Preset owns
+   ingress routing. This tiny helper lets the new ingress module refresh the
+   old cache without taking ownership away from the morph worker yet. */
+void seq_updateLiveSharedParameterCache(uint16_t param, uint8_t value);
+
+/* Compatibility wrapper for ingress target selection. The actual mode state is
+   owned by `Preset`, but old callers can keep using the `seq_*` name while the
+   refactor lands. */
+static inline void seq_setIngressTarget(uint8_t target)
+{
+   preset_setIngressTarget(target);
+}
+
+/* Compatibility wrapper that exposes the current ingress target flag through
+   the legacy Sequencer API surface. */
+static inline uint8_t seq_getIngressTarget(void)
+{
+   return preset_getIngressTarget();
+}
+
+/* Compatibility wrapper for the live-vs-restore ingress predicate. */
+static inline uint8_t seq_shouldApplyIngressToLive(void)
+{
+   return preset_shouldApplyIngressToLive();
+}
+
+/* Compatibility wrapper for the automation-sideband ingress mode. */
+static inline void seq_setAutomationIngressTarget(uint8_t target)
+{
+   preset_setAutomationIngressTarget(target);
+}
+
+/* Compatibility wrapper that forwards raw endpoint bytes into `Preset`. */
+static inline void seq_storeParameterIngress(uint16_t param, uint8_t value)
+{
+   preset_storeParameterIngress(param, value);
+}
+
+/* Compatibility wrapper that forwards morph-endpoint bytes into `Preset`. */
+static inline void seq_storeMorphParameterIngress(uint16_t param, uint8_t value)
+{
+   preset_storeMorphParameterIngress(param, value);
+}
+
+/* Compatibility wrapper for LFO destination ingress. */
+static inline void seq_storeLfoDestinationIngress(uint8_t voice, uint16_t destination)
+{
+   preset_storeLfoDestinationIngress(voice, destination);
+}
+
+/* Compatibility wrapper for velocity destination ingress. */
+static inline void seq_storeVelocityDestinationIngress(uint8_t voice, uint16_t destination)
+{
+   preset_storeVelocityDestinationIngress(voice, destination);
+}
+
+/* Compatibility wrapper for macro destination ingress. */
+static inline void seq_storeMacroDestinationIngress(uint8_t destinationNr, uint16_t destination)
+{
+   preset_storeMacroDestinationIngress(destinationNr, destination);
+}
 
 void seq_setMainSteps(uint8_t pattern, uint8_t track, uint16_t steps);
 //------------------------------------------------------------------------------
 void seq_init();
 //------------------------------------------------------------------------------
 /** call periodically to check if the next step has to be processed */
-#define SEQ_PARAM_INGRESS_CURRENT_IMAGE 0
-#define SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT 1
-
-/* Endpoint automation target sidebands arrive as resolved destinations, not raw
-   parameter bytes. The phase keeps kit/front endpoint targets separate from
-   morph endpoint targets while file loads are writing normal endpoint storage. */
-#define SEQ_AUTOMATION_INGRESS_NONE 0
-#define SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT 1
-#define SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT 2
-
-void seq_setIngressTarget(uint8_t target);
-uint8_t seq_getIngressTarget();
-uint8_t seq_shouldApplyIngressToLive();
-uint8_t seq_isTmpKitActive();
-void seq_setAutomationIngressTarget(uint8_t target);
 
 void seq_tick();
 void seq_serviceMorphInterpolation();
@@ -274,7 +436,6 @@ void seq_setVoiceMorphAutomationValue(uint8_t synthVoice, uint8_t morphValue);
 void seq_setVoiceMorphMaskAutomationValue(uint8_t voiceMask, uint8_t morphValue);
 void seq_modulateVoiceMorphAmount(uint8_t synthVoice, float amount, float value);
 void seq_applyNormalEndpointAutomationTargets();
-void seq_storeMorphParameterIngress(uint16_t param, uint8_t value);
 //------------------------------------------------------------------------------
 void seq_armAutomationStep(uint8_t stepNr, uint8_t track,uint8_t isArmed);
 //------------------------------------------------------------------------------
@@ -369,14 +530,6 @@ void seq_copySubStep(uint8_t srcStep, uint8_t dstStep, uint8_t activeTrack);
 void seq_setActiveAutomationTrack(uint8_t trackNr);
 //------------------------------------------------------------------------------
 void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value);
-//------------------------------------------------------------------------------
-void seq_storeParameterIngress(uint16_t param, uint8_t value);
-//------------------------------------------------------------------------------
-void seq_storeLfoDestinationIngress(uint8_t voice, uint16_t destination);
-//------------------------------------------------------------------------------
-void seq_storeVelocityDestinationIngress(uint8_t voice, uint16_t destination);
-//------------------------------------------------------------------------------
-void seq_storeMacroDestinationIngress(uint8_t destinationNr, uint16_t destination);
 //------------------------------------------------------------------------------
 void seq_writeTranspose();
 //------------------------------------------------------------------------------

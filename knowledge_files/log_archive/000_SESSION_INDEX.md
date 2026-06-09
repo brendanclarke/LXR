@@ -15,6 +15,7 @@
 | 004 | 2026-06-07 | local repo, user will commit/push after review | temp background loading made functional; normal/temp parameter switching, endpoint sync, retrigger glitch, automation target persistence, and phased LFO-to-morph drain fixed |
 | 005 | 2026-06-09 | local repo after reset, uncommitted docs/code | targeted global morph menu-sync fix; display-only STM report on normal/temp boundary; session 005 closeout docs updated |
 | 006 | 2026-06-09 | local repo, uncommitted planning docs | refactor planning and architectural alignment for STM-side preset/morph subsystems; finalized phased roadmap |
+| 007 | 2026-06-09 | local repo, Phase 1 complete | refactor phase 1: carved core Preset types (KitState, ParameterMap, ParameterIngress) into new module; established ingress authority |
 
 ---
 
@@ -44,6 +45,10 @@ Session 005 closed the remaining global morph menu-sync bug after the reset: STM
 Session 006 finalized the comprehensive phased refactor plan for the STM-side preset, morph, and pattern subsystems. Key decisions were made to unify background loading into a single overwriteable session model, retire legacy voice-cache promotion paths, and strictly separate UART transport from protocol parsing. The resulting roadmap in `REFACTOR_PHASED_PLAN.md` serves as the authoritative guide for the upcoming implementation phases.
 - **Find here**: refactor phased roadmap, module boundaries for `/Preset/` and `/uARTFrontSYX/`, single background-load session model, transport vs protocol separation decisions, retired legacy load paths
 
+### 007 — Refactor Phase 1: Core Preset Module Carve-out (2026-06-09)
+Session 007 implemented Phase 1 of the architectural refactor. It established the new `mainboard/LxrStm32/src/Preset/` directory and moved the core sound-state structures (`SeqKitState`), parameter mapping logic, and ingress authority into `KitState`, `ParameterMap`, and `ParameterIngress` modules. `Sequencer` remains a compatibility façade for this phase, while `MidiParser` and `frontPanelParser` were migrated to use the new `preset_*` ingress APIs directly. Extensive documentation was added to all new and moved code to ensure ownership and intent are clear for future phases.
+- **Find here**: Preset module structure, KitState ownership, ParameterMap resolution, ParameterIngress authority, sequencer compatibility façade, deep comment requirements
+
 
 ---
 
@@ -68,6 +73,7 @@ Session 006 finalized the comprehensive phased refactor plan for the STM-side pr
 | Global morph menu sync on normal/temp switch is handled by display-only STM-to-AVR report traffic, not file-load routing | 005 |
 | Background loading is unified into a single overwriteable STM-side session model; legacy voice-cache promotion is retired | 006 |
 | UART transport (Uart.c) and protocol parsing (frontPanelParser.c) are strictly separated; parser is session-aware but transport-blind | 006 |
+| Core sound-state (KitState), parameter mapping, and ingress authority are now owned by the new Preset module | 007 |
 
 
 ---

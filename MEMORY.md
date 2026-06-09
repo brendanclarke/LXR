@@ -26,9 +26,10 @@ make firmware
 
 **Session 001 close status**: full top-level build succeeds in this repo with `make clean && make firmware` (warnings remain, no fatal errors).
 
-**Current status after Session 006 closeout (2026-06-09)**: Refactor planning for the STM-side preset, morph, and pattern subsystems is complete. A comprehensive phased roadmap is defined in `REFACTOR_PHASED_PLAN.md`. Background loading is unified into a single overwriteable session model, and transport/protocol boundaries are strictly defined. Standard operation remains stable as established in Session 005.
+**Current status after Session 007 closeout (2026-06-09)**: Phase 1 of the architectural refactor is complete. Core sound-state images (`SeqKitState`), parameter mapping, and ingress authority have been moved into the new `mainboard/LxrStm32/src/Preset/` module (`KitState`, `ParameterMap`, `ParameterIngress`). `Sequencer` remains a compatibility façade. Build is verified, and the refactor continues according to `REFACTOR_PHASED_PLAN.md`.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md`
 - `REFACTOR_PHASED_PLAN.md`
 - `REFACTOR_DIAGRAM.md`
@@ -189,6 +190,7 @@ User-referenced checkpoints:
 | Session 003 STM morph move details | `knowledge_files/log_archive/003_SESSION_HANDOFF_LOG.md` |
 | Session 004 temp/background loading closeout | `knowledge_files/log_archive/004_SESSION_HANDOFF_LOG.md` |
 | Session 006 refactor planning details | `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md` |
+| Session 007 refactor Phase 1 details | `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md` |
 | Current preset/morph refactor knowledge | `AUDIT_PRESET-MORPH_REFACTOR.md`, `REFACTOR_PHASED_PLAN.md` |
 | Current comms/protocol knowledge | `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
 
