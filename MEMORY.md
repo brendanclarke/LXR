@@ -300,6 +300,14 @@ Sample flash map:
 
 ---
 
+## Digital Input (DIN)
+
+- **Initialization Requirements**: `din_inputData[]` software mirror must be synchronized with the physical shift registers during `din_init()`.
+- **Logic**: 0 = Pressed, 1 = Released.
+- **Initialization Bug (Fixed Session 008)**: Initializing mirror to `0` with `memset` caused ghost release events on the first scan. Sequential polling (10 buttons/loop) allowed SELECT buttons to be processed while SHIFT state was still `0` (interpreted as 'Pressed'), triggering phantom 'shifted release' actions.
+
+---
+
 ## Display / Menu
 
 - **LCD queue**: <to audit>
@@ -354,9 +362,11 @@ Sample flash map:
 
 ## Known Issues / Technical Debt
 
-### Resolved in Session xxx
+### Resolved in Session 008
 
-- **Session 001 resolved**:
+- **AVR Startup Substep Toggle Bug**: Root cause identified as a mismatch between the `din_inputData` software mirror (initialized to 'all-pressed' `0`) and the actual hardware state (all-released `1`), combined with a sequential polling order that processed SELECT buttons before the SHIFT button. This triggered a phantom 'shifted release' event on boot, sending 8 `STEP_CC` toggle messages to the STM32. Fixed by synchronizing `din_inputData` with hardware in `din_init()` before the main loop starts.
+
+### Resolved in Session 001
 - Header-defined globals causing multiple definitions (`MidiMessages.h`, `MidiVoiceControl.h`, SD headers).
 - Legacy inline linkage breakage causing undefined references (`BufferTools`, `GetRngValue`).
 - Full build now completes to `firmware image/FIRMWARE.BIN` in this repo.

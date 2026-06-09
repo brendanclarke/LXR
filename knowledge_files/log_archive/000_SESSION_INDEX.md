@@ -16,6 +16,7 @@
 | 005 | 2026-06-09 | local repo after reset, uncommitted docs/code | targeted global morph menu-sync fix; display-only STM report on normal/temp boundary; session 005 closeout docs updated |
 | 006 | 2026-06-09 | local repo, uncommitted planning docs | refactor planning and architectural alignment for STM-side preset/morph subsystems; finalized phased roadmap |
 | 007 | 2026-06-09 | local repo, Phase 1 complete | refactor phase 1: carved core Preset types (KitState, ParameterMap, ParameterIngress) into new module; established ingress authority |
+| 008 | 2026-06-09 | local repo, uncommitted docs | AVR startup substep toggle bug root-cause analysis and fix; identified DIN initialization mismatch and polling race |
 
 ---
 
@@ -49,6 +50,10 @@ Session 006 finalized the comprehensive phased refactor plan for the STM-side pr
 Session 007 implemented Phase 1 of the architectural refactor. It established the new `mainboard/LxrStm32/src/Preset/` directory and moved the core sound-state structures (`SeqKitState`), parameter mapping logic, and ingress authority into `KitState`, `ParameterMap`, and `ParameterIngress` modules. `Sequencer` remains a compatibility façade for this phase, while `MidiParser` and `frontPanelParser` were migrated to use the new `preset_*` ingress APIs directly. Extensive documentation was added to all new and moved code to ensure ownership and intent are clear for future phases.
 - **Find here**: Preset module structure, KitState ownership, ParameterMap resolution, ParameterIngress authority, sequencer compatibility façade, deep comment requirements
 
+### 008 — AVR Startup Substep Toggle Bug Fix (2026-06-09)
+Session 008 identified and fixed a bug where the AVR would incorrectly toggle all substeps of the first pattern's first step on startup. The root cause was a mismatch between the software button-state mirror (initialized to 'all pressed') and the actual hardware state (all released), combined with a polling order that processed SELECT buttons before the SHIFT button. This resulted in a phantom "shifted release" event on the first scan. The fix involved synchronizing the software mirror with the hardware state in `din_init()` before the main loop begins.
+- **Find here**: AVR startup bug, DIN initialization, button-state mirror synchronization, phantom release events, polling order dependency, hardware/software state alignment
+
 
 ---
 
@@ -74,6 +79,7 @@ Session 007 implemented Phase 1 of the architectural refactor. It established th
 | Background loading is unified into a single overwriteable STM-side session model; legacy voice-cache promotion is retired | 006 |
 | UART transport (Uart.c) and protocol parsing (frontPanelParser.c) are strictly separated; parser is session-aware but transport-blind | 006 |
 | Core sound-state (KitState), parameter mapping, and ingress authority are now owned by the new Preset module | 007 |
+| AVR `din_inputData` must be synchronized with hardware in `din_init` to prevent phantom startup events | 008 |
 
 
 ---
