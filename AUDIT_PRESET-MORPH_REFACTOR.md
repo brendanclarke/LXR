@@ -104,6 +104,8 @@ Current global STM images:
 Normal is the file-load destination:
 
 - Background `.ALL` / `.PRF` loads refresh normal pattern/parameter storage.
+- Only one background file-load session should be in flight at a time; a newer
+  background load can replace an older in-flight one.
 - Playback can continue from temp.
 - The user can switch back to refreshed normal on demand.
 
@@ -550,11 +552,13 @@ Session 004 finding:
 
 Refactor target:
 
-- Split direct/legacy load cache promotion from temp-background-load finalizer.
-- If direct `.SND`/voice load still needs a hold/release path, rebuild it as an
-  explicit preset-load mode.
+- Fold any surviving useful behavior into a single temp/background-load
+  finalizer.
+- Do not preserve a separate direct-load voice-cache promotion mechanism.
 - Temp-background path should clear bookkeeping and release locks without
   replaying cached params into live DSP.
+- A newer background load may replace an older in-flight one if the prior load
+  has not completed yet.
 
 ## Proposed `/Preset/` Refactor Layout
 
@@ -790,7 +794,7 @@ Move candidates:
 - `frontParser_prfCacheLiveNoteOverrideValue()`
 - `frontParser_prfCacheTakeLiveVMorphFlag()`
 - `frontParser_prfCacheLiveVMorphAmountValue()`
-- split replacement for `frontParser_applyDeferredVoiceCache()`
+- single background-load finalizer replacing `frontParser_applyDeferredVoiceCache()`
 
 ### `Preset/ProtocolEndpoint.h/.c`
 

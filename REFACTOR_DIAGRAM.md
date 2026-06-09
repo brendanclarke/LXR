@@ -16,7 +16,7 @@ The objective of this architectural refactor is to decouple the sound parameter 
 Historically, `sequencer.c` and parts of the `MIDI/` parser mixed audio-rate real-time thread logic with block-level storage transfers, parameter interpolation, file-system caching, and raw UART stream decoding. This refactor establishes clean, structured APIs across three newly isolated sub-directories within `mainboard/LxrStm32/src/`:
 
 1.  **`/uARTFrontSYX/`**: implementation of the (future SysEx) protocol specification. Physical front-panel UART traffic feeds directly into this layer, the `/MIDI/` module is eventually updated to act as a front interpreter to map generic incoming MIDI messages (CC, Notes, RTC) straight into local SysEx packets to go here.
-2.  **`/Preset/`**: Centralized authority for all sound state parameters (normal kit endpoints, morph endpoints, interpolated run-time baselines, and active modulation target caches). Owns the low-Hz phase-drained morph engine and velocity/LFO morph modulations (currently all stacked on sequencer.c).
+2.  **`/Preset/`**: Centralized authority for all sound state parameters (normal kit endpoints, morph endpoints, interpolated run-time baselines, and active modulation target caches). Owns the low-Hz phase-drained morph engine, velocity/LFO morph modulations, and the single overwriteable background-load session (currently all stacked on sequencer.c).
 3.  **`/Sequencer/Pattern/`**: Forms a specialized sub-directory under the sequencer subsystem that exclusively manages pattern data and generative algorithms (Euclidean/SOM), and specialized pattern synchronization/loading mechanics (such as temp/background pattern loading).
 
 ---
@@ -131,6 +131,13 @@ The preset module retains sole authority over parameter image states. It complet
 * **Primary Function Groups**:
     * Schedules background state pushbacks to the physical user interface.
     * Iterates through background tasks safely, metering packets to prevent receiver FIFO overflows on the ATmega hardware.
+
+#### `PresetLoadCache.c/h`
+* **Purpose**: Owns the single in-flight background file-load session, deferred replay bookkeeping, and live snapshot/cache state that replaces the older voice-cache promotion path.
+* **Primary Function Groups**:
+    * Accepts a new background file-load request and, if one is already in flight, replaces/discards the older pending one.
+    * Tracks deferred replay / session completion state until the background load is committed or aborted.
+    * Keeps the protocol layer thin by centralizing the "load into normal storage while temp continues playing" behavior here instead of in `frontPanelParser.c`.
 
 ---
 

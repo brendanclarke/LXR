@@ -35,7 +35,7 @@ Session 005 note:
 
 ## High-Value Refactor Targets
 
-### 1. Split `frontParser_applyDeferredVoiceCache()`
+### 1. Retire `frontParser_applyDeferredVoiceCache()`
 
 Current location:
 
@@ -69,23 +69,30 @@ Problem:
 
 - The function name says "apply deferred voice cache", but the function is now a mixed finalizer.
 - It can promote legacy held voice cache into live DSP, replay deferred performance messages, apply staged temp pattern data, clear deferred perf flags, clear PRF runtime flags, and exit a PRF cache session.
-- For temp-backed `.PRF` / `.ALL` background loading, the live application part is probably not supposed to be the source of truth. The normal `SeqKitState` should already contain the loaded endpoint/interpolated/automation state, while playback can continue from temp. A switch should select a `SeqKitState`, not replay `midi_midiCache`.
+- For temp-backed `.PRF` / `.ALL` background loading, the live application part is not supposed to be the source of truth. The normal `SeqKitState` should already contain the loaded endpoint/interpolated/automation state, while playback can continue from temp. A switch should select a `SeqKitState`, not replay `midi_midiCache`.
 - The current implementation partly acknowledges this: `frontParser_releaseVoiceCache()` and `frontParser_unholdLoadedVoice()` clear voice cache instead of applying it when `seq_isTmpKitActive()` is true.
 - The first switch after file load can still hang if this mixed function drains all deferred cleanup in one foreground burst.
 - Session 004 functional branch note: the old file-load voice hold/unhold promotion path has now been disabled for temp-background loading. `FRONT_SEQ_LOAD_VOICE` still uses `seq_voicesLoading` as an ingress/cache guard so incoming file bytes store into STM normal endpoint state instead of becoming live menu edits, but `FRONT_SEQ_UNHOLD_VOICE`, deferred unhold cleanup, and release-cache paths now clear the legacy cache instead of promoting it to `midi_midiKit`, setting `seq_newVoiceAvailable`, or replaying cached messages through `midiParser_ccHandler()`.
 
 Refactor direction:
 
-- Split into a legacy direct-load voice-cache operation and a temp-background-load finalizer.
+- Retire `frontParser_applyDeferredVoiceCache()` as a separate legacy
+  promotion path and fold any remaining useful behavior into a single
+  background-load finalizer.
 - Candidate API:
-  - `presetLoad_applyLegacyVoiceCacheToLive()`
   - `presetLoad_finalizeTempBackgroundLoad()`
   - `presetLoad_clearDeferredSession()`
   - `presetLoad_hasPendingDeferredWork()`
-- The legacy/direct path should remain available for `.SND`, direct kit/voice loads, and any non-temp mode that still relies on held-cache promotion.
-- The temp-background path should clear cache/session bookkeeping and release locks without applying cached voice params into live DSP.
-- Re-evaluate whether the legacy/direct path is still needed after STM-side `/Preset/` owns all kit state. If needed, rebuild it as an explicit preset-load mode rather than an implicit voice hold/unhold side channel.
-- Do not delete the remaining session cleanup blindly. It is also holding old PRF cache session cleanup and deferred pattern bookkeeping.
+- Architecturally, there should be only one background file-load mechanism in
+  flight at a time. If a newer background load begins, it can discard and
+  overwrite the older in-flight one.
+- The finalizer should clear cache/session bookkeeping and release locks
+  without applying cached voice params into live DSP.
+- Do not preserve a separate direct-load voice-cache promotion mode after the
+  refactor. If any legacy behavior still matters, fold it into the unified
+  background-load path.
+- Do not delete the remaining session cleanup blindly. It is also holding old
+  PRF cache session cleanup and deferred pattern bookkeeping.
 
 Redundancy to remove later:
 
@@ -95,25 +102,7 @@ Redundancy to remove later:
 - `frontParser_unholdVoice()` and `frontParser_uncacheVoice()` still exist as legacy live-cache promotion helpers, but the temp-background branch should not depend on them. During the refactor, either move them into a clearly named legacy loader module or remove them once all direct kit/voice load modes have a new STM-side preset API.
 - The current name `seq_voicesLoading` is now overloaded: it means "file voice payload is being received; store/cache instead of live apply", not necessarily "a voice is held awaiting later live promotion." Rename or replace it in the preset load API.
 
-### 2. Rename AVR temp read buffers
-
-Current AVR arrays:
-
-- `parameter_values_temp[]`
-- `parameters2_temp[]`
-
-Reason to rename:
-
-- The names now collide mentally with the STM temp playback kit.
-- In current intended architecture, these AVR arrays are not temp playback storage. They are file-read buffers used while reading `.SND`, `.PRF`, and `.ALL`, plus temporary preservation buffers for restoring the active menu image while temp is sounding.
-
-Candidate names:
-
-- `parameter_values_fileBuffer[]`
-- `parameters2_fileBuffer[]`
-- If one use remains specifically for UI preservation, split that into `parameter_values_menuSnapshot[]` / `parameters2_menuSnapshot[]`.
-
-### 3. Split STM preset state out of `Sequencer`
+### 2. Split STM preset state out of `Sequencer`
 
 The sequencer now contains a large amount of preset-state and morph-state service code. Some of it is used by sequencing, but the ownership boundary is no longer clean.
 
@@ -272,115 +261,6 @@ Suggested files:
     - restore begin/done/ready/ack handshake state
     - endpoint dump begin/end and automation phase interpretation
   - This may overlap with a later broader `Comms/` split; keep small if introduced.
-
-- `Preset/PassiveApply.h/.c` or part of `Preset/ParameterIngress.h/.c`
-  - Owns the distinction between performance/actionful parameter application and passive preset-image reconstruction.
-  - Candidate moved APIs/functions:
-    - `midiParser_ccHandlerWithFlags(...)`
-    - `MIDI_PARSER_CC_APPLY_NORMAL`
-    - `MIDI_PARSER_CC_APPLY_PASSIVE`
-    - `modNode_updateValueWithFlags(...)`
-    - `MOD_NODE_UPDATE_NORMAL`
-    - `MOD_NODE_UPDATE_PASSIVE`
-    - `seq_applyVoiceAutomationTargetsWithFlags(...)`
-    - `seq_applySharedAutomationTargetsWithFlags(...)`
-    - passive handling for `CC2_ENVELOPE_POSITION_1..6`
-    - passive handling for modulation-node envelope-position destinations reached through LFO, velocity, or macro restore
-    - future passive handling for any other actionful DSP setters discovered during temp switching.
-  - API goal: source switching should be able to rebuild DSP state from a preset image without firing actionful setters such as envelope triggers. Live edits and automation should keep actionful behavior.
-
-### 4. Comment upgrade for new STM functions
-
-Several new or heavily modified functions in `sequencer.c/.h` are under-documented relative to the complexity they now carry. During the refactor, add comments beside the code before or while moving the functions.
-
-Comment descriptions that can be turned into code comments:
-
-- `seq_getCurrentImageKitState()`
-  - Returns the kit image currently selected by the global normal/temp kit flag. Use for shared/global menu edits, not necessarily for per-voice playback when tracks are split between normal and temp.
-
-- `seq_getMorphKitForImage(image)`
-  - Converts a morph image id to the corresponding kit state. This is the stable lookup used by morph code and temp switching.
-
-- `seq_syncVMorphAmountMirrorsFromLiveSources()`
-  - Rebuilds the compatibility `seq_vMorphAmount[]` mirror from the normal/temp kit images currently sounding per synth voice. This mirror exists for legacy `ParameterArray` / PRF cache paths and is not the authoritative morph state.
-
-- `seq_selectVoiceMorphAmountFromKit(synthVoice, kit)`
-  - Copies one voice's active morph amount from a selected kit image into the compatibility mirror after a normal/temp voice source switch.
-
-- `seq_setVoiceMorphLiveAmount(synthVoice, morphAmount)`
-  - Writes the live per-voice morph amount into the currently sounding kit image for that synth voice, without changing the stored base amount.
-
-- `seq_morphImageVoiceIsLive(image, synthVoice)`
-  - Tests whether a given normal/temp image is the live source for a synth voice. Used to prevent inactive image interpolation or modulation from touching DSP.
-
-- `seq_getMorphImageForVoice(synthVoice)`
-  - Resolves which normal/temp kit image owns a synth voice based on current per-voice source state.
-
-- `seq_liveMorphApplyNeeded(image, param, value)`
-  - Per-image DSP apply cache. Allows first-time zero values to be applied while suppressing repeated unchanged morph writes.
-
-- `seq_interpolateMorphValue(a, b, x)`
-  - Fixed-point 0..255 interpolation helper for endpoint A/B morph values.
-
-- `seq_setGlobalMorphAmount(morphAmount)`
-  - Menu/global morph command. Stores global amount in the current kit image and resets every per-voice base/live morph amount in that same image.
-
-- `seq_setGlobalMorphAutomationValue(morphValue)`
-  - Automation/global morph command. Converts 0..127 automation value to 0..255 morph amount and writes live per-voice amounts for the currently sounding voice images.
-
-- `seq_setVoiceMorphAmount(synthVoice, morphAmount)`
-  - Direct per-voice morph setter. Updates both base and live morph amount in the currently sounding image for that voice. Per-voice morph is not currently exposed in the AVR menu.
-
-- `seq_setVoiceMorphAutomationValue(synthVoice, morphValue)`
-  - Automation value entry point for one voice. Updates live amount only, preserving base morph amount.
-
-- `seq_modulateVoiceMorphAmount(synthVoice, amount, value)`
-  - LFO/velocity live overlay. Interpolates between stored interpolation baseline and morph endpoint for the selected voice, applies DSP, and deliberately does not write `interpolatedParams[]`.
-
-- `seq_serviceMorphInterpolation()`
-  - Background morph worker. Processes exactly one parameter per STM main-loop pass, updates the selected kit image's interpolation baseline, refreshes interpolated automation target cache, and applies DSP only if that image/voice is live.
-
-- `seq_storeParameterIngress(param, value)`
-  - Stores a raw AVR/menu endpoint parameter according to the current ingress mode. Current-image mode is live/menu edit routing; normal-kit-endpoint mode is file/restore ingress and must not change temp sound.
-
-- `seq_storeMorphParameterIngress(param, value)`
-  - Stores raw morph endpoint bytes only. Does not compute morph and does not write interpolation state.
-
-- `seq_getIngressAutomationTarget()` / `seq_getIngressInterpolatedAutomationTarget()`
-  - Resolves where resolved automation sideband messages should be stored based on endpoint phase: front endpoint, morph endpoint, or interpolated target cache.
-
-- `seq_storeLfoDestinationIngress()` / `seq_storeVelocityDestinationIngress()` / `seq_storeMacroDestinationIngress()`
-  - Stores resolved automation destinations into the active target image. These functions receive resolved destination params, not raw menu selector bytes.
-
-- `seq_applyNormalEndpointAutomationTargets()`
-  - Applies normal endpoint automation targets to currently live normal voices and shared macro targets when normal is globally active.
-
-- `seq_applySingleParameterValue(param, value)`
-  - The canonical raw-endpoint-to-live-DSP conversion point. This is where low raw params get `+1` before calling `midiParser_ccHandler()`. Endpoint transport itself must not apply that offset.
-
-- `seq_applySingleParameterValueWithFlags(param, value, applyFlags)`
-  - Flagged variant of the raw-endpoint-to-live-DSP conversion point. Used when preset-image application needs passive behavior for actionful parameters while preserving the raw low-param `+1` conversion.
-
-- `seq_applyVoiceSource(synthVoice, useTmp)`
-  - Applies the selected normal/temp image's interpolated voice parameters and automation destinations to one synth voice.
-
-- `seq_markVoiceSourceTarget(synthVoice, useTmp)`
-  - Commits a normal/temp source change for one synth voice, ensuring temp image exists, publishing source state before modulation callbacks, syncing morph mirror, and applying voice source.
-
-- `seq_updateVoiceSourcesForPatternChange(oldPatternForTrack, pushEndpointUpdates)`
-  - Compares old vs new per-track pattern sources, handles hi-hat paired track behavior, applies changed synth voice sources, and optionally queues AVR endpoint restore for menu sync.
-
-- `seq_captureTmpKitState()`
-  - Direct STM-side copy-to-temp image clone: front endpoint, morph endpoint, interpolated baseline, all automation target images, global morph, base per-voice morph, live per-voice morph, and validity.
-
-- `seq_setTmpKitActive(active)`
-  - Selects global temp/normal kit mode for full-pattern switching, initializes temp image if needed, invalidates live apply cache, syncs morph mirrors, and queues full endpoint restore.
-
-- `seq_pushKitEndpointVoiceMaskToFront(kit, voiceMask)`
-  - Queues full or masked endpoint restore to AVR. The queue coalesces adjacent compatible requests and rate-limits actual transmission through `seq_serviceEndpointRestore()`.
-
-- `seq_serviceEndpointRestore()`
-  - STM endpoint push-up state machine. Performs restore begin/ready, front endpoint bytes, morph endpoint bytes, done/ack, timeout cleanup, and one-parameter-per-service pacing.
 
 ## Communication Modes Audit
 
@@ -806,7 +686,9 @@ Concluding messages:
 
 - `SEQ_PRF_PENDING_DONE` for pending validity.
 - `SEQ_PRF_CACHE_ABORT` or flow abort for failure.
-- `frontParser_applyDeferredVoiceCache()` currently exits some cache sessions when conditions are met.
+- `frontParser_applyDeferredVoiceCache()` is one of the remaining legacy exit
+  paths and should be folded into the unified background-load finalizer rather
+  than kept as its own promotion mechanism.
 
 Rough length:
 
@@ -817,8 +699,12 @@ Rough length:
 Refactor notes:
 
 - Treat this as WIP after the STM morph move.
-- It overlaps strongly with temp-backed normal storage. Once temp background loading is stable, some PRF cache modes may collapse into: load into normal image while temp image plays, then switch on demand.
-- The snapshot/restore pieces should be separated from legacy deferred voice-cache promotion.
+- It overlaps strongly with temp-backed normal storage. Once temp background
+  loading is stable, the PRF cache/snapshot pieces should collapse into a
+  single background-load finalizer that loads into normal image while temp
+  image plays, then switches on demand.
+- The snapshot/restore pieces should be separated from the retired legacy
+  deferred voice-cache promotion path.
 
 #### K. Sample upload/count mode
 
@@ -939,10 +825,11 @@ Refactor target:
   - `frontParser_unholdLoadedVoice(...)`
   - `frontParser_applyPendingVoiceCache(...)`
   - `frontParser_applyDeferredVoiceCache(...)`
-- Replace it with an explicit preset-load/session finalizer in the future
+- Replace it with the unified background-load/session finalizer in the future
   STM-side `/Preset/` service.
-- Future hold/unhold behavior, if needed for direct kit loads, should be a
-  deliberate preset API policy rather than ambient MIDI parser cache state.
+- Future hold/unhold behavior, if needed, should be a deliberate preset API
+  policy or folded into the unified background-load path rather than ambient
+  MIDI parser cache state.
 
 ### Envelope position mirror ownership
 
@@ -1088,10 +975,10 @@ Problem:
 
 Refactor target:
 
-- Split direct/legacy voice-load promotion from temp-background file-load
-  finalization.
-- Rename ingress flags around "file payload receiving" and "legacy live
-  promotion pending".
+- Fold direct/legacy voice-load promotion into the unified background-file-load
+  finalization path.
+- Rename ingress flags around "file payload receiving" and "background-load
+  pending".
 - Remove temp-background dependency on old unhold/release-cache semantics.
 
 ### Endpoint restore queue API

@@ -26,14 +26,14 @@ make firmware
 
 **Session 001 close status**: full top-level build succeeds in this repo with `make clean && make firmware` (warnings remain, no fatal errors).
 
-**Current status after Session 005 closeout (2026-06-09)**: post-morph temp/background loading is functional again, and the remaining global morph menu-sync bug is closed. STM owns normal/temp pattern and parameter images; switching between normal and temp playback selects which STM image is read and pushes endpoint/menu state back up to the AVR. Session 005 added a narrow display-only STM-to-AVR report path so `PAR_MORPH` follows the active normal/temp image without touching file loading or live edit semantics. Hardware validation of that report path is still pending.
+**Current status after Session 006 closeout (2026-06-09)**: Refactor planning for the STM-side preset, morph, and pattern subsystems is complete. A comprehensive phased roadmap is defined in `REFACTOR_PHASED_PLAN.md`. Background loading is unified into a single overwriteable session model, and transport/protocol boundaries are strictly defined. Standard operation remains stable as established in Session 005.
 
 Canonical current WIP docs:
-- `knowledge_files/log_archive/005_SESSION_HANDOFF_LOG.md`
-- `knowledge_files/log_archive/004_SESSION_HANDOFF_LOG.md`
+- `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md`
+- `REFACTOR_PHASED_PLAN.md`
+- `REFACTOR_DIAGRAM.md`
 - `AUDIT_PRESET-MORPH_REFACTOR.md`
-- `AUDIT_REFACTOR_TARGETS.md`
-- `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md`
+- `knowledge_files/log_archive/005_SESSION_HANDOFF_LOG.md`
 
 Session 005 closeout / remaining follow-up:
 - Encoder phase is slightly unbalanced and may still need a small fix.
@@ -188,7 +188,8 @@ User-referenced checkpoints:
 | Session 001 build triage details | `BUILD_AUDIT.md` |
 | Session 003 STM morph move details | `knowledge_files/log_archive/003_SESSION_HANDOFF_LOG.md` |
 | Session 004 temp/background loading closeout | `knowledge_files/log_archive/004_SESSION_HANDOFF_LOG.md` |
-| Current preset/morph refactor knowledge | `AUDIT_PRESET-MORPH_REFACTOR.md` |
+| Session 006 refactor planning details | `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md` |
+| Current preset/morph refactor knowledge | `AUDIT_PRESET-MORPH_REFACTOR.md`, `REFACTOR_PHASED_PLAN.md` |
 | Current comms/protocol knowledge | `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
 
 ---

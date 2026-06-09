@@ -14,6 +14,7 @@
 | 003 | 2026-06-03 | local branch `custom-develop-patload-envmod` (STM morph WIP, dirty tree) | morph computation moved fully to STM for standard operation; normal/temp exchange broken and queued for session 004 |
 | 004 | 2026-06-07 | local repo, user will commit/push after review | temp background loading made functional; normal/temp parameter switching, endpoint sync, retrigger glitch, automation target persistence, and phased LFO-to-morph drain fixed |
 | 005 | 2026-06-09 | local repo after reset, uncommitted docs/code | targeted global morph menu-sync fix; display-only STM report on normal/temp boundary; session 005 closeout docs updated |
+| 006 | 2026-06-09 | local repo, uncommitted planning docs | refactor planning and architectural alignment for STM-side preset/morph subsystems; finalized phased roadmap |
 
 ---
 
@@ -39,6 +40,10 @@ Session 004 made the post-morph temp/background-load model functional: copy-to-t
 Session 005 closed the remaining global morph menu-sync bug after the reset: STM now reports the selected kit image's `globalMorphAmount` back to AVR only on actual normal/temp boundary restores, and AVR updates menu state without echoing the change back into STM sound state. The session kept the scope narrow, documented the fix in the session logs, and left the broader preset/background-load refactor for later.
 - **Find here**: display-only global morph report opcodes, normal/temp boundary restore behavior, AVR menu update without STM echo, session 005 closeout logs and audit notes
 
+### 006 — Refactor Planning + Phased Roadmap Finalization (2026-06-09)
+Session 006 finalized the comprehensive phased refactor plan for the STM-side preset, morph, and pattern subsystems. Key decisions were made to unify background loading into a single overwriteable session model, retire legacy voice-cache promotion paths, and strictly separate UART transport from protocol parsing. The resulting roadmap in `REFACTOR_PHASED_PLAN.md` serves as the authoritative guide for the upcoming implementation phases.
+- **Find here**: refactor phased roadmap, module boundaries for `/Preset/` and `/uARTFrontSYX/`, single background-load session model, transport vs protocol separation decisions, retired legacy load paths
+
 
 ---
 
@@ -61,6 +66,8 @@ Session 005 closed the remaining global morph menu-sync bug after the reset: STM
 | Velocity-to-voice-morph is a trigger-time one-shot value set, not a generic modulation-node destination | 004 |
 | Future preset/morph refactor target is `mainboard/LxrStm32/src/Preset/`; SEQ16 temp keyhole remains intentionally bodged until after that refactor | 004 |
 | Global morph menu sync on normal/temp switch is handled by display-only STM-to-AVR report traffic, not file-load routing | 005 |
+| Background loading is unified into a single overwriteable STM-side session model; legacy voice-cache promotion is retired | 006 |
+| UART transport (Uart.c) and protocol parsing (frontPanelParser.c) are strictly separated; parser is session-aware but transport-blind | 006 |
 
 
 ---
