@@ -44,6 +44,7 @@
 #include "Preset/KitState.h"
 #include "Preset/ParameterMap.h"
 #include "Preset/ParameterIngress.h"
+#include "Preset/MorphEngine.h"
 #include "EuklidGenerator.h"
 
  /**<
@@ -176,9 +177,9 @@ extern uint8_t seq_rollVelocity;
 extern uint8_t seq_kitResetFlag;
 extern uint8_t seq_skipFirstRoll;
 
-extern uint8_t seq_vMorphAmount[7];
-extern uint8_t seq_vMorphFlag;
-extern uint8_t seq_morphLoadDisabled;
+#define seq_vMorphAmount preset_vMorphAmount
+#define seq_vMorphFlag preset_vMorphFlag
+#define seq_morphLoadDisabled preset_morphLoadDisabled
 
 void sequencer_sendVMorph(uint8_t voiceArray, uint8_t morphAmount);
 //------------------------------------------------------------------------------
@@ -355,10 +356,10 @@ static inline void seq_updateFrontAndInterpolatedAutomationTargets(SeqKitState *
    preset_updateFrontAndInterpolatedAutomationTargets(kit, param, selector);
 }
 
-/* Sequencer still owns the transitional live-apply cache while Preset owns
-   ingress routing. This tiny helper lets the new ingress module refresh the
-   old cache without taking ownership away from the morph worker yet. */
-void seq_updateLiveSharedParameterCache(uint16_t param, uint8_t value);
+static inline void seq_updateLiveSharedParameterCache(uint16_t param, uint8_t value)
+{
+   preset_updateLiveSharedParameterCache(param, value);
+}
 
 /* Compatibility wrapper for ingress target selection. The actual mode state is
    owned by `Preset`, but old callers can keep using the `seq_*` name while the
@@ -424,17 +425,63 @@ void seq_init();
 /** call periodically to check if the next step has to be processed */
 
 void seq_tick();
-void seq_serviceMorphInterpolation();
+
+static inline void seq_serviceMorphInterpolation(void)
+{
+   preset_serviceMorphInterpolation();
+}
+
 void seq_serviceEndpointRestore();
 uint8_t seq_endpointRestoreBusy();
-void seq_setGlobalMorphAmount(uint8_t morphAmount);
-void seq_resetVoiceMorphAmountsToGlobal();
-void seq_resetLiveMorphApplyCache();
-void seq_setGlobalMorphAutomationValue(uint8_t morphValue);
-void seq_setVoiceMorphAmount(uint8_t synthVoice, uint8_t morphAmount);
-void seq_setVoiceMorphAutomationValue(uint8_t synthVoice, uint8_t morphValue);
-void seq_setVoiceMorphMaskAutomationValue(uint8_t voiceMask, uint8_t morphValue);
-void seq_modulateVoiceMorphAmount(uint8_t synthVoice, float amount, float value);
+
+static inline void seq_setGlobalMorphAmount(uint8_t morphAmount)
+{
+   preset_setGlobalMorphAmount(morphAmount);
+}
+
+static inline void seq_resetVoiceMorphAmountsToGlobal(void)
+{
+   preset_resetVoiceMorphAmountsToGlobal();
+}
+
+static inline void seq_resetLiveMorphApplyCache(void)
+{
+   preset_resetLiveMorphApplyCache();
+}
+
+static inline void seq_setGlobalMorphAutomationValue(uint8_t morphValue)
+{
+   preset_setGlobalMorphAutomationValue(morphValue);
+}
+
+static inline void seq_setVoiceMorphAmount(uint8_t synthVoice, uint8_t morphAmount)
+{
+   preset_setVoiceMorphAmount(synthVoice, morphAmount);
+}
+
+static inline void seq_setVoiceMorphAutomationValue(uint8_t synthVoice, uint8_t morphValue)
+{
+   preset_setVoiceMorphAutomationValue(synthVoice, morphValue);
+}
+
+static inline void seq_setVoiceMorphMaskAutomationValue(uint8_t voiceMask, uint8_t morphValue)
+{
+   preset_setVoiceMorphMaskAutomationValue(voiceMask, morphValue);
+}
+
+static inline void seq_modulateVoiceMorphAmount(uint8_t synthVoice, float amount, float value)
+{
+   preset_modulateVoiceMorphAmount(synthVoice, amount, value);
+}
+
+static inline void seq_applySingleParameterValue(uint16_t param, uint8_t value)
+{
+   preset_applySingleParameterValue(param, value);
+}
+
+void seq_applyVoiceAutomationTargets(const SeqKitAutomationTargets *source,
+                                     uint8_t synthVoice);
+
 void seq_applyNormalEndpointAutomationTargets();
 //------------------------------------------------------------------------------
 void seq_armAutomationStep(uint8_t stepNr, uint8_t track,uint8_t isArmed);

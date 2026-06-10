@@ -1,7 +1,7 @@
 # REFACTOR_PHASED_PLAN
 
-Date: 2026-06-09
-Status: Phase 1 in progress for Session 007
+Date: 2026-06-10
+Status: Phase 3 in progress
 
 ## Purpose
 
@@ -185,7 +185,7 @@ façade that binds pattern and preset modules together.
 | `mainboard/LxrStm32/src/MIDI/Uart.h` | `uARTFrontSYX/Uart.h` | Transport API | Human-readable names should be finalized here. |
 | `mainboard/LxrStm32/src/MIDI/frontPanelParser.c` | `uARTFrontSYX/frontPanelParser.c` | Front-panel protocol state machine, parser, command dispatch | Parser should not keep preset state once the split is complete. |
 | `mainboard/LxrStm32/src/MIDI/frontPanelParser.h` | `uARTFrontSYX/frontPanelParser.h` | Parser-facing public API | Keep only the external entry points that the transport or main loop needs. |
-| `mainboard/LxrStm32/src/MIDI/frontPanelParser.c` | `Preset/PresetLoadCache.c` | PRF/load cache session state, deferred perf replay, live snapshot cache, single overwriteable background-load session | This is a strong candidate for removal from the protocol layer. |
+| `mainboard/LxrStm32/src/MIDI/frontPanelParser.c" | `Preset/PresetLoadCache.c` | PRF/load cache session state, deferred perf replay, live snapshot cache, single overwriteable background-load session | This is a strong candidate for removal from the protocol layer. |
 | `mainboard/LxrStm32/src/MIDI/MidiMessages.h` | optional `uARTFrontSYX/FrontPanelProtocol.h` | Front-panel opcode names and semantic protocol constants | Decision needed on whether to keep a shared header or split it. |
 
 ## Functions And Variables To Flag As Possibly Redundant
@@ -329,16 +329,101 @@ Goal:
 
 Deliverables:
 
-- interpolation worker
-- phased LFO-to-morph drain
-- velocity-to-morph one-shot path
-- global morph set/get helpers
-- cache invalidation and live apply suppression helpers
+- `mainboard/LxrStm32/src/Preset/MorphEngine.h/.c`
+- interpolation worker (`preset_serviceMorphInterpolation`)
+- phased LFO-to-morph drain and cursor logic
+- velocity-to-morph and modulation paths
+- global and per-voice morph amount state
+- live-apply suppression cache for DSP coherence
+
+Reasoning:
+
+- Colocate morph interpretation logic: The morph engine is the primary consumer 
+  of morph endpoint data. Moving it to `Preset` allows the sound-state 
+  authority to own the interpolation pipeline that transforms endpoints into 
+  live audio parameters.
+- Encapsulate live-apply suppression: The live-apply cache (`seq_liveMorphAppliedValue`) 
+  is a performance optimization for the morph worker. It does not belong in 
+  the generic Sequencer state.
+- Decouple from real-time loop: While `preset_serviceMorphInterpolation` is 
+  called from the main loop, its internal state (scan cursors, phases) should 
+  be private to the morph module.
+
+Files to be modified:
+
+- `mainboard/LxrStm32/src/Sequencer/sequencer.c`: Remove morph variables and 
+  function definitions. Replace with calls to new `preset_morph*` APIs.
+- `mainboard/LxrStm32/src/Sequencer/sequencer.h`: Move morph-related declarations 
+  to the new header. Add compatibility wrappers for existing callers.
+- `mainboard/LxrStm32/src/Preset/MorphEngine.h/.c`: New files to host the 
+  relocated logic.
+- `mainboard/LxrStm32/src/Preset/ParameterIngress.c`: Update to call 
+  `preset_updateLiveSharedParameterCache` instead of the old Sequencer bridge.
+- `mainboard/LxrStm32/src/main.c`: Update main loop call to 
+  `preset_serviceMorphInterpolation()`.
+- `mainboard/LxrStm32/Makefile`: Add `src/Preset/MorphEngine.c` to the build.
+
+Functions to be moved/renamed:
+
+- `seq_syncVMorphAmountMirrorsFromLiveSources()` -> `preset_syncVMorphAmountMirrorsFromLiveSources()`
+- `seq_selectVoiceMorphAmountFromKit()` -> `preset_selectVoiceMorphAmountFromKit()`
+- `seq_setVoiceMorphLiveAmount()` -> `preset_setVoiceMorphLiveAmount()`
+- `seq_morphImageVoiceIsLive()` -> `preset_morphImageVoiceIsLive()`
+- `seq_invalidateLiveMorphApplyCache()` -> `preset_invalidateLiveMorphApplyCache()`
+- `seq_invalidateAllLiveMorphApplyCaches()` -> `preset_invalidateAllLiveMorphApplyCaches()`
+- `seq_resetLiveMorphApplyCache()` -> `preset_resetLiveMorphApplyCache()`
+- `seq_liveMorphApplyNeeded()` -> `preset_liveMorphApplyNeeded()`
+- `seq_interpolateMorphValue()` -> `preset_interpolateMorphValue()`
+- `seq_applyLiveMorphParameterValue()` -> `preset_applyLiveMorphParameterValue()`
+- `seq_morphAutomationValueToAmount()` -> `preset_morphAutomationValueToAmount()`
+- `seq_advanceMorphScanCursor()` -> `preset_advanceMorphScanCursor()`
+- `seq_lfoMorphAssignmentForSource()` -> `preset_lfoMorphAssignmentForSource()`
+- `seq_voiceHasLfoMorphOverlay()` -> `preset_voiceHasLfoMorphOverlay()`
+- `seq_advanceMorphDrainPhase()` -> `preset_advanceMorphDrainPhase()`
+- `seq_setGlobalMorphAmount()` -> `preset_setGlobalMorphAmount()`
+- `seq_setGlobalMorphAutomationValue()` -> `preset_setGlobalMorphAutomationValue()`
+- `seq_resetVoiceMorphAmountsToGlobal()` -> `preset_resetVoiceMorphAmountsToGlobal()`
+- `seq_setVoiceMorphAmount()` -> `preset_setVoiceMorphAmount()`
+- `seq_setVoiceMorphAutomationValue()` -> `preset_setVoiceMorphAutomationValue()`
+- `seq_setVoiceMorphMaskAutomationValue()` -> `preset_setVoiceMorphMaskAutomationValue()`
+- `seq_applyVelocityVoiceMorphOnTrigger()` -> `preset_applyVelocityVoiceMorphOnTrigger()`
+- `seq_modulateVoiceMorphAmount()` -> `preset_modulateVoiceMorphAmount()`
+- `seq_serviceMorphInterpolation()` -> `preset_serviceMorphInterpolation()`
+- `seq_updateLiveSharedParameterCache()` -> `preset_updateLiveSharedParameterCache()`
+
+Variables to be moved:
+
+- `seq_vMorphFlag` -> `preset_vMorphFlag`
+- `seq_vMorphAmount[]` -> `preset_vMorphAmount[]`
+- `seq_morphLoadDisabled` -> `preset_morphLoadDisabled`
+- `seq_morphScanParam` -> `preset_morphScanParam` (internal to MorphEngine)
+- `seq_morphDrainPhase` -> `preset_morphDrainPhase` (internal to MorphEngine)
+- `seq_liveMorphAppliedValue[][]` -> `preset_liveMorphAppliedValue[][]` (internal to MorphEngine)
+- `seq_liveMorphAppliedKnown[][]` -> `preset_liveMorphAppliedKnown[][]` (internal to MorphEngine)
+- `seq_liveSharedParams[]` -> `preset_liveSharedParams[]` (internal to MorphEngine)
+- `seq_liveSharedParamsValid[]` -> `preset_liveSharedParamsValid[]` (internal to MorphEngine)
+
+Session 009 implementation result:
+
+- Added the new `mainboard/LxrStm32/src/Preset/MorphEngine.h/.c` files.
+- Moved all morph-related variables and functions from `sequencer.c` to `MorphEngine.c`.
+- Renamed moved functions and variables to use the `preset_` prefix.
+- Relocated `seq_applySingleParameterValue()` to `Preset/ParameterIngress.c` 
+  as `preset_applySingleParameterValue()` and updated its signature.
+- Moved `seq_applySharedParameterValues()` and `seq_applyVoiceParameterValues()` 
+  to `MorphEngine.c` since they depend on the live-apply cache.
+- Established `preset_updateLiveSharedParameterCache()` in `MorphEngine.c` as 
+  the canonical way to refresh the shared parameter cache.
+- Updated `sequencer.h` with `static inline` wrappers and defines to maintain 
+  compatibility for old callers.
+- Updated `main.c` to call `preset_serviceMorphInterpolation()` in the main loop.
+- Verified the build with `make stm32 -j4`.
 
 Exit criteria:
 
-- `sequencer.c` no longer owns morph interpolation logic.
-- `seq_morphScanParam` and related live-apply internals are no longer public.
+- `sequencer.c` no longer owns morph interpolation logic or live-apply state.
+- Morph interpolation continues to function correctly in standard and LFO-modulated modes.
+- Build remains successful.
 
 ### Phase 3: Move Endpoint Restore And Temp Switching
 

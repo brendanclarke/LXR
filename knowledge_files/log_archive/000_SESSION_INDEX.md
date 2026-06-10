@@ -17,6 +17,7 @@
 | 006 | 2026-06-09 | local repo, uncommitted planning docs | refactor planning and architectural alignment for STM-side preset/morph subsystems; finalized phased roadmap |
 | 007 | 2026-06-09 | local repo, Phase 1 complete | refactor phase 1: carved core Preset types (KitState, ParameterMap, ParameterIngress) into new module; established ingress authority |
 | 008 | 2026-06-09 | local repo, uncommitted docs | AVR startup substep toggle bug root-cause analysis and fix; identified DIN initialization mismatch and polling race |
+| 009 | 2026-06-10 | local repo, Phase 2 complete | refactor phase 2: moved morph engine and live-apply suppression logic to new Preset/MorphEngine module; updated main loop and established authoritative DSP application bridge |
 
 ---
 
@@ -54,6 +55,10 @@ Session 007 implemented Phase 1 of the architectural refactor. It established th
 Session 008 identified and fixed a bug where the AVR would incorrectly toggle all substeps of the first pattern's first step on startup. The root cause was a mismatch between the software button-state mirror (initialized to 'all pressed') and the actual hardware state (all released), combined with a polling order that processed SELECT buttons before the SHIFT button. This resulted in a phantom "shifted release" event on the first scan. The fix involved synchronizing the software mirror with the hardware state in `din_init()` before the main loop begins.
 - **Find here**: AVR startup bug, DIN initialization, button-state mirror synchronization, phantom release events, polling order dependency, hardware/software state alignment
 
+### 009 — Refactor Phase 2: Morph Engine and Live-Apply (2026-06-10)
+Session 009 implemented Phase 2 of the architectural refactor. The morph engine, interpolation worker, phased LFO-to-morph drain, and live-apply suppression cache were moved into the new `mainboard/LxrStm32/src/Preset/MorphEngine` module. All relocated logic was renamed with the `preset_` prefix. A new authoritative DSP application bridge, `preset_applySingleParameterValue()`, was established in `ParameterIngress.c`. The `sequencer.h` header was updated with compatibility wrappers to ensure the rest of the codebase remains functional during the transition.
+- **Find here**: Morph engine relocation, interpolation worker, live-apply cache, phased morph drain, DSP application bridge, preset API renaming, sequencer compatibility wrappers
+
 
 ---
 
@@ -80,6 +85,7 @@ Session 008 identified and fixed a bug where the AVR would incorrectly toggle al
 | UART transport (Uart.c) and protocol parsing (frontPanelParser.c) are strictly separated; parser is session-aware but transport-blind | 006 |
 | Core sound-state (KitState), parameter mapping, and ingress authority are now owned by the new Preset module | 007 |
 | AVR `din_inputData` must be synchronized with hardware in `din_init` to prevent phantom startup events | 008 |
+| Morph engine and live-apply logic are now owned by the new Preset/MorphEngine module | 009 |
 
 
 ---

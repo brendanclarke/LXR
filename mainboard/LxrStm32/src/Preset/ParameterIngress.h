@@ -76,4 +76,9 @@ void preset_storeVelocityDestinationIngress(uint8_t voice, uint16_t destination)
    image coherent with the current ingress mode. */
 void preset_storeMacroDestinationIngress(uint8_t destinationNr, uint16_t destination);
 
+/* Applies a single parameter value to the DSP, respecting the retrigger-safe
+   diagnostic filter and converting the raw index to a MIDI-like status/data
+   pair for the parser. */
+void preset_applySingleParameterValue(uint16_t param, uint8_t value);
+
 #endif /* PRESET_PARAMETERINGRESS_H_ */

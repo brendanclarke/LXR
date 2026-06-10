@@ -26,7 +26,7 @@ make firmware
 
 **Session 001 close status**: full top-level build succeeds in this repo with `make clean && make firmware` (warnings remain, no fatal errors).
 
-**Current status after Session 007 closeout (2026-06-09)**: Phase 1 of the architectural refactor is complete. Core sound-state images (`SeqKitState`), parameter mapping, and ingress authority have been moved into the new `mainboard/LxrStm32/src/Preset/` module (`KitState`, `ParameterMap`, `ParameterIngress`). `Sequencer` remains a compatibility façade. Build is verified, and the refactor continues according to `REFACTOR_PHASED_PLAN.md`.
+**Current status after Session 009 closeout (2026-06-10)**: Phase 2 of the architectural refactor is complete. The morph engine, interpolation worker, and live-apply suppression cache have been moved into the new `mainboard/LxrStm32/src/Preset/MorphEngine` module. All relocated logic was renamed with the `preset_` prefix, and a new authoritative DSP bridge was established in `ParameterIngress.c`. `Sequencer` remains a compatibility façade. Build is verified, and the refactor continues according to `REFACTOR_PHASED_PLAN.md`.
 
 Canonical current WIP docs:
 - `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md`

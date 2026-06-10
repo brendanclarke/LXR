@@ -108,10 +108,6 @@ int8_t seq_loopActiveStepPosition[NUM_TRACKS+1];
 
 int8_t seq_loopUpdateFlag=0;
 
-uint8_t seq_vMorphFlag=0;
-uint8_t seq_vMorphAmount[7];
-uint8_t seq_morphLoadDisabled=0;
-
 int8_t 	seq_stepIndex[NUM_TRACKS+1];	/**< we have 16 steps consisting of 8 sub steps = 128 steps.
 											     each track has its own counter to allow different pattern lengths */
                                       // -bc- +1 so we don't have to use DRUM1 as a reference
@@ -210,32 +206,7 @@ static uint16_t seq_endpointRestoreParamCursor = 0;
 static uint8_t seq_endpointRestoreVoiceCursor = 0;
 static uint8_t seq_endpointRestoreVoiceParamCursor = 0;
 static uint16_t seq_endpointRestoreWaitCounter = 0;
-
-static uint16_t seq_morphScanParam = 0;
-/* Phase 0 stores the normal morph baseline; phases 1..6 optionally apply
-   source-voice LFO-to-morph overlays. The scan param advances only after all
-   active phases for that parameter have had a main-loop pass. */
-static uint8_t seq_morphDrainPhase = 0;
-/* This is a live-DSP apply cache, not a parameter validity model. It lets the
-   first computed zero value land in DSP after file load, but suppresses repeated
-   identical setter calls on later morph scan passes. */
-static uint8_t seq_liveMorphAppliedValue[SEQ_MORPH_IMAGE_COUNT][END_OF_SOUND_PARAMETERS];
-static uint8_t seq_liveMorphAppliedKnown[SEQ_MORPH_IMAGE_COUNT][END_OF_SOUND_PARAMETERS];
-
 static uint8_t seq_tmpBoundaryPatternSwitchAck = 0;
-static uint8_t seq_liveSharedParams[END_OF_SOUND_PARAMETERS];
-static uint8_t seq_liveSharedParamsValid[END_OF_SOUND_PARAMETERS];
-
-/* Keep the transitional live-apply cache in Sequencer while Preset owns the
-   ingress policy and raw parameter routing. */
-void seq_updateLiveSharedParameterCache(uint16_t param, uint8_t value)
-{
-   if(!seq_isVoiceParameter(param))
-   {
-      seq_liveSharedParams[param] = value;
-      seq_liveSharedParamsValid[param] = 1;
-   }
-}
 
 uint8_t seq_transpose_voiceAmount[7];
 uint8_t seq_transposeOnOff;
@@ -261,13 +232,8 @@ static void seq_pushKitEndpointVoiceMaskToFrontInternal(const SeqKitState *kit,
                                                         uint8_t voiceMask,
                                                         uint8_t reportGlobalMorph);
 static void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask);
-static void seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit);
-static void seq_syncVMorphAmountMirrorsFromLiveSources();
-static void seq_selectVoiceMorphAmountFromKit(uint8_t synthVoice,
-                                              const SeqKitState *kit);
-static void seq_applySingleParameterValue(uint16_t param, uint8_t value);
-static void seq_applyVoiceAutomationTargets(const SeqKitAutomationTargets *source,
-                                            uint8_t synthVoice);
+static void seq_pushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit);
+
 static ModulationNode* seq_getLfoModNode(uint8_t voice);
 static void seq_updateVoiceSourcesForPatternChange(const uint8_t *oldPatternForTrack,
                                                    uint8_t pushEndpointUpdates);
@@ -277,546 +243,72 @@ static uint8_t seq_intIsMainStepActive(uint8_t voice, uint8_t mainStepNr, uint8_
 static void seq_resetNote(Step *step);
 static void seq_setStepIndexToStart();
 
-static void seq_syncVMorphAmountMirrorsFromLiveSources()
+//------------------------------------------------------------------------------
+static ModulationNode* seq_getLfoModNode(uint8_t voice)
 {
-   uint8_t synthVoice;
-
-   seq_vMorphAmount[0] = seq_getCurrentImageKitState()->globalMorphAmount;
-
-   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
+   switch(voice)
    {
-      const SeqKitState *kit =
-         seq_getMorphKitForImage(seq_getMorphImageForVoice(synthVoice));
-      seq_vMorphAmount[synthVoice + 1] = kit->voiceMorphAmount[synthVoice];
+      case 0:
+      case 1:
+      case 2:
+         return &voiceArray[voice].lfo.modTarget;
+      case 3:
+         return &snareVoice.lfo.modTarget;
+      case 4:
+         return &cymbalVoice.lfo.modTarget;
+      case 5:
+      default:
+         return &hatVoice.lfo.modTarget;
    }
 }
 
-//------------------------------------------------------------------------------
-static void seq_selectVoiceMorphAmountFromKit(uint8_t synthVoice,
-                                              const SeqKitState *kit)
+void seq_applyVoiceAutomationTargets(const SeqKitAutomationTargets *source,
+                                            uint8_t synthVoice)
 {
-   if(!kit || synthVoice >= SEQ_SYNTH_VOICES)
+   ModulationNode *lfoNode;
+
+   if(!source || synthVoice >= SEQ_SYNTH_VOICES)
       return;
 
-   seq_vMorphAmount[synthVoice + 1] = kit->voiceMorphAmount[synthVoice];
-}
 
-//------------------------------------------------------------------------------
-static void seq_setVoiceMorphLiveAmount(uint8_t synthVoice,
-                                        uint8_t morphAmount)
-{
-   SeqKitState *kit;
-
-   if(synthVoice >= SEQ_SYNTH_VOICES)
-      return;
-
-   /* Velocity-to-VMORPH is a one-shot trigger value, not a generic velocity
-      modulation-node destination. */
-   kit = seq_getMorphKitForImage(seq_getMorphImageForVoice(synthVoice));
-   kit->voiceMorphAmount[synthVoice] = morphAmount;
-   seq_vMorphAmount[synthVoice + 1] = morphAmount;
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_morphImageVoiceIsLive(uint8_t image, uint8_t synthVoice)
-{
-   uint8_t sourceState;
-
-   if(synthVoice >= SEQ_SYNTH_VOICES)
-      return 0;
-
-   sourceState = (image == SEQ_MORPH_IMAGE_TMP) ? SEQ_VOICE_SOURCE_TMP
-                                                : SEQ_VOICE_SOURCE_NORMAL;
-   return seq_voiceSourceState[synthVoice] == sourceState;
-}
-
-static void seq_invalidateLiveMorphApplyCache(uint8_t image)
-{
-   if(image < SEQ_MORPH_IMAGE_COUNT)
-      memset(seq_liveMorphAppliedKnown[image], 0, END_OF_SOUND_PARAMETERS);
-}
-
-//------------------------------------------------------------------------------
-static void seq_invalidateAllLiveMorphApplyCaches()
-{
-   uint8_t image;
-
-   for(image=0;image<SEQ_MORPH_IMAGE_COUNT;image++)
-      seq_invalidateLiveMorphApplyCache(image);
-}
-
-//------------------------------------------------------------------------------
-void seq_resetLiveMorphApplyCache()
-{
-   seq_invalidateAllLiveMorphApplyCaches();
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_liveMorphApplyNeeded(uint8_t image,
-                                        uint16_t param,
-                                        uint8_t value)
-{
-   if(image >= SEQ_MORPH_IMAGE_COUNT || param >= END_OF_SOUND_PARAMETERS)
-      return 0;
-
-   if(seq_liveMorphAppliedKnown[image][param]
-      && seq_liveMorphAppliedValue[image][param] == value)
+   lfoNode = seq_getLfoModNode(synthVoice);
+   if(source->lfoDestinationValid & (1 << synthVoice))
    {
-      return 0;
+      modNode_setDestination(lfoNode, source->lfoDestination[synthVoice]);
+      modNode_updateValue(lfoNode, lfoNode->lastVal);
    }
 
-   seq_liveMorphAppliedValue[image][param] = value;
-   seq_liveMorphAppliedKnown[image][param] = 1;
-   return 1;
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_interpolateMorphValue(uint8_t a, uint8_t b, uint8_t x)
-{
-   int32_t fixedPointValue = ((int32_t)a * 256) + (((int32_t)b - (int32_t)a) * x);
-   uint8_t result;
-
-   if(fixedPointValue < 0)
-      fixedPointValue = 0;
-   else if(fixedPointValue > 0xffff)
-      fixedPointValue = 0xffff;
-
-   result = (uint8_t)(((uint32_t)fixedPointValue) / 256);
-
-   return (uint8_t)((fixedPointValue & 0xff) < 0x7f ? result : result + 1);
-}
-
-static uint8_t seq_synthVoiceFromTriggerVoice(uint8_t voiceNr)
-{
-   if(voiceNr >= 5)
-      return 5;
-
-   return voiceNr;
-}
-
-static void seq_applyLiveAutomationTargetSelector(uint8_t image,
-                                                  uint16_t param,
-                                                  uint8_t selector)
-{
-   SeqKitAutomationTargets target;
-   uint8_t synthVoice;
-
-   memset(&target, 0, sizeof(target));
-
-   if(param >= PAR_VEL_DEST_1 && param <= PAR_VEL_DEST_6)
+   if(source->velocityDestinationValid & (1 << synthVoice))
    {
-      synthVoice = (uint8_t)(param - PAR_VEL_DEST_1);
-      target.velocityDestination[synthVoice] =
-         seq_resolveAutomationTargetSelector(selector);
-      target.velocityDestinationValid = (uint8_t)(1 << synthVoice);
-   }
-   else if(param >= PAR_TARGET_LFO1 && param <= PAR_TARGET_LFO6)
-   {
-      synthVoice = (uint8_t)(param - PAR_TARGET_LFO1);
-      target.lfoDestination[synthVoice] =
-         seq_resolveAutomationTargetSelector(selector);
-      target.lfoDestinationValid = (uint8_t)(1 << synthVoice);
-   }
-   else
-   {
-      return;
-   }
-
-   if(seq_morphImageVoiceIsLive(image, synthVoice))
-      seq_applyVoiceAutomationTargets(&target, synthVoice);
-}
-
-//------------------------------------------------------------------------------
-static void seq_applyLiveMorphParameterValue(uint8_t image,
-                                             uint8_t synthVoice,
-                                             uint16_t param,
-                                             uint8_t value)
-{
-   if(!seq_morphImageVoiceIsLive(image, synthVoice))
-      return;
-
-   if(!seq_liveMorphApplyNeeded(image, param, value))
-      return;
-
-   seq_applyLiveAutomationTargetSelector(image, param, value);
-   seq_applySingleParameterValue(param, value);
-}
-
-static uint8_t seq_morphAutomationValueToAmount(uint8_t morphValue)
-{
-   if(morphValue >= 127)
-      return 255;
-
-   return (uint8_t)(morphValue * 2);
-}
-
-//------------------------------------------------------------------------------
-static void seq_advanceMorphScanCursor()
-{
-   seq_morphScanParam++;
-   if(seq_morphScanParam >= END_OF_SOUND_PARAMETERS)
-      seq_morphScanParam = 0;
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_lfoMorphAssignmentForSource(uint8_t sourceVoice,
-                                               uint8_t *targetVoice,
-                                               ModulationNode **lfoNode)
-{
-   uint8_t image;
-   SeqKitState *kit;
-   uint16_t destination;
-   uint8_t morphVoice;
-
-   if(sourceVoice >= SEQ_SYNTH_VOICES)
-      return 0;
-
-   /* LFO-to-VMORPH is drained from the LFO node's lastVal later; do not do full
-      voice-parameter morph work in the audio/LFO update path. */
-   image = seq_getMorphImageForVoice(sourceVoice);
-   kit = seq_getMorphKitForImage(image);
-
-   if(!(kit->frontPanelAutomationTargets.lfoDestinationValid &
-        (uint8_t)(1 << sourceVoice)))
-   {
-      return 0;
-   }
-
-   destination = kit->frontPanelAutomationTargets.lfoDestination[sourceVoice];
-   morphVoice = seq_morphVoiceForParam(destination);
-   if(morphVoice >= SEQ_SYNTH_VOICES)
-      return 0;
-
-   if(targetVoice)
-      *targetVoice = morphVoice;
-   if(lfoNode)
-      *lfoNode = seq_getLfoModNode(sourceVoice);
-
-   return 1;
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_voiceHasLfoMorphOverlay(uint8_t targetVoice)
-{
-   uint8_t sourceVoice;
-
-   if(targetVoice >= SEQ_SYNTH_VOICES)
-      return 0;
-
-   for(sourceVoice=0;sourceVoice<SEQ_SYNTH_VOICES;sourceVoice++)
-   {
-      uint8_t morphVoice;
-      if(seq_lfoMorphAssignmentForSource(sourceVoice, &morphVoice, 0)
-         && morphVoice == targetVoice)
+      if(preset_isMorphAmountParam(source->velocityDestination[synthVoice]))
       {
-         return 1;
+         modNode_setDestination(&velocityModulators[synthVoice], PAR_NONE);
+      }
+      else
+      {
+         modNode_setDestination(&velocityModulators[synthVoice],
+                                source->velocityDestination[synthVoice]);
+         modNode_updateValue(&velocityModulators[synthVoice],
+                             velocityModulators[synthVoice].lastVal);
       }
    }
-
-   return 0;
 }
 
-//------------------------------------------------------------------------------
-static void seq_advanceMorphDrainPhase()
+static void seq_applySharedAutomationTargets(const SeqKitAutomationTargets *source)
 {
-   uint8_t nextPhase;
-
-   for(nextPhase=(uint8_t)(seq_morphDrainPhase + 1);
-       nextPhase<=SEQ_SYNTH_VOICES;
-       nextPhase++)
-   {
-      if(seq_lfoMorphAssignmentForSource((uint8_t)(nextPhase - 1), 0, 0))
-      {
-         seq_morphDrainPhase = nextPhase;
-         return;
-      }
-   }
-
-   seq_morphDrainPhase = 0;
-   seq_advanceMorphScanCursor();
-}
-
-//------------------------------------------------------------------------------
-void seq_setGlobalMorphAmount(uint8_t morphAmount)
-{
-   SeqKitState *kit = seq_getCurrentImageKitState();
-   uint8_t voice;
-
-   /* Global/menu morph is only a convenience input on STM: it resets all
-      per-voice morph bases. Actual interpolation always reads per-voice state. */
-   kit->globalMorphAmount = morphAmount;
-
-   for(voice=0;voice<SEQ_SYNTH_VOICES;voice++)
-   {
-      kit->voiceMorphBaseAmount[voice] = morphAmount;
-      kit->voiceMorphAmount[voice] = morphAmount;
-   }
-
-   seq_syncVMorphAmountMirrorsFromLiveSources();
-}
-
-//------------------------------------------------------------------------------
-void seq_setGlobalMorphAutomationValue(uint8_t morphValue)
-{
-   uint8_t synthVoice;
-   uint8_t morphAmount = seq_morphAutomationValueToAmount(morphValue);
-
-   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
-      seq_setVoiceMorphLiveAmount(synthVoice, morphAmount);
-
-   seq_vMorphAmount[0] = morphAmount;
-}
-
-//------------------------------------------------------------------------------
-void seq_resetVoiceMorphAmountsToGlobal()
-{
-   SeqKitState *kit = seq_getCurrentImageKitState();
-   uint8_t synthVoice;
-
-   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
-   {
-      kit->voiceMorphBaseAmount[synthVoice] = kit->globalMorphAmount;
-      kit->voiceMorphAmount[synthVoice] = kit->globalMorphAmount;
-   }
-
-   seq_syncVMorphAmountMirrorsFromLiveSources();
-}
-
-//------------------------------------------------------------------------------
-void seq_setVoiceMorphAmount(uint8_t synthVoice, uint8_t morphAmount)
-{
-   SeqKitState *kit;
-
-   if(synthVoice >= SEQ_SYNTH_VOICES)
-      return;
-
-   kit = seq_getMorphKitForImage(seq_getMorphImageForVoice(synthVoice));
-   kit->voiceMorphBaseAmount[synthVoice] = morphAmount;
-   kit->voiceMorphAmount[synthVoice] = morphAmount;
-   seq_vMorphAmount[synthVoice + 1] = morphAmount;
-}
-
-//------------------------------------------------------------------------------
-void seq_setVoiceMorphAutomationValue(uint8_t synthVoice, uint8_t morphValue)
-{
-   seq_setVoiceMorphLiveAmount(synthVoice,
-                               seq_morphAutomationValueToAmount(morphValue));
-}
-
-//------------------------------------------------------------------------------
-void seq_setVoiceMorphMaskAutomationValue(uint8_t voiceMask, uint8_t morphValue)
-{
-   uint8_t synthVoice;
-
-   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
-   {
-      uint8_t bit = (uint8_t)(1 << synthVoice);
-      if(voiceMask & bit)
-         seq_setVoiceMorphAutomationValue(synthVoice, morphValue);
-   }
-
-   if(voiceMask & 0x40)
-      seq_setVoiceMorphAutomationValue(5, morphValue);
-}
-
-//------------------------------------------------------------------------------
-static void seq_applyVelocityVoiceMorphOnTrigger(uint8_t voiceNr, uint8_t velocity)
-{
-   uint8_t synthVoice = seq_synthVoiceFromTriggerVoice(voiceNr);
-   uint8_t targetVoice;
-   uint8_t morphAmount;
-   uint16_t destination;
-   float amount;
-   float scaled;
-   SeqKitState *kit;
-
-   if(!velocity)
-      return;
-
-   if(synthVoice >= SEQ_SYNTH_VOICES)
-      return;
-
-   kit = seq_getMorphKitForImage(seq_getMorphImageForVoice(synthVoice));
-   if(!(kit->frontPanelAutomationTargets.velocityDestinationValid &
-        (uint8_t)(1 << synthVoice)))
-   {
-      return;
-   }
-
-   destination = kit->frontPanelAutomationTargets.velocityDestination[synthVoice];
-   targetVoice = seq_morphVoiceForParam(destination);
-   if(targetVoice >= SEQ_SYNTH_VOICES)
-      return;
-
-   amount = velocityModulators[synthVoice].amount;
-   if(amount < 0.f)
-      amount = 0.f;
-   else if(amount > 1.f)
-      amount = 1.f;
-
-   scaled = ((float)velocity / 127.f) * amount;
-   if(scaled < 0.f)
-      scaled = 0.f;
-   else if(scaled > 1.f)
-      scaled = 1.f;
-
-   morphAmount = (uint8_t)((scaled * 255.f) + 0.5f);
-   seq_setVoiceMorphLiveAmount(targetVoice, morphAmount);
-}
-
-//------------------------------------------------------------------------------
-void seq_modulateVoiceMorphAmount(uint8_t synthVoice, float amount, float value)
-{
-   float travel;
-   uint8_t modulationAmount;
-   uint8_t image;
-   SeqKitState *kit;
    uint8_t i;
 
-   if(synthVoice >= SEQ_SYNTH_VOICES)
+   if(!source)
       return;
 
-   /* LFO/velocity morph modulation is a live overlay. It moves between the
-      stored interpolation baseline and the morph endpoint, then applies DSP.
-      It must not write the stored interpolatedParams[] baseline. */
-   travel = amount * value;
-   if(travel < 0.f)
-      travel = 0.f;
-   else if(travel > 1.f)
-      travel = 1.f;
-
-   modulationAmount = (uint8_t)((travel * 255.f) + 0.5f);
-   image = seq_getMorphImageForVoice(synthVoice);
-   kit = seq_getMorphKitForImage(image);
-
-   for(i=0;i<SEQ_VOICE_PARAM_LENGTH;i++)
+   for(i=0;i<4;i++)
    {
-      uint16_t param =
-         seq_canonicalParamFromVoiceMask(seq_voiceParamMask[synthVoice][i]);
-      uint8_t baseline;
-      uint8_t liveValue;
-
-      if(param >= END_OF_SOUND_PARAMETERS
-         || seq_isAutomationTargetSelectorParam(param)
-         || seq_isMorphAmountParam(param))
+      if(source->macroDestinationValid & (1 << i))
       {
-         continue;
+         modNode_setDestination(&macroModulators[i], source->macroDestination[i]);
+         modNode_updateValue(&macroModulators[i], macroModulators[i].lastVal);
       }
-
-      baseline = kit->interpolatedParams[param];
-
-      liveValue = baseline;
-      if(modulationAmount)
-      {
-         liveValue = seq_interpolateMorphValue(baseline,
-                                               kit->morphParams[param],
-                                               modulationAmount);
-      }
-
-      seq_applyLiveMorphParameterValue(image, synthVoice, param, liveValue);
    }
-}
-
-//------------------------------------------------------------------------------
-void seq_serviceMorphInterpolation()
-{
-   SeqKitState *kit;
-   uint8_t synthVoice;
-   uint8_t image;
-   uint8_t voiceMask;
-   uint16_t param;
-   uint8_t isAutomationTargetSelector;
-
-   if(seq_morphScanParam >= END_OF_SOUND_PARAMETERS)
-      seq_morphScanParam = 0;
-   if(seq_morphDrainPhase > SEQ_SYNTH_VOICES)
-      seq_morphDrainPhase = 0;
-
-   /* Background morph worker: exactly one interpolation is allowed per STM main
-      loop pass. Phase 0 updates the stored baseline. Active LFO-to-morph phases
-      apply one live overlay from that baseline without storing it. */
-   param = seq_morphScanParam;
-
-   if(seq_morphDrainPhase)
-   {
-      uint8_t sourceVoice = (uint8_t)(seq_morphDrainPhase - 1);
-      uint8_t targetVoice;
-      ModulationNode *lfoNode;
-      float travel;
-      uint8_t modulationAmount;
-      uint8_t liveValue;
-
-      if(!seq_lfoMorphAssignmentForSource(sourceVoice, &targetVoice, &lfoNode))
-      {
-         seq_advanceMorphDrainPhase();
-         return;
-      }
-
-      voiceMask = seq_voiceMaskForParameter(param);
-      if(!(voiceMask & (uint8_t)(1 << targetVoice))
-         || param >= END_OF_SOUND_PARAMETERS
-         || seq_isAutomationTargetSelectorParam(param)
-         || seq_isMorphAmountParam(param))
-      {
-         seq_advanceMorphDrainPhase();
-         return;
-      }
-
-      image = seq_getMorphImageForVoice(targetVoice);
-      kit = seq_getMorphKitForImage(image);
-
-      travel = lfoNode->amount * lfoNode->lastVal;
-      if(travel < 0.f)
-         travel = 0.f;
-      else if(travel > 1.f)
-         travel = 1.f;
-
-      modulationAmount = (uint8_t)((travel * 255.f) + 0.5f);
-      liveValue = kit->interpolatedParams[param];
-      if(modulationAmount)
-      {
-         liveValue = seq_interpolateMorphValue(liveValue,
-                                               kit->morphParams[param],
-                                               modulationAmount);
-      }
-
-      seq_applyLiveMorphParameterValue(image, targetVoice, param, liveValue);
-      seq_advanceMorphDrainPhase();
-      return;
-   }
-
-   voiceMask = seq_voiceMaskForParameter(param);
-
-   synthVoice = seq_firstVoiceForMask(voiceMask);
-   if(synthVoice >= SEQ_SYNTH_VOICES)
-   {
-      seq_advanceMorphDrainPhase();
-      return;
-   }
-
-   image = seq_getMorphImageForVoice(synthVoice);
-   kit = seq_getMorphKitForImage(image);
-   isAutomationTargetSelector = seq_isAutomationTargetSelectorParam(param);
-
-   if(param < END_OF_SOUND_PARAMETERS)
-   {
-      uint8_t value = isAutomationTargetSelector
-                    ? kit->frontPanelParams[param]
-                    : seq_interpolateMorphValue(kit->frontPanelParams[param],
-                                                kit->morphParams[param],
-                                                kit->voiceMorphAmount[synthVoice]);
-      uint8_t liveValue = value;
-
-      /* Stored interpolation is the baseline owned by this worker. Selector
-         parameters are carved out to the kit/front endpoint so a modulation
-         destination cannot also be morphed by its own generator. */
-      kit->interpolatedParams[param] = value;
-      seq_updateInterpolatedAutomationTarget(kit, param, value);
-      if(isAutomationTargetSelector || !seq_voiceHasLfoMorphOverlay(synthVoice))
-         seq_applyLiveMorphParameterValue(image, synthVoice, param, liveValue);
-   }
-
-   seq_advanceMorphDrainPhase();
 }
 
 static uint8_t seq_trackPatternUsesTmp(uint8_t pattern)
@@ -824,7 +316,6 @@ static uint8_t seq_trackPatternUsesTmp(uint8_t pattern)
    return seq_normalizePatternNumber(pattern) == SEQ_TMP_PATTERN;
 }
 
-//------------------------------------------------------------------------------
 static uint8_t seq_synthVoiceUsesTmpFromTrackPatterns(const uint8_t *patternForTrack,
                                                       uint8_t synthVoice)
 {
@@ -840,13 +331,6 @@ static uint8_t seq_synthVoiceUsesTmpFromTrackPatterns(const uint8_t *patternForT
    return seq_trackPatternUsesTmp(patternForTrack[synthVoice]);
 }
 
-//------------------------------------------------------------------------------
-uint8_t seq_isTmpKitActive()
-{
-   return seq_tmpKitActive;
-}
-
-//------------------------------------------------------------------------------
 uint8_t seq_normalizePatternNumber(uint8_t pattern)
 {
    if(pattern == SEQ_TMP_PATTERN)
@@ -900,199 +384,27 @@ void seq_setMainSteps(uint8_t pattern, uint8_t track, uint16_t steps)
       seq_patternSet.seq_mainSteps[pattern][track] = steps;
 }
 
-//------------------------------------------------------------------------------
-static ModulationNode* seq_getLfoModNode(uint8_t voice)
-{
-   switch(voice)
-   {
-      case 0:
-      case 1:
-      case 2:
-         return &voiceArray[voice].lfo.modTarget;
-      case 3:
-         return &snareVoice.lfo.modTarget;
-      case 4:
-         return &cymbalVoice.lfo.modTarget;
-      case 5:
-      default:
-         return &hatVoice.lfo.modTarget;
-   }
-}
-
-//------------------------------------------------------------------------------
-static void seq_applyVoiceAutomationTargets(const SeqKitAutomationTargets *source,
-                                            uint8_t synthVoice)
-{
-   ModulationNode *lfoNode;
-
-   if(!source || synthVoice >= SEQ_SYNTH_VOICES)
-      return;
-
-   lfoNode = seq_getLfoModNode(synthVoice);
-   if(source->lfoDestinationValid & (1 << synthVoice))
-   {
-      modNode_setDestination(lfoNode, source->lfoDestination[synthVoice]);
-      modNode_updateValue(lfoNode, lfoNode->lastVal);
-   }
-
-   if(source->velocityDestinationValid & (1 << synthVoice))
-   {
-      if(seq_isMorphAmountParam(source->velocityDestination[synthVoice]))
-      {
-         modNode_setDestination(&velocityModulators[synthVoice], PAR_NONE);
-      }
-      else
-      {
-         modNode_setDestination(&velocityModulators[synthVoice],
-                                source->velocityDestination[synthVoice]);
-         modNode_updateValue(&velocityModulators[synthVoice],
-                             velocityModulators[synthVoice].lastVal);
-      }
-   }
-}
-
-//------------------------------------------------------------------------------
-static void seq_applySharedAutomationTargets(const SeqKitAutomationTargets *source)
-{
-   uint8_t i;
-
-   if(!source)
-      return;
-
-   for(i=0;i<4;i++)
-   {
-      if(source->macroDestinationValid & (1 << i))
-      {
-         modNode_setDestination(&macroModulators[i], source->macroDestination[i]);
-         modNode_updateValue(&macroModulators[i], macroModulators[i].lastVal);
-      }
-   }
-}
-
-//------------------------------------------------------------------------------
 void seq_applyNormalEndpointAutomationTargets()
 {
    uint8_t synthVoice;
 
    for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
    {
-      if(seq_morphImageVoiceIsLive(SEQ_MORPH_IMAGE_NORMAL, synthVoice))
-         seq_applyVoiceAutomationTargets(&seq_normalKitState.frontPanelAutomationTargets,
+      if(preset_getMorphImageForVoice(synthVoice) == PRESET_MORPH_IMAGE_NORMAL)
+         seq_applyVoiceAutomationTargets(&preset_normalKitState.frontPanelAutomationTargets,
                                          synthVoice);
    }
 
-   if(!seq_tmpKitActive)
-      seq_applySharedAutomationTargets(&seq_normalKitState.frontPanelAutomationTargets);
-}
-
-//------------------------------------------------------------------------------
-static void seq_applySingleParameterValue(uint16_t param, uint8_t value)
-{
-   MidiMsg msg;
-
-   /* Diagnostic: reintroduce live DSP apply by low-risk parameter families.
-      All other stored/morphed params remain blocked from the old live MIDI
-      parameter API while we isolate the retrigger-like glitch. */
-   if(!((param >= PAR_VOL1 && param <= PAR_VOL6)
-      || (param >= PAR_OSC_WAVE_DRUM1 && param <= PAR_OSC_WAVE_SNARE)
-      || param == PAR_WAVE1_CYM
-      || param == PAR_WAVE1_HH
-      || (param >= PAR_PAN1 && param <= PAR_PAN3)
-      || (param >= PAR_PAN4 && param <= PAR_PAN6)
-      || (param >= PAR_AUDIO_OUT1 && param <= PAR_AUDIO_OUT6)
-      || (param >= PAR_COARSE1 && param <= PAR_FINE6)
-      || (param >= PAR_MOD_WAVE_DRUM1 && param <= PAR_WAVE3_HH)
-      || (param >= PAR_NOISE_FREQ1 && param <= PAR_MIX1)
-      || (param >= PAR_MOD_OSC_F1_CYM && param <= PAR_MOD_OSC_GAIN2)
-      || (param >= PAR_FILTER_FREQ_1 && param <= PAR_RESO_6)
-      || (param >= PAR_VELOA1 && param <= PAR_VELOD6_OPEN)
-      || (param >= PAR_VOL_SLOPE1 && param <= PAR_VOL_SLOPE6)
-      || (param >= PAR_REPEAT4 && param <= PAR_REPEAT5)
-      || (param >= PAR_MOD_EG1 && param <= PAR_MODAMNT4)
-      || (param >= PAR_PITCH_SLOPE1 && param <= PAR_PITCH_SLOPE4)
-      || (param >= PAR_FMAMNT1 && param <= PAR_FM_FREQ3)
-      || (param >= PAR_DRIVE1 && param <= PAR_HAT_DISTORTION)
-      || (param >= PAR_VOICE_DECIMATION1 && param <= PAR_VOICE_DECIMATION_ALL)
-      || (param >= PAR_FREQ_LFO1 && param <= PAR_AMOUNT_LFO6)
-      || (param >= PAR_FILTER_DRIVE_1 && param <= PAR_FILTER_DRIVE_6)
-      || (param >= PAR_MIX_MOD_1 && param <= PAR_MIX_MOD_3)
-      || (param >= PAR_VOLUME_MOD_ON_OFF1 && param <= PAR_VOLUME_MOD_ON_OFF6)
-      || (param >= PAR_VELO_MOD_AMT_1 && param <= PAR_VELO_MOD_AMT_6)
-      || (param >= PAR_WAVE_LFO1 && param <= PAR_WAVE_LFO6)
-      || (param >= PAR_RETRIGGER_LFO1 && param <= PAR_OFFSET_LFO6)
-      || (param >= PAR_FILTER_TYPE_1 && param <= PAR_FILTER_TYPE_6)
-      || (param >= PAR_TRANS1_VOL && param <= PAR_TRANS6_FREQ)
-      || (param >= PAR_VEL_DEST_1 && param <= PAR_VEL_DEST_6)
-      || (param >= PAR_VOICE_LFO1 && param <= PAR_VOICE_LFO6)
-      || (param >= PAR_TARGET_LFO1 && param <= PAR_TARGET_LFO6)
-      || (param >= PAR_MAC1_DST1 && param <= PAR_MAC2_DST2_AMT)
-      || (param >= PAR_MORPH_DRUM1 && param <= PAR_MORPH_HIHAT)))
-   {
-      return;
-   }
-
-   /* This is the only low-parameter +1 conversion point for ordinary live DSP
-      application. Endpoint storage and PRF_RESTORE_* traffic use raw indices. */
-   if(param < 128)
-   {
-      msg.status = MIDI_CC;
-      msg.data1 = (uint8_t)((param + 1) & 0x7f);
-   }
-   else
-   {
-      msg.status = FRONT_CC_2;
-      msg.data1 = (uint8_t)(param - 128);
-   }
-
-   msg.data2 = value;
-   midiParser_ccHandler(msg, 0);
-}
-
-//------------------------------------------------------------------------------
-static void seq_applySharedParameterValues(const SeqKitState *kit)
-{
-   uint16_t param;
-
-   if(!kit)
-      return;
-
-   for(param=1;param<END_OF_SOUND_PARAMETERS;param++)
-   {
-      if(seq_isVoiceParameter(param))
-         continue;
-
-      if(seq_liveSharedParamsValid[param]
-         && seq_liveSharedParams[param] == kit->interpolatedParams[param])
-         continue;
-
-      seq_applySingleParameterValue(param, kit->interpolatedParams[param]);
-      seq_liveSharedParams[param] = kit->interpolatedParams[param];
-      seq_liveSharedParamsValid[param] = 1;
-   }
-}
-
-//------------------------------------------------------------------------------
-static void seq_applyVoiceParameterValues(const SeqKitState *kit, uint8_t synthVoice)
-{
-   uint8_t i;
-
-   if(!kit || synthVoice >= SEQ_SYNTH_VOICES)
-      return;
-
-   for(i=0;i<SEQ_VOICE_PARAM_LENGTH;i++)
-   {
-      uint16_t param = seq_canonicalParamFromVoiceMask(seq_voiceParamMask[synthVoice][i]);
-      if(param < END_OF_SOUND_PARAMETERS)
-         seq_applySingleParameterValue(param, kit->interpolatedParams[param]);
-   }
+   if(!preset_tmpKitActive)
+      seq_applySharedAutomationTargets(&preset_normalKitState.frontPanelAutomationTargets);
 }
 
 //------------------------------------------------------------------------------
 static void seq_applyVoiceSource(uint8_t synthVoice, uint8_t useTmp)
 {
-   const SeqKitState *kit = useTmp ? &seq_tmpKitState : &seq_normalKitState;
+   const SeqKitState *kit = useTmp ? &preset_tmpKitState : &preset_normalKitState;
 
-   seq_applyVoiceParameterValues(kit, synthVoice);
+   preset_applyVoiceParameterValues(kit, synthVoice);
    seq_applyVoiceAutomationTargets(&kit->interpolatedAutomationTargets, synthVoice);
 }
 
@@ -1120,10 +432,10 @@ static void seq_markVoiceSourceTarget(uint8_t synthVoice, uint8_t useTmp)
 
    /* TEMP PATTERN: publish the source before applying automation targets so any
       modulation callback observes the selected normal/temp image. */
-   seq_voiceSourceState[synthVoice] = targetState;
-   seq_selectVoiceMorphAmountFromKit(synthVoice,
-                                     useTmp ? &seq_tmpKitState
-                                            : &seq_normalKitState);
+   preset_setVoiceSourceState(synthVoice, targetState);
+   preset_selectVoiceMorphAmountFromKit(synthVoice,
+                                     useTmp ? &preset_tmpKitState
+                                            : &preset_normalKitState);
    seq_applyVoiceSource(synthVoice, useTmp);
 }
 
@@ -1214,7 +526,7 @@ static void seq_captureTmpKitState()
           SEQ_SYNTH_VOICES);
 
    seq_tmpKitState.valid = 1;
-   seq_invalidateLiveMorphApplyCache(SEQ_MORPH_IMAGE_TMP);
+   preset_invalidateLiveMorphApplyCache(PRESET_MORPH_IMAGE_TMP);
 }
 
 //------------------------------------------------------------------------------
@@ -1662,28 +974,28 @@ static void seq_setTmpKitActive(uint8_t active)
       /* TEMP PATTERN: Phase 1 avoids broad shared/non-voice DSP application on
          switch. Voice-local params are applied per synth voice after per-track
          pattern sources are committed. */
-      seq_tmpKitActive = 1;
-      seq_syncVMorphAmountMirrorsFromLiveSources();
-      seq_invalidateLiveMorphApplyCache(SEQ_MORPH_IMAGE_TMP);
+      preset_tmpKitActive = 1;
+      preset_syncVMorphAmountMirrorsFromLiveSources();
+      preset_invalidateLiveMorphApplyCache(PRESET_MORPH_IMAGE_TMP);
 
       /* RESTORE: Push the full temporary kit endpoints (Main + Morph) to the AVR.
          These may come from copy-to-temp or from lazy temp-kit initialization. */
-      seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(&seq_tmpKitState);
+      seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(&preset_tmpKitState);
       return;
    }
 
-   if(!seq_tmpKitActive)
+   if(!preset_tmpKitActive)
       return;
 
    /* TEMP PATTERN: Phase 1 avoids broad shared/non-voice DSP application on
       switch. Voice-local params are applied per synth voice after per-track
       pattern sources are committed. */
-   seq_tmpKitActive = 0;
-   seq_syncVMorphAmountMirrorsFromLiveSources();
-   seq_invalidateLiveMorphApplyCache(SEQ_MORPH_IMAGE_NORMAL);
+   preset_tmpKitActive = 0;
+   preset_syncVMorphAmountMirrorsFromLiveSources();
+   preset_invalidateLiveMorphApplyCache(PRESET_MORPH_IMAGE_NORMAL);
 
    /* RESTORE: Push the full captured normal kit endpoints (Main + Morph) to the AVR. */
-   seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(&seq_normalKitState);
+   seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(&preset_normalKitState);
 }
 
 //------------------------------------------------------------------------------
@@ -1712,12 +1024,10 @@ void seq_init()
    memset(seq_transpose_voiceAmount,63,NUM_TRACKS);
    memset(&seq_tmpKitState,0,sizeof(seq_tmpKitState));
    memset(&seq_normalKitState, 0, sizeof(seq_normalKitState));
-   memset(seq_liveSharedParams, 0, sizeof(seq_liveSharedParams));
-   memset(seq_liveSharedParamsValid, 0, sizeof(seq_liveSharedParamsValid));
-   memset(seq_liveMorphAppliedValue, 0, sizeof(seq_liveMorphAppliedValue));
-   seq_invalidateAllLiveMorphApplyCaches();
-   memset(seq_vMorphAmount, 0, sizeof(seq_vMorphAmount));
-   seq_morphScanParam = 0;
+
+   preset_resetLiveMorphApplyCache();
+   memset(preset_vMorphAmount, 0, sizeof(preset_vMorphAmount));
+
    for(i=0;i<SEQ_SYNTH_VOICES;i++)
    {
       seq_voiceSourceState[i] = SEQ_VOICE_SOURCE_NORMAL;
@@ -2033,7 +1343,7 @@ void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
    
    stepData = seq_liveStepForTrack(voiceNr, seq_stepIndex[voiceNr]);
    seq_parseAutomationNodes(voiceNr, stepData);
-   seq_applyVelocityVoiceMorphOnTrigger(voiceNr, vol);
+   preset_applyVelocityVoiceMorphOnTrigger(voiceNr, vol);
 
 	//turn the trigger off before sending the next one
    if(voiceNr>=5)

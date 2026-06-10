@@ -1,11 +1,3 @@
-# Session Handoff Log — 008
-
-## How to start a new session
-
-Paste the following at the start of each conversation, filling in the bracketed fields:
-
----
-
 **Project**: LXR -bc- Enhanced Firmware  
 **Session goal**: [Goal of the next session]  
 **Last session summary**: AVR startup substep toggle bug root-cause analysis and fix; identified DIN initialization mismatch and polling race.  

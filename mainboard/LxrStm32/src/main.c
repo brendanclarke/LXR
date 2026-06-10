@@ -293,7 +293,7 @@ int main(void)
 		trigger_tick();
 
 		// Service STM-owned morph interpolation independently of menu restore traffic.
-		seq_serviceMorphInterpolation();
+		preset_serviceMorphInterpolation();
 
 		// Advance any queued AVR endpoint/menu restore outside the sequencer boundary path.
 		seq_serviceEndpointRestore();

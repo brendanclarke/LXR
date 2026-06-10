@@ -102,7 +102,7 @@ Redundancy to remove later:
 - `frontParser_unholdVoice()` and `frontParser_uncacheVoice()` still exist as legacy live-cache promotion helpers, but the temp-background branch should not depend on them. During the refactor, either move them into a clearly named legacy loader module or remove them once all direct kit/voice load modes have a new STM-side preset API.
 - The current name `seq_voicesLoading` is now overloaded: it means "file voice payload is being received; store/cache instead of live apply", not necessarily "a voice is held awaiting later live promotion." Rename or replace it in the preset load API.
 
-### 2. Split STM preset state out of `Sequencer`
+### 2. Split STM preset state out of `Sequencer` (PHASE 1 & 2 COMPLETE)
 
 The sequencer now contains a large amount of preset-state and morph-state service code. Some of it is used by sequencing, but the ownership boundary is no longer clean.
 
@@ -169,29 +169,29 @@ Suggested files:
     - `seq_applySingleParameterValue()`
   - API goal: MIDI/front parser should call "store param into selected preset image" and not know about normal/temp arrays directly.
 
-- `Preset/MorphEngine.h/.c`
+- `Preset/MorphEngine.h/.c` (PHASE 2 COMPLETE)
   - Owns STM-side morph state and interpolation service.
   - Candidate moved functions:
-    - `seq_syncVMorphAmountMirrorsFromLiveSources()`
-    - `seq_selectVoiceMorphAmountFromKit()`
-    - `seq_setVoiceMorphLiveAmount()`
-    - `seq_morphImageVoiceIsLive()`
-    - `seq_getMorphImageForVoice()`
-    - `seq_invalidateLiveMorphApplyCache()`
-    - `seq_invalidateAllLiveMorphApplyCaches()`
-    - `seq_resetLiveMorphApplyCache()`
-    - `seq_liveMorphApplyNeeded()`
-    - `seq_interpolateMorphValue()`
-    - `seq_morphAutomationValueToAmount()`
-    - `seq_advanceMorphScanCursor()`
-    - `seq_setGlobalMorphAmount()`
-    - `seq_setGlobalMorphAutomationValue()`
-    - `seq_resetVoiceMorphAmountsToGlobal()`
-    - `seq_setVoiceMorphAmount()`
-    - `seq_setVoiceMorphAutomationValue()`
-    - `seq_setVoiceMorphMaskAutomationValue()`
-    - `seq_modulateVoiceMorphAmount()`
-    - `seq_serviceMorphInterpolation()`
+    - `seq_syncVMorphAmountMirrorsFromLiveSources()` (COMPLETE)
+    - `seq_selectVoiceMorphAmountFromKit()` (COMPLETE)
+    - `seq_setVoiceMorphLiveAmount()` (COMPLETE)
+    - `seq_morphImageVoiceIsLive()` (COMPLETE)
+    - `seq_getMorphImageForVoice()` (COMPLETE)
+    - `seq_invalidateLiveMorphApplyCache()` (COMPLETE)
+    - `seq_invalidateAllLiveMorphApplyCaches()` (COMPLETE)
+    - `seq_resetLiveMorphApplyCache()` (COMPLETE)
+    - `seq_liveMorphApplyNeeded()` (COMPLETE)
+    - `seq_interpolateMorphValue()` (COMPLETE)
+    - `seq_morphAutomationValueToAmount()` (COMPLETE)
+    - `seq_advanceMorphScanCursor()` (COMPLETE)
+    - `seq_setGlobalMorphAmount()` (COMPLETE)
+    - `seq_setGlobalMorphAutomationValue()` (COMPLETE)
+    - `seq_resetVoiceMorphAmountsToGlobal()` (COMPLETE)
+    - `seq_setVoiceMorphAmount()` (COMPLETE)
+    - `seq_setVoiceMorphAutomationValue()` (COMPLETE)
+    - `seq_setVoiceMorphMaskAutomationValue()` (COMPLETE)
+    - `seq_modulateVoiceMorphAmount()` (COMPLETE)
+    - `seq_serviceMorphInterpolation()` (COMPLETE)
   - API goal: sequencer and modulation nodes set morph amounts; morph engine updates preset image and DSP.
 
 - `Preset/EndpointRestore.h/.c`

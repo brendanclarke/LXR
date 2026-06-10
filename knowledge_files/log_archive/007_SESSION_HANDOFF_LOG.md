@@ -21,6 +21,46 @@ COMPLETED:
 - Updated mainboard/LxrStm32/Makefile to include the new src/Preset directory in vpath and includes.
 - Added extensive deep block comments to all new and moved functions, variables, and headers.
 - Verified the STM32 firmware build with "make stm32 -j4".
+
+### Detailed Refactor Results (Phase 1)
+
+#### Functions Relocated to `Preset/` Module:
+- **Ingress Logic (`ParameterIngress.c`)**:
+  - `seq_storeParameterIngress()` -> `preset_storeParameterIngress()`
+  - `seq_storeMorphParameterIngress()` -> `preset_storeMorphParameterIngress()`
+  - `seq_storeLfoDestinationIngress()` -> `preset_storeLfoDestinationIngress()`
+  - `seq_storeVelocityDestinationIngress()` -> `preset_storeVelocityDestinationIngress()`
+  - `seq_storeMacroDestinationIngress()` -> `preset_storeMacroDestinationIngress()`
+  - `seq_setIngressTarget()` -> `preset_setIngressTarget()`
+  - `seq_getIngressTarget()` -> `preset_getIngressTarget()`
+  - `seq_setAutomationIngressTarget()` -> `preset_setAutomationIngressTarget()`
+  - `seq_updateInterpolatedAutomationTarget()` -> `preset_updateInterpolatedAutomationTarget()`
+  - `seq_updateFrontAndInterpolatedAutomationTargets()` -> `preset_updateFrontAndInterpolatedAutomationTargets()`
+- **Parameter Classification (`ParameterMap.c`)**:
+  - `seq_resolveAutomationTargetSelector()` -> `preset_resolveAutomationTargetSelector()`
+  - `seq_voiceMaskForParameter()` -> `preset_voiceMaskForParameter()`
+  - `seq_isVoiceParameter()` -> `preset_isVoiceParameter()`
+  - `seq_firstVoiceForMask()` -> `preset_firstVoiceForMask()`
+  - `seq_canonicalParamFromVoiceMask()` -> `preset_canonicalParamFromVoiceMask()`
+  - `seq_isAutomationTargetSelectorParam()` -> `preset_isAutomationTargetSelectorParam()`
+  - `seq_isMorphAmountParam()` -> `preset_isMorphAmountParam()`
+  - `seq_morphVoiceForParam()` -> `preset_morphVoiceForParam()`
+- **Sound State Management (`KitState.c`)**:
+  - `seq_getCurrentImageKitState()` -> `preset_getCurrentImageKitState()`
+  - `seq_getMorphKitForImage()` -> `preset_getMorphKitForImage()`
+  - `seq_getMorphImageForVoice()` -> `preset_getMorphImageForVoice()`
+  - `seq_isTmpKitActive()` -> `preset_isTmpKitActive()`
+  - `seq_setVoiceSourceState()` -> `preset_setVoiceSourceState()`
+  - `seq_getVoiceSourceState()` -> `preset_getVoiceSourceState()`
+
+#### Variables Relocated to `Preset/` Module:
+- `seq_normalKitState` -> `preset_normalKitState`
+- `seq_tmpKitState` -> `preset_tmpKitState`
+- `seq_paramIngressTarget` -> `preset_paramIngressTarget`
+- `seq_automationIngressTarget` -> `preset_automationIngressTarget`
+- `seq_voiceSourceState[]` -> `preset_voiceSourceState[]`
+- `seq_tmpKitActive` -> `preset_tmpKitActive`
+
 VERIFIED ON HARDWARE: No (Build verified by agent; hardware verification requested from user)
 
 CHANGES THIS SESSION:
