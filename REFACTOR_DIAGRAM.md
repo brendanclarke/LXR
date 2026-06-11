@@ -4,8 +4,8 @@ START OF REFACTOR_DIAGRAM.md
 
 # ARCHITECTURAL REFACTOR DIAGRAM & API SPECIFICATION
 **Project**: LXR Enhanced Firmware (STM32 Audio Engine Subsystems)  
-**Date**: 2026-06-08  
-**Status**: Target Refactor Specification (Pre-Session 006 Architecture)
+**Date**: 2026-06-11  
+**Status**: Target Refactor Specification (updated through Sessions 007-009; Phase 3 is next)
 
 ---
 
@@ -16,7 +16,7 @@ The objective of this architectural refactor is to decouple the sound parameter 
 Historically, `sequencer.c` and parts of the `MIDI/` parser mixed audio-rate real-time thread logic with block-level storage transfers, parameter interpolation, file-system caching, and raw UART stream decoding. This refactor establishes clean, structured APIs across three newly isolated sub-directories within `mainboard/LxrStm32/src/`:
 
 1.  **`/uARTFrontSYX/`**: implementation of the (future SysEx) protocol specification. Physical front-panel UART traffic feeds directly into this layer, the `/MIDI/` module is eventually updated to act as a front interpreter to map generic incoming MIDI messages (CC, Notes, RTC) straight into local SysEx packets to go here.
-2.  **`/Preset/`**: Centralized authority for all sound state parameters (normal kit endpoints, morph endpoints, interpolated run-time baselines, and active modulation target caches). Owns the low-Hz phase-drained morph engine, velocity/LFO morph modulations, and the single overwriteable background-load session (currently all stacked on sequencer.c).
+2.  **`/Preset/`**: Centralized authority for all sound state parameters (normal kit endpoints, morph endpoints, interpolated run-time baselines, and active modulation target caches). The concrete implementation now lives in `KitState.c/h`, `ParameterMap.c/h`, `ParameterIngress.c/h`, and `MorphEngine.c/h`; Phase 3 adds `EndpointRestore.c/h`, `TempPlaybackSwitch.c/h`, and `PresetLoadCache.c/h` for restore policy, temp switching, and the single overwriteable background-load session.
 3.  **`/Sequencer/Pattern/`**: Forms a specialized sub-directory under the sequencer subsystem that exclusively manages pattern data and generative algorithms (Euclidean/SOM), and specialized pattern synchronization/loading mechanics (such as temp/background pattern loading).
 
 ---
@@ -57,7 +57,7 @@ The following ASCII structural diagram models the modular blocks, the layout of 
 |  [Canonical Sound Parameter Store] |      |  [Pattern Layout & Generative Logic]    |       |  Pushbacks/
 |                                    |      |                                         |       |  Endpoint
 |  +------------------------------+  |      |  +-----------------------------------+  |       |  Restores)
-|  |         PresetData.c/h       |  |      |  |           PatternData.c/h         |  |       |
+|  |  KitState / ParameterMap / ParameterIngress / MorphEngine  |  |      |  |           PatternData.c/h         |  |       |
 |  | - normal/tmpKitState arrays  |  |      |  | - Pattern structs (Steps, Gates)  |  |       |
 |  | - Ingress routing matrices   |  |      |  | - Background load temp buffer     |  |       |
 |  +------------------------------+  |      |  | - Normal/Temp switch logic        |  |       |
@@ -111,8 +111,8 @@ This folder contains the protocol interface. It is responsible for parsing seria
 ### 3.2 /Preset/
 The preset module retains sole authority over parameter image states. It completely manages sound parameter images and time-sliced interpolation mechanics.
 
-#### `PresetData.c/h`
-* **Purpose**: Consolidates direct memory layout representation, state routing boundaries, parameter configuration ingestion, and image states.
+#### `KitState.c/h`, `ParameterMap.c/h`, `ParameterIngress.c/h`, `MorphEngine.c/h`
+* **Purpose**: Consolidates direct memory layout representation, state routing boundaries, parameter configuration ingestion, image states, and morph/live-apply ownership that used to sit directly inside `sequencer.c`.
 * **Primary Function Groups**:
     * Stores incoming parameters or kit byte values into the designated destination array
     * Reconciles raw selector bytes with resolved operational target maps (e.g., resolving LFO destination mappings synchronously to eliminate detached assignments)
@@ -125,6 +125,13 @@ The preset module retains sole authority over parameter image states. It complet
     * Owns fundamental, single-pass async worker function. Executed exactly once per main loop iteration, it processes one individual parameter, interpolating across current states to populate `interpolatedParams`.
     * Evaluates LFO modulations targeting voice morph PAR_MORPH_X as a second-pass interpolation on parameters for X, appended to the single pass, one-param-per-loop, morph async drain.
     * Captures note trigger velocity into voice morph value if so automated
+
+#### `TempPlaybackSwitch.c/h`
+* **Purpose**: Owns normal/temp source selection, temp-kit validity, voice-source routing, and the switch-state bookkeeping that decides when a pattern change should flip the active image.
+* **Primary Function Groups**:
+    * Captures the temp kit from the current normal image when temp playback is first needed.
+    * Applies the hihat-coupled per-voice source selection rules at normal/temp boundaries.
+    * Owns the pending-switch flags and the commit path that tells the sequencer when a source change is complete.
 
 #### `EndpointRestore.c/h`
 * **Purpose**: Handshaking, rate-limiting, and managing the state of async block parameters transmitted to update the ATmega display layout.

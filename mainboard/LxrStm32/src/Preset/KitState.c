@@ -6,6 +6,7 @@
  */
 
 #include "Preset/KitState.h"
+#include <string.h>
 
 /* The temporary kit image is the dedicated storage block for temp-pattern
    playback and any current-image writes that route to the temp bank. Keeping it
@@ -87,4 +88,39 @@ void preset_setVoiceSourceState(uint8_t synthVoice, uint8_t sourceState)
 {
    if(synthVoice < PRESET_SYNTH_VOICES)
       preset_voiceSourceState[synthVoice] = sourceState;
+}
+
+/* Copies the canonical normal kit image into the temp sandbox. The temp
+   pattern switch and copy-to-temp flows use this helper so the temp image is
+   created in one place and the capture semantics stay tied to the kit model
+   rather than the sequencer or parser. */
+void preset_captureTmpKitState(void)
+{
+   memcpy(preset_tmpKitState.frontPanelParams,
+          preset_normalKitState.frontPanelParams,
+          END_OF_SOUND_PARAMETERS);
+   memcpy(preset_tmpKitState.morphParams,
+          preset_normalKitState.morphParams,
+          END_OF_SOUND_PARAMETERS);
+   memcpy(preset_tmpKitState.interpolatedParams,
+          preset_normalKitState.interpolatedParams,
+          END_OF_SOUND_PARAMETERS);
+   memcpy(&preset_tmpKitState.frontPanelAutomationTargets,
+          &preset_normalKitState.frontPanelAutomationTargets,
+          sizeof(preset_tmpKitState.frontPanelAutomationTargets));
+   memcpy(&preset_tmpKitState.morphParameterEndpointAutomationTargets,
+          &preset_normalKitState.morphParameterEndpointAutomationTargets,
+          sizeof(preset_tmpKitState.morphParameterEndpointAutomationTargets));
+   memcpy(&preset_tmpKitState.interpolatedAutomationTargets,
+          &preset_normalKitState.interpolatedAutomationTargets,
+          sizeof(preset_tmpKitState.interpolatedAutomationTargets));
+   preset_tmpKitState.globalMorphAmount = preset_normalKitState.globalMorphAmount;
+   memcpy(preset_tmpKitState.voiceMorphBaseAmount,
+          preset_normalKitState.voiceMorphBaseAmount,
+          PRESET_SYNTH_VOICES);
+   memcpy(preset_tmpKitState.voiceMorphAmount,
+          preset_normalKitState.voiceMorphAmount,
+          PRESET_SYNTH_VOICES);
+
+   preset_tmpKitState.valid = 1;
 }

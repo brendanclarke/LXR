@@ -33,6 +33,13 @@ Session 005 note:
   boundary push-up path in place, but do not treat this as a future refactor
   target.
 
+Phase 3 fold-in note:
+
+- The endpoint-restore/temp-switch phase now absorbs the
+  `frontParser_applyDeferredVoiceCache()` split, the
+  `frontParser_unholdVoice()` / `frontParser_uncacheVoice()` cleanup, and the
+  `seq_loadPendigFlag` rename instead of leaving them as separate cleanup work.
+
 ## High-Value Refactor Targets
 
 ### 1. Retire `frontParser_applyDeferredVoiceCache()`

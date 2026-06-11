@@ -1,6 +1,6 @@
 # REFACTOR_PHASED_PLAN
 
-Date: 2026-06-10
+Date: 2026-06-11
 Status: Phase 3 in progress
 
 ## Purpose
@@ -119,6 +119,24 @@ It is intended to answer three questions before code movement begins:
       direct-load behavior still matters, it should be folded into the unified
       background-load finalizer rather than preserved as a separate voice-cache
       promotion mode.
+
+12. Should ordinary MIDI input ever directly initiate AVR/front-panel
+    communication, or should AVR traffic be emitted only by storage/session
+    protocols?
+    - AVR communication should be initiated only by storage/session protocols,
+      which are almost entirely owned by `Preset` and `Pattern` after the
+      refactor.
+    - Live MIDI input should update preset storage and DSP state first; it
+      should not normally be the source of AVR menu traffic.
+    - Any AVR-bound message that falls outside storage/session finalization
+      must be explicitly flagged in the docs and in review notes so it can be
+      checked before it is kept.
+    - Known exception buckets to review:
+      - endpoint restore and temp-boundary restore traffic, including the
+        display-only global morph report;
+      - background-load / restore handshake traffic;
+      - any remaining parser/session status bytes that are still required to
+        keep the front panel synchronized during a storage protocol.
 
 ## Proposed Module Boundaries
 
@@ -429,23 +447,136 @@ Exit criteria:
 
 Goal:
 
-- Separate the outbound restore protocol and the temp/normal source selection
-  model from the rest of the sequencer.
+- Separate the outbound restore protocol, the temp/normal source selection
+  model, and the background-load finalizer from the rest of the sequencer and
+  front-panel parser.
+- Keep `sequencer.c` as the real-time clock / trigger engine, but make it ask
+  `Preset` for restore policy, temp-image selection, and background-load
+  cleanup instead of owning those policies directly.
 
 Deliverables:
 
 - `Preset/EndpointRestore.*`
 - `Preset/TempPlaybackSwitch.*`
+- `Preset/PresetLoadCache.*`
 - explicit temp-boundary restore path for display-only global morph reports
-- split `frontParser_applyDeferredVoiceCache()` into a single temp/background
-  load finalizer and retire the legacy direct-load voice-cache promotion path
-- the background-load finalizer should model one in-flight load at a time, with
-  newer background requests able to replace older pending ones
+- a single overwriteable background-load session model
+- a transitional compatibility path for the legacy
+  `frontParser_applyDeferredVoiceCache()` entry point while the parser and
+  sequencer call sites are migrated
+
+Files to be modified:
+
+- `mainboard/LxrStm32/src/Sequencer/sequencer.c`
+- `mainboard/LxrStm32/src/Sequencer/sequencer.h`
+- `mainboard/LxrStm32/src/MIDI/frontPanelParser.c`
+- `mainboard/LxrStm32/src/MIDI/frontPanelParser.h`
+- `mainboard/LxrStm32/src/Preset/KitState.c/.h`
+- `mainboard/LxrStm32/src/Preset/EndpointRestore.c/.h`
+- `mainboard/LxrStm32/src/Preset/TempPlaybackSwitch.c/.h`
+- `mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h`
+- `mainboard/LxrStm32/Makefile`
+
+Implementation split:
+
+1. Endpoint restore ownership:
+   - move `seq_pushSingleParameterToFront()`,
+     `seq_pushSingleMorphParameterToFront()`,
+     `seq_pushKitEndpointsToFront()`,
+     `seq_pushKitEndpointsToFrontWithGlobalMorphReport()`,
+     `seq_pushKitEndpointVoiceMaskToFront()`,
+     `seq_pushKitEndpointVoiceMaskToFrontInternal()`,
+     `seq_pushGlobalMorphToFront()`,
+     `seq_pushEndpointUpdateForVoiceSourceChange()`,
+     `seq_maybePushKitEndpointsToFrontWithGlobalMorphReport()`,
+     `seq_endpointRestorePopRequest()`,
+     `seq_endpointRestoreClearCurrent()`,
+     `seq_endpointRestoreWaitTimedOut()`,
+     `seq_endpointRestoreSendNextFull()`,
+     `seq_endpointRestoreSendNextMasked()`,
+     `seq_endpointRestoreSendNext()`,
+     `seq_endpointRestoreBusy()`, and
+     `seq_serviceEndpointRestore()` into `EndpointRestore.c`.
+   - move the restore queue, phase machine, cursors, wait counter, and handshake
+     flags (`seq_tmpKitPushParamsToFrontEnabled`, `seq_tmpKitHandshakeReady`,
+     `seq_tmpKitHandshakeAck`) with them.
+   - keep the public `seq_serviceEndpointRestore()` / `seq_endpointRestoreBusy()`
+     wrappers in `sequencer.h` during the phase so callers do not need to churn
+     immediately.
+
+2. Temp switching ownership:
+   - move the temp-copy helper `seq_captureTmpKitState()` into
+     `Preset/KitState.c` as a `preset_*` helper so the temp image clone and the
+     switch boundary live in the same ownership domain.
+   - move `seq_trackPatternUsesTmp()`, `seq_synthVoiceUsesTmpFromTrackPatterns()`,
+     `seq_allVoiceSourcesUseTmp()`, `seq_allVoiceSourcesUseNormal()`,
+     `seq_applyVoiceSource()`, `seq_markVoiceSourceTarget()`, and
+     `seq_updateVoiceSourcesForPatternChange()` into `TempPlaybackSwitch.c`.
+   - move the temp-switch pending state
+     (`seq_pendingPattern`, `seq_perTrackPendingPattern[]`,
+     `seq_loadPendigFlag` renamed to `seq_loadPendingFlag`,
+     `seq_loadSeqNow`, `seq_newPatternAvailable`, `seq_newPatternExecuted`,
+     `seq_tmpBoundaryPatternSwitchAck`) into the same module so the sequencer
+     only sees a commit request and a completed switch.
+   - keep the hihat coupling rule inside the new module, because tracks 5 and 6
+     still need to move together across the normal/temp boundary.
+   - leave the actual pattern storage in `Sequencer/Pattern` for Phase 4; Phase
+     3 only moves the source-selection and switch-state machinery.
+
+3. Background-load finalizer ownership:
+   - move the PRF/load-session state from `frontPanelParser.c` into
+     `PresetLoadCache.c`.
+   - split `frontParser_applyDeferredVoiceCache()` into:
+     - `presetLoad_finalizeTempBackgroundLoad()` for the final commit / cleanup
+       path;
+     - `presetLoad_clearDeferredSession()` for session teardown;
+     - `presetLoad_hasPendingDeferredWork()` for the foreground tick or parser.
+   - keep `frontParser_applyDeferredVoiceCache()` only as a thin compatibility
+     shim while call sites are migrated, then remove it in the cleanup phase.
+   - move the related session flags and live-snapshot helpers with it:
+     `frontParser_clearDeferredPerfLoad()`, `frontParser_clearPrfRuntimeFlags()`,
+     `frontParser_clearPrfCacheSession()`, `frontParser_prfCacheSessionActive()`,
+     `frontParser_prfCacheCanExit()`, `frontParser_prfPendingCountsValid()`,
+     `frontParser_capturePrfStmLiveSnapshot()`,
+     `frontParser_prfCacheUseLivePattern()`,
+     `frontParser_prfCacheTrackUsesLivePattern()`,
+     `frontParser_prfCacheLiveStep()`, `frontParser_prfCacheLiveMainSteps()`,
+     `frontParser_prfCacheLiveLengthRotate()`,
+     `frontParser_prfCacheLivePatternSetting()`,
+     `frontParser_prfCacheLiveMidiChannel()`,
+     `frontParser_prfCacheLiveNoteOverrideValue()`,
+     `frontParser_prfCacheTakeLiveVMorphFlag()`,
+     `frontParser_prfCacheLiveVMorphAmountValue()`, and the
+     `frontParser_prfCacheCountPatternWrite()` bookkeeping.
+   - explicitly retire the legacy direct-load promotion behavior:
+     `frontParser_unholdVoice()`, `frontParser_uncacheVoice()`, and
+     `frontParser_unholdLoadedVoice()` should either become internal helpers in
+     the load-cache module or disappear once the new session API covers every
+     load mode.
+   - the new background-load model must allow a newer request to replace an
+     older in-flight request rather than queueing multiple sessions.
+
+Legacy cleanup folded in from `AUDIT_REFACTOR_TARGETS.md`:
+
+- rename `seq_loadPendigFlag` to `seq_loadPendingFlag`;
+- stop treating `frontParser_applyDeferredVoiceCache()` as a separate legacy
+  promotion path;
+- keep the remaining `frontParser_*` unhold/uncache helpers out of the public
+  parser API once the finalizer owns the session lifecycle.
+- flag any AVR traffic that is not initiated by a storage/session protocol
+  boundary for explicit review before it is retained.
 
 Exit criteria:
 
-- The sequencer can report source changes to `Preset`, but the actual restore
-  policy lives outside the real-time step engine.
+- `sequencer.c` no longer owns the endpoint restore queue or temp-switch state
+  machine.
+- `frontPanelParser.c` no longer decides how a background load is finalized.
+- The temp/normal switch still restores AVR menu state, including the
+  display-only global morph report, with no live-DSP cache replay from the
+  parser.
+- A newer background `.ALL` / `.PRF` request can safely replace an older
+  in-flight request.
+- Build remains reproducible.
 
 ### Phase 4: Move Pattern Data And Generators
 

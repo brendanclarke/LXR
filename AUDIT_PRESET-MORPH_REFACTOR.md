@@ -19,6 +19,12 @@ consolidation:
 
 Anything needed for future preset/morph work should live here instead.
 
+Session 009/010 note:
+
+- Phases 1 and 2 are now implemented in `mainboard/LxrStm32/src/Preset/`.
+- `sequencer.h` remains a compatibility façade while Phase 3 moves endpoint
+  restore, temp switching, and the background-load finalizer.
+
 ## Core Architecture After Session 004
 
 ### Ownership Model
@@ -51,9 +57,10 @@ buffers, not temp playback state.
 
 ### `SeqKitState`
 
-Current type:
+Current authoritative type:
 
-- `SeqKitState` in `mainboard/LxrStm32/src/Sequencer/sequencer.h`
+- `SeqKitState` in `mainboard/LxrStm32/src/Preset/KitState.h`
+- `sequencer.h` still re-exports compatibility wrappers for older call sites.
 
 Current fields:
 
@@ -96,8 +103,8 @@ Important invariant:
 
 Current global STM images:
 
-- `seq_normalKitState`
-- `seq_tmpKitState`
+- `preset_normalKitState` (`seq_normalKitState` remains as a compatibility alias)
+- `preset_tmpKitState` (`seq_tmpKitState` remains as a compatibility alias)
 - `seq_patternSet`
 - `seq_tmpPattern`
 

@@ -98,6 +98,12 @@ uint8_t preset_isTmpKitActive(void);
    data itself is written. */
 void preset_setTmpKitActive(uint8_t active);
 
+/* Copies the canonical normal kit image into the temp kit sandbox and marks
+   the temp image valid. Temp switching and copy-to-temp flows call this when
+   they need a fresh temporary image without teaching the parser or sequencer
+   how the kit struct is laid out. */
+void preset_captureTmpKitState(void);
+
 /* Maps a voice index to the morph-image slot that should receive its per-voice
    endpoint writes. This exists so the parameter router can choose temp vs
    normal storage from one canonical source of truth. */
