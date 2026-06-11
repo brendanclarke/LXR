@@ -1,7 +1,7 @@
 # REFACTOR_PHASED_PLAN
 
 Date: 2026-06-11
-Status: Phase 3 in progress
+Status: Phase 3 complete
 
 ## Purpose
 
@@ -454,6 +454,18 @@ Goal:
   `Preset` for restore policy, temp-image selection, and background-load
   cleanup instead of owning those policies directly.
 
+Implementation status:
+
+- Endpoint restore policy now lives in `mainboard/LxrStm32/src/Preset/EndpointRestore.c/.h`.
+- Temp/normal source selection and the boundary switch state now live in
+  `mainboard/LxrStm32/src/Preset/TempPlaybackSwitch.c/.h`.
+- The background-load session, deferred perf replay, live snapshot cache, and
+  pending-counter bookkeeping now live in
+  `mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h`.
+- `frontPanelParser.c` now includes `PresetLoadCache.h`, consumes the new
+  session API, and no longer owns the PRF/session state locally.
+- `make stm32 -j4` is green after the Phase 3 split.
+
 Deliverables:
 
 - `Preset/EndpointRestore.*`
@@ -526,6 +538,9 @@ Implementation split:
 3. Background-load finalizer ownership:
    - move the PRF/load-session state from `frontPanelParser.c` into
      `PresetLoadCache.c`.
+   - move `frontParser_deferPerfLoadCacheUntilPatternChange` and
+     `frontParser_resetPrfPendingCounters()` with the rest of the session
+     state so the parser only consumes the cache API.
    - split `frontParser_applyDeferredVoiceCache()` into:
      - `presetLoad_finalizeTempBackgroundLoad()` for the final commit / cleanup
        path;
@@ -536,7 +551,8 @@ Implementation split:
    - move the related session flags and live-snapshot helpers with it:
      `frontParser_clearDeferredPerfLoad()`, `frontParser_clearPrfRuntimeFlags()`,
      `frontParser_clearPrfCacheSession()`, `frontParser_prfCacheSessionActive()`,
-     `frontParser_prfCacheCanExit()`, `frontParser_prfPendingCountsValid()`,
+     `frontParser_prfCacheCanExit()`, `frontParser_resetPrfPendingCounters()`,
+     `frontParser_prfPendingCountsValid()`,
      `frontParser_capturePrfStmLiveSnapshot()`,
      `frontParser_prfCacheUseLivePattern()`,
      `frontParser_prfCacheTrackUsesLivePattern()`,

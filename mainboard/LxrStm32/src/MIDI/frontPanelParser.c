@@ -40,6 +40,7 @@
 #include "MidiParser.h"
 #include "ParameterArray.h"
 #include "sequencer.h"
+#include "Preset/PresetLoadCache.h"
 #include "Preset/ParameterIngress.h"
 #include "Uart.h"
 #include "SD_Manager.h"
@@ -55,7 +56,7 @@
 #include "TriggerOut.h"
 #include <string.h>
 
-static void frontParser_handleMidiMessage();
+void frontParser_handleMidiMessage(void);
 static void frontParser_handleSysexData(unsigned char data);
 static void frontParser_handleSeqCC();
 
@@ -63,67 +64,12 @@ static void frontParser_handleSeqCC();
 #define FLOW_ACK_CREDITS 1
 #define FRONT_FILE_DONE_TYPE_PERFORMANCE 8
 #define FRONT_FILE_DONE_TYPE_ALL 9
-#define DEFERRED_PERF_MSG_CACHE_SIZE 128
-#define PRF_CACHE_LIVE_PARAM_COUNT 310
-#define PRF_PENDING_EXPECTED_MAINSTEP_COUNT (NUM_PATTERN * NUM_TRACKS)
-#define PRF_PENDING_EXPECTED_STEP_COUNT (NUM_PATTERN * NUM_TRACKS * NUM_STEPS)
-#define PRF_PENDING_EXPECTED_LENGTH_COUNT (NUM_PATTERN * NUM_TRACKS)
-#define PRF_PENDING_EXPECTED_SCALE_COUNT (NUM_PATTERN * NUM_TRACKS)
-#define PRF_PENDING_EXPECTED_CHAIN_COUNT NUM_PATTERN
-
-typedef enum {
-   PRF_CACHE_IDLE = 0,
-   PRF_CACHE_RECEIVING_AVR_LIVE,
-   PRF_CACHE_LIVE_ACTIVE,
-   PRF_CACHE_RECEIVING_PENDING,
-   PRF_CACHE_PENDING_VALID,
-   PRF_CACHE_ABORTING
-} PrfCacheState;
 
 static uint8_t comm_loadSessionActive = 0;
 static uint8_t comm_quietUi = 0;
 static uint8_t comm_flowActive = 0;
 static uint8_t comm_flowChannel = 0;
 static uint8_t comm_flowBudgetRemaining = 0;
-
-uint8_t frontParser_deferPerfLoadCacheUntilPatternChange = 0;
-static uint8_t frontParser_deferredPerfLoadActive = 0;
-static uint8_t frontParser_deferredPerfVoiceCachePending = 0;
-static uint8_t frontParser_deferredPerfPatternPending = 0;
-static uint8_t frontParser_deferredPerfUnholdPending = 0;
-static uint8_t frontParser_deferredPerfProtectedPattern = 0;
-static uint8_t frontParser_deferredPerfReplay = 0;
-static uint8_t frontParser_deferredPerfMsgCount = 0;
-static MidiMsg frontParser_deferredPerfMsgCache[DEFERRED_PERF_MSG_CACHE_SIZE];
-static uint8_t frontParser_fileLoadIngressActive = 0;
-static uint8_t frontParser_fileLoadBracketActive = 0;
-static PrfCacheState frontParser_prfCacheState = PRF_CACHE_IDLE;
-static uint8_t frontParser_prfCacheProtectedPattern = 0;
-static uint8_t frontParser_prfCachePendingValid = 0;
-static uint8_t frontParser_prfCacheAvrLiveValid = 0;
-static uint8_t frontParser_prfCacheStmLiveValid = 0;
-// static uint8_t frontParser_prfCacheLiveParams[PRF_CACHE_LIVE_PARAM_COUNT];
-// static uint8_t frontParser_prfCacheLiveMorph[END_OF_SOUND_PARAMETERS];
-static TempPattern frontParser_prfCacheLivePattern;
-static uint8_t frontParser_prfCacheLiveActivePattern = 0;
-static uint8_t frontParser_prfCacheLivePendingPattern = 0;
-static uint8_t frontParser_prfCacheLivePerTrackActivePattern[NUM_TRACKS];
-static uint8_t frontParser_prfCacheLivePerTrackPendingPattern[NUM_TRACKS];
-static int8_t frontParser_prfCacheLiveStepIndex[NUM_TRACKS+1];
-static uint8_t frontParser_prfCacheLiveMidiChannels[8];
-static uint8_t frontParser_prfCacheLiveNoteOverride[7];
-static uint8_t frontParser_prfCacheLiveVMorphAmount[7];
-static uint8_t frontParser_prfCacheLiveVMorphFlag = 0;
-static uint8_t frontParser_prfCacheLiveSeqVoicesLoading = 0;
-static uint8_t frontParser_prfCacheLiveSeqNewVoiceAvailable = 0;
-static uint8_t frontParser_prfCacheLiveSeqTracksLocked = 0;
-static uint8_t frontParser_prfCacheLiveSeqLoadFastMode = 0;
-static uint16_t frontParser_prfPendingMainStepCount = 0;
-static uint16_t frontParser_prfPendingStepCount = 0;
-static uint16_t frontParser_prfPendingLengthCount = 0;
-static uint16_t frontParser_prfPendingScaleCount = 0;
-static uint16_t frontParser_prfPendingChainCount = 0;
-static uint16_t frontParser_prfPendingProtectedWriteCount = 0;
 
 extern MidiMsg frontParser_midiMsg;
 extern uint8_t frontParser_sysexActive;
@@ -200,6 +146,8 @@ uint8_t frontParser_isQuietUi()
 {
    return comm_quietUi;
 }
+
+#if 0
 
 #define VOICE_PARAM_LENGTH 36
 static uint8_t voice1presetMask[VOICE_PARAM_LENGTH]={1,8,9,20,      37,43,49,50,   62,70,74,78,  82,83,88,94,   102,108,115,121,     128,134,137,143,    149,155,161,167,    173,179,185,191,    197,203,209,215}; 
@@ -677,6 +625,8 @@ static void frontParser_clearHeldVoiceLoad(uint8_t voice)
    }
 }
 
+#endif
+
 //a counter for the received bytes
 //each message is made up from 3 bytes (status 0xb0, parameter nr and parameter value)
 uint8_t frontParser_rxCnt=0;
@@ -705,6 +655,7 @@ uint8_t frontParser_activeStep=0;
 uint8_t frontParser_stepCopySource=0;
 
   //------------------------------------------------------
+#if 0
 void frontParser_unholdVoice(uint8_t voice)
 {  
    uint8_t *presetMask;
@@ -923,6 +874,7 @@ void frontParser_applyDeferredVoiceCache()
       frontParser_clearDeferredPerfLoad();
    }
 }
+#endif
 
 //------------------------------------------------------
 /**send all active step numbers to frontpanel to light up corresponding LEDs*/
@@ -1469,7 +1421,7 @@ static void frontParser_handleSysexData(unsigned char data)
 }
 //------------------------------------------------------
 // This is called when we've received a full midi message
-static void frontParser_handleMidiMessage()
+void frontParser_handleMidiMessage(void)
 {
    switch(frontParser_midiMsg.status)
    {

@@ -18,6 +18,7 @@
 | 007 | 2026-06-09 | local repo, Phase 1 complete | refactor phase 1: carved core Preset types (KitState, ParameterMap, ParameterIngress) into new module; established ingress authority |
 | 008 | 2026-06-09 | local repo, uncommitted docs | AVR startup substep toggle bug root-cause analysis and fix; identified DIN initialization mismatch and polling race |
 | 009 | 2026-06-10 | local repo, Phase 2 complete | refactor phase 2: moved morph engine and live-apply suppression logic to new Preset/MorphEngine module; updated main loop and established authoritative DSP application bridge |
+| 010 | 2026-06-11 | local repo, Phase 3 complete | refactor phase 3: moved endpoint restore, temp switching, and background-load session bookkeeping into Preset; parser now consumes PresetLoadCache API; build verified |
 
 ---
 
@@ -59,6 +60,10 @@ Session 008 identified and fixed a bug where the AVR would incorrectly toggle al
 Session 009 implemented Phase 2 of the architectural refactor. The morph engine, interpolation worker, phased LFO-to-morph drain, and live-apply suppression cache were moved into the new `mainboard/LxrStm32/src/Preset/MorphEngine` module. All relocated logic was renamed with the `preset_` prefix. A new authoritative DSP application bridge, `preset_applySingleParameterValue()`, was established in `ParameterIngress.c`. The `sequencer.h` header was updated with compatibility wrappers to ensure the rest of the codebase remains functional during the transition.
 - **Find here**: Morph engine relocation, interpolation worker, live-apply cache, phased morph drain, DSP application bridge, preset API renaming, sequencer compatibility wrappers
 
+### 010 — Refactor Phase 3: Endpoint Restore, Temp Switching, and Background-Load Finalizer (2026-06-11)
+Session 010 completed the Phase 3 ownership split. Endpoint restore policy moved into `Preset/EndpointRestore`, temp/normal source selection and switch state moved into `Preset/TempPlaybackSwitch`, and the PRF/background-load cache moved into `Preset/PresetLoadCache`. The parser now imports the new cache API directly, including the pending-counter reset helper, and the Phase 3 build was verified with `make stm32 -j4`.
+- **Find here**: Endpoint restore ownership, temp-switch state split, background-load session cache, parser-to-PresetLoadCache wiring, pending-counter reset helper, build verification
+
 
 ---
 
@@ -86,6 +91,7 @@ Session 009 implemented Phase 2 of the architectural refactor. The morph engine,
 | Core sound-state (KitState), parameter mapping, and ingress authority are now owned by the new Preset module | 007 |
 | AVR `din_inputData` must be synchronized with hardware in `din_init` to prevent phantom startup events | 008 |
 | Morph engine and live-apply logic are now owned by the new Preset/MorphEngine module | 009 |
+| Phase 3 background-load/session ownership now lives in Preset/PresetLoadCache; frontPanelParser consumes the cache API and the pending-counter reset helper is exported there | 010 |
 
 
 ---

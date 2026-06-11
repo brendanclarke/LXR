@@ -5,7 +5,7 @@ START OF REFACTOR_DIAGRAM.md
 # ARCHITECTURAL REFACTOR DIAGRAM & API SPECIFICATION
 **Project**: LXR Enhanced Firmware (STM32 Audio Engine Subsystems)  
 **Date**: 2026-06-11  
-**Status**: Target Refactor Specification (updated through Sessions 007-009; Phase 3 is next)
+**Status**: Target Refactor Specification (updated through Sessions 007-010; Phase 3 is complete)
 
 ---
 
@@ -16,7 +16,7 @@ The objective of this architectural refactor is to decouple the sound parameter 
 Historically, `sequencer.c` and parts of the `MIDI/` parser mixed audio-rate real-time thread logic with block-level storage transfers, parameter interpolation, file-system caching, and raw UART stream decoding. This refactor establishes clean, structured APIs across three newly isolated sub-directories within `mainboard/LxrStm32/src/`:
 
 1.  **`/uARTFrontSYX/`**: implementation of the (future SysEx) protocol specification. Physical front-panel UART traffic feeds directly into this layer, the `/MIDI/` module is eventually updated to act as a front interpreter to map generic incoming MIDI messages (CC, Notes, RTC) straight into local SysEx packets to go here.
-2.  **`/Preset/`**: Centralized authority for all sound state parameters (normal kit endpoints, morph endpoints, interpolated run-time baselines, and active modulation target caches). The concrete implementation now lives in `KitState.c/h`, `ParameterMap.c/h`, `ParameterIngress.c/h`, and `MorphEngine.c/h`; Phase 3 adds `EndpointRestore.c/h`, `TempPlaybackSwitch.c/h`, and `PresetLoadCache.c/h` for restore policy, temp switching, and the single overwriteable background-load session.
+2.  **`/Preset/`**: Centralized authority for all sound state parameters (normal kit endpoints, morph endpoints, interpolated run-time baselines, and active modulation target caches). The concrete implementation now lives in `KitState.c/h`, `ParameterMap.c/h`, `ParameterIngress.c/h`, `MorphEngine.c/h`, `EndpointRestore.c/h`, `TempPlaybackSwitch.c/h`, and `PresetLoadCache.c/h` for restore policy, temp switching, and the single overwriteable background-load session.
 3.  **`/Sequencer/Pattern/`**: Forms a specialized sub-directory under the sequencer subsystem that exclusively manages pattern data and generative algorithms (Euclidean/SOM), and specialized pattern synchronization/loading mechanics (such as temp/background pattern loading).
 
 ---

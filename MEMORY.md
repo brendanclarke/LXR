@@ -28,7 +28,10 @@ make firmware
 
 **Current status after Session 009 closeout (2026-06-10)**: Phase 2 of the architectural refactor is complete. The morph engine, interpolation worker, and live-apply suppression cache have been moved into the new `mainboard/LxrStm32/src/Preset/MorphEngine` module. All relocated logic was renamed with the `preset_` prefix, and a new authoritative DSP bridge was established in `ParameterIngress.c`. `Sequencer` remains a compatibility façade. Build is verified, and the refactor continues according to `REFACTOR_PHASED_PLAN.md`. Session 010 is expanding the Phase 3 plan so the next implementation pass can move endpoint restore, temp switching, and background-load finalization into `Preset`.
 
+**Current status after Session 010 closeout (2026-06-11)**: Phase 3 implementation is complete and `make stm32 -j4` is green. Endpoint restore, temp/normal source switching, and the background-load session cache now live under `mainboard/LxrStm32/src/Preset/`, with `PresetLoadCache` owning the deferred perf replay and session bookkeeping that used to sit in `frontPanelParser.c`. The parser now imports that API instead of owning the PRF/load session state directly.
+
 Canonical current WIP docs:
+- `knowledge_files/log_archive/010_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/009_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/008_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md`
@@ -444,13 +447,19 @@ Sample flash map:
 - Be technical, concise, and direct.
 - No greetings, apologies, filler, or meta-commentary.
 - State facts, risks, and next actions. Keep function docs brief: why, ownership, timing.
+- A 'turn' consists of a user message and (your) agent response. 
+- Do not mix planning, coding, and summary turns unless told to do so: 
+    - Planning creates/edits markup, doesn't modify code or logs. 
+    - Coding creates/edits code files, tracks/modifies progress and status in markup documents, doesn't modify logs. 
+    - Summary creates/edits logs, updates other markup as necessary, doesn't touch code.
 
 ### 2. Security And Boundaries
 
-- Stay inside the workspace root.
+- Stay inside the workspace root, read permissions are always granted in root. 
 - No network, sudo, system config, or destructive commands unless explicitly requested.
 - No mutating git unless explicitly requested. Read-only git inspection is allowed when needed.
 - Never expose credentials. Ask before any command that can alter external state.
+
 
 ### 3. Coding Standards
 

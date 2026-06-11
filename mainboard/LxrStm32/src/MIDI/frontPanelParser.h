@@ -39,6 +39,7 @@
 
 #include "MidiMessages.h"
 #include "sequencer.h"
+#include "Preset/PresetLoadCache.h"
 #include "modulationNode.h"
 #include "valueShaper.h"
 
@@ -53,19 +54,5 @@ uint8_t frontParser_isQuietUi();
 
 void frontParser_updateTrackLeds(const uint8_t trackNr, uint8_t patternNr);
 void frontParser_updateSubStepLeds(const uint8_t trackNr, uint8_t patternNr);
-void frontParser_uncacheVoice(uint8_t voice);
-void frontParser_applyDeferredVoiceCache();
-uint8_t frontParser_prfCacheUseLivePattern();
-uint8_t frontParser_prfCacheTrackUsesLivePattern(uint8_t track);
-Step* frontParser_prfCacheLiveStep(uint8_t track, uint8_t step);
-uint16_t frontParser_prfCacheLiveMainSteps(uint8_t track);
-LengthRotate frontParser_prfCacheLiveLengthRotate(uint8_t track);
-PatternSetting frontParser_prfCacheLivePatternSetting();
-uint8_t frontParser_prfCacheLiveMidiChannel(uint8_t voice);
-uint8_t frontParser_prfCacheLiveNoteOverrideValue(uint8_t voice);
-uint8_t frontParser_prfCacheTakeLiveVMorphFlag();
-uint8_t frontParser_prfCacheLiveVMorphAmountValue(uint8_t voice);
-
-extern uint8_t frontParser_deferPerfLoadCacheUntilPatternChange;
 
 #endif /* FRONTPANELPARSER_H_ */
