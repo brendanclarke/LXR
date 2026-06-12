@@ -41,9 +41,10 @@
 #include "MidiMessages.h"
 #include "CymbalVoice.h"
 #include "sequencer.h"
-#include "frontPanelParser.h"
+#include "uARTFrontSYX/frontPanelParser.h"
+#include "Preset/PresetLoadCache.h"
 #include "TriggerOut.h"
-#include "Uart.h"
+#include "uARTFrontSYX/Uart.h"
 //#include "LCD_driver.h"
 
 uint8_t voiceStatus[NUM_VOICES];

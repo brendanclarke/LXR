@@ -38,7 +38,8 @@ Phase 3 fold-in note:
 - The endpoint-restore/temp-switch phase now absorbs the
   `frontParser_applyDeferredVoiceCache()` split, the
   `frontParser_unholdVoice()` / `frontParser_uncacheVoice()` cleanup, and the
-  `seq_loadPendigFlag` rename instead of leaving them as separate cleanup work.
+  `seq_loadPendingFlag` spelling cleanup instead of leaving them as separate
+  cleanup work.
 
 Phase 4 note:
 
@@ -46,17 +47,33 @@ Phase 4 note:
   live in `mainboard/LxrStm32/src/Sequencer/Pattern/`. This document remains
   the broader later-cleanup list for comms, protocol, and non-pattern targets.
 
+Session 012 closeout note:
+
+- The front-panel transport/parser split now lives in
+  `mainboard/LxrStm32/src/uARTFrontSYX/`, and the opcode namespace has been
+  moved into `uARTFrontSYX/FrontPanelProtocol.h` behind a compatibility
+  include from `MidiMessages.h`.
+- The active `frontParser_applyDeferredVoiceCache()` implementation now lives
+  in `mainboard/LxrStm32/src/Preset/PresetLoadCache.c`; the parser retains an
+  inactive historical copy only as migration residue.
+- The remaining cleanup target is the legacy hold/unhold and
+  `frontParser_applyDeferredVoiceCache()` compatibility surface, which is now
+  a Phase 6 follow-up rather than a Phase 5 relocation task.
+
 ## High-Value Refactor Targets
 
 ### 1. Retire `frontParser_applyDeferredVoiceCache()`
 
 Current location:
 
-- `mainboard/LxrStm32/src/MIDI/frontPanelParser.c`
+- `mainboard/LxrStm32/src/Preset/PresetLoadCache.c`
+- `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c` retains an inactive
+  historical copy in a `#if 0` block
 
 Current callers observed:
 
-- `seq_tick()` calls `frontParser_applyDeferredVoiceCache()` when `seq_loadPendigFlag` is set during manual pattern change.
+- `seq_tick()` calls `frontParser_applyDeferredVoiceCache()` when
+  `seq_loadPendingFlag` is set during manual pattern change.
 - `seq_setRunning(0)` calls it when stopping playback.
 - STM parser/file-load paths set the deferred/cache state that this later drains.
 
@@ -702,6 +719,19 @@ Concluding messages:
 - `frontParser_applyDeferredVoiceCache()` is one of the remaining legacy exit
   paths and should be folded into the unified background-load finalizer rather
   than kept as its own promotion mechanism.
+
+Session 012 closeout note:
+
+- Phase 5 has landed in `mainboard/LxrStm32/src/uARTFrontSYX/`, so the
+  front-panel transport/parser extraction is no longer future work.
+- The front-panel opcode namespace now lives in
+  `uARTFrontSYX/FrontPanelProtocol.h` behind a compatibility include from
+  `MidiMessages.h`.
+- Remaining parser-side load/session glue should still be pared back so
+  `PresetLoadCache` remains the single owner of PRF/background-load state.
+- Session 012 smoke-tested `.ALL` load, morph, parameter change, copy to temp,
+  load new `.ALL`, and switch-back flow; MIDI-specific verification remains
+  for later.
 
 Rough length:
 

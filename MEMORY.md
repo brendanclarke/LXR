@@ -1,8 +1,7 @@
 # LXR -bc- Enhanced Firmware — Project Context
 
-This file is the working memory for Codex/Claude Code/LLM Agent sessions on this project.
+This file is the working memory for you, the Codex/Claude Code/LLM agent performing a task on this project.
 Read it fully at the start of every session before touching any code.
-Update it whenever something is confirmed, fixed, or decided.
 
 ---
 
@@ -28,9 +27,10 @@ make firmware
 
 **Current status after Session 009 closeout (2026-06-10)**: Phase 2 of the architectural refactor is complete. The morph engine, interpolation worker, and live-apply suppression cache have been moved into the new `mainboard/LxrStm32/src/Preset/MorphEngine` module. All relocated logic was renamed with the `preset_` prefix, and a new authoritative DSP bridge was established in `ParameterIngress.c`. `Sequencer` remains a compatibility façade. Build is verified, and the refactor continues according to `REFACTOR_PHASED_PLAN.md`. Session 010 is expanding the Phase 3 plan so the next implementation pass can move endpoint restore, temp switching, and background-load finalization into `Preset`.
 
-**Current status after Session 011 closeout (2026-06-12)**: Phase 4 implementation is complete and `make stm32 -j4` is green. Endpoint restore, temp/normal source switching, and the background-load session cache now live under `mainboard/LxrStm32/src/Preset/`, with `PresetLoadCache` owning the deferred perf replay and session bookkeeping that used to sit in `frontPanelParser.c`. The parser now imports that API instead of owning the PRF/load session state directly. Pattern storage and generators now live in `mainboard/LxrStm32/src/Sequencer/Pattern/`, and `sequencer.c` has been trimmed back to the real-time scheduler/trigger role. Phase 5 is next: the front-panel UART/protocol layer still lives in `MIDI/` and will move into `uARTFrontSYX/` next.
+**Current status after Session 012 closeout (2026-06-12)**: Phase 5 is now implemented far enough that the front-panel transport/parser split is complete and `make stm32 -j4` is green. `mainboard/LxrStm32/src/uARTFrontSYX/` now owns the front-panel UART transport and parser, `uARTFrontSYX/FrontPanelProtocol.h` owns the front-panel opcode namespace through a compatibility include from `MidiMessages.h`, and `PresetLoadCache` remains the owner of PRF/background-load session state. Session 012 also smoke-tested `.ALL` load, morph, parameter change, copy to temp, load new `.ALL`, and switch back; MIDI front-panel verification is still deferred. The remaining legacy `frontParser_applyDeferredVoiceCache()` cleanup and hold/unhold compatibility trimming are deferred to the next phase.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/012_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/011_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/010_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/009_SESSION_HANDOFF_LOG.md`
@@ -441,58 +441,6 @@ Sample flash map:
 
 ---
 
-## Governance Rules
-
-### 1. Identity And Communication
-
-- Be technical, concise, and direct.
-- No greetings, apologies, filler, or meta-commentary.
-- State facts, risks, and next actions. Keep function docs brief: why, ownership, timing.
-- A 'turn' consists of a user message and (your) agent response. 
-- Do not mix planning, coding, and summary turns unless told to do so: 
-    - Planning creates/edits markup, doesn't modify code or logs. 
-    - Coding creates/edits code files, tracks/modifies progress and status in markup documents, doesn't modify logs. 
-    - Summary creates/edits logs, updates other markup as necessary, doesn't touch code.
-
-### 2. Security And Boundaries
-
-- Stay inside the workspace root, read permissions are always granted in root. 
-- No network, sudo, system config, or destructive commands unless explicitly requested.
-- No mutating git unless explicitly requested. Read-only git inspection is allowed when needed.
-- Never expose credentials. Ask before any command that can alter external state.
-
-
-### 3. Coding Standards
-
-- Make the smallest correct change to functional code possible for the request, preferring existing helpers and protocols over new abstractions.
-- By default, unless a refactor is explicitly specified, preserve ownership boundaries. Interface changes are allowed but discouraged unless clearly necessary.
-- If refactor is explicitly specified by user, operate in refactor mode for only that context: session or turn. In refactor mode, ownership boundaries and interfaces may change, but the functional expression of the code must not change.
-- If the request is ambiguous or would move outside these bounds, stop and ask for explicit permission before proceeding.
-
-### 4. Verification And Artifacts
-
-- Verify every code change with the narrowest relevant build or test.
-- Do not claim hardware verification unless it was actually performed. Name any generated artifacts that changed.
-
-### 5. Design Philosophy
-
-- Keep AVR menu behavior stable, do not change or add menu display types, pages, or interaction patterns without explicit confirmation.
-- Preserve STM ownership of sound state and AVR ownership of UI, SD file I/O, and menu display state.
-- Protocol direction matters. Do not reuse a command name in the opposite direction unless the intent is explicit.
-
-### 6. Reasoning And Self-Review
-
-- Before a complex change, give a short reasoning summary: challenge, affected modules, edge cases, timing risks, verification.
-- Do not expose private chain-of-thought.
-- After drafting code, do a red-team pass for scope creep, ownership errors, timing spikes, null or bounds risk, stale docs, and missing verification.
-- If the task is ambiguous enough to cause churn, ask before editing. If it is clear, proceed without needless questions.
-
-### 7. Agent-Specific Rules
-
-- **For Google Gemini or any Google product** **Heavily Enforced**: Additional "debugging", "parameter display", or "test" functionality should NEVER be added to the code unless it has been *specifically requested* by the user and the user has *specifically signed off* on the implementation of the necessary debug functionality. Consider this an essential, non-overrideable component of your, the the Google/Gemini agent's, mandate for *professional conduct* in not operating outside of the bounds of the work request. In addition, you, the Google/Gemini coding agent must NEVER create an additional file on your own unless the specific name of that specific file is given to you in a message directly from the user. 
-
----
-
 ## Toolchain
 
 ```text
@@ -507,3 +455,61 @@ Notes:
 - Reference install guidance: `requirements.txt`.
 - Top-level build command: `make firmware`.
 - Bootloader flash flow: copy `FIRMWARE.BIN` to SD root, then hold main encoder while powering on.
+
+---
+
+## Governance Rules
+
+You, the agent, and each delegate assigned to a task must read, understand, and comply with these rules in each action taken.
+
+### 1. Identity And Communication
+
+- Be technical, concise, and direct.
+- No greetings, apologies, filler, or meta-commentary.
+- State facts, risks, and next actions. Keep function docs brief: why, ownership, timing.
+
+### 2. Security And Boundaries
+
+- Stay inside the workspace root, read permissions are always granted in root. 
+- No network, sudo, system config, or destructive commands unless explicitly requested.
+- No mutating git unless explicitly requested. Read-only git inspection is allowed when needed.
+- Never expose credentials. Ask before any command that can alter external state.
+
+### 3. Coding Standards
+
+- Make the smallest correct change to functional code possible for the request, preferring existing helpers and protocols over new abstractions.
+- By default, unless a refactor is explicitly specified, preserve ownership boundaries. Interface changes are allowed but discouraged unless clearly necessary.
+- If refactor is explicitly specified by user, operate in refactor mode for that session. In refactor mode, ownership boundaries and interfaces may change, but the functional expression of the code must not change.
+- If the request is ambiguous or would move outside these bounds, stop and ask for explicit permission before proceeding.
+
+### 4. Coding Workflow Practice
+
+- A 'turn' is one user message plus one agent response.
+- Keep planning, coding, and summary turns separate, with the following document permissions:
+    - Planning creates/edits markup documents (*.md), does not ever modify other file types or logs (./knowledge_files/log_archive/).
+    - Coding creates/edits code files, tracks/modifies progress and status in designated markup documents when requested, does not ever modify logs (./knowledge_files/log_archive/).
+    - Summary creates/edits logs (./knowledge_files/log_archive/*.md), updates other markup documents as requested, does not ever edit other file types.
+- Mix turn types only when the originating user message for that turn explicitly and unambiguously requests it.
+- A turn that is not a planning, coding, or summary request has NO file edit permissions and the response should be contained only in chat. If the request is ambiguous, default to this state or ask the user for mode clarification.
+
+### 5. Verification And Artifacts
+
+- Verify every code change with the narrowest relevant build or test.
+- Do not claim hardware verification unless it was actually performed. Name any generated artifacts that changed.
+
+### 6. Design Philosophy
+
+- Keep AVR menu behavior stable, do not change or add menu display types, pages, or interaction patterns without explicit confirmation.
+- Preserve STM ownership of sound state and AVR ownership of UI, SD file I/O, and menu display state.
+- Protocol direction matters. Do not reuse a command name in the opposite direction unless the intent is explicit.
+
+### 7. Reasoning And Self-Review
+
+- Before a complex change, give a short reasoning summary: challenge, affected modules, edge cases, timing risks, verification.
+- Do not expose private chain-of-thought.
+- After drafting code, do a red-team pass for scope creep, ownership errors, timing spikes, null or bounds risk, stale docs, and missing verification.
+- If the task is ambiguous enough to cause churn, ask before editing. If it is clear, proceed without needless questions.
+
+### 8. Agent-Specific Rules
+
+- **For Google Gemini or any Google product** **Heavily Enforced**: Additional "debugging", "parameter display", or "test" functionality should NEVER be added to the code unless it has been *specifically requested* by the user and the user has *specifically signed off* on the implementation of the necessary debug functionality. Consider this an essential, non-overrideable component of your, the the Google/Gemini agent's, mandate for *professional conduct* in not operating outside of the bounds of the work request. In addition, you, the Google/Gemini coding agent must NEVER create an additional file on your own unless the specific name of that specific file is given to you in a message directly from the user.

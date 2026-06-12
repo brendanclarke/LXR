@@ -68,6 +68,7 @@ vpath %.c ./src/Hardware/USB
 vpath %.c ./src/MIDI
 vpath %.c ./src/SampleRom
 vpath %.c ./src/Preset
+vpath %.c ./src/uARTFrontSYX
 vpath %.c ./src/Sequencer/Pattern
 vpath %.c ./src/Sequencer 
 
@@ -100,6 +101,7 @@ INCLUDES += -I"./src/Hardware/SD_FAT"
 INCLUDES += -I"./src/Hardware/USB"
 INCLUDES += -I"./src/MIDI"
 INCLUDES += -I"./src/Preset"
+INCLUDES += -I"./src/uARTFrontSYX"
 INCLUDES += -I"./src/Sequencer/Pattern"
 INCLUDES += -I"./src/Sequencer" 
 

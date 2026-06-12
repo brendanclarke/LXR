@@ -1,5 +1,5 @@
 /*
- * MidiUart.h
+ * Uart.h
  * ------------------------------------------------------------------------------------------------------------------------
  *  Copyright 2013 Julian Schmidt
  *  Julian@sonic-potions.com
@@ -34,6 +34,8 @@
 
 #ifndef MIDIUART_H_
 #define MIDIUART_H_
+
+#include "MidiMessages.h"
 
 #define ACK 1
 #define NACK -1

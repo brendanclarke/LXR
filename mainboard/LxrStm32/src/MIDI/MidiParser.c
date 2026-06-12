@@ -41,14 +41,15 @@
 #include "config.h"
 #include "HiHat.h"
 #include "CymbalVoice.h"
-#include "Uart.h"
+#include "uARTFrontSYX/Uart.h"
+#include "uARTFrontSYX/frontPanelParser.h"
+#include "Preset/PresetLoadCache.h"
 #include "sequencer.h"
 #include "Preset/ParameterIngress.h"
 #include "clockSync.h"
 #include "mixer.h"
 #include "valueShaper.h"
 #include "modulationNode.h"
-#include "frontPanelParser.h"
 #include "usb_manager.h"
 #define MORPH_CC        0xac
 #define BANK_CHANGE_CC  0xad

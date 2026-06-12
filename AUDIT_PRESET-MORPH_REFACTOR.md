@@ -28,8 +28,23 @@ Session 011 note:
   Euclid/SOM generators into `mainboard/LxrStm32/src/Sequencer/Pattern/`.
 - `sequencer.c` is back to the real-time scheduler/trigger role, with
   `sequencer.h` still serving as a compatibility façade during the transition.
-- Phase 5 is next: the front-panel UART/protocol layer still lives in `MIDI/`
-  and will move into `uARTFrontSYX/` next.
+- Phase 5 followed in Session 012 and moved the front-panel UART/protocol
+  layer into `uARTFrontSYX/`.
+
+Session 012 closeout note:
+
+- Phase 5 is now implemented: the front-panel transport/parser slice lives in
+  `mainboard/LxrStm32/src/uARTFrontSYX/`.
+- The front-panel opcode namespace now lives in
+  `uARTFrontSYX/FrontPanelProtocol.h` behind a compatibility include from
+  `MidiMessages.h`.
+- `PresetLoadCache` remains the owner of PRF/background-load session state; the
+  new parser should call that API rather than carrying a second session model.
+- The remaining legacy hold/unhold and `frontParser_applyDeferredVoiceCache()`
+  cleanup is deferred to the next phase.
+- Session 012 also smoke-tested `.ALL` load, morph, parameter change, copy to
+  temp, load new `.ALL`, and switch-back flow; MIDI-specific verification is
+  still pending.
 
 ## Core Architecture After Session 004
 
@@ -189,12 +204,12 @@ Immediate state set:
 
 - `seq_pendingPattern`
 - `seq_perTrackPendingPattern[]`
-- `seq_loadPendigFlag = 1`
+- `seq_loadPendingFlag = 1`
 - `seq_loadSeqNow = 1`
 
 Spelling refactor target:
 
-- Rename `seq_loadPendigFlag` to `seq_loadPendingFlag`.
+- `seq_loadPendingFlag` is the current spelling in the codebase.
 
 ### `seq_tick()` Switch Commit Shape
 
@@ -205,7 +220,7 @@ The switch block runs when:
   - `switchOnNextStep && seq_loadSeqNow`;
 - work gate:
   - active/pending pattern mismatch, or
-  - `seq_loadPendigFlag`.
+  - `seq_loadPendingFlag`.
 
 Switch commit order:
 

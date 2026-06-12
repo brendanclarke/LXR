@@ -1,7 +1,7 @@
 # REFACTOR_PHASED_PLAN
 
-Date: 2026-06-11
-Status: Phase 4 complete; Phase 5 planned
+Date: 2026-06-12
+Status: Phase 4 complete; Phase 5 transport/parser split landed and smoke-tested; legacy cleanup pending
 
 ## Purpose
 
@@ -165,7 +165,7 @@ Expected subfiles:
 
 - `Uart.h/.c`
 - `frontPanelParser.h/.c`
-- optional `FrontPanelProtocol.h/.c` if the opcode namespace is split out
+- `FrontPanelProtocol.h` with a compatibility include from `MidiMessages.h`
 
 ### `mainboard/LxrStm32/src/Sequencer/Pattern/`
 
@@ -203,14 +203,14 @@ façade that binds pattern and preset modules together.
 | `mainboard/LxrStm32/src/MIDI/Uart.h` | `uARTFrontSYX/Uart.h` | Transport API | Human-readable names should be finalized here. |
 | `mainboard/LxrStm32/src/MIDI/frontPanelParser.c` | `uARTFrontSYX/frontPanelParser.c` | Front-panel protocol state machine, parser, command dispatch | Parser should not keep preset state once the split is complete. |
 | `mainboard/LxrStm32/src/MIDI/frontPanelParser.h` | `uARTFrontSYX/frontPanelParser.h` | Parser-facing public API | Keep only the external entry points that the transport or main loop needs. |
-| `mainboard/LxrStm32/src/MIDI/frontPanelParser.c" | `Preset/PresetLoadCache.c` | PRF/load cache session state, deferred perf replay, live snapshot cache, single overwriteable background-load session | This is a strong candidate for removal from the protocol layer. |
-| `mainboard/LxrStm32/src/MIDI/MidiMessages.h` | optional `uARTFrontSYX/FrontPanelProtocol.h` | Front-panel opcode names and semantic protocol constants | Decision needed on whether to keep a shared header or split it. |
+| `mainboard/LxrStm32/src/MIDI/frontPanelParser.c` | `Preset/PresetLoadCache.c` | PRF/load cache session state, deferred perf replay, live snapshot cache, single overwriteable background-load session | This is a strong candidate for removal from the protocol layer. |
+| `mainboard/LxrStm32/src/MIDI/MidiMessages.h` | `uARTFrontSYX/FrontPanelProtocol.h` | Front-panel opcode names and semantic protocol constants | Keep a compatibility include while the namespace is split. |
 
 ## Functions And Variables To Flag As Possibly Redundant
 
 | Symbol | Why it may be redundant | Likely action |
 |---|---|---|
-| `seq_loadPendigFlag` | Typo plus unclear ownership of load state | Rename or replace with a clearer pattern-load request flag. |
+| `seq_loadPendingFlag` | Pattern-load request flag that still wants a clearer owner name | Keep the current spelling, then decide whether a later façade cleanup is worthwhile. |
 | `seq_tmpKitPushParamsToFrontEnabled` | Restore policy is already a separate concern | Move into restore/session policy or retire after the split. |
 | `seq_liveSharedParams[]` | Looks like a transitional cache for live apply coherence | Keep only if the new morph engine still needs a local cache. |
 | `seq_liveSharedParamsValid[]` | Duplicates validity semantics that should live in the apply cache | Likely retire with the old live-apply path. |
@@ -526,7 +526,7 @@ Implementation split:
      `seq_updateVoiceSourcesForPatternChange()` into `TempPlaybackSwitch.c`.
    - move the temp-switch pending state
      (`seq_pendingPattern`, `seq_perTrackPendingPattern[]`,
-     `seq_loadPendigFlag` renamed to `seq_loadPendingFlag`,
+     `seq_loadPendingFlag`,
      `seq_loadSeqNow`, `seq_newPatternAvailable`, `seq_newPatternExecuted`,
      `seq_tmpBoundaryPatternSwitchAck`) into the same module so the sequencer
      only sees a commit request and a completed switch.
@@ -574,7 +574,8 @@ Implementation split:
 
 Legacy cleanup folded in from `AUDIT_REFACTOR_TARGETS.md`:
 
-- rename `seq_loadPendigFlag` to `seq_loadPendingFlag`;
+- keep `seq_loadPendingFlag` as the current spelling and decide later whether
+  a narrower façade name is still needed;
 - stop treating `frontParser_applyDeferredVoiceCache()` as a separate legacy
   promotion path;
 - keep the remaining `frontParser_*` unhold/uncache helpers out of the public
@@ -696,24 +697,103 @@ Implementation split:
 
 Goal:
 
-- Move the UART transport and front-panel protocol code into
-  `uARTFrontSYX`.
+- Extract the front-panel transport and protocol parser from
+  `mainboard/LxrStm32/src/MIDI/` into `mainboard/LxrStm32/src/uARTFrontSYX/`.
+- Keep `PresetLoadCache` as the source of truth for PRF/background-load
+  session state, and make the new parser call that API instead of re-owning the
+  session bookkeeping.
+- Move the front-panel opcode namespace out of `MidiMessages.h` and into
+  `uARTFrontSYX/FrontPanelProtocol.h`, with a compatibility include so the
+  parser and callers can migrate without a flag day.
 
 Deliverables:
 
-- `uARTFrontSYX/Uart.*`
+- `uARTFrontSYX/Uart.*` for the front-panel transport slice of the current
+  shared UART module
 - `uARTFrontSYX/frontPanelParser.*`
-- protocol constants split or adapted as needed
-- parser-side session state cleaned up into clear groups
-- front-panel protocol opcode definitions moved into
-  `uARTFrontSYX/FrontPanelProtocol.h` with a compatibility include, if the
-  shared `MidiMessages.h` namespace is still too noisy after the split
+- `uARTFrontSYX/FrontPanelProtocol.h`
+- a thin compatibility include path from `MidiMessages.h` while the opcode
+  split is in flight
+- parser cleanup that removes any remaining direct dependency on the old
+  `frontParser_applyDeferredVoiceCache()` promotion path, once the legacy
+  compatibility surface is no longer needed
+
+Implementation status:
+
+- Complete for the transport/parser relocation, front-panel opcode namespace
+  split, parser header trimming, and build wiring.
+- `PresetLoadCache` remains the source of truth for PRF/background-load
+  session state.
+- The remaining legacy hold/unhold compatibility helpers and
+  `frontParser_applyDeferredVoiceCache()` cleanup are now tracked as Phase 6
+  follow-up work.
+
+Session 012 closeout:
+
+- Moved `Uart.c/.h` and `frontPanelParser.c/.h` into
+  `mainboard/LxrStm32/src/uARTFrontSYX/`.
+- Added `uARTFrontSYX/FrontPanelProtocol.h` and switched `MidiMessages.h` to
+  pull that namespace in through a compatibility include.
+- Trimmed `frontPanelParser.h` down to its public entry points and front-panel
+  state externs.
+- Wired `mainboard/LxrStm32/Makefile` to the new source directory.
+- Updated the main front-panel callers to use the new `uARTFrontSYX` headers
+  and to include `PresetLoadCache` explicitly where the load-session API is
+  consumed.
+- Verified the STM32 firmware with `make clean && make stm32 -j4`.
+- Smoke-tested `.ALL` load, morph, parameter change, copy to temp, load new
+  `.ALL`, and switch back on hardware; MIDI front-panel verification remains
+  for the next phase.
+
+Implementation split:
+
+1. Front-panel transport extraction:
+   - move the front-panel-only `USART3_IRQHandler`, FIFO state, send/process
+     helpers, `uart_clearFrontFifo()`, and `initFrontpanelUart()` into
+     `uARTFrontSYX/Uart.c` and `uARTFrontSYX/Uart.h`.
+   - keep `uart_sendFrontpanelPriorityByteWait()` in the UART layer as the
+     transport primitive for blocking priority sends.
+   - leave the MIDI/USART2 transport path in the existing MIDI transport
+     module.
+2. Parser relocation:
+   - move `frontPanelParser.c` and `frontPanelParser.h` into
+     `uARTFrontSYX/`.
+   - keep parser-private flow-control, SysEx framing, and front-panel protocol
+     state there (`comm_*`, `frontParser_*` counters/buffers, and dispatch
+     state).
+   - trim `frontPanelParser.h` so unrelated translation units do not inherit
+     the full load/session and modulation header stack.
+3. Opcode namespace cleanup:
+   - move front-panel status/opcode constants and protocol enums out of
+     `MidiMessages.h` into `uARTFrontSYX/FrontPanelProtocol.h`.
+   - keep a compatibility include while the remaining call sites migrate.
+4. Load-session and legacy helper cleanup:
+   - keep all PRF/background-load state ownership in `PresetLoadCache`.
+   - consolidate the remaining parser-side hold/uncache helpers
+     (`frontParser_clearVoiceCache()`, `frontParser_unholdVoice()`,
+     `frontParser_uncacheVoice()`, `frontParser_releaseVoiceCache()`,
+     `frontParser_unholdLoadedVoice()`, `frontParser_applyPendingVoiceCache()`,
+     and the related session helpers) so the parser no longer maintains a
+     second load-state model.
+   - remove `frontParser_applyDeferredVoiceCache()` as a separate legacy
+     promotion path once the compatibility surface is no longer needed.
+5. Compatibility and build wiring:
+   - update `mainboard/LxrStm32/Makefile` with the new `src/uARTFrontSYX`
+     vpath and include path.
+   - update `main.c`, `MidiParser.c`, `sequencer.c`, and any front-panel
+     callers to include the new headers.
+   - move any header-only dependencies out of `frontPanelParser.h` if they are
+     only needed by the implementation file.
 
 Exit criteria:
 
-- `MIDI/` is no longer the home of the front-panel transport layer.
-- The parser calls into `Preset` and `Sequencer/Pattern` through semantic APIs
-  rather than reaching across modules for raw storage details.
+- `MIDI/` is no longer the home of the front-panel transport or parser
+  implementation.
+- The parser calls `Preset`, `Sequencer/Pattern`, and `MidiParser` through
+  semantic APIs rather than reaching into raw storage state.
+- Opcode names are isolated in `FrontPanelProtocol.h`, with `MidiMessages.h`
+  retaining only a compatibility include during migration.
+- Build remains reproducible.
 
 ### Phase 6: Remove Redundant State And Polish Naming
 
@@ -763,7 +843,9 @@ Exit criteria:
 - Build remains reproducible throughout the migration.
 - All exported functions have in-place documentation.
 - Sound-state ownership lives in `Preset`.
-- Front-panel transport and parser code lives in `uARTFrontSYX`.
+- Front-panel transport and parser code lives in `uARTFrontSYX`, and the
+  front-panel opcode namespace is isolated from the generic `MidiMessages.h`
+  surface.
 - Pattern data and generators live in `Sequencer/Pattern`.
 - Human-readable API names replace the current cross-module leakage where
   practical.

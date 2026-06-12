@@ -9,7 +9,7 @@
 #include "Preset/EndpointRestore.h"
 #include "Preset/TempPlaybackSwitch.h"
 #include "MidiMessages.h"
-#include "Uart.h"
+#include "uARTFrontSYX/Uart.h"
 #include "Sequencer/sequencer.h"
 
 #define SEQ_ENDPOINT_RESTORE_NONE 0

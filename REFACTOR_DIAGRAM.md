@@ -4,8 +4,8 @@ START OF REFACTOR_DIAGRAM.md
 
 # ARCHITECTURAL REFACTOR DIAGRAM & API SPECIFICATION
 **Project**: LXR Enhanced Firmware (STM32 Audio Engine Subsystems)  
-**Date**: 2026-06-11  
-**Status**: Target Refactor Specification (updated through Sessions 007-011; Phase 4 is complete, Phase 5 is next)
+**Date**: 2026-06-12
+**Status**: Target Refactor Specification (updated through Sessions 007-012; Phase 4 is complete, Phase 5 transport/parser split landed and smoke-tested, legacy cleanup pending)
 
 ---
 
@@ -15,7 +15,7 @@ The objective of this architectural refactor is to decouple the sound parameter 
 
 Historically, `sequencer.c` and parts of the `MIDI/` parser mixed audio-rate real-time thread logic with block-level storage transfers, parameter interpolation, file-system caching, and raw UART stream decoding. This refactor establishes clean, structured APIs across three newly isolated sub-directories within `mainboard/LxrStm32/src/`:
 
-1.  **`/uARTFrontSYX/`**: implementation of the (future SysEx) protocol specification. Physical front-panel UART traffic feeds directly into this layer, the `/MIDI/` module is eventually updated to act as a front interpreter to map generic incoming MIDI messages (CC, Notes, RTC) straight into local SysEx packets to go here.
+1.  **`/uARTFrontSYX/`**: the front-panel transport and protocol layer. Physical front-panel UART traffic feeds directly into this directory, which now owns the parser, transport, and front-panel opcode namespace behind a compatibility include from `MidiMessages.h`.
 2.  **`/Preset/`**: Centralized authority for all sound state parameters (normal kit endpoints, morph endpoints, interpolated run-time baselines, and active modulation target caches). The concrete implementation now lives in `KitState.c/h`, `ParameterMap.c/h`, `ParameterIngress.c/h`, `MorphEngine.c/h`, `EndpointRestore.c/h`, `TempPlaybackSwitch.c/h`, and `PresetLoadCache.c/h` for restore policy, temp switching, and the single overwriteable background-load session.
 3.  **`/Sequencer/Pattern/`**: Forms a specialized sub-directory under the sequencer subsystem that exclusively manages pattern data and generative algorithms (Euclidean/SOM). Temp/background pattern load policy and temp/normal boundary decisions remain in `Preset`.
 
@@ -91,13 +91,13 @@ The following ASCII structural diagram models the modular blocks, the layout of 
 ## 3. FUNCTION GROUPS
 
 ### 3.1 /uARTFrontSYX/
-This folder contains the protocol interface. It is responsible for parsing serial byte data against the core (future SysEx) specification layout
+This folder contains the front-panel protocol interface. It is responsible for parsing serial byte data against the current front-panel specification layout.
 
 #### `Uart.c/h`
 * **Purpose**: Low-level interrupt handling and basic byte-stream ring buffering.
 
 #### `frontPanelParser.c/h`
-* **Purpose**: Comprehensive SysEx specification implementation, message verification, and routing. Receives raw traffic from the physical link, as well as pre-interpreted SysEx packets funneled down by the standard `/MIDI/` module.
+* **Purpose**: Comprehensive front-panel protocol implementation, message verification, and routing. Receives raw traffic from the physical link and dispatches validated protocol traffic to the downstream `/Preset/` and `/Sequencer/Pattern/` APIs.
 * **Primary Function Groups**:
     * Reads from the UART input ring buffer, tracking state machines for active opcodes, packet headers, lengths, and checksums.
     * Main interpreter loop that isolates SysEx IDs, data payloads, and validation bits.

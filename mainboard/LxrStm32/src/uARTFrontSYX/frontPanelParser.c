@@ -37,6 +37,7 @@
 
 #include "frontPanelParser.h"
 #include "MidiMessages.h"
+#include "FrontPanelProtocol.h"
 #include "MidiParser.h"
 #include "ParameterArray.h"
 #include "sequencer.h"

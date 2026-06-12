@@ -37,11 +37,7 @@
 #ifndef FRONTPANELPARSER_H_
 #define FRONTPANELPARSER_H_
 
-#include "MidiMessages.h"
-#include "sequencer.h"
-#include "Preset/PresetLoadCache.h"
-#include "modulationNode.h"
-#include "valueShaper.h"
+#include <stdint.h>
 
 extern uint8_t frontParser_activeTrack;
 extern uint8_t frontParser_shownPattern;

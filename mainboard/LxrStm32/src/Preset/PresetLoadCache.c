@@ -9,7 +9,8 @@
 
 #include "Preset/PresetLoadCache.h"
 #include "PatternData.h"
-#include "Uart.h"
+#include "uARTFrontSYX/FrontPanelProtocol.h"
+#include "uARTFrontSYX/Uart.h"
 #include <string.h>
 
 extern void frontParser_handleMidiMessage(void);

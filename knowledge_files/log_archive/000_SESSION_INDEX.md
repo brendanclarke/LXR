@@ -20,6 +20,7 @@
 | 009 | 2026-06-10 | local repo, Phase 2 complete | refactor phase 2: moved morph engine and live-apply suppression logic to new Preset/MorphEngine module; updated main loop and established authoritative DSP application bridge |
 | 010 | 2026-06-11 | local repo, Phase 3 complete | refactor phase 3: moved endpoint restore, temp switching, and background-load session bookkeeping into Preset; parser now consumes PresetLoadCache API; build verified |
 | 011 | 2026-06-12 | local repo, Phase 4 complete | refactor phase 4: moved pattern storage, pattern copy/mutation helpers, and Euclid/SOM generators into Sequencer/Pattern; sequencer.c trimmed back to scheduler/trigger role |
+| 012 | 2026-06-12 | local repo, Phase 5 complete | refactor phase 5: moved front-panel UART/protocol layer into uARTFrontSYX, split opcode namespace into FrontPanelProtocol.h, smoke-tested .ALL/temp-switch flow |
 
 ---
 
@@ -69,6 +70,10 @@ Session 010 completed the Phase 3 ownership split. Endpoint restore policy moved
 Session 011 completed Phase 4 of the architectural refactor. Pattern storage and mutation now live in `Sequencer/Pattern/PatternData.c/.h`, the Euclid/SOM generator files were moved under the same directory, and `sequencer.c` was trimmed back to the real-time scheduler/trigger role while retaining the compatibility façade in `sequencer.h`. Build wiring was updated for the new pattern submodule and the firmware build remained green after the move.
 - **Find here**: PatternData ownership, pattern copy/clear/mutation helpers, Euclid/SOM generator relocation, sequencer façade trim, build wiring, stale dependency cleanup
 
+### 012 — Refactor Phase 5: Front-Panel Transport/Protocol Relocation (2026-06-12)
+Session 012 completed the Phase 5 front-panel transport/protocol split. The front-panel UART transport and parser now live under `uARTFrontSYX/`, the opcode namespace moved into `FrontPanelProtocol.h` behind a compatibility include from `MidiMessages.h`, and the build remained green after the move. The session also smoke-tested `.ALL` load, morph, parameter change, copy to temp, load new `.ALL`, and switch-back flow; MIDI-specific verification remains for later. `PresetLoadCache` continues to own PRF/background-load session state, while the remaining legacy hold/unhold cleanup is deferred to the next phase.
+- **Find here**: front-panel UART transport relocation, parser relocation, opcode namespace split, compatibility include, build wiring, hardware smoke test, next-phase legacy cleanup
+
 
 ---
 
@@ -98,6 +103,7 @@ Session 011 completed Phase 4 of the architectural refactor. Pattern storage and
 | Morph engine and live-apply logic are now owned by the new Preset/MorphEngine module | 009 |
 | Phase 3 background-load/session ownership now lives in Preset/PresetLoadCache; frontPanelParser consumes the cache API and the pending-counter reset helper is exported there | 010 |
 | Pattern storage and generators now live in Sequencer/Pattern; sequencer.c is trimmed back to the scheduler/trigger role | 011 |
+| Front-panel transport and parser code now live in uARTFrontSYX; opcode namespace is isolated in FrontPanelProtocol.h behind a compatibility include | 012 |
 
 
 ---

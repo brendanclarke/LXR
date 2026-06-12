@@ -48,7 +48,7 @@
 #include "sequencer.h"
 
 #include "mixer.h"
-#include "Uart.h"
+#include "uARTFrontSYX/Uart.h"
 #include "FIFO.h"
 #include "DrumVoice.h"
 #include "CymbalVoice.h"
