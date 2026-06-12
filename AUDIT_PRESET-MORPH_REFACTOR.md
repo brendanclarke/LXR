@@ -19,11 +19,17 @@ consolidation:
 
 Anything needed for future preset/morph work should live here instead.
 
-Session 009/010 note:
+Session 011 note:
 
 - Phases 1 and 2 are now implemented in `mainboard/LxrStm32/src/Preset/`.
-- `sequencer.h` remains a compatibility façade while Phase 3 moves endpoint
-  restore, temp switching, and the background-load finalizer.
+- Phase 3 has moved endpoint restore, temp switching, and the background-load
+  finalizer into `mainboard/LxrStm32/src/Preset/`.
+- Phase 4 has now moved pattern storage, pattern copy/mutation helpers, and the
+  Euclid/SOM generators into `mainboard/LxrStm32/src/Sequencer/Pattern/`.
+- `sequencer.c` is back to the real-time scheduler/trigger role, with
+  `sequencer.h` still serving as a compatibility façade during the transition.
+- Phase 5 is next: the front-panel UART/protocol layer still lives in `MIDI/`
+  and will move into `uARTFrontSYX/` next.
 
 ## Core Architecture After Session 004
 

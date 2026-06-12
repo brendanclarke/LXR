@@ -40,6 +40,12 @@ Phase 3 fold-in note:
   `frontParser_unholdVoice()` / `frontParser_uncacheVoice()` cleanup, and the
   `seq_loadPendigFlag` rename instead of leaving them as separate cleanup work.
 
+Phase 4 note:
+
+- Pattern storage, copy/mutation helpers, and the Euclid/SOM generators now
+  live in `mainboard/LxrStm32/src/Sequencer/Pattern/`. This document remains
+  the broader later-cleanup list for comms, protocol, and non-pattern targets.
+
 ## High-Value Refactor Targets
 
 ### 1. Retire `frontParser_applyDeferredVoiceCache()`

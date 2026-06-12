@@ -8,6 +8,7 @@
  */
 
 #include "Preset/PresetLoadCache.h"
+#include "PatternData.h"
 #include "Uart.h"
 #include <string.h>
 

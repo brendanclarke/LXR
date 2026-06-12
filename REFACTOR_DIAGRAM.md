@@ -5,7 +5,7 @@ START OF REFACTOR_DIAGRAM.md
 # ARCHITECTURAL REFACTOR DIAGRAM & API SPECIFICATION
 **Project**: LXR Enhanced Firmware (STM32 Audio Engine Subsystems)  
 **Date**: 2026-06-11  
-**Status**: Target Refactor Specification (updated through Sessions 007-010; Phase 3 is complete)
+**Status**: Target Refactor Specification (updated through Sessions 007-011; Phase 4 is complete, Phase 5 is next)
 
 ---
 
@@ -17,7 +17,7 @@ Historically, `sequencer.c` and parts of the `MIDI/` parser mixed audio-rate rea
 
 1.  **`/uARTFrontSYX/`**: implementation of the (future SysEx) protocol specification. Physical front-panel UART traffic feeds directly into this layer, the `/MIDI/` module is eventually updated to act as a front interpreter to map generic incoming MIDI messages (CC, Notes, RTC) straight into local SysEx packets to go here.
 2.  **`/Preset/`**: Centralized authority for all sound state parameters (normal kit endpoints, morph endpoints, interpolated run-time baselines, and active modulation target caches). The concrete implementation now lives in `KitState.c/h`, `ParameterMap.c/h`, `ParameterIngress.c/h`, `MorphEngine.c/h`, `EndpointRestore.c/h`, `TempPlaybackSwitch.c/h`, and `PresetLoadCache.c/h` for restore policy, temp switching, and the single overwriteable background-load session.
-3.  **`/Sequencer/Pattern/`**: Forms a specialized sub-directory under the sequencer subsystem that exclusively manages pattern data and generative algorithms (Euclidean/SOM), and specialized pattern synchronization/loading mechanics (such as temp/background pattern loading).
+3.  **`/Sequencer/Pattern/`**: Forms a specialized sub-directory under the sequencer subsystem that exclusively manages pattern data and generative algorithms (Euclidean/SOM). Temp/background pattern load policy and temp/normal boundary decisions remain in `Preset`.
 
 ---
 
@@ -59,8 +59,8 @@ The following ASCII structural diagram models the modular blocks, the layout of 
 |  +------------------------------+  |      |  +-----------------------------------+  |       |  Restores)
 |  |  KitState / ParameterMap / ParameterIngress / MorphEngine  |  |      |  |           PatternData.c/h         |  |       |
 |  | - normal/tmpKitState arrays  |  |      |  | - Pattern structs (Steps, Gates)  |  |       |
-|  | - Ingress routing matrices   |  |      |  | - Background load temp buffer     |  |       |
-|  +------------------------------+  |      |  | - Normal/Temp switch logic        |  |       |
+|  | - Ingress routing matrices   |  |      |  | - Pattern access/mutation API     |  |       |
+|  +------------------------------+  |      |  | - Copy/clear helpers              |  |       |
 |                |                   |      |  +-----------------------------------+  |       |
 |                v                   |      |    ^                  ^                 |       |
 |  +------------------------------+  |      |    | (Generates       | (Fills          |       |
@@ -152,11 +152,11 @@ The preset module retains sole authority over parameter image states. It complet
 This component encapsulates step allocations, track parameters, and mathematical generation algorithms, separating sequencing databases from runtime trigger loops.
 
 #### `PatternData.c/h`
-* **Purpose**: Holds structural layouts for patterns (`seq_patternSet`, `seq_tmpPattern`), controls live pointer switches, and manages safe double-buffered runtime pattern updates.
+* **Purpose**: Holds structural layouts for patterns (`seq_patternSet`, `seq_tmpPattern`) and the pure pattern copy/clear/mutation helpers. Temp/normal source switching is owned by `Preset/TempPlaybackSwitch.c/h`, not by the pattern data module.
 * **Primary Function Groups**:
     * Erases and formats data matrices.
-    * Flags/tracks pattern states, transitions, and load states
-    * Executes safe, structural switches inside the atomic window of a step interrupt. Adjusts track voice structures, maps linked hi-hat channels, updates routing
+    * Flags and tracks pattern storage states and transitions
+    * Provides the read/write API for pattern storage so the sequencer no longer indexes the storage arrays directly
     * Standard read-only endpoint utilized by the real-time playback sequencer to analyze triggers and parameter automation flags without exposing interior arrays
 
 #### `EuklidGenerator.c/h` & `SomGenerator.c/h` / `SomData.c/h`

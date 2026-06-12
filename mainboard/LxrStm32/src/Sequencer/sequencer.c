@@ -169,10 +169,6 @@ const float seq_shuffleTable[16] =
 
 float seq_lastShuffle = 0;
 
-PatternSet seq_patternSet;
-
-TempPattern seq_tmpPattern;
-
 uint8_t seq_transpose_voiceAmount[7];
 uint8_t seq_transposeOnOff;
 
@@ -187,8 +183,6 @@ static void seq_nextStep();
 
 static ModulationNode* seq_getLfoModNode(uint8_t voice);
 static uint8_t seq_isNextStepSyncStep();
-static uint8_t seq_intIsStepActive(uint8_t voice, uint8_t stepNr, uint8_t patternNr);
-static uint8_t seq_intIsMainStepActive(uint8_t voice, uint8_t mainStepNr, uint8_t pattern);
 static void seq_resetNote(Step *step);
 static void seq_setStepIndexToStart();
 
@@ -258,59 +252,6 @@ static void seq_applySharedAutomationTargets(const SeqKitAutomationTargets *sour
          modNode_updateValue(&macroModulators[i], macroModulators[i].lastVal);
       }
    }
-}
-
-uint8_t seq_normalizePatternNumber(uint8_t pattern)
-{
-   if(pattern == SEQ_TMP_PATTERN)
-      return SEQ_TMP_PATTERN;
-   return pattern & 0x07;
-}
-
-//------------------------------------------------------------------------------
-Step* seq_getStepPtr(uint8_t pattern, uint8_t track, uint8_t step)
-{
-   pattern = seq_normalizePatternNumber(pattern);
-   if(pattern == SEQ_TMP_PATTERN)
-      return &seq_tmpPattern.seq_subStepPattern[track][step & 0x7f];
-   return &seq_patternSet.seq_subStepPattern[pattern][track][step & 0x7f];
-}
-
-//------------------------------------------------------------------------------
-LengthRotate* seq_getLengthRotatePtr(uint8_t pattern, uint8_t track)
-{
-   pattern = seq_normalizePatternNumber(pattern);
-   if(pattern == SEQ_TMP_PATTERN)
-      return &seq_tmpPattern.seq_patternLengthRotate[track];
-   return &seq_patternSet.seq_patternLengthRotate[pattern][track];
-}
-
-//------------------------------------------------------------------------------
-PatternSetting* seq_getPatternSettingPtr(uint8_t pattern)
-{
-   pattern = seq_normalizePatternNumber(pattern);
-   if(pattern == SEQ_TMP_PATTERN)
-      return &seq_tmpPattern.seq_patternSettings;
-   return &seq_patternSet.seq_patternSettings[pattern];
-}
-
-//------------------------------------------------------------------------------
-uint16_t seq_getMainSteps(uint8_t pattern, uint8_t track)
-{
-   pattern = seq_normalizePatternNumber(pattern);
-   if(pattern == SEQ_TMP_PATTERN)
-      return seq_tmpPattern.seq_mainSteps[track];
-   return seq_patternSet.seq_mainSteps[pattern][track];
-}
-
-//------------------------------------------------------------------------------
-void seq_setMainSteps(uint8_t pattern, uint8_t track, uint16_t steps)
-{
-   pattern = seq_normalizePatternNumber(pattern);
-   if(pattern == SEQ_TMP_PATTERN)
-      seq_tmpPattern.seq_mainSteps[track] = steps;
-   else
-      seq_patternSet.seq_mainSteps[pattern][track] = steps;
 }
 
 void seq_applyNormalEndpointAutomationTargets()
@@ -972,116 +913,12 @@ void seq_init()
    seq_transposeOnOff = 0;
 
 
-   for(i=0;i<NUM_PATTERN;i++)
-   {
-      seq_patternSet.seq_patternSettings[i].changeBar 	= 0;	//default setting: zero repeats (play once then change)
-      seq_patternSet.seq_patternSettings[i].nextPattern 	= i;	//default setting: repeat same pattern
-      seq_clearPattern(i); // will clear all tracks in the pattern
-   }
-   seq_tmpPattern.seq_patternSettings.changeBar = 0;
-   seq_tmpPattern.seq_patternSettings.nextPattern = SEQ_TMP_PATTERN;
-   seq_clearPattern(SEQ_TMP_PATTERN);
+   seq_initPatternData();
 
 }
-//------------------------------------------------------------------------------
-void seq_applyTmpPatternTo(uint8_t pattern)
-{  
-   if(pattern == SEQ_TMP_PATTERN)
-      return;
-   pattern &= 0x07;
-   memcpy(&seq_patternSet.seq_subStepPattern[pattern],&seq_tmpPattern.seq_subStepPattern,sizeof(Step)*NUM_TRACKS*NUM_STEPS);
-   memcpy(&seq_patternSet.seq_mainSteps[pattern],&seq_tmpPattern.seq_mainSteps,sizeof(uint16_t)*NUM_TRACKS);
-   memcpy(&seq_patternSet.seq_patternSettings[pattern],&seq_tmpPattern.seq_patternSettings,sizeof(PatternSetting));
-   memcpy(&seq_patternSet.seq_patternLengthRotate[pattern],&seq_tmpPattern.seq_patternLengthRotate,sizeof(LengthRotate)*NUM_TRACKS);
-}
-//------------------------------------------------------------------------------
-void seq_activateTmpPattern()
-{
-   seq_applyTmpPatternTo(seq_activePattern);
-}
-//------------------------------------------------------------------------------
 void seq_setShuffle(float shuffle)
 {
    seq_shuffle = shuffle;
-}
-//------------------------------------------------------------------------------
-void seq_setTrackLength(uint8_t trackNr, uint8_t length)
-{
-	//set new end marker
-   if(length == 16)
-      length=0;
-	// --AS **PATROT this was changed from setting length on seq_activePattern to shown (or edited) pattern
-   // --bc this gets changed to store scale - length is now bitmasked to use only the first 5 bits since it is 1-16
-   seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->length = length;
-
-}
-//------------------------------------------------------------------------------
-void seq_setTrackScale(uint8_t trackNr, uint8_t scale)
-{
-   //set the scaling of the track - in powers of 2 from 0 to 7 ie we set a scale divisor of 1 to 128
-   //this is stored as the upper 3 bits of length
-   if(scale > 7)
-      scale=7;
-      
-   seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->scale = scale;
-   
-}
-
-//------------------------------------------------------------------------------
-uint8_t seq_getTrackLength(uint8_t trackNr)
-{
-	// --AS **PATROT this was changed from getting seq_activePattern to shown (or edited) pattern
-   uint8_t r=seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->length;
-   if(r==0)
-      return 16;
-   return r;
-}
-//------------------------------------------------------------------------------
-uint8_t seq_getTrackScale(uint8_t trackNr)
-{
-   uint8_t r=seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->scale;
-   return r;
-}
-//------------------------------------------------------------------------------
-// **PATROT
-void seq_setTrackRotation(uint8_t trackNr, const uint8_t newRot)
-{
-	// frontParser_shownPattern contains the pattern that is shown (being edited) on the front at the time this is called
-	// seq_activePattern is the pattern that is now playing
-   LengthRotate *lr=seq_getLengthRotatePtr(frontParser_shownPattern, trackNr);
-
-   if(newRot == lr->rotate)
-      return;
-
-	// if sequencer is running, move the current step position to compensate for the rotation
-   if(seq_running) {
-      int8_t len = 0x1f & (lr->length);
-      if(len==0)
-         len=16;
-   
-   	// this is how many main steps we need to move in one direction, negative means
-   	// move back positive is move forward
-      int8_t offset=(((int8_t)newRot) % len) - (((int8_t)lr->rotate) % len);
-   
-        // if adding the offset to si would push it over the edge either way we need to wrap it
-   	// offset will always be less than len
-      int16_t si = seq_stepIndex[trackNr] + (offset*8);
-      if(si < 0 )
-         si += (len*8);
-      else if(si >= (len*8))
-         si -= (len*8);
-      seq_stepIndex[trackNr]=(int8_t)si;
-   }
-
-	//set new rotation value
-   lr->rotate=newRot;
-   
-}
-//------------------------------------------------------------------------------
-// **PATROT
-uint8_t seq_getTrackRotation(uint8_t trackNr)
-{
-   return seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->rotate;
 }
 //------------------------------------------------------------------------------
 static void seq_calcDeltaT(uint16_t bpm)
@@ -1361,27 +1198,6 @@ static uint8_t seq_determineNextPattern()
    else
       return seq_activePattern;
 }
-//------------------------------------------------------------------------------
-void seq_setLoop(uint8_t length)
-{
-   if(!length) // length received is zero - turn off looping
-   {
-      seq_loopLength=0;
-      seq_pendingLoopLength=0;
-      seq_loopCurrentPosition=0;
-   }   
-   else if(seq_loopLength) // a new length is received - change length when this loop ends
-   {
-      seq_pendingLoopLength=length;
-   }   
-   else // a new loop starting - set the start point.
-   {
-      seq_loopLength=length;
-      seq_pendingLoopLength=length;
-      seq_loopUpdateFlag=1;
-   }      
-}
-//------------------------------------------------------------------------------
 void seq_startLoop()
 {
    uint8_t i;
@@ -1975,37 +1791,6 @@ void seq_setQuantisation(uint8_t value)
    }
 }
 //------------------------------------------------------------------------------
-void seq_toggleStep(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
-{
-   Step *step = seq_getStepPtr(patternNr, voice, stepNr);
-   if((step->volume&STEP_ACTIVE_MASK)==0)
-   {
-      step->volume |= STEP_ACTIVE_MASK;
-   } 
-   else {
-      step->volume &= ~STEP_ACTIVE_MASK;
-   }
-}
-//------------------------------------------------------------------------------
-void seq_toggleMainStep(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
-{
-   seq_setMainSteps(patternNr, voice, (uint16_t)(seq_getMainSteps(patternNr, voice) ^ (1<<stepNr)));
-}
-//------------------------------------------------------------------------------
-void seq_setMainStep(uint8_t patternNr, uint8_t voice, uint8_t stepNr, uint8_t onOff)
-{
-   uint16_t mainSteps = seq_getMainSteps(patternNr, voice);
-   if(onOff)
-   {
-      mainSteps |= (1<<stepNr);
-   }
-   else
-   {
-      mainSteps &= ~(1<<stepNr);
-   }
-   seq_setMainSteps(patternNr, voice, mainSteps);
-}
-//------------------------------------------------------------------------------
 // --AS this appears unused
 //void seq_setStep(uint8_t voice, uint8_t stepNr, uint8_t onOff)
 //{
@@ -2073,29 +1858,6 @@ void seq_setRunning(uint8_t isRunning)
    uart_sendFrontpanelByte(FRONT_SEQ_RUN_STOP);
    uart_sendFrontpanelByte(isRunning);
 }
-//------------------------------------------------------------------------------
-static uint8_t seq_intIsStepActive(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
-{
-   return ((seq_getStepPtr(patternNr, voice, stepNr)->volume & STEP_ACTIVE_MASK) > 0);
-}
-// --AS above will be inlined, below is for ext linkage
-uint8_t seq_isStepActive(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
-{
-   return seq_intIsStepActive(voice,stepNr,patternNr);
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_intIsMainStepActive(uint8_t voice, uint8_t mainStepNr, uint8_t pattern)
-{
-   return (seq_getMainSteps(pattern, voice) & (1<<mainStepNr)) > 0;
-}
-// --AS above is inlined below for ext linkage
-uint8_t seq_isMainStepActive(uint8_t voice, uint8_t mainStepNr, uint8_t pattern)
-{
-   return seq_intIsMainStepActive(voice, mainStepNr, pattern);
-}
-
-//------------------------------------------------------------------------------
 void seq_setMute(uint8_t trackNr, uint8_t isMuted)
 {
    
@@ -2544,8 +2306,8 @@ void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value)
       uint8_t quantizedStep = seq_quantize(seq_stepIndex[voice], voice);
    
    	//only record to active steps
-      /*if( seq_intIsMainStepActive(voice,quantizedStep/8,seq_perTrackActivePattern[voice]) &&
-      		seq_intIsStepActive(voice,quantizedStep,seq_perTrackActivePattern[voice]))
+      /*if( seq_isMainStepActive(voice,quantizedStep/8,seq_perTrackActivePattern[voice]) &&
+      		seq_isStepActive(voice,quantizedStep,seq_perTrackActivePattern[voice]))
       {*/
       if(seq_activeAutomTrack == 0) {
          Step *step = seq_getStepPtr(seq_perTrackActivePattern[voice], voice, quantizedStep);
@@ -2558,7 +2320,7 @@ void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value)
          step->param2Val = value;
       }
       
-      if(!seq_intIsStepActive(voice,quantizedStep,seq_perTrackActivePattern[voice])&&(quantizedStep%8))
+      if(!seq_isStepActive(voice,quantizedStep,seq_perTrackActivePattern[voice])&&(quantizedStep%8))
          seq_getStepPtr(seq_perTrackActivePattern[voice], voice, quantizedStep)->volume=0;
          
       //}
@@ -2612,7 +2374,7 @@ void seq_addNote(uint8_t trackNr,uint8_t vel, uint8_t note)
    	//special care must be taken when recording midi notes!
    	//since per default the 1st substep of a mainstep cluster is always active
    	//we will get double notes when a substep other than ss1 is recorded
-      if(!seq_intIsMainStepActive(trackNr, quantizedStep/8, targetPattern))
+      if(!seq_isMainStepActive(trackNr, quantizedStep/8, targetPattern))
       {
       	//if the mainstep is not active, we clear the 1st substep
       	//to prevent double notes while recording
@@ -2730,171 +2492,6 @@ static void seq_resetNote(Step *step)
    step->prob		= 127;
    step->volume	= 100; // clears active bit as well
 }
-//------------------------------------------------------------------------------
-void seq_clearTrack(uint8_t trackNr, uint8_t pattern)
-{
-   int k;
-   for(k=0;k<128;k++)
-   {
-      Step *step = seq_getStepPtr(pattern, trackNr, k);
-      seq_resetNote(step);
-   
-   	//every 1st step in a substep pattern active
-      if( (k%8) == 0)
-         step->volume |= STEP_ACTIVE_MASK ;
-   }
-
-	// all main steps off for this track
-   seq_setMainSteps(pattern, trackNr, 0);
-
-	//**PATROT all pattern rotations off and all patterns set to length 16
-   seq_getLengthRotatePtr(pattern, trackNr)->rotate=0;
-
-}
-//------------------------------------------------------------------------------
-void seq_clearPattern(uint8_t pattern)
-{
-   int i;
-   for(i=0;i<NUM_TRACKS;i++)
-      seq_clearTrack(i, pattern);
-}
-
-//------------------------------------------------------------------------------
-void seq_clearAutomation(uint8_t trackNr, uint8_t pattern, uint8_t automTrack)
-{
-   int k;
-
-   if(automTrack==0)
-   {
-      for(k=0;k<128;k++)
-      {
-         Step *step = seq_getStepPtr(pattern, trackNr, k);
-         step->param1Nr 	= NO_AUTOMATION;
-         step->param1Val 	= 0;
-      }
-   } 
-   else {
-      for(k=0;k<128;k++)
-      {
-         Step *step = seq_getStepPtr(pattern, trackNr, k);
-         step->param2Nr		= NO_AUTOMATION;
-         step->param2Val	= 0;
-      }
-   }
-}
-//------------------------------------------------------------------------------
-void seq_copyTrack(uint8_t srcNr, uint8_t dstNr, uint8_t pattern)
-{
-	// --AS todo this fn and the next are very similar. Add a new fn that takes src, dest track and src, dest pat
-	// and then have these two fn's call it instead.
-   int k;
-   Step *src, *dst;
-   for(k=0;k<128;k++)
-   {
-      dst=seq_getStepPtr(pattern,dstNr,k);
-      src=seq_getStepPtr(pattern,srcNr,k);
-      dst->note		= src->note;
-      dst->param1Nr 	= src->param1Nr;
-      dst->param1Val 	= src->param1Val;
-      dst->param2Nr	= src->param2Nr;
-      dst->param2Val	= src->param2Val;
-      dst->prob		= src->prob;
-      dst->volume		= src->volume;
-   }
-
-	// copy which main steps are on/off
-   seq_setMainSteps(pattern, dstNr, seq_getMainSteps(pattern, srcNr));
-
-	// --AS copy length and rotation offset from source track
-   seq_getLengthRotatePtr(pattern, dstNr)->value =
-      seq_getLengthRotatePtr(pattern, srcNr)->value;
-
-
-}
-//------------------------------------------------------------------------------
-void seq_copyPattern(uint8_t src, uint8_t dst)
-{
-   int k,j;
-   Step *psrc, *pdst;
-   uint8_t normalizedSrc = seq_normalizePatternNumber(src);
-   uint8_t normalizedDst = seq_normalizePatternNumber(dst);
-
-   for(j=0;j<NUM_TRACKS;j++)
-   {
-      for(k=0;k<128;k++)
-      {
-         pdst=seq_getStepPtr(dst,j,k);
-         psrc=seq_getStepPtr(src,j,k);
-         pdst->note			= psrc->note;
-         pdst->param1Nr 		= psrc->param1Nr;
-         pdst->param1Val 	= psrc->param1Val;
-         pdst->param2Nr		= psrc->param2Nr;
-         pdst->param2Val		= psrc->param2Val;
-         pdst->prob			= psrc->prob;
-         pdst->volume		= psrc->volume;
-      }
-   
-      seq_setMainSteps(dst, j, seq_getMainSteps(src, j));
-   
-   	// --AS copy length and rotation offset from source pattern for the track
-      seq_getLengthRotatePtr(dst, j)->value =
-         seq_getLengthRotatePtr(src, j)->value;
-   
-   }
-
-   if((normalizedDst == SEQ_TMP_PATTERN) && (normalizedSrc != SEQ_TMP_PATTERN))
-   {
-      preset_captureTmpKitState();
-   }
-}
-//------------------------------------------------------------------------------
-void seq_copyTrackPattern(uint8_t srcNr, uint8_t dstPat, uint8_t srcPat)
-// srcNr = source voice
-{
-   int k;
-   Step *psrc, *pdst;
-   for(k=0;k<128;k++)
-   {
-      pdst=seq_getStepPtr(dstPat,srcNr,k);
-      psrc=seq_getStepPtr(srcPat,srcNr,k);
-      pdst->note			= psrc->note;
-      pdst->param1Nr 		= psrc->param1Nr;
-      pdst->param1Val 	= psrc->param1Val;
-      pdst->param2Nr		= psrc->param2Nr;
-      pdst->param2Val		= psrc->param2Val;
-      pdst->prob			= psrc->prob;
-      pdst->volume		= psrc->volume;
-   
-   }
-   
-   seq_setMainSteps(dstPat, srcNr, seq_getMainSteps(srcPat, srcNr));
-   
-   	// --AS copy length and rotation offset from source pattern for the track
-   seq_getLengthRotatePtr(dstPat, srcNr)->value =
-      seq_getLengthRotatePtr(srcPat, srcNr)->value;
-   
-}
-//------------------------------------------------------------------------------
-void seq_copySubStep(uint8_t src, uint8_t dst, uint8_t track)
-{
-   Step *psrc, *pdst;
-   
-      // copy the step data
-
-   pdst=seq_getStepPtr(seq_perTrackActivePattern[track],track,dst);
-   psrc=seq_getStepPtr(seq_perTrackActivePattern[track],track,src);
-   pdst->note			= psrc->note;
-   pdst->param1Nr 		= psrc->param1Nr;
-   pdst->param1Val 	= psrc->param1Val;
-   pdst->param2Nr		= psrc->param2Nr;
-   pdst->param2Val		= psrc->param2Val;
-   pdst->prob			= psrc->prob;
-   pdst->volume		= psrc->volume;
-
-      
-
-}
-//------------------------------------------------------------------------------
 void seq_setActiveAutomationTrack(uint8_t trackNr)
 {
    seq_activeAutomTrack = trackNr;

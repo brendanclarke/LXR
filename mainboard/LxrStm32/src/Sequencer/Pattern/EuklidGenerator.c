@@ -36,7 +36,9 @@
 
 
 #include "EuklidGenerator.h"
-#include "sequencer.h"
+#include "PatternData.h"
+
+extern uint8_t seq_activePattern;
 
 static uint8_t euklid_length[NUM_TRACKS];
 static uint8_t euklid_steps[NUM_TRACKS];

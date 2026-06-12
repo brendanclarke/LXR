@@ -1,7 +1,7 @@
 # REFACTOR_PHASED_PLAN
 
 Date: 2026-06-11
-Status: Phase 3 complete
+Status: Phase 4 complete; Phase 5 planned
 
 ## Purpose
 
@@ -367,7 +367,7 @@ Reasoning:
   called from the main loop, its internal state (scan cursors, phases) should 
   be private to the morph module.
 
-Files to be modified:
+Files modified:
 
 - `mainboard/LxrStm32/src/Sequencer/sequencer.c`: Remove morph variables and 
   function definitions. Replace with calls to new `preset_morph*` APIs.
@@ -477,7 +477,7 @@ Deliverables:
   `frontParser_applyDeferredVoiceCache()` entry point while the parser and
   sequencer call sites are migrated
 
-Files to be modified:
+Files modified:
 
 - `mainboard/LxrStm32/src/Sequencer/sequencer.c`
 - `mainboard/LxrStm32/src/Sequencer/sequencer.h`
@@ -598,23 +598,99 @@ Exit criteria:
 
 Goal:
 
-- Make `Sequencer/Pattern` the single owner of pattern data and pattern
-  generation code.
+- Make `Sequencer/Pattern` the single owner of pattern data, copy/clear/mutation
+  helpers, and pattern-generation code.
+- Keep `sequencer.c` as the real-time scheduler/trigger loop and temp-switch
+  consumer, but remove its direct ownership of the pattern storage model.
+- Leave temp/normal switch request state in `Preset/TempPlaybackSwitch`; Phase
+  4 only moves the pattern payloads and the generator code that writes them.
 
 Deliverables:
 
-- `PatternData.*`
-- `EuklidGenerator.*`
-- `SomData.*`
-- `SomGenerator.*`
-- human-readable pattern APIs for get/set/copy/clear operations
-- SEQ16 temp-pattern keyhole retained as a clearly named shim module if it is
-  still needed for observation/control
+- `Sequencer/Pattern/PatternData.h/.c`
+- moved `Sequencer/EuklidGenerator.h/.c`
+- moved `Sequencer/SomData.h/.c`
+- moved `Sequencer/SomGenerator.h/.c`
+- compatibility wrappers in `sequencer.h` while call sites are migrated
+- optional `Sequencer/Pattern/PatternTempKeyhole.h/.c` if the SEQ16
+  observation/control path still needs a named shim
+
+Implementation status:
+
+- Complete. Pattern storage now lives in `Sequencer/Pattern/PatternData.c/.h`
+  as `seq_patternSet` and `seq_tmpPattern`, and the accessors/mutation helpers
+  were moved with it.
+- `EuklidGenerator.*`, `SomData.*`, and `SomGenerator.*` now live under
+  `Sequencer/Pattern/`, with the generators depending on `PatternData.h`
+  instead of the full sequencer façade for pattern access.
+- `PresetLoadCache.c`, `frontPanelParser.c`, and `sequencer.c` now include the
+  pattern module directly where they need the pattern helpers.
+- `make stm32 -j4` is green after the move; the `clean` target now removes the
+  generated dependency files so stale pre-move paths do not linger.
 
 Exit criteria:
 
-- `sequencer.c` only calls pattern APIs, it does not define the pattern data
-  model directly.
+- `sequencer.c` no longer defines or mutates the pattern storage model directly.
+- `Sequencer/Pattern` owns the pattern data image, the mutation helpers, and
+  the generator code.
+- The SEQ16 temp-pattern keyhole, if retained, is isolated as a named shim and
+  not mixed into the standard pattern data path.
+- Build remains reproducible.
+
+Files modified:
+
+- `mainboard/LxrStm32/src/Sequencer/sequencer.c`
+- `mainboard/LxrStm32/src/Sequencer/sequencer.h`
+- `mainboard/LxrStm32/src/Sequencer/EuklidGenerator.c/.h`
+- `mainboard/LxrStm32/src/Sequencer/SomData.c/.h`
+- `mainboard/LxrStm32/src/Sequencer/SomGenerator.c/.h`
+- `mainboard/LxrStm32/src/Preset/PresetLoadCache.c`
+- `mainboard/LxrStm32/src/MIDI/frontPanelParser.c`
+- `mainboard/LxrStm32/Makefile`
+
+Implementation split:
+
+1. Pattern storage ownership:
+   - move `PatternSet`, `TempPattern`, `SEQ_TMP_PATTERN`, `seq_patternSet`,
+     and `seq_tmpPattern` into `Sequencer/Pattern/PatternData.h/.c`.
+   - move the pattern accessors `seq_normalizePatternNumber()`,
+     `seq_getStepPtr()`, `seq_getLengthRotatePtr()`,
+     `seq_getPatternSettingPtr()`, `seq_getMainSteps()`, and
+     `seq_setMainSteps()` with them.
+   - keep the public compatibility names in `sequencer.h` until the final
+     cleanup phase, but make the new module the source of truth.
+
+2. Pattern mutation helpers:
+   - move `seq_applyTmpPatternTo()`, `seq_toggleStep()`,
+     `seq_toggleMainStep()`, `seq_setMainStep()`, `seq_isStepActive()`,
+     `seq_isMainStepActive()`, `seq_clearTrack()`, `seq_clearAutomation()`,
+     `seq_clearPattern()`, `seq_copyTrack()`, `seq_copyPattern()`,
+     `seq_copyTrackPattern()`, and `seq_copySubStep()` into `PatternData.c`.
+   - move the pattern-view helpers that directly read or write pattern
+     rotation/length state: `seq_setTrackLength()`, `seq_getTrackLength()`,
+     `seq_setTrackScale()`, `seq_getTrackScale()`, `seq_setTrackRotation()`,
+     `seq_getTrackRotation()`, and `seq_setLoop()`.
+   - keep the existing temp-pattern copy semantics intact, including the
+     SEQ16 keyhole behavior, but isolate any observation/control hook into its
+     own small shim file if we still need to expose it.
+
+3. Generator relocation:
+   - move `EuklidGenerator.c/.h`, `SomData.c/.h`, and `SomGenerator.c/.h`
+     into `Sequencer/Pattern/`.
+   - update those generators to include `PatternData.h` instead of the full
+     sequencer façade wherever they only need pattern accessors or the shared
+     pattern types.
+   - keep generator behavior unchanged so the phase only changes ownership and
+     include paths, not the rhythmic output.
+
+4. Compatibility and build wiring:
+   - trim `sequencer.h` so it re-exports only the compatibility wrappers and
+     any remaining pattern-facing externs that must survive until Phase 6.
+   - update `PresetLoadCache.c` and `frontPanelParser.c` to include the new
+     pattern headers for `seq_applyTmpPatternTo()` and any remaining pattern
+     helpers they still call.
+   - update `Makefile` vpaths/source lists for the new
+     `mainboard/LxrStm32/src/Sequencer/Pattern/` directory.
 
 ### Phase 5: Move The Front-Panel UART Layer
 

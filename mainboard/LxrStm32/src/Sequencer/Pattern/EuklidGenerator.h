@@ -38,7 +38,6 @@
 #define EUKLIDGENERATOR_H_
 
 #include "stm32f4xx.h"
-#include "sequencer.h"
 
 void euklid_init();
 uint8_t euklid_getLength(uint8_t trackNr);

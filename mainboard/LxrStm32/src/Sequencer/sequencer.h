@@ -45,29 +45,8 @@
 #include "Preset/ParameterMap.h"
 #include "Preset/ParameterIngress.h"
 #include "Preset/MorphEngine.h"
+#include "PatternData.h"
 #include "EuklidGenerator.h"
-
- /**<
-  * we have 6 voices
-  * 3 drums
-  * 1 snare/claps
- * 1 cymbal/snare
- * 1 hiHat
- * track 7 is the open hh... it triggers the highhat voice but with longer decay. it chokes the closed hihat*/
-#define NUM_TRACKS 7
-#define NUM_PATTERN 8
-#define SEQ_TMP_PATTERN 8
-#define NUM_STEPS 128
-
-#define SEQ_DEFAULT_NOTE 63
-
-#define STEP_ACTIVE_MASK 0x80
-#define STEP_VOLUME_MASK 0x7f
-
-
-// **PATROT these are not used anymore
-//#define PATTERN_END_MASK 0x7f
-//#define PATTERN_END 0x80
 
 #define SEQ_NEXT_RANDOM 		0x08
 #define SEQ_NEXT_RANDOM_PREV 	0x09
@@ -94,54 +73,6 @@ enum Seq_QuantisationEnum
 	QUANT_64,
 };
 
-typedef struct StepStruct
-{
-   uint8_t 	volume;		// 0-127 volume -> 0x7f => lower 7 bit, upper bit => active
-   uint8_t  	prob;		// step probability // bc - I'm going to appropriate the upper bit of prob for
-                        // activestep - 0 will be on (default), 1 will be step off (skip)
-   uint8_t		note;		// midi note value 0-127 -> 0x7f, --AS todo upper bit is now free for other usages
-
-	//parameter automation
-   uint8_t 	param1Nr;
-   uint8_t 	param1Val;
-
-   uint8_t 	param2Nr;
-   uint8_t 	param2Val;
-
-}Step;
-
-typedef struct PatternSettingsStruct
-{
-   uint8_t 	changeBar;		// change on every Nth bar to the next pattern
-   uint8_t  	nextPattern;	// [0:9] (0-7) are the 8 patterns, (8) is random previous, (9) is random all
-}PatternSetting;
-
-// --AS **PATROT
-typedef union {
-   uint8_t value;
-   struct {
-      unsigned length:4;	// length (0 = default 16 steps)
-      unsigned scale:3;    // scale is 2^n
-      unsigned rotate:4;	// 0 means not rotated, 15 is max
-   };
-} LengthRotate;
-
-typedef struct PatternSetStruct
-{
-   Step seq_subStepPattern[NUM_PATTERN][NUM_TRACKS][NUM_STEPS];
-   uint16_t seq_mainSteps[NUM_PATTERN][NUM_TRACKS];
-   PatternSetting seq_patternSettings[NUM_PATTERN];
-   LengthRotate seq_patternLengthRotate[NUM_PATTERN][NUM_TRACKS];
-}PatternSet;
-
-typedef struct TempPatternStruct
-{
-   Step seq_subStepPattern[NUM_TRACKS][NUM_STEPS];
-   uint16_t seq_mainSteps[NUM_TRACKS];
-   PatternSetting seq_patternSettings;
-   LengthRotate seq_patternLengthRotate[NUM_TRACKS]; // only used for length
-}TempPattern;
-
 extern uint8_t seq_activePattern;
 extern uint8_t seq_pendingPattern;
 extern uint8_t seq_perTrackActivePattern[7];
@@ -151,8 +82,6 @@ extern uint8_t seq_newPatternAvailable;
 extern uint8_t seq_recordActive;				/**< set to 1 to activate the reording mode*/
 
 //extern PatternSet* seq_activePatternSetPtr;
-extern PatternSet seq_patternSet;
-extern TempPattern seq_tmpPattern;
 
 extern uint8_t seq_transpose_voiceAmount[7];
 extern uint8_t seq_transposeOnOff;
@@ -186,28 +115,6 @@ void sequencer_sendVMorph(uint8_t voiceArray, uint8_t morphAmount);
 void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note);
 //------------------------------------------------------------------------------
 void seq_setShuffle(float shuffle);
-//------------------------------------------------------------------------------
-void seq_setTrackLength(uint8_t trackNr, uint8_t length);
-//------------------------------------------------------------------------------
-uint8_t seq_getTrackLength(uint8_t trackNr);
-//------------------------------------------------------------------------------
-void seq_setTrackScale(uint8_t trackNr, uint8_t scale);
-//------------------------------------------------------------------------------
-uint8_t seq_getTrackScale(uint8_t trackNr);
-//------------------------------------------------------------------------------
-void seq_setTrackRotation(uint8_t trackNr, const uint8_t rot);
-//------------------------------------------------------------------------------
-void seq_setLoop(uint8_t length);
-//------------------------------------------------------------------------------
-uint8_t seq_getTrackRotation(uint8_t trackNr);
-//------------------------------------------------------------------------------
-// void seq_activateTmpPattern();
-void seq_applyTmpPatternTo(uint8_t pattern);
-uint8_t seq_normalizePatternNumber(uint8_t pattern);
-Step* seq_getStepPtr(uint8_t pattern, uint8_t track, uint8_t step);
-LengthRotate* seq_getLengthRotatePtr(uint8_t pattern, uint8_t track);
-PatternSetting* seq_getPatternSettingPtr(uint8_t pattern);
-uint16_t seq_getMainSteps(uint8_t pattern, uint8_t track);
 /* Preset now owns the core sound-state images and parameter routing logic.
    Keep the old seq_* names alive here as compatibility wrappers while the
    rest of the tree migrates to the new Preset public API. */
@@ -418,7 +325,6 @@ static inline void seq_storeMacroDestinationIngress(uint8_t destinationNr, uint1
    preset_storeMacroDestinationIngress(destinationNr, destination);
 }
 
-void seq_setMainSteps(uint8_t pattern, uint8_t track, uint16_t steps);
 //------------------------------------------------------------------------------
 void seq_init();
 //------------------------------------------------------------------------------
@@ -512,78 +418,30 @@ void seq_setExtSync(uint8_t isExt);
 /** switch to pattern patNr after the current pattern has finished*/
 void seq_setNextPattern(const uint8_t patNr, uint8_t voice);
 //------------------------------------------------------------------------------
-void seq_toggleStep(uint8_t voice, uint8_t stepNr, uint8_t patternNr);
-//------------------------------------------------------------------------------
-void seq_toggleMainStep(uint8_t voice, uint8_t stepNr, uint8_t patternNr);
-//------------------------------------------------------------------------------
-void seq_setMainStep(uint8_t patternNr, uint8_t voice, uint8_t stepNr, uint8_t onOff);
-//------------------------------------------------------------------------------
-//void seq_setStep(uint8_t voice, uint8_t stepNr, uint8_t onOff);
-//------------------------------------------------------------------------------
 void seq_setRunning(uint8_t isRunning);
-//------------------------------------------------------------------------------
 uint8_t seq_isRunning();
-//------------------------------------------------------------------------------
-uint8_t seq_isStepActive(uint8_t voice, uint8_t stepNr, uint8_t patternNr);
-//------------------------------------------------------------------------------
-uint8_t seq_isMainStepActive(uint8_t voice, uint8_t mainStepNr, uint8_t pattern);
-//------------------------------------------------------------------------------
 /** mutes and unmutes a track [0..maxTrack]*/
 void seq_setMute(uint8_t trackNr, uint8_t isMuted);
-//------------------------------------------------------------------------------
 uint8_t seq_isTrackMuted(uint8_t trackNr);
-//------------------------------------------------------------------------------
 /** send step data to front panel. the whole step struct for one step is transmitted*/
 void seq_sendStepInfoToFront(uint16_t stepNr);
-//------------------------------------------------------------------------------
 void seq_sendMainStepInfoToFront(uint16_t stepNr);
-//------------------------------------------------------------------------------
 void seq_rollChange(uint8_t voice, uint8_t onOff);
-//------------------------------------------------------------------------------
 uint8_t seq_setRoll(uint8_t voice, uint8_t onOff);
-//------------------------------------------------------------------------------
 uint8_t seq_checkRollStep(uint8_t voice);
-//------------------------------------------------------------------------------
 uint8_t seq_rollTrig(uint8_t voice);
-//------------------------------------------------------------------------------
 void seq_setRollRate(uint8_t rate);
-//------------------------------------------------------------------------------
 void seq_setRollNote(uint8_t note);
-//------------------------------------------------------------------------------
 void seq_setRollVelocity(uint8_t velocity);
-//------------------------------------------------------------------------------
 /** add a note to the current pattern position*/
 void seq_addNote(uint8_t trackNr,uint8_t vel, uint8_t note);
-//------------------------------------------------------------------------------
 void seq_setRecordingMode(uint8_t active);
-//------------------------------------------------------------------------------
 void seq_setErasingMode(uint8_t active);
-//------------------------------------------------------------------------------
-void seq_clearTrack(uint8_t trackNr, uint8_t pattern);
-//------------------------------------------------------------------------------
-void seq_clearAutomation(uint8_t trackNr, uint8_t pattern, uint8_t automTrack);
-//------------------------------------------------------------------------------
-void seq_clearPattern(uint8_t pattern);
-//------------------------------------------------------------------------------
-void seq_copyTrack(uint8_t srcNr, uint8_t dstNr, uint8_t pattern);
-//------------------------------------------------------------------------------
-void seq_copyPattern(uint8_t src, uint8_t dst);
-//------------------------------------------------------------------------------
-void seq_copyTrackPattern(uint8_t srcNr, uint8_t dstPat, uint8_t srcPat);
-//------------------------------------------------------------------------------
-void seq_copySubStep(uint8_t srcStep, uint8_t dstStep, uint8_t activeTrack);
-//------------------------------------------------------------------------------
 //selects the automation track (0:1) that is recorded to
 void seq_setActiveAutomationTrack(uint8_t trackNr);
-//------------------------------------------------------------------------------
 void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value);
-//------------------------------------------------------------------------------
 void seq_writeTranspose();
-//------------------------------------------------------------------------------
 int8_t seq_quantize(int8_t step, uint8_t track);
-//------------------------------------------------------------------------------
-//uint8_t seq_isNextStepSyncStep();
-//------------------------------------------------------------------------------
 // send a note off for a channel if there is a note playing on that channel
 // if 0xff is specified, send a note off on all channels that have a note playing
 void seq_midiNoteOff(uint8_t chan);

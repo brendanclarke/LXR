@@ -40,6 +40,7 @@
 #include "MidiParser.h"
 #include "ParameterArray.h"
 #include "sequencer.h"
+#include "PatternData.h"
 #include "Preset/PresetLoadCache.h"
 #include "Preset/ParameterIngress.h"
 #include "Uart.h"

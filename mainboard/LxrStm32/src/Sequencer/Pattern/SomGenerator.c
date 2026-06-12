@@ -36,8 +36,10 @@
 
 #include "SomGenerator.h"
 #include "SomData.h"
-#include "sequencer.h"
+#include "PatternData.h"
 #include "math.h"
+
+extern void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note);
 
 SomGenerator somGenerator;
 

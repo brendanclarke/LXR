@@ -55,3 +55,30 @@ COMPLETED: Endpoint restore policy, temp/normal source switching, and the backgr
 ### Next Session Recommendation
 - Phase 4: move pattern data and generators into `Sequencer/Pattern`.
 
+## End of session block
+
+```
+DATE: 2026-06-11
+SESSION GOAL: Complete Phase 3 of the architectural refactor (Move Endpoint Restore And Temp Switching).
+COMPLETED: Endpoint restore policy, temp/normal source switching, and the background-load session cache were moved into `Preset`. `frontPanelParser.c` now consumes `PresetLoadCache` directly, and the Phase 3 split built successfully with `make stm32 -j4`.
+VERIFIED ON HARDWARE: No; build verified with `make stm32 -j4`, but no hardware run was performed in this session.
+
+CHANGES THIS SESSION:
+- mainboard/LxrStm32/src/Preset/EndpointRestore.c/.h: Added the endpoint restore ownership split and moved the STM-to-AVR restore policy there.
+- mainboard/LxrStm32/src/Preset/TempPlaybackSwitch.c/.h: Added the temp/normal source-switch ownership split and moved the normal/temp boundary bookkeeping there.
+- mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h: Added the background-load session cache and deferred replay bookkeeping there.
+- mainboard/LxrStm32/src/MIDI/frontPanelParser.c: Switched the parser over to the Preset-owned load-cache API and removed the local PRF/session ownership.
+- mainboard/LxrStm32/src/Preset/KitState.c/.h: Added `preset_captureTmpKitState()` so temp-image capture stays with the temp boundary owner.
+- mainboard/LxrStm32/Makefile: Verified the build wiring for the new Preset-owned source split.
+
+KNOWN ISSUES INTRODUCED: None.
+KNOWN ISSUES RESOLVED: Endpoint restore, temp switching, and background-load session bookkeeping are no longer split across the sequencer and parser layers.
+
+NEXT SESSION RECOMMENDED GOAL: Begin Phase 4 by moving pattern storage, copy/mutation helpers, and generator code into `Sequencer/Pattern`.
+BLOCKERS: None.
+
+CRITICAL REMINDERS FOR NEXT SESSION:
+- Keep the parser thin and let `Preset` own the session/cache state.
+- Keep AVR communications initiated by storage/session protocols, not by ordinary live MIDI input.
+- Preserve the compatibility façade until the remaining call sites are migrated.
+```

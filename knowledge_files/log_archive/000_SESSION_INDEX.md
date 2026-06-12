@@ -19,6 +19,7 @@
 | 008 | 2026-06-09 | local repo, uncommitted docs | AVR startup substep toggle bug root-cause analysis and fix; identified DIN initialization mismatch and polling race |
 | 009 | 2026-06-10 | local repo, Phase 2 complete | refactor phase 2: moved morph engine and live-apply suppression logic to new Preset/MorphEngine module; updated main loop and established authoritative DSP application bridge |
 | 010 | 2026-06-11 | local repo, Phase 3 complete | refactor phase 3: moved endpoint restore, temp switching, and background-load session bookkeeping into Preset; parser now consumes PresetLoadCache API; build verified |
+| 011 | 2026-06-12 | local repo, Phase 4 complete | refactor phase 4: moved pattern storage, pattern copy/mutation helpers, and Euclid/SOM generators into Sequencer/Pattern; sequencer.c trimmed back to scheduler/trigger role |
 
 ---
 
@@ -64,6 +65,10 @@ Session 009 implemented Phase 2 of the architectural refactor. The morph engine,
 Session 010 completed the Phase 3 ownership split. Endpoint restore policy moved into `Preset/EndpointRestore`, temp/normal source selection and switch state moved into `Preset/TempPlaybackSwitch`, and the PRF/background-load cache moved into `Preset/PresetLoadCache`. The parser now imports the new cache API directly, including the pending-counter reset helper, and the Phase 3 build was verified with `make stm32 -j4`.
 - **Find here**: Endpoint restore ownership, temp-switch state split, background-load session cache, parser-to-PresetLoadCache wiring, pending-counter reset helper, build verification
 
+### 011 — Refactor Phase 4: Pattern Ownership and Generator Relocation (2026-06-12)
+Session 011 completed Phase 4 of the architectural refactor. Pattern storage and mutation now live in `Sequencer/Pattern/PatternData.c/.h`, the Euclid/SOM generator files were moved under the same directory, and `sequencer.c` was trimmed back to the real-time scheduler/trigger role while retaining the compatibility façade in `sequencer.h`. Build wiring was updated for the new pattern submodule and the firmware build remained green after the move.
+- **Find here**: PatternData ownership, pattern copy/clear/mutation helpers, Euclid/SOM generator relocation, sequencer façade trim, build wiring, stale dependency cleanup
+
 
 ---
 
@@ -92,6 +97,7 @@ Session 010 completed the Phase 3 ownership split. Endpoint restore policy moved
 | AVR `din_inputData` must be synchronized with hardware in `din_init` to prevent phantom startup events | 008 |
 | Morph engine and live-apply logic are now owned by the new Preset/MorphEngine module | 009 |
 | Phase 3 background-load/session ownership now lives in Preset/PresetLoadCache; frontPanelParser consumes the cache API and the pending-counter reset helper is exported there | 010 |
+| Pattern storage and generators now live in Sequencer/Pattern; sequencer.c is trimmed back to the scheduler/trigger role | 011 |
 
 
 ---
