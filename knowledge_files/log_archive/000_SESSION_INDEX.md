@@ -21,6 +21,7 @@
 | 010 | 2026-06-11 | local repo, Phase 3 complete | refactor phase 3: moved endpoint restore, temp switching, and background-load session bookkeeping into Preset; parser now consumes PresetLoadCache API; build verified |
 | 011 | 2026-06-12 | local repo, Phase 4 complete | refactor phase 4: moved pattern storage, pattern copy/mutation helpers, and Euclid/SOM generators into Sequencer/Pattern; sequencer.c trimmed back to scheduler/trigger role |
 | 012 | 2026-06-12 | local repo, Phase 5 complete | refactor phase 5: moved front-panel UART/protocol layer into uARTFrontSYX, split opcode namespace into FrontPanelProtocol.h, smoke-tested .ALL/temp-switch flow |
+| 013 | 2026-06-13 | local repo, session 013 closeout | Phase 6 cleanup/naming closeout, Phase 7+ consolidation audit, comms/temp spec reshaping, and handoff prep for session 014 |
 
 ---
 
@@ -47,7 +48,7 @@ Session 005 closed the remaining global morph menu-sync bug after the reset: STM
 - **Find here**: display-only global morph report opcodes, normal/temp boundary restore behavior, AVR menu update without STM echo, session 005 closeout logs and audit notes
 
 ### 006 — Refactor Planning + Phased Roadmap Finalization (2026-06-09)
-Session 006 finalized the comprehensive phased refactor plan for the STM-side preset, morph, and pattern subsystems. Key decisions were made to unify background loading into a single overwriteable session model, retire legacy voice-cache promotion paths, and strictly separate UART transport from protocol parsing. The resulting roadmap in `REFACTOR_PHASED_PLAN.md` serves as the authoritative guide for the upcoming implementation phases.
+Session 006 finalized the comprehensive phased refactor plan for the STM-side preset, morph, and pattern subsystems. Key decisions were made to unify background loading into a single overwriteable session model, retire legacy voice-cache promotion paths, and strictly separate UART transport from protocol parsing. The resulting roadmap served as the authoritative guide for the upcoming implementation phases.
 - **Find here**: refactor phased roadmap, module boundaries for `/Preset/` and `/uARTFrontSYX/`, single background-load session model, transport vs protocol separation decisions, retired legacy load paths
 
 ### 007 — Refactor Phase 1: Core Preset Module Carve-out (2026-06-09)
@@ -73,6 +74,10 @@ Session 011 completed Phase 4 of the architectural refactor. Pattern storage and
 ### 012 — Refactor Phase 5: Front-Panel Transport/Protocol Relocation (2026-06-12)
 Session 012 completed the Phase 5 front-panel transport/protocol split. The front-panel UART transport and parser now live under `uARTFrontSYX/`, the opcode namespace moved into `FrontPanelProtocol.h` behind a compatibility include from `MidiMessages.h`, and the build remained green after the move. The session also smoke-tested `.ALL` load, morph, parameter change, copy to temp, load new `.ALL`, and switch-back flow; MIDI-specific verification remains for later. `PresetLoadCache` continues to own PRF/background-load session state, while the remaining legacy hold/unhold cleanup is deferred to the next phase.
 - **Find here**: front-panel UART transport relocation, parser relocation, opcode namespace split, compatibility include, build wiring, hardware smoke test, next-phase legacy cleanup
+
+### 013 — Session 013 Closeout: Phase 6 Completion and Phase 7 Handoff (2026-06-13)
+Session 013 closed out the Phase 6 cleanup/naming pass and then turned the refactor into its next-phase handoff. The remaining useful material from the old refactor docs was migrated into the new Phase 7+ consolidation audit plus the two session-in-flight specs for UART comms and temporary/pattern/parameter load behavior. Session 013 also wrote the detailed handoff log, updated the session index, and refreshed MEMORY so the next session can start from the new canonical docs instead of the retired planning files.
+- **Find here**: Phase 6 closeout, `PRESET_CONSOLIDATION_AUDIT.md`, `COMMS_FLOW_SPEC.md`, `TEMPORARY_PAT_PARAM_LOAD_SPEC.md`, handoff log and index updates, retired planning-doc cleanup
 
 
 ---
@@ -104,6 +109,8 @@ Session 012 completed the Phase 5 front-panel transport/protocol split. The fron
 | Phase 3 background-load/session ownership now lives in Preset/PresetLoadCache; frontPanelParser consumes the cache API and the pending-counter reset helper is exported there | 010 |
 | Pattern storage and generators now live in Sequencer/Pattern; sequencer.c is trimmed back to the scheduler/trigger role | 011 |
 | Front-panel transport and parser code now live in uARTFrontSYX; opcode namespace is isolated in FrontPanelProtocol.h behind a compatibility include | 012 |
+| Phase 6 cleanup/naming is complete; the next refactor step is driven by PRESET_CONSOLIDATION_AUDIT.md and the old planning docs are no longer canonical | 013 |
+| `PresetLoadCache` is still transitional; `frontPanelParser.c` also carries a parser-local duplicate load-session helper block, so Phase 7 must delete both the shared module and the mirrored parser-side state machine | 013/014 |
 
 
 ---

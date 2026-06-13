@@ -3942,7 +3942,7 @@ void menu_reloadKit()
    frontPanel_sendByte(PATCH_RESET);
    for(i=0;i<END_OF_MORPH_PARAMETERS;i++)
    {
-      parameter_values[i]=parameter_values_temp[i];
+      parameter_values[i]=parameter_values_fileLoadSnapshot[i];
    }  
 }
 //----------------------------------------------------------------

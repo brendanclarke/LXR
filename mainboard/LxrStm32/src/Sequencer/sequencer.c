@@ -302,7 +302,7 @@ static void seq_markVoiceSourceTarget(uint8_t synthVoice, uint8_t useTmp)
          /* TEMP PATTERN: per-track temp playback can request temporary voice
             params even when the global active pattern stays normal. Ensure the
             temporary parameter image exists before applying that voice source. */
-         seq_captureTmpKitState();
+         preset_captureTmpKitState();
       }
    }
 
@@ -371,41 +371,6 @@ static void seq_updateVoiceSourcesForPatternChange(const uint8_t *oldPatternForT
       seq_pushEndpointUpdateForVoiceSourceChange(changedVoiceMask);
 }
 
-static void seq_captureTmpKitState()
-{
-   /* TEMP PATTERN: copy-to-temp is a direct STM image clone. The AVR requests the
-      copy, but it does not stage endpoints through normal storage. */
-   memcpy(seq_tmpKitState.frontPanelParams,
-          seq_normalKitState.frontPanelParams,
-          END_OF_SOUND_PARAMETERS);
-   memcpy(seq_tmpKitState.morphParams,
-          seq_normalKitState.morphParams,
-          END_OF_SOUND_PARAMETERS);
-   memcpy(seq_tmpKitState.interpolatedParams,
-          seq_normalKitState.interpolatedParams,
-          END_OF_SOUND_PARAMETERS);
-   memcpy(&seq_tmpKitState.frontPanelAutomationTargets,
-          &seq_normalKitState.frontPanelAutomationTargets,
-          sizeof(seq_tmpKitState.frontPanelAutomationTargets));
-   memcpy(&seq_tmpKitState.morphParameterEndpointAutomationTargets,
-          &seq_normalKitState.morphParameterEndpointAutomationTargets,
-          sizeof(seq_tmpKitState.morphParameterEndpointAutomationTargets));
-   memcpy(&seq_tmpKitState.interpolatedAutomationTargets,
-          &seq_normalKitState.interpolatedAutomationTargets,
-          sizeof(seq_tmpKitState.interpolatedAutomationTargets));
-   seq_tmpKitState.globalMorphAmount = seq_normalKitState.globalMorphAmount;
-   memcpy(seq_tmpKitState.voiceMorphBaseAmount,
-          seq_normalKitState.voiceMorphBaseAmount,
-          SEQ_SYNTH_VOICES);
-   memcpy(seq_tmpKitState.voiceMorphAmount,
-          seq_normalKitState.voiceMorphAmount,
-          SEQ_SYNTH_VOICES);
-
-   seq_tmpKitState.valid = 1;
-   preset_invalidateLiveMorphApplyCache(PRESET_MORPH_IMAGE_TMP);
-}
-
-//------------------------------------------------------------------------------
 /* RESTORE PUSH-UP PROCESS (STM32 Side)
    This mechanism synchronizes the STM32's canonical parameter image (current or temporary)
    back to the AVR front-panel menu.
@@ -611,8 +576,8 @@ static uint8_t seq_endpointRestoreSendNextFull(uint8_t morphEndpoint)
 {
    uint16_t param;
    const SeqKitState *kit = seq_endpointRestoreCurrent.kit;
-   const uint8_t *values = morphEndpoint ? kit->morphParams
-                                         : kit->frontPanelParams;
+   const uint8_t *values = morphEndpoint ? kit->morphEndpointParams
+                                         : kit->kitEndpointParams;
 
    param = seq_endpointRestoreParamCursor;
    if(param < END_OF_SOUND_PARAMETERS)
@@ -633,8 +598,8 @@ static uint8_t seq_endpointRestoreSendNextFull(uint8_t morphEndpoint)
 static uint8_t seq_endpointRestoreSendNextMasked(uint8_t morphEndpoint)
 {
    const SeqKitState *kit = seq_endpointRestoreCurrent.kit;
-   const uint8_t *values = morphEndpoint ? kit->morphParams
-                                         : kit->frontPanelParams;
+   const uint8_t *values = morphEndpoint ? kit->morphEndpointParams
+                                         : kit->kitEndpointParams;
 
    while(seq_endpointRestoreVoiceCursor < SEQ_SYNTH_VOICES)
    {
@@ -784,7 +749,7 @@ static void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask)
    if(seq_allVoiceSourcesUseTmp())
    {
       if(!seq_tmpKitState.valid)
-         seq_captureTmpKitState();
+         preset_captureTmpKitState();
 
       seq_pushKitEndpointsToFront(&seq_tmpKitState);
       return;
@@ -812,7 +777,7 @@ static void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask)
    if(tmpVoiceMask)
    {
       if(!seq_tmpKitState.valid)
-         seq_captureTmpKitState();
+         preset_captureTmpKitState();
 
       seq_pushKitEndpointVoiceMaskToFront(&seq_tmpKitState, tmpVoiceMask);
    }
@@ -844,7 +809,7 @@ static void seq_setTmpKitActive(uint8_t active)
             first copying a normal pattern into it. Create a parameter sandbox
             from the current normal images so menu edits while the temp pattern
             is active cannot land in normal parameter storage. */
-         seq_captureTmpKitState();
+         preset_captureTmpKitState();
       }
 
       /* TEMP PATTERN: Phase 1 avoids broad shared/non-voice DSP application on
@@ -1060,24 +1025,24 @@ static void seq_parseAutomationNodes(uint8_t track, Step* stepData)
 //------------------------------------------------------------------------------
 static Step* seq_liveStepForTrack(uint8_t track, uint8_t step)
 {
-   if(frontParser_prfCacheTrackUsesLivePattern(track))
-      return frontParser_prfCacheLiveStep(track, step);
+   if(presetLoad_prfCacheTrackUsesLivePattern(track))
+      return presetLoad_prfCacheLiveStep(track, step);
 
    return seq_getStepPtr(seq_perTrackActivePattern[track], track, step);
 }
 //------------------------------------------------------------------------------
 static LengthRotate seq_liveLengthRotateForTrack(uint8_t track)
 {
-   if(frontParser_prfCacheTrackUsesLivePattern(track))
-      return frontParser_prfCacheLiveLengthRotate(track);
+   if(presetLoad_prfCacheTrackUsesLivePattern(track))
+      return presetLoad_prfCacheLiveLengthRotate(track);
 
    return *seq_getLengthRotatePtr(seq_perTrackActivePattern[track], track);
 }
 //------------------------------------------------------------------------------
 static uint8_t seq_liveMainStepActive(uint8_t track, uint8_t mainStep)
 {
-   if(frontParser_prfCacheTrackUsesLivePattern(track))
-      return (frontParser_prfCacheLiveMainSteps(track) & (1<<mainStep)) > 0;
+   if(presetLoad_prfCacheTrackUsesLivePattern(track))
+      return (presetLoad_prfCacheLiveMainSteps(track) & (1<<mainStep)) > 0;
 
    return (seq_getMainSteps(seq_perTrackActivePattern[track], track) & (1<<mainStep)) > 0;
 }
@@ -1134,14 +1099,14 @@ void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
    //Trigger internal synth voice
       voiceControl_noteOn(voiceNr, note, vol);
    }
-   uint8_t midiChannel = frontParser_prfCacheLiveMidiChannel(voiceNr);
+   uint8_t midiChannel = presetLoad_prfCacheLiveMidiChannel(voiceNr);
    if(midiChannel)
    {
       midiChan = midiChannel-1;
    
    //--AS the note that is played will be whatever is received unless we have a note override set
    // A note override is any non-zero value for this parameter
-      uint8_t noteOverride = frontParser_prfCacheLiveNoteOverrideValue(voiceNr);
+      uint8_t noteOverride = presetLoad_prfCacheLiveNoteOverrideValue(voiceNr);
       if(noteOverride == 0)
          midiNote = note;
       else
@@ -1186,7 +1151,7 @@ static uint8_t seq_determineNextPattern()
 {
    PatternSetting p;
 
-   if(frontParser_prfCacheUseLivePattern())
+   if(presetLoad_prfCacheUseLivePattern())
       return seq_activePattern;
 
    p = *seq_getPatternSettingPtr(seq_activePattern);
@@ -1234,13 +1199,13 @@ static void seq_nextStep()
    //---- do we need to do a voice morph
    if(!(seq_stepIndex[NUM_TRACKS]%4))
    {
-      uint8_t vMorphFlag = frontParser_prfCacheTakeLiveVMorphFlag();
+      uint8_t vMorphFlag = presetLoad_prfCacheTakeLiveVMorphFlag();
       if(vMorphFlag)
       {
          for (i=0;i<7;i++)
          {
             if (vMorphFlag&(0x01<<i))
-               sequencer_sendVMorph((uint8_t)(0x01<<i), frontParser_prfCacheLiveVMorphAmountValue(i));
+               sequencer_sendVMorph((uint8_t)(0x01<<i), presetLoad_prfCacheLiveVMorphAmountValue(i));
          
          }
       }
@@ -1817,7 +1782,7 @@ void seq_setRunning(uint8_t isRunning)
 	//jump to 1st step if sequencer is stopped
    if(!seq_running)
    {
-      frontParser_applyDeferredVoiceCache();
+      presetLoad_finalizeTempBackgroundLoad();
    
    	// --AS reset all track rotations to 0. We are not saving rotated value. it's a performance tool.
       uint8_t i;
@@ -1871,7 +1836,7 @@ void seq_setMute(uint8_t trackNr, uint8_t isMuted)
          seq_mutedTracks = 0xFF;
          for (idx=0;idx<7;idx++)
          {
-            uint8_t midiChannel = frontParser_prfCacheLiveMidiChannel(idx);
+            uint8_t midiChannel = presetLoad_prfCacheLiveMidiChannel(idx);
             if(midiChannel)
                voiceControl_noteOff(midiChannel-1);
          }
@@ -1888,7 +1853,7 @@ void seq_setMute(uint8_t trackNr, uint8_t isMuted)
       	//mute track
          seq_mutedTracks |= (1<<trackNr);
       	// --AS turn off the midi note that may be playing on that track
-         uint8_t midiChannel = frontParser_prfCacheLiveMidiChannel(trackNr);
+         uint8_t midiChannel = presetLoad_prfCacheLiveMidiChannel(trackNr);
          if(midiChannel)
             voiceControl_noteOff(midiChannel-1);
       } 
@@ -2592,7 +2557,7 @@ void seq_sendMidiNoteOn(const uint8_t channel, const uint8_t note, const uint8_t
  */
 static void seq_sendProgChg(const uint8_t ptn)
 {
-   uint8_t midiChannel = frontParser_prfCacheLiveMidiChannel(7);
+   uint8_t midiChannel = presetLoad_prfCacheLiveMidiChannel(7);
    if(midiChannel)
    {
       static MidiMsg msg = {0,0,0, {0,0,1}};

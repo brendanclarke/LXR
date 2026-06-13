@@ -488,7 +488,7 @@ void preset_modulateVoiceMorphAmount(uint8_t synthVoice, float amount, float val
       if(modulationAmount)
       {
          liveValue = preset_interpolateMorphValue(baseline,
-                                                  kit->morphParams[param],
+                                                  kit->morphEndpointParams[param],
                                                   modulationAmount);
       }
 
@@ -552,7 +552,7 @@ void preset_serviceMorphInterpolation(void)
       if(modulationAmount)
       {
          liveValue = preset_interpolateMorphValue(liveValue,
-                                                  kit->morphParams[param],
+                                                  kit->morphEndpointParams[param],
                                                   modulationAmount);
       }
 
@@ -577,9 +577,9 @@ void preset_serviceMorphInterpolation(void)
    if(param < END_OF_SOUND_PARAMETERS)
    {
       uint8_t value = isAutomationTargetSelector
-                    ? kit->frontPanelParams[param]
-                    : preset_interpolateMorphValue(kit->frontPanelParams[param],
-                                                   kit->morphParams[param],
+                    ? kit->kitEndpointParams[param]
+                    : preset_interpolateMorphValue(kit->kitEndpointParams[param],
+                                                   kit->morphEndpointParams[param],
                                                    kit->voiceMorphAmount[synthVoice]);
       uint8_t liveValue = value;
 

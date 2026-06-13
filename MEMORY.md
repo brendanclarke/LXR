@@ -25,11 +25,14 @@ make firmware
 
 **Session 001 close status**: full top-level build succeeds in this repo with `make clean && make firmware` (warnings remain, no fatal errors).
 
-**Current status after Session 009 closeout (2026-06-10)**: Phase 2 of the architectural refactor is complete. The morph engine, interpolation worker, and live-apply suppression cache have been moved into the new `mainboard/LxrStm32/src/Preset/MorphEngine` module. All relocated logic was renamed with the `preset_` prefix, and a new authoritative DSP bridge was established in `ParameterIngress.c`. `Sequencer` remains a compatibility façade. Build is verified, and the refactor continues according to `REFACTOR_PHASED_PLAN.md`. Session 010 is expanding the Phase 3 plan so the next implementation pass can move endpoint restore, temp switching, and background-load finalization into `Preset`.
+**Current status after Session 009 closeout (2026-06-10)**: Phase 2 of the architectural refactor is complete. The morph engine, interpolation worker, and live-apply suppression cache have been moved into the new `mainboard/LxrStm32/src/Preset/MorphEngine` module. All relocated logic was renamed with the `preset_` prefix, and a new authoritative DSP bridge was established in `ParameterIngress.c`. `Sequencer` remains a compatibility façade. Build is verified, and the refactor continues according to the phased plan that followed this handoff. Session 010 is expanding the Phase 3 plan so the next implementation pass can move endpoint restore, temp switching, and background-load finalization into `Preset`.
 
-**Current status after Session 012 closeout (2026-06-12)**: Phase 5 is now implemented far enough that the front-panel transport/parser split is complete and `make stm32 -j4` is green. `mainboard/LxrStm32/src/uARTFrontSYX/` now owns the front-panel UART transport and parser, `uARTFrontSYX/FrontPanelProtocol.h` owns the front-panel opcode namespace through a compatibility include from `MidiMessages.h`, and `PresetLoadCache` remains the owner of PRF/background-load session state. Session 012 also smoke-tested `.ALL` load, morph, parameter change, copy to temp, load new `.ALL`, and switch back; MIDI front-panel verification is still deferred. The remaining legacy `frontParser_applyDeferredVoiceCache()` cleanup and hold/unhold compatibility trimming are deferred to the next phase.
+**Current status after Session 013 closeout (2026-06-13)**: Phase 6 cleanup/naming is complete and `make -C mainboard/LxrStm32 -j4 stm32` is green. `mainboard/LxrStm32/src/uARTFrontSYX/` owns the front-panel UART transport and parser, `uARTFrontSYX/FrontPanelProtocol.h` owns the front-panel opcode namespace through a compatibility include from `MidiMessages.h`, and `PresetLoadCache` still exposes the shared `presetLoad_*` background-load/session API while `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c` still carries a parser-local duplicate helper block. `SeqKitState` uses endpoint-oriented field names, the AVR snapshot buffers were renamed to match their file-load/menu-snapshot role, and the session 013 handoff now points at `PRESET_CONSOLIDATION_AUDIT.md`, `COMMS_FLOW_SPEC.md`, and `TEMPORARY_PAT_PARAM_LOAD_SPEC.md` as the active next-step docs. Session 012 smoke-tested `.ALL` load, morph, parameter change, copy to temp, load new `.ALL`, and switch back; MIDI front-panel verification was already confirmed before the closeout pass.
+
+**Current consolidation planning artifact**: `PRESET_CONSOLIDATION_AUDIT.md` now captures the Phase 7+ `/Preset/` cleanup pass. Phase 7 is focused on making `PresetLoadCache` redundant by reusing the existing temp pattern and parameter structures, plus deleting the parser-local load-session helper mirror in `frontPanelParser.c`. Phase 8 handles the remaining `/Preset/` consolidation work, and Phase 9+ covers the protocol/parser cleanup outside `/Preset/`.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/013_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/012_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/011_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/010_SESSION_HANDOFF_LOG.md`
@@ -37,10 +40,10 @@ Canonical current WIP docs:
 - `knowledge_files/log_archive/008_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md`
-- `REFACTOR_PHASED_PLAN.md`
-- `REFACTOR_DIAGRAM.md`
-- `AUDIT_PRESET-MORPH_REFACTOR.md`
-- `AUDIT_REFACTOR_TARGETS.md`
+- `knowledge_files/log_archive/000_SESSION_INDEX.md`
+- `PRESET_CONSOLIDATION_AUDIT.md`
+- `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`
+- `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`
 
 Session 005 closeout / remaining follow-up:
 - Encoder phase is slightly unbalanced and may still need a small fix.
@@ -55,11 +58,6 @@ These older in-flight audits are stale after Session 003 and should not be treat
 - `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT.md`
 - `knowledge_files/session_in_flight/TEMP_CACHE_LOAD-IN_FLIGHT-POST_MORPH_MOVE.md`
 - `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT-POST_MORPH_MOVE.md`
-
-These root-level Session 004 working audits may be deleted after their contents are consolidated into `AUDIT_PRESET-MORPH_REFACTOR.md` and the session handoff:
-- `MORPH_AUTOMATION_ASSIGN_DROPPED_BUG.md`
-- `TEMP_SWITCH_WALK.md`
-- `AUDIT_TEMP_AUDIO_DROPOUT.md`
 
 The two pre-morph load/comms audits were expanded on 2026-05-29 from source diffs:
 - `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT.md`: compares `LXR-9120ea7620f1a9a4a924f029cdaf3ae71df303fd/front|mainboard` against `LXR-custom-develop-patload-envmod-90d3f08/front|mainboard`.
@@ -197,8 +195,8 @@ User-referenced checkpoints:
 | Session 004 temp/background loading closeout | `knowledge_files/log_archive/004_SESSION_HANDOFF_LOG.md` |
 | Session 006 refactor planning details | `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md` |
 | Session 007 refactor Phase 1 details | `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md` |
-| Current preset/morph refactor knowledge | `AUDIT_PRESET-MORPH_REFACTOR.md`, `REFACTOR_PHASED_PLAN.md` |
-| Current comms/protocol knowledge | `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
+| Current preset/morph refactor knowledge | `PRESET_CONSOLIDATION_AUDIT.md`, `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md` |
+| Current comms/protocol knowledge | `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`, `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
 
 ---
 
@@ -362,7 +360,7 @@ Sample flash map:
 - `seq_serviceMorphInterpolation()` runs one parameter per STM main-loop pass and is the only intended writer of `interpolatedParams[]`.
 - `seq_serviceMorphInterpolation()` now has phase 0 for standard morph and optional later phases for source voices whose LFO targets voice morph. Each main-loop pass must still perform at most one interpolation/application unit.
 - Automation selector parameters, morph amount parameters, and LFO target voice selector parameters are carved out of ordinary interpolation and return kit/front endpoint values.
-- Automation target endpoint bytes and resolved sideband structures must stay coherent. For LFO target ingress, raw selector bytes must be written to `frontPanelParams[]` for kit endpoints or `morphParams[]` for morph endpoints, and the matching `SeqKitAutomationTargets` sideband must be refreshed. If only the sideband is changed, normal/temp switching can later restore stale/off raw bytes and drop the assignment.
+- Automation target endpoint bytes and resolved sideband structures must stay coherent. For LFO target ingress, raw selector bytes must be written to `kitEndpointParams[]` for kit endpoints or `morphEndpointParams[]` for morph endpoints, and the matching `SeqKitAutomationTargets` sideband must be refreshed. If only the sideband is changed, normal/temp switching can later restore stale/off raw bytes and drop the assignment.
 
 ---
 
@@ -389,14 +387,14 @@ Sample flash map:
 
 - SEQ16 is used as a SELECT button for `SEQ_TMP_PATTERN`.
 - Session 004 made normal/temporary pattern and parameter exchange functional again after the Session 003 morph move.
-- AVR-to-STM endpoint dump (Opcodes 0x65/0x66) is implemented and captures `parameter_values`, `parameters2`, and all 16 mod targets.
+- AVR-to-STM endpoint dump (Opcodes 0x65/0x66) is implemented and captures `parameter_values_fileLoadSnapshot`, `parameters2_fileLoadSnapshot`, and all 16 mod targets.
 - STM-side `seq_normalKitState` and `seq_tmpKitState` are the source of truth for menu pushbacks.
 - STM-to-AVR parameter pushback on temp-pattern transitions must happen on every normal/temp switch so the menu stays in sync. Global morph push-up on those boundaries is now handled by display-only report traffic.
 - Endpoint storage uses raw AVR/menu parameter indices. Do not apply low `+1/-1` offsets to endpoint arrays or PRF restore opcodes.
-- Sound engine live morph path uses `interpolatedParams` after the STM worker writes it; menu pushback uses `frontPanelParams`.
+- Sound engine live morph path uses `interpolatedParams` after the STM worker writes it; menu pushback uses `kitEndpointParams`.
 - File loads must target normal parameter storage and normal pattern storage only; they must never touch temporary parameter storage or temporary pattern data.
 - File loads must only write endpoint arrays, not interpolation arrays. Automation target sideband caches may be refreshed on file load, but parameter bytes still flow into endpoint storage only.
-- Sound parameter arrays are always valid from zero init. Do not reintroduce `frontPanelParamsValid[]`, `morphParamsValid[]`, or `interpolatedParamsValid[]`.
+- Sound parameter arrays are always valid from zero init. Do not reintroduce `kitEndpointParamsValid[]`, `morphEndpointParamsValid[]`, or `interpolatedParamsValid[]`.
 - No extraneous LCD/debug writes should occur during copy/paste, temp/normal switching, endpoint restore, or file-load operations.
 - Do not make the temp pattern loadable/saveable unless explicitly requested.
 - Future background-load automation should build on the Session 004 STM-owned normal/temp image model and should not revive AVR-owned temp staging.

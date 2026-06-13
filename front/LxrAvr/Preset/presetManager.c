@@ -111,8 +111,8 @@ char filename[GEN_BUF_LEN];
 char preset_currentName[8];
 char preset_currentSaveMenuName[8];
 
-uint8_t parameter_values_temp[END_OF_SOUND_PARAMETERS];
-uint8_t parameters2_temp[END_OF_SOUND_PARAMETERS];
+uint8_t parameter_values_fileLoadSnapshot[END_OF_SOUND_PARAMETERS];
+uint8_t parameters2_fileLoadSnapshot[END_OF_SOUND_PARAMETERS];
 static uint8_t preset_savedParameterValues[END_OF_SOUND_PARAMETERS];
 static uint8_t preset_savedParameters2[END_OF_SOUND_PARAMETERS];
 
@@ -298,7 +298,7 @@ void preset_loadGlobals()
          // track MIDI was not contained in globals - get them from drumkit 0
          for(i=0;i<7;i++)
          {
-            parameter_values[PAR_MIDI_NOTE1+i]=parameter_values_temp[PAR_ENVELOPE_POSITION_1+i];
+            parameter_values[PAR_MIDI_NOTE1+i]=parameter_values_fileLoadSnapshot[PAR_ENVELOPE_POSITION_1+i];
          }
          
          lcd_clear();
@@ -331,10 +331,10 @@ void preset_readKitToTemp(uint8_t isMorph)
    int16_t i;
    FRESULT res;
    uint16_t kitOffset;
-   uint8_t *para = parameter_values_temp;
+   uint8_t *para = parameter_values_fileLoadSnapshot;
    
    if(isMorph)
-      para=parameters2_temp;
+      para=parameters2_fileLoadSnapshot;
    
    switch(preset_workingType)
    {
@@ -505,14 +505,14 @@ void preset_readDrumVoice(uint8_t track, uint8_t isMorph)
    {
       for (i=0;i<VOICE_PARAM_LENGTH;i++)
       {
-         parameters2[paramMask[i]]=parameters2_temp[paramMask[i]];
+         parameters2[paramMask[i]]=parameters2_fileLoadSnapshot[paramMask[i]];
       }
    }
    else
    {
       for (i=0;i<VOICE_PARAM_LENGTH;i++)
       {
-         parameter_values[paramMask[i]]=parameter_values_temp[paramMask[i]];
+         parameter_values[paramMask[i]]=parameter_values_fileLoadSnapshot[paramMask[i]];
       }
    }
     
@@ -562,7 +562,7 @@ void preset_readDrumsetMeta(uint8_t isMorph)
       for (i=0;i<END_OF_SOUND_PARAMETERS-END_OF_INDIVIDUAL_VOICE_PARAMS;i++)
       {
          parameters2[END_OF_INDIVIDUAL_VOICE_PARAMS+i]=
-            parameters2_temp[END_OF_INDIVIDUAL_VOICE_PARAMS+i];
+            parameters2_fileLoadSnapshot[END_OF_INDIVIDUAL_VOICE_PARAMS+i];
       }
       parameters2[PAR_KIT_VERSION]=preset_workingVersion; // version is updated in readToTemp
       
@@ -577,7 +577,7 @@ void preset_readDrumsetMeta(uint8_t isMorph)
       for (i=0;i<END_OF_SOUND_PARAMETERS-END_OF_INDIVIDUAL_VOICE_PARAMS;i++)
       {
          parameter_values[END_OF_INDIVIDUAL_VOICE_PARAMS+i]=
-            parameter_values_temp[END_OF_INDIVIDUAL_VOICE_PARAMS+i];
+            parameter_values_fileLoadSnapshot[END_OF_INDIVIDUAL_VOICE_PARAMS+i];
       }
    
    // bc: special case macro targets - re-send targets on kit load

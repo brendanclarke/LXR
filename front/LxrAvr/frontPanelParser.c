@@ -433,7 +433,7 @@ void frontPanel_parseData(uint8_t data)
       {
          for(i=0;i<END_OF_MORPH_PARAMETERS;i++)
          {
-            parameter_values[i]=parameter_values_temp[i];
+            parameter_values[i]=parameter_values_fileLoadSnapshot[i];
          }
          menu_repaintAll();
       }

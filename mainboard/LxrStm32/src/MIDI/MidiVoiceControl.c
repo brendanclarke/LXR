@@ -98,7 +98,7 @@ void voiceControl_noteOff(uint8_t voice)
       active_voices &= (~(1<<voice));
    
    	//send midi note off
-      uint8_t midiChannel = frontParser_prfCacheLiveMidiChannel(voice);
+      uint8_t midiChannel = presetLoad_prfCacheLiveMidiChannel(voice);
       if(midiChannel)
       {
          midiChan = midiChannel-1;

@@ -16,8 +16,8 @@
 extern char preset_currentName[8];
 extern char preset_currentSaveMenuName[8];
 
-extern uint8_t parameter_values_temp[END_OF_SOUND_PARAMETERS];
-extern uint8_t parameters2_temp[END_OF_SOUND_PARAMETERS];
+extern uint8_t parameter_values_fileLoadSnapshot[END_OF_SOUND_PARAMETERS];
+extern uint8_t parameters2_fileLoadSnapshot[END_OF_SOUND_PARAMETERS];
 extern uint8_t preset_workingVoiceArray;
 
 void preset_init();

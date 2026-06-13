@@ -227,8 +227,8 @@ static uint8_t seq_endpointRestoreSendNextFull(uint8_t morphEndpoint)
 {
    uint16_t param;
    const SeqKitState *kit = seq_endpointRestoreCurrent.kit;
-   const uint8_t *values = morphEndpoint ? kit->morphParams
-                                         : kit->frontPanelParams;
+   const uint8_t *values = morphEndpoint ? kit->morphEndpointParams
+                                         : kit->kitEndpointParams;
 
    param = seq_endpointRestoreParamCursor;
    if(param < END_OF_SOUND_PARAMETERS)
@@ -248,8 +248,8 @@ static uint8_t seq_endpointRestoreSendNextFull(uint8_t morphEndpoint)
 static uint8_t seq_endpointRestoreSendNextMasked(uint8_t morphEndpoint)
 {
    const SeqKitState *kit = seq_endpointRestoreCurrent.kit;
-   const uint8_t *values = morphEndpoint ? kit->morphParams
-                                         : kit->frontPanelParams;
+   const uint8_t *values = morphEndpoint ? kit->morphEndpointParams
+                                         : kit->kitEndpointParams;
 
    while(seq_endpointRestoreVoiceCursor < SEQ_SYNTH_VOICES)
    {

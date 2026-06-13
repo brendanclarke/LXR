@@ -42,19 +42,19 @@ typedef struct SeqKitAutomationTargetsStruct
 } SeqKitAutomationTargets;
 
 /* Kit state is the always-defined preset image that Phase 1 moves out of the
-   sequencer. The front-panel array stores the raw live/edit endpoint, the
-   morph array stores the alternate endpoint image, and the interpolated array
-   is the worker-owned render cache rebuilt from those two sources. The
-   automation target blocks mirror the same split so the protocol layer can
-   preserve selector bytes while the morph and restore workers decide which
-   image is authoritative. */
+   sequencer. The kit-endpoint array stores the raw live/edit endpoint, the
+   morph-endpoint array stores the alternate endpoint image, and the
+   interpolated array is the worker-owned render cache rebuilt from those two
+   sources. The automation target blocks mirror the same split so the protocol
+   layer can preserve selector bytes while the morph and restore workers
+   decide which image is authoritative. */
 typedef struct SeqKitStateStruct
 {
    /* These arrays are always-defined sound state from zero init. File/front
       ingress writes endpoint bytes here, and the morph worker later rebuilds
       interpolatedParams[] from these images. */
-   uint8_t frontPanelParams[END_OF_SOUND_PARAMETERS];
-   uint8_t morphParams[END_OF_SOUND_PARAMETERS];
+   uint8_t kitEndpointParams[END_OF_SOUND_PARAMETERS];
+   uint8_t morphEndpointParams[END_OF_SOUND_PARAMETERS];
    uint8_t interpolatedParams[END_OF_SOUND_PARAMETERS];
    SeqKitAutomationTargets frontPanelAutomationTargets;
    SeqKitAutomationTargets morphParameterEndpointAutomationTargets;

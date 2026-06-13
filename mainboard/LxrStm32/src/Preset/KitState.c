@@ -96,11 +96,11 @@ void preset_setVoiceSourceState(uint8_t synthVoice, uint8_t sourceState)
    rather than the sequencer or parser. */
 void preset_captureTmpKitState(void)
 {
-   memcpy(preset_tmpKitState.frontPanelParams,
-          preset_normalKitState.frontPanelParams,
+   memcpy(preset_tmpKitState.kitEndpointParams,
+          preset_normalKitState.kitEndpointParams,
           END_OF_SOUND_PARAMETERS);
-   memcpy(preset_tmpKitState.morphParams,
-          preset_normalKitState.morphParams,
+   memcpy(preset_tmpKitState.morphEndpointParams,
+          preset_normalKitState.morphEndpointParams,
           END_OF_SOUND_PARAMETERS);
    memcpy(preset_tmpKitState.interpolatedParams,
           preset_normalKitState.interpolatedParams,

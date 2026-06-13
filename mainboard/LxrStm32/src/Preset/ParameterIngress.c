@@ -219,7 +219,7 @@ void preset_storeMorphParameterIngress(uint16_t param, uint8_t value)
       kit = &preset_normalKitState;
    }
 
-   kit->morphParams[param] = value;
+   kit->morphEndpointParams[param] = value;
 }
 
 /* Stores a raw parameter byte into the correct kit image for the current
@@ -267,12 +267,12 @@ void preset_storeParameterIngress(uint16_t param, uint8_t value)
          kit = &preset_tmpKitState;
       }
 
-      kit->frontPanelParams[param] = value;
+      kit->kitEndpointParams[param] = value;
       preset_updateLiveSharedParameterCache(param, value);
       return;
    }
 
-   preset_normalKitState.frontPanelParams[param] = value;
+   preset_normalKitState.kitEndpointParams[param] = value;
    preset_updateFrontAndInterpolatedAutomationTargets(&preset_normalKitState,
                                                       param,
                                                       value);
@@ -322,12 +322,12 @@ void preset_storeLfoDestinationIngress(uint8_t voice, uint16_t destination)
       voiceSelector =
          preset_voiceSelectorForAutomationTargetDestination(
             destination,
-            kit ? kit->morphParams[voiceParam] : 0);
+            kit ? kit->morphEndpointParams[voiceParam] : 0);
 
       if(kit)
       {
-         kit->morphParams[voiceParam] = voiceSelector;
-         kit->morphParams[targetParam] = selector;
+         kit->morphEndpointParams[voiceParam] = voiceSelector;
+         kit->morphEndpointParams[targetParam] = selector;
       }
    }
    else
@@ -335,12 +335,12 @@ void preset_storeLfoDestinationIngress(uint8_t voice, uint16_t destination)
       voiceSelector =
          preset_voiceSelectorForAutomationTargetDestination(
             destination,
-            kit ? kit->frontPanelParams[voiceParam] : 0);
+            kit ? kit->kitEndpointParams[voiceParam] : 0);
 
       if(kit)
       {
-         kit->frontPanelParams[voiceParam] = voiceSelector;
-         kit->frontPanelParams[targetParam] = selector;
+         kit->kitEndpointParams[voiceParam] = voiceSelector;
+         kit->kitEndpointParams[targetParam] = selector;
 
          if(interpolatedTarget)
          {
