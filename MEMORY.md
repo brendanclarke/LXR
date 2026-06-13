@@ -29,11 +29,12 @@ make firmware
 
 **Current status after Session 013 closeout (2026-06-13)**: Phase 6 cleanup/naming is complete and `make -C mainboard/LxrStm32 -j4 stm32` is green. `mainboard/LxrStm32/src/uARTFrontSYX/` owns the front-panel UART transport and parser, `uARTFrontSYX/FrontPanelProtocol.h` owns the front-panel opcode namespace through a compatibility include from `MidiMessages.h`, and `PresetLoadCache` still exposes the shared `presetLoad_*` background-load/session API while `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c` still carries a parser-local duplicate helper block. `SeqKitState` uses endpoint-oriented field names, the AVR snapshot buffers were renamed to match their file-load/menu-snapshot role, and the session 013 handoff now points at `PRESET_CONSOLIDATION_AUDIT.md`, `COMMS_FLOW_SPEC.md`, and `TEMPORARY_PAT_PARAM_LOAD_SPEC.md` as the active next-step docs. Session 012 smoke-tested `.ALL` load, morph, parameter change, copy to temp, load new `.ALL`, and switch back; MIDI front-panel verification was already confirmed before the closeout pass.
 
-**Current status after Session 014 implementation pass (2026-06-13)**: `Sequencer`, `MidiParser`, and `MidiVoiceControl` now read live voice/pattern/morph state directly from the owner modules instead of the shared cache header. `presetLoad_finalizeTempBackgroundLoad()` was moved to the `TempPlaybackSwitch`-facing interface so `sequencer.c` no longer needs `PresetLoadCache.h` for the finalizer call. `PresetLoadCache` still exists for the transitional parser/session path, and `frontPanelParser.c` still has the dead `#if 0` helper mirror pending cleanup. `make -C mainboard/LxrStm32 -j4 stm32` is green after the cutover.
+**Current status after Session 014 implementation pass (2026-06-13)**: `Sequencer`, `MidiParser`, and `MidiVoiceControl` now read live voice/pattern/morph state directly from the owner modules instead of the shared cache header. `presetLoad_finalizeTempBackgroundLoad()` is exposed through the `TempPlaybackSwitch` interface so `sequencer.c` no longer needs `PresetLoadCache.h` for the finalizer call. `PresetLoadCache.c/.h` were deleted, and the remaining parser/session bridge now lives inside `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c` as the transitional holdover. `make -C mainboard/LxrStm32 -j4 stm32` is green after the cutover, and the user re-test confirmed the Phase 7 cutover behaves correctly.
 
-**Current consolidation planning artifact**: `PRESET_CONSOLIDATION_AUDIT.md` now captures the Phase 7+ `/Preset/` cleanup pass. Phase 7 is focused on making `PresetLoadCache` redundant by reusing the existing temp pattern and parameter structures, plus deleting the parser-local load-session helper mirror in `frontPanelParser.c`. Session 014 has already cut the runtime caller side over to direct owner reads; Phase 8 handles the remaining `/Preset/` consolidation work, and Phase 9+ covers the protocol/parser cleanup outside `/Preset/`.
+**Current consolidation planning artifact**: `PRESET_CONSOLIDATION_AUDIT.md` now captures the Phase 7+ `/Preset/` cleanup pass. Session 014 removed the shared `PresetLoadCache` module and concentrated the remaining transitional bridge in `frontPanelParser.c`; Phase 8 handles the remaining `/Preset/` consolidation work, and Phase 9+ covers the protocol/parser cleanup outside `/Preset/`.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/014_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/013_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/012_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/011_SESSION_HANDOFF_LOG.md`
@@ -484,13 +485,14 @@ You, the agent, and each delegate assigned to a task must read, understand, and 
 
 ### 4. Coding Workflow Practice
 
-- A 'turn' is one user message plus one agent response.
-- Keep planning, coding, and summary turns separate, with the following document permissions:
+- A 'turn' is one user message plus one agent response. The turn type is defined by the initiating user message and is immutable for the turn.
+- Keep planning, coding, and logging turns separate, with the following document permissions:
     - Planning creates/edits markup documents (*.md), does not ever modify other file types or logs (./knowledge_files/log_archive/).
     - Coding creates/edits code files, tracks/modifies progress and status in designated markup documents when requested, does not ever modify logs (./knowledge_files/log_archive/).
-    - Summary creates/edits logs (./knowledge_files/log_archive/*.md), updates other markup documents as requested, does not ever edit other file types.
+    - Logging creates/edits logs (./knowledge_files/log_archive/*.md), updates other markup documents as requested, does not ever edit other file types.
 - Mix turn types only when the originating user message for that turn explicitly and unambiguously requests it.
-- A turn that is not a planning, coding, or summary request has NO file edit permissions and the response should be contained only in chat. If the request is ambiguous, default to this state or ask the user for mode clarification.
+- A turn that is not a planning, coding, or logging request has NO file edit permissions and the response should be contained only in chat. If the request is ambiguous, default to this state or ask the user for mode clarification.
+- The turn type and file permissions apply to all tool calls and sub-agent actions in that turn. Tool calls do not reclassify or expand permissions. If an action would exceed the current turn type, stop and ask the user. 
 
 ### 5. Verification And Artifacts
 

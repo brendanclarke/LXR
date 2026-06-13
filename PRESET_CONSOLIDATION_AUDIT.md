@@ -1,7 +1,7 @@
 # PRESET_CONSOLIDATION_AUDIT
 
 Date: 2026-06-13
-Status: planning draft for Phase 7, with the runtime caller cutover already landing in Session 014
+Status: Phase 7 implementation landed in Session 014; the shared cache module is gone and Phase 8 now owns the remaining `/Preset/` consolidation work
 
 ## Purpose
 
@@ -85,13 +85,29 @@ voice/pattern callers:
   declaration so `sequencer.c` no longer needs the old cache header just for
   the finalizer call.
 
-The shared load/session module still exists for the parser/session path, and
-the parser-local dead mirror block is still pending its own cleanup pass.
+Session 014 completed the shared-module removal: `PresetLoadCache.c/.h` were
+deleted, and the remaining transitional load/session bridge now lives in
+`mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c`.
+
+That leaves one parser-local holdover instead of a separate shared cache
+module. The remaining direct-owner cleanup is now the follow-on consolidation
+work, not another cache-module cutover.
+
+### Session 014 implementation note
+
+- deleted `mainboard/LxrStm32/src/Preset/PresetLoadCache.c`;
+- deleted `mainboard/LxrStm32/src/Preset/PresetLoadCache.h`;
+- moved the remaining `presetLoad_*` storage and helper API into
+  `frontPanelParser.c` as the transitional bridge;
+- kept `TempPlaybackSwitch.h` as the public finalizer declaration for the
+  sequencer-facing call site;
+- verified the STM32 build with `make -C mainboard/LxrStm32 -j4 stm32`.
 
 ## AVR-Side Processes That Currently Feed This System
 
-The AVR side does not directly call `PresetLoadCache`, but it does initiate and
-participate in the protocol flows that `PresetLoadCache` currently supports.
+The AVR side does not directly call `PresetLoadCache`, but it still initiates
+and participates in the protocol flows that now feed the parser-local
+transitional bridge in `frontPanelParser.c`.
 
 ### Front-panel protocol initiators
 
@@ -106,7 +122,7 @@ In `front/LxrAvr/frontPanelParser.c`:
   bookkeeping.
 
 These are the AVR-facing initiators that will need to be reconnected to the new
-background-load mechanism after `PresetLoadCache` disappears.
+background-load mechanism after the parser-local bridge is retired.
 
 ### AVR preset/file-load flows
 
@@ -143,9 +159,9 @@ should not disturb parameter storage mode.
 ### Goal
 
 Make `PresetLoadCache` completely redundant by moving the surviving behavior
-into the real owners, then deleting both the shared cache module and the
-parser-local helper mirror that currently duplicates the same state machine in
-`mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c`.
+into the real owners, deleting the shared cache module, and leaving only the
+parser-local bridge in `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c`
+as a temporary holdover until the follow-on consolidation pass absorbs it.
 
 ### What Changes
 
@@ -178,9 +194,9 @@ background-load mode.
    - Delete `mainboard/LxrStm32/src/Preset/PresetLoadCache.h`.
    - Remove the `presetLoad_*` declarations from the callers that only used the
      shared cache API.
-   - Remove the parser-local duplicate `presetLoad_*` helper block in
-     `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c` once the direct
-     owner calls are wired.
+   - Move the remaining `presetLoad_*` helper API into
+     `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c` as the
+     transitional bridge while the direct-owner calls are wired.
 
 2. Replace the live snapshot mirror with direct owner reads.
    - Delete `presetLoad_capturePrfStmLiveSnapshot()`,
@@ -236,10 +252,10 @@ background-load mode.
    - Keep `TempPlaybackSwitch` only as long as it still reads more clearly than
      folding the boundary logic into the core preset API.
 
-### Current `PresetLoadCache` surface by function family
+### Current transitional parser-local surface
 
-The functions below are the transitional surface this phase removes or
-replaces:
+The functions below are the transitional surface that replaced the deleted
+shared module in Session 014 and now need to be folded into the real owners:
 
 - Session control and teardown:
   - `presetLoad_beginFileLoadIngress()`
@@ -291,9 +307,9 @@ what remains here is the transitional parser/session path.
 The AVR initiators do not need to keep the old semantics forever.
 
 They can be kept as thin stubs while the backend is disconnected from
-`PresetLoadCache` and the parser-local helper mirror, as long as they preserve
-the user-visible control flow and do not try to emulate the old session cache
-in the AVR layer.
+`PresetLoadCache` and the parser-local transitional bridge, as long as they
+preserve the user-visible control flow and do not try to emulate the old
+session cache in the AVR layer.
 
 That means:
 
@@ -341,21 +357,20 @@ is simplified:
 This future control should replace the current "File Load Fast" concept rather
 than adding another mode on top of it.
 
-### Phase 7 exit criteria
+### Phase 7 completion result
 
-- No `PresetLoadCache.c/h` remains.
-- No `presetLoad_*` background-load/session API remains in a shared module.
-- The parser-local duplicate load-session helper block in
-  `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c` is gone.
-- The AVR initiators are routed through the new temp-switch/core preset API or
-  are stubbed out in a controlled way while the new path is being connected.
+- Completed in Session 014: `PresetLoadCache.c/h` no longer exist.
+- Completed in Session 014: the shared-module `presetLoad_*` surface is gone.
+- The parser-local bridge in `frontPanelParser.c` is now the remaining
+  transitional holdover until the follow-on consolidation pass absorbs it.
 - Pattern-only background loading keeps parameter read/write on normal storage.
-- The codebase has one background-load mechanism, not two overlapping ones.
+- The codebase has one parser-owned transitional bridge, not a second shared
+  cache module.
 
 ### Scope Check
 
-- The parser-local duplicate helper block in `frontPanelParser.c` is part of
-  Phase 7, not a later cleanup.
+- The parser-local bridge in `frontPanelParser.c` is the Phase 7
+  transitional holdover, not a separate shared module.
 - `ParameterArray.c/h` still looks like a Phase 8 item; it is not a cheap add-on
   to the cache-removal pass.
 
@@ -554,11 +569,12 @@ Before implementation, the main questions to keep in mind are:
 
 The consolidation strategy is now:
 
-- Phase 7: remove `PresetLoadCache` and the parser-local duplicate load-session
-  mirror by reusing the existing temp pattern and parameter structures instead
-  of a separate cache/session model. Session 014 already cut the Sequencer and
-  MIDI runtime callers over to direct owner reads; the remaining work is to
-  retire the transitional parser/session path.
+- Phase 7: remove `PresetLoadCache` as a shared module and keep only the
+  parser-local transitional bridge until the direct-owner rewrite is complete,
+  reusing the existing temp pattern and parameter structures instead of a
+  separate cache/session model. Session 014 already cut the Sequencer and MIDI
+  runtime callers over to direct owner reads and deleted the shared cache
+  module; the remaining work is to retire the parser-local bridge.
 - Phase 8: consolidate the remaining `/Preset/` files into one core ownership
   layer plus the true async workers, including `ParameterArray` into `/Preset/`.
 - Phase 9 and beyond: split the front-panel protocol and MIDI parser into

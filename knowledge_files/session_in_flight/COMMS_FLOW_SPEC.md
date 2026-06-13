@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
 Date: 2026-06-13
-Status: current AVR<->STM comms reference; Session 014 already moved the Sequencer/MIDI runtime callers off the load cache, and Phase 9 will split the send/receive protocol files.
+Status: current AVR<->STM comms reference; Session 014 already moved the Sequencer/MIDI runtime callers off the load cache, deleted the shared cache module, and Phase 9 will split the send/receive protocol files.
 
 ## Purpose
 
@@ -127,7 +127,7 @@ These messages tell STM that the incoming traffic belongs to a file load or back
 - `SEQ_LOAD_VOICE`
 - `SEQ_LOAD_FAST`
 
-The current implementation still passes through `PresetLoadCache` for the remaining parser/session bridge, but the Sequencer/MIDI runtime callers have already moved to direct owner reads. The Phase 7 target is to remove that remaining overlap and make the temp/normal storage model carry the load semantics directly.
+The remaining parser/session bridge now lives inside `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c`; the shared `PresetLoadCache` files were removed in Session 014. The Sequencer/MIDI runtime callers have already moved to direct owner reads, and the remaining cleanup is to make the temp/normal storage model carry the load semantics directly without a separate cache module.
 
 File-load traffic should follow this broad rule:
 
@@ -160,7 +160,7 @@ In `front/LxrAvr/frontPanelParser.c`:
 - `frontPanel_flowAbortSession()`
 - `PRF_CACHE_STATUS` handling
 
-These are the AVR-facing entry points that need to be reconnected once the background-load machinery no longer depends on `PresetLoadCache`.
+These are the AVR-facing entry points that need to be reconnected once the remaining parser-local bridge no longer needs to emulate the old cache behavior.
 
 ### AVR preset/file-load flows
 
@@ -208,7 +208,7 @@ The comms layer should end up with a very clear split:
 - `Preset` for storage and session semantics
 - `Pattern` for pattern storage and pattern temp behavior
 
-The parser should not keep a second background-load model after `PresetLoadCache` is removed.
+The parser should not keep a second background-load model after the remaining parser-local bridge is retired.
 It should route semantics into `Preset` and `Pattern`, then get out of the way.
 
 The background-load initiators can stay thin or stubbed while the replacement path is being connected.

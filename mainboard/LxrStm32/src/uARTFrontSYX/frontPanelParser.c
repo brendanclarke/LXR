@@ -42,7 +42,6 @@
 #include "ParameterArray.h"
 #include "sequencer.h"
 #include "PatternData.h"
-#include "Preset/PresetLoadCache.h"
 #include "Preset/ParameterIngress.h"
 #include "Uart.h"
 #include "SD_Manager.h"
@@ -149,7 +148,64 @@ uint8_t frontParser_isQuietUi()
    return comm_quietUi;
 }
 
-#if 0
+/* Transitional parser-owned load/session stub. This keeps the remaining
+   background-load and deferred-performance bookkeeping local while the shared
+   PresetLoadCache module is removed. */
+#define DEFERRED_PERF_MSG_CACHE_SIZE 128
+#define PRF_CACHE_LIVE_PARAM_COUNT 310
+#define PRF_PENDING_EXPECTED_MAINSTEP_COUNT (NUM_PATTERN * NUM_TRACKS)
+#define PRF_PENDING_EXPECTED_STEP_COUNT (NUM_PATTERN * NUM_TRACKS * NUM_STEPS)
+#define PRF_PENDING_EXPECTED_LENGTH_COUNT (NUM_PATTERN * NUM_TRACKS)
+#define PRF_PENDING_EXPECTED_SCALE_COUNT (NUM_PATTERN * NUM_TRACKS)
+#define PRF_PENDING_EXPECTED_CHAIN_COUNT NUM_PATTERN
+typedef enum {
+   PRF_CACHE_IDLE = 0,
+   PRF_CACHE_RECEIVING_AVR_LIVE,
+   PRF_CACHE_LIVE_ACTIVE,
+   PRF_CACHE_RECEIVING_PENDING,
+   PRF_CACHE_PENDING_VALID,
+   PRF_CACHE_ABORTING
+} PrfCacheState;
+
+/* Transitional parser-owned storage for the remaining load/session bridge.
+   The helpers below still expect these symbols while the shared Preset cache
+   module is being retired. */
+uint8_t presetLoad_deferPerfLoadCacheUntilPatternChange = 0;
+uint8_t presetLoad_deferredPerfLoadActive = 0;
+uint8_t presetLoad_deferredPerfVoiceCachePending = 0;
+uint8_t presetLoad_deferredPerfPatternPending = 0;
+uint8_t presetLoad_deferredPerfUnholdPending = 0;
+uint8_t presetLoad_deferredPerfProtectedPattern = 0;
+uint8_t presetLoad_deferredPerfReplay = 0;
+uint8_t presetLoad_deferredPerfMsgCount = 0;
+MidiMsg presetLoad_deferredPerfMsgCache[DEFERRED_PERF_MSG_CACHE_SIZE];
+uint8_t presetLoad_fileLoadIngressActive = 0;
+uint8_t presetLoad_fileLoadBracketActive = 0;
+PrfCacheState presetLoad_prfCacheState = PRF_CACHE_IDLE;
+uint8_t presetLoad_prfCacheProtectedPattern = 0;
+uint8_t presetLoad_prfCachePendingValid = 0;
+uint8_t presetLoad_prfCacheAvrLiveValid = 0;
+uint8_t presetLoad_prfCacheStmLiveValid = 0;
+TempPattern presetLoad_prfCacheLivePattern;
+uint8_t presetLoad_prfCacheLiveActivePattern = 0;
+uint8_t presetLoad_prfCacheLivePendingPattern = 0;
+uint8_t presetLoad_prfCacheLivePerTrackActivePattern[NUM_TRACKS];
+uint8_t presetLoad_prfCacheLivePerTrackPendingPattern[NUM_TRACKS];
+int8_t presetLoad_prfCacheLiveStepIndex[NUM_TRACKS+1];
+uint8_t presetLoad_prfCacheLiveMidiChannels[8];
+uint8_t presetLoad_prfCacheLiveNoteOverride[7];
+uint8_t presetLoad_prfCacheLiveVMorphAmount[7];
+uint8_t presetLoad_prfCacheLiveVMorphFlag = 0;
+uint8_t presetLoad_prfCacheLiveSeqVoicesLoading = 0;
+uint8_t presetLoad_prfCacheLiveSeqNewVoiceAvailable = 0;
+uint8_t presetLoad_prfCacheLiveSeqTracksLocked = 0;
+uint8_t presetLoad_prfCacheLiveSeqLoadFastMode = 0;
+uint16_t presetLoad_prfPendingMainStepCount = 0;
+uint16_t presetLoad_prfPendingStepCount = 0;
+uint16_t presetLoad_prfPendingLengthCount = 0;
+uint16_t presetLoad_prfPendingScaleCount = 0;
+uint16_t presetLoad_prfPendingChainCount = 0;
+uint16_t presetLoad_prfPendingProtectedWriteCount = 0;
 
 #define VOICE_PARAM_LENGTH 36
 static uint8_t voice1presetMask[VOICE_PARAM_LENGTH]={1,8,9,20,      37,43,49,50,   62,70,74,78,  82,83,88,94,   102,108,115,121,     128,134,137,143,    149,155,161,167,    173,179,185,191,    197,203,209,215}; 
@@ -159,7 +215,7 @@ static uint8_t voice4presetMask[VOICE_PARAM_LENGTH]={4,14,15,27,28, 40,46,55,   
 static uint8_t voice5presetMask[VOICE_PARAM_LENGTH]={6,16,17,23,    24,29,30,31,   32,41,47,57,  58,66,69,92,   100,106,112,119,125, 132,141,147,153,        159,165,171,    177,183,189,195,    201,207,213,219}; 
 static uint8_t voice6presetMask[VOICE_PARAM_LENGTH]={7,18,19,25,    26,33,34,35,   36,42,48,59,  60,61,67,93,   101,107,113,120,126, 133,142,148,154,        160,166,172,    178,184,190,196,    202,208,214,220};  
 
-static uint8_t* frontParser_getVoicePresetMask(uint8_t *voice)
+static uint8_t* presetLoad_getVoicePresetMaskByVoice(uint8_t *voice)
 {
    switch(*voice)
    {
@@ -186,7 +242,7 @@ static uint8_t* frontParser_getVoicePresetMask(uint8_t *voice)
 static void presetLoad_clearVoiceCache(uint8_t voice)
 {
    uint8_t i;
-   uint8_t *presetMask = frontParser_getVoicePresetMask(&voice);
+   uint8_t *presetMask = presetLoad_getVoicePresetMaskByVoice(&voice);
 
    if(!presetMask)
       return;
@@ -627,7 +683,222 @@ static void presetLoad_clearHeldVoiceLoad(uint8_t voice)
    }
 }
 
-#endif
+void presetLoad_unholdVoice(uint8_t voice)
+{
+   uint8_t *presetMask;
+   uint8_t i;
+   seq_newVoiceAvailable |= (0x01<<voice);
+
+   switch(voice)
+   {
+      case 0:
+         presetMask=voice1presetMask;
+         break;
+      case 1:
+         presetMask=voice2presetMask;
+         break;
+      case 2:
+         presetMask=voice3presetMask;
+         break;
+      case 3:
+         presetMask=voice4presetMask;
+         break;
+      case 4:
+         presetMask=voice5presetMask;
+         break;
+      case 6:
+         voice--;
+      case 5:
+         seq_newVoiceAvailable |= 0x60;
+         presetMask=voice6presetMask;
+         break;
+      default:
+         return;
+   }
+
+   if(midi_midiLfoCacheAvailable[voice])
+      midi_kitLfoCache[voice]=midi_midiLfoCache[voice];
+   if(midi_midiVeloCacheAvailable[voice])
+      midi_kitVeloCache[voice]=midi_midiVeloCache[voice];
+
+   for(i=0;i<VOICE_PARAM_LENGTH;i++)
+   {
+      if(midi_midiCacheAvailable[presetMask[i]])
+      {
+         midi_midiKit[presetMask[i]]=midi_midiCache[presetMask[i]];
+      }
+   }
+}
+
+void presetLoad_uncacheVoice(uint8_t voice)
+{
+   uint8_t *presetMask;
+   uint8_t i;
+
+   switch(voice)
+   {
+      case 0:
+         if(midi_midiLfoCacheAvailable[voice])
+            modNode_setDestination(&voiceArray[voice].lfo.modTarget, midi_midiLfoCache[voice]);
+         presetMask=voice1presetMask;
+         break;
+      case 1:
+         if(midi_midiLfoCacheAvailable[voice])
+            modNode_setDestination(&voiceArray[voice].lfo.modTarget, midi_midiLfoCache[voice]);
+         presetMask=voice2presetMask;
+         break;
+      case 2:
+         if(midi_midiLfoCacheAvailable[voice])
+            modNode_setDestination(&voiceArray[voice].lfo.modTarget, midi_midiLfoCache[voice]);
+         presetMask=voice3presetMask;
+         break;
+      case 3:
+         if(midi_midiLfoCacheAvailable[voice])
+            modNode_setDestination(&snareVoice.lfo.modTarget, midi_midiLfoCache[voice]);
+         presetMask=voice4presetMask;
+         break;
+      case 4:
+         if(midi_midiLfoCacheAvailable[voice])
+            modNode_setDestination(&cymbalVoice.lfo.modTarget, midi_midiLfoCache[voice]);
+         presetMask=voice5presetMask;
+         break;
+      case 6:
+         voice--;
+      case 5:
+         if(midi_midiLfoCacheAvailable[voice])
+            modNode_setDestination(&hatVoice.lfo.modTarget, midi_midiLfoCache[voice]);
+         seq_newVoiceAvailable &= ~(0x60);
+         seq_voicesLoading &= ~(0x60);
+         presetMask=voice6presetMask;
+         break;
+      default:
+         return;
+   }
+   if(midi_midiLfoCacheAvailable[voice])
+   {
+      switch(voice)
+      {
+         case 0:
+         case 1:
+         case 2:	modNode_setDestination(&voiceArray[voice].lfo.modTarget, midi_midiLfoCache[voice]);
+            break;
+         case 3:	modNode_setDestination(&snareVoice.lfo.modTarget,midi_midiLfoCache[voice]);
+            break;
+         case 4:	modNode_setDestination(&cymbalVoice.lfo.modTarget, midi_midiLfoCache[voice]);
+            break;
+         case 5:
+         case 6:	modNode_setDestination(&hatVoice.lfo.modTarget, midi_midiLfoCache[voice]);
+            break;
+         default:
+            break;
+      }
+      midi_midiLfoCacheAvailable[voice]=0;
+   }
+	   if(midi_midiVeloCacheAvailable[voice])
+	   {
+	      if(midi_midiVeloCache[voice] >= PAR_MORPH_DRUM1
+	         && midi_midiVeloCache[voice] <= PAR_MORPH_HIHAT)
+	      {
+	         modNode_setDestination(&velocityModulators[voice], PAR_NONE);
+	      }
+	      else
+	      {
+	         modNode_setDestination(&velocityModulators[voice],
+	                                midi_midiVeloCache[voice]);
+	      }
+	      midi_midiVeloCacheAvailable[voice]=0;
+	   }
+
+   for(i=0;i<VOICE_PARAM_LENGTH;i++)
+   {
+      if(midi_midiCacheAvailable[presetMask[i]])
+      {
+         midiParser_ccHandler(midi_midiCache[presetMask[i]],0);
+         midi_midiCacheAvailable[presetMask[i]]=0;
+      }
+   }
+}
+
+void presetLoad_releaseVoiceCache(uint8_t voice)
+{
+   presetLoad_clearHeldVoiceLoad(voice);
+}
+
+void presetLoad_unholdLoadedVoice(uint8_t voice)
+{
+   presetLoad_clearHeldVoiceLoad(voice);
+}
+
+uint8_t presetLoad_voiceCachePending(uint8_t voice)
+{
+   uint8_t i;
+   uint8_t *presetMask = presetLoad_getVoicePresetMaskByVoice(&voice);
+
+   if(!presetMask)
+      return 0;
+
+   if(midi_midiLfoCacheAvailable[voice] || midi_midiVeloCacheAvailable[voice])
+      return 1;
+
+   for(i=0;i<VOICE_PARAM_LENGTH;i++)
+   {
+      if(midi_midiCacheAvailable[presetMask[i]])
+         return 1;
+   }
+
+   return 0;
+}
+
+void presetLoad_applyPendingVoiceCache(void)
+{
+   uint8_t voice;
+
+   for(voice=0;voice<6;voice++)
+   {
+      if(presetLoad_deferredPerfUnholdPending & (0x01<<voice))
+      {
+         presetLoad_clearHeldVoiceLoad(voice);
+         presetLoad_deferredPerfUnholdPending &= (uint8_t)~(0x01<<voice);
+      }
+
+      if(presetLoad_voiceCachePending(voice))
+      {
+         presetLoad_releaseVoiceCache(voice);
+         if(voice == 5)
+            seq_newVoiceAvailable &= (uint8_t)~0x60;
+         else
+            seq_newVoiceAvailable &= (uint8_t)~(0x01<<voice);
+      }
+   }
+}
+
+void presetLoad_finalizeTempBackgroundLoad(void)
+{
+   if(presetLoad_prfCacheCanExit())
+   {
+      presetLoad_applyPendingVoiceCache();
+      presetLoad_deferredPerfVoiceCachePending = 0;
+      presetLoad_deferredPerfPatternPending = 0;
+      presetLoad_clearDeferredPerfLoad();
+      presetLoad_clearPrfRuntimeFlags();
+      presetLoad_clearPrfCacheSession();
+      return;
+   }
+
+   if(presetLoad_prfCacheSessionActive())
+      return;
+
+   if(presetLoad_deferredPerfVoiceCachePending)
+   {
+      presetLoad_applyDeferredPerfMessages();
+      presetLoad_applyPendingVoiceCache();
+      if(presetLoad_deferredPerfPatternPending)
+         seq_applyTmpPatternTo(presetLoad_deferredPerfProtectedPattern);
+      presetLoad_deferredPerfVoiceCachePending = 0;
+      presetLoad_deferredPerfPatternPending = 0;
+      presetLoad_clearDeferredPerfLoad();
+   }
+}
 
 //a counter for the received bytes
 //each message is made up from 3 bytes (status 0xb0, parameter nr and parameter value)

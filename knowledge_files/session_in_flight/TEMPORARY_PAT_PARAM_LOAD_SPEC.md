@@ -1,7 +1,7 @@
 # TEMPORARY / PATTERN / PARAMETER LOAD SPEC
 
 Date: 2026-06-13
-Status: current storage and switching spec; Session 014 already moved the Sequencer/MIDI runtime callers off `PresetLoadCache`, and Phase 7 now focuses on retiring the remaining parser/session bridge.
+Status: current storage and switching spec; Session 014 already moved the Sequencer/MIDI runtime callers off `PresetLoadCache`, deleted the shared cache module, and left the remaining parser/session bridge inside `frontPanelParser.c`.
 
 ## Purpose
 
@@ -58,11 +58,13 @@ It does not own a second copy of the storage model itself.
 
 ### Transitional load/session bridge
 
-`mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h` currently carries the remaining in-flight parser/session bookkeeping.
+`mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c` currently carries the remaining in-flight parser/session bookkeeping.
 
-Session 014 already moved the live Sequencer/MIDI caller paths to direct owner reads, so the cache is now transitional only for the parser-side bridge.
+The shared `mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h` files were removed in Session 014.
 
-Phase 7 is supposed to remove it.
+Session 014 already moved the live Sequencer/MIDI caller paths to direct owner reads, so the parser-local bridge is now transitional only for the remaining load/session compatibility path.
+
+Phase 8 is expected to absorb or eliminate that last parser-local bridge.
 
 The long-term plan is for the temp/parameter structures and their associated functions to absorb the real behavior so there is no separate load-cache authority left over.
 
@@ -192,14 +194,14 @@ These functions still matter during the transition, even though the long-term go
 - `presetLoad_finalizeTempBackgroundLoad()`
 
 The first group is the long-term ownership surface.
-The `presetLoad_*` functions are the transitional bridge that Phase 7 should eliminate or absorb.
+The `presetLoad_*` functions are the transitional bridge that Session 014 moved into `frontPanelParser.c`, and Phase 8 should eliminate or absorb.
 
 ## Design Note: Why The Temp Switch And Load Cache Were Separate
 
 The reason these mechanisms felt split is simple:
 
 - `TempPlaybackSwitch` answers "which image is active?";
-- `PresetLoadCache` answers "what in-flight file/session work still needs to be finalized?"
+- the parser-local bridge in `frontPanelParser.c` answers "what in-flight file/session work still needs to be finalized?"
 
 That distinction made sense while the background-load flow still had its own special session machinery.
 
