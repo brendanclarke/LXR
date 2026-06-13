@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
 Date: 2026-06-13
-Status: current AVR<->STM comms reference; Phase 7 will remove the last load-cache overlap, and Phase 9 will split the send/receive protocol files.
+Status: current AVR<->STM comms reference; Session 014 already moved the Sequencer/MIDI runtime callers off the load cache, and Phase 9 will split the send/receive protocol files.
 
 ## Purpose
 
@@ -127,7 +127,7 @@ These messages tell STM that the incoming traffic belongs to a file load or back
 - `SEQ_LOAD_VOICE`
 - `SEQ_LOAD_FAST`
 
-The current implementation still passes through `PresetLoadCache` for this behavior, but the Phase 7 target is to remove that overlap and make the temp/normal storage model carry the load semantics directly.
+The current implementation still passes through `PresetLoadCache` for the remaining parser/session bridge, but the Sequencer/MIDI runtime callers have already moved to direct owner reads. The Phase 7 target is to remove that remaining overlap and make the temp/normal storage model carry the load semantics directly.
 
 File-load traffic should follow this broad rule:
 
@@ -222,4 +222,3 @@ That is acceptable as long as they do not reintroduce a second cache-as-authorit
 - Do not create a second load/session model beside the temp/normal storage model.
 - Do not merge pattern-only background loading with parameter storage switching.
 - Do not let the future send/receive split blur the ownership boundary between parsing bytes and deciding what they mean.
-

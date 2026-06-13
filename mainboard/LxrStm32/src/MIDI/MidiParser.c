@@ -43,7 +43,6 @@
 #include "CymbalVoice.h"
 #include "uARTFrontSYX/Uart.h"
 #include "uARTFrontSYX/frontPanelParser.h"
-#include "Preset/PresetLoadCache.h"
 #include "sequencer.h"
 #include "Preset/ParameterIngress.h"
 #include "clockSync.h"
@@ -130,6 +129,16 @@ static void midiParser_setVelocityModAmount(uint8_t voice, uint8_t value)
    velocityModulators[voice].amount = value / 127.f;
    modNode_updateValue(&velocityModulators[voice],
                        velocityModulators[voice].lastVal);
+}
+
+static inline uint8_t midiParser_voiceMidiChannel(uint8_t voice)
+{
+   return (voice < 8) ? midi_MidiChannels[voice] : 0;
+}
+
+static inline uint8_t midiParser_voiceNoteOverride(uint8_t voice)
+{
+   return (voice < 7) ? midi_NoteOverride[voice] : 0;
 }
 
 // this will be set to some value if we are ignoring all mtc messages until the next 0 message
@@ -1263,9 +1272,9 @@ static void midiParser_noteOn(uint8_t voice, uint8_t note, uint8_t vel, uint8_t 
 // if it's some other note, trigger the drum voice only if it matches, and in this case
 // trigger the default note
 
-   if(presetLoad_prfCacheLiveNoteOverrideValue(voice) != 0) {
+   if(midiParser_voiceNoteOverride(voice) != 0) {
    // looking for specific note
-      if(note==presetLoad_prfCacheLiveNoteOverrideValue(voice))
+      if(note==midiParser_voiceNoteOverride(voice))
          note=SEQ_DEFAULT_NOTE; // match found. Play default note
       else
          return; // note does not match. Do nothing
@@ -1293,9 +1302,9 @@ static void midiParser_noteOn(uint8_t voice, uint8_t note, uint8_t vel, uint8_t 
    // --AS todo a user played note will end up being turned off if a pattern switch happens.
    //           to fix this we'd have to differentiate between a user played note and a
    //           note triggered from sequencer, and also recognize note off on user played note and send it.
-      if(presetLoad_prfCacheLiveMidiChannel(voice))
+      if(midiParser_voiceMidiChannel(voice))
       {
-         const uint8_t chan=presetLoad_prfCacheLiveMidiChannel(voice)-1;
+         const uint8_t chan=midiParser_voiceMidiChannel(voice)-1;
          seq_sendMidiNoteOn(chan, note, vel);
       }
    }
@@ -1434,28 +1443,28 @@ void midiParser_parseMidiMessage(MidiMsg msg)
             int8_t v;
          // --AS if a note message comes in on global channel, then send that note to
          // the voice that is currently active on the front.
-            if(presetLoad_prfCacheLiveMidiChannel(7)==chanonly) {
+            if(midiParser_voiceMidiChannel(7)==chanonly) {
             
                // -bc- first, check to see if active track is set to 'any' - use chromatic mode if it is
-               if( (msgonly==NOTE_ON/* && msg.data2*/) && !presetLoad_prfCacheLiveNoteOverrideValue(frontParser_activeTrack) ) {
+               if( (msgonly==NOTE_ON/* && msg.data2*/) && !midiParser_voiceNoteOverride(frontParser_activeTrack) ) {
                   midiParser_noteOn(frontParser_activeTrack, msg.data1, msg.data2, 1);
                } 
                // current active track is not set to 'any' - user wants to assign voices to global notes
                else if (msgonly==NOTE_ON/* && msg.data2*/){
                   for(v=0;v<7;v++){
-                     if (presetLoad_prfCacheLiveNoteOverrideValue(v)==msg.data1){
+                     if (midiParser_voiceNoteOverride(v)==msg.data1){
                         midiParser_noteOn(v, msg.data1, msg.data2, 1);
                      }
                   }
                
                }
-               else if( (msgonly==NOTE_OFF) && !presetLoad_prfCacheLiveNoteOverrideValue(frontParser_activeTrack) ) {
+               else if( (msgonly==NOTE_OFF) && !midiParser_voiceNoteOverride(frontParser_activeTrack) ) {
                   midiParser_noteOff(frontParser_activeTrack, msg.data1, msg.data2, 1);
                } 
                // current active track is not set to 'any' - user wants to assign voices to global notes
                else if (msgonly==NOTE_OFF){
                   for(v=0;v<7;v++){
-                     if (presetLoad_prfCacheLiveNoteOverrideValue(v)==msg.data1){
+                     if (midiParser_voiceNoteOverride(v)==msg.data1){
                         midiParser_noteOff(v, msg.data1, msg.data2, 1);
                      }
                   }
@@ -1465,7 +1474,7 @@ void midiParser_parseMidiMessage(MidiMsg msg)
            
             // additionally, check each voice channel to see if it cares about this message
             for(v=0;v<7;v++) {
-               if(presetLoad_prfCacheLiveMidiChannel(v)==chanonly) { // if channel match and we haven't sent it already for the voice
+               if(midiParser_voiceMidiChannel(v)==chanonly) { // if channel match and we haven't sent it already for the voice
                   if(msgonly==NOTE_ON/* && msg.data2*/) {
                      if(v==frontParser_activeTrack)
                         midiParser_noteOn(v, msg.data1, msg.data2, 1);
@@ -1495,7 +1504,7 @@ void midiParser_parseMidiMessage(MidiMsg msg)
          //send the ack message to tell the front that a new pattern starts playing
          if(midiParser_txRxFilter & 0x08)
          {
-            if(chanonly == presetLoad_prfCacheLiveMidiChannel(7))
+            if(chanonly == midiParser_voiceMidiChannel(7))
             {
                if(msg.data1<16)
                {
@@ -1509,7 +1518,7 @@ void midiParser_parseMidiMessage(MidiMsg msg)
             uint8_t i;
             for(i=0;i<NUM_TRACKS;i++) // set individual track patterns with PC on that channel
             {
-               if(chanonly == presetLoad_prfCacheLiveMidiChannel(i))
+               if(chanonly == midiParser_voiceMidiChannel(i))
                {
                   seq_setNextPattern(msg.data1&0x07,i);
                   seq_newVoiceAvailable&=(0x01<<i);
@@ -1555,20 +1564,20 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    // deal with this separately, because we can't have the mainboard overwhelming
    // the front with bank change messages
    // this stripes the channels across a byte
-      if (chanonly==presetLoad_prfCacheLiveMidiChannel(7)) // global channel - send global bank change to front
+      if (chanonly==midiParser_voiceMidiChannel(7)) // global channel - send global bank change to front
          midiChannelCode=0x3F;
       else{
-         if (chanonly==presetLoad_prfCacheLiveMidiChannel(0))
+         if (chanonly==midiParser_voiceMidiChannel(0))
             midiChannelCode|=BANK_1;
-         if (chanonly==presetLoad_prfCacheLiveMidiChannel(1))
+         if (chanonly==midiParser_voiceMidiChannel(1))
             midiChannelCode|=BANK_2;
-         if (chanonly==presetLoad_prfCacheLiveMidiChannel(2))
+         if (chanonly==midiParser_voiceMidiChannel(2))
             midiChannelCode|=BANK_3;
-         if (chanonly==presetLoad_prfCacheLiveMidiChannel(3))
+         if (chanonly==midiParser_voiceMidiChannel(3))
             midiChannelCode|=BANK_4;
-         if (chanonly==presetLoad_prfCacheLiveMidiChannel(4))
+         if (chanonly==midiParser_voiceMidiChannel(4))
             midiChannelCode|=BANK_5;
-         if ( (chanonly==presetLoad_prfCacheLiveMidiChannel(5))||(chanonly==presetLoad_prfCacheLiveMidiChannel(6)) )
+         if ( (chanonly==midiParser_voiceMidiChannel(5))||(chanonly==midiParser_voiceMidiChannel(6)) )
          {
             midiChannelCode|=BANK_6;
             midiChannelCode|=BANK_7;
@@ -1593,20 +1602,20 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    // deal with this separately, because we can't have the mainboard overwhelming
    // the front with bank change messages
    // this stripes the channels across a byte
-      if (chanonly==presetLoad_prfCacheLiveMidiChannel(7)) // global channel - send global bank change to front
+      if (chanonly==midiParser_voiceMidiChannel(7)) // global channel - send global bank change to front
          midiChannelCode=0x3F;
       else{
-         if (chanonly==presetLoad_prfCacheLiveMidiChannel(0))
+         if (chanonly==midiParser_voiceMidiChannel(0))
             midiChannelCode|=BANK_1;
-         if (chanonly==presetLoad_prfCacheLiveMidiChannel(1))
+         if (chanonly==midiParser_voiceMidiChannel(1))
             midiChannelCode|=BANK_2;
-         if (chanonly==presetLoad_prfCacheLiveMidiChannel(2))
+         if (chanonly==midiParser_voiceMidiChannel(2))
             midiChannelCode|=BANK_3;
-         if (chanonly==presetLoad_prfCacheLiveMidiChannel(3))
+         if (chanonly==midiParser_voiceMidiChannel(3))
             midiChannelCode|=BANK_4;
-         if (chanonly==presetLoad_prfCacheLiveMidiChannel(4))
+         if (chanonly==midiParser_voiceMidiChannel(4))
             midiChannelCode|=BANK_5;
-         if ( (chanonly==presetLoad_prfCacheLiveMidiChannel(5))||(chanonly==presetLoad_prfCacheLiveMidiChannel(6)) )
+         if ( (chanonly==midiParser_voiceMidiChannel(5))||(chanonly==midiParser_voiceMidiChannel(6)) )
          {
             midiChannelCode|=BANK_6;
             midiChannelCode|=BANK_7;
@@ -1624,7 +1633,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       
    }
    else {
-      if (chanonly == presetLoad_prfCacheLiveMidiChannel(0)) // DRUM1 voice is a target
+      if (chanonly == midiParser_voiceMidiChannel(0)) // DRUM1 voice is a target
       {
          switch(MIDIparamNr){
             case MOD_WHEEL:
@@ -1881,7 +1890,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
     
-      if (chanonly == presetLoad_prfCacheLiveMidiChannel(1)) // DRUM2 voice is a target
+      if (chanonly == midiParser_voiceMidiChannel(1)) // DRUM2 voice is a target
       {
          switch(MIDIparamNr){
             case MOD_WHEEL:
@@ -2138,7 +2147,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
      
-      if (chanonly == presetLoad_prfCacheLiveMidiChannel(2)) // DRUM3 voice is a target
+      if (chanonly == midiParser_voiceMidiChannel(2)) // DRUM3 voice is a target
       {
          switch(MIDIparamNr){
             case MOD_WHEEL:
@@ -2396,7 +2405,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
    
-      if (chanonly == presetLoad_prfCacheLiveMidiChannel(3)) // SNARE voice is a target
+      if (chanonly == midiParser_voiceMidiChannel(3)) // SNARE voice is a target
       {
          switch(MIDIparamNr){
             case MOD_WHEEL:
@@ -2655,7 +2664,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
    
-      if (chanonly == presetLoad_prfCacheLiveMidiChannel(4)) // CYMBAL voice is a target
+      if (chanonly == midiParser_voiceMidiChannel(4)) // CYMBAL voice is a target
       {
          switch(MIDIparamNr){ 
             case MOD_WHEEL:
@@ -2915,7 +2924,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
    
-      if (chanonly == presetLoad_prfCacheLiveMidiChannel(5)) // HAT CLOSED voice is a target
+      if (chanonly == midiParser_voiceMidiChannel(5)) // HAT CLOSED voice is a target
       {
          switch(MIDIparamNr){
             case MOD_WHEEL:
@@ -3170,7 +3179,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
      
-      if (chanonly == presetLoad_prfCacheLiveMidiChannel(6)) // HAT OPEN voice is a target - same as before
+      if (chanonly == midiParser_voiceMidiChannel(6)) // HAT OPEN voice is a target - same as before
       {
          switch(MIDIparamNr){
             case MOD_WHEEL:
@@ -3425,7 +3434,7 @@ void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       }
    
          
-      if (chanonly == presetLoad_prfCacheLiveMidiChannel(7)) // GLOBAL is a target
+      if (chanonly == midiParser_voiceMidiChannel(7)) // GLOBAL is a target
       {
          switch(MIDIparamNr){
             case MOD_WHEEL: // global morph is handled elsewhere

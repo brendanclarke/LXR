@@ -49,4 +49,8 @@ void seq_updateVoiceSourcesForPatternChange(const uint8_t *oldPatternForTrack,
    when a pattern switch crosses the normal/temp boundary. */
 uint8_t seq_consumeTmpBoundaryPatternSwitchAck(void);
 
+/* Temporary load-session finalization hook used by the sequencer while the
+   cache cutover still routes background-load completion through Preset. */
+void presetLoad_finalizeTempBackgroundLoad(void);
+
 #endif /* PRESET_TEMPPLAYBACKSWITCH_H_ */

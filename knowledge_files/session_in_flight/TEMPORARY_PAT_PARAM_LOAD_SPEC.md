@@ -1,7 +1,7 @@
 # TEMPORARY / PATTERN / PARAMETER LOAD SPEC
 
 Date: 2026-06-13
-Status: current storage and switching spec; Phase 7 will remove `PresetLoadCache` and make these rules live directly in the temp/parameter structures.
+Status: current storage and switching spec; Session 014 already moved the Sequencer/MIDI runtime callers off `PresetLoadCache`, and Phase 7 now focuses on retiring the remaining parser/session bridge.
 
 ## Purpose
 
@@ -58,7 +58,9 @@ It does not own a second copy of the storage model itself.
 
 ### Transitional load/session bridge
 
-`mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h` currently carries the in-flight background-load/session bookkeeping.
+`mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h` currently carries the remaining in-flight parser/session bookkeeping.
+
+Session 014 already moved the live Sequencer/MIDI caller paths to direct owner reads, so the cache is now transitional only for the parser-side bridge.
 
 Phase 7 is supposed to remove it.
 
@@ -212,4 +214,3 @@ Once that happens, the load bridge should shrink to either a thin compatibility 
 - Do not merge pattern staging and parameter staging into one ambiguous flag.
 - Do not let temp switching recopy storage when a simple source selection change is enough.
 - Do not allow the transitional load bridge to become a permanent second owner.
-

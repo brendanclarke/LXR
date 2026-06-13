@@ -22,6 +22,7 @@
 | 011 | 2026-06-12 | local repo, Phase 4 complete | refactor phase 4: moved pattern storage, pattern copy/mutation helpers, and Euclid/SOM generators into Sequencer/Pattern; sequencer.c trimmed back to scheduler/trigger role |
 | 012 | 2026-06-12 | local repo, Phase 5 complete | refactor phase 5: moved front-panel UART/protocol layer into uARTFrontSYX, split opcode namespace into FrontPanelProtocol.h, smoke-tested .ALL/temp-switch flow |
 | 013 | 2026-06-13 | local repo, session 013 closeout | Phase 6 cleanup/naming closeout, Phase 7+ consolidation audit, comms/temp spec reshaping, and handoff prep for session 014 |
+| 014 | 2026-06-13 | local repo, Phase 7 runtime caller cutover | Sequencer/MIDI now read live owner state directly, the background-load finalizer prototype moved to TempPlaybackSwitch, and the remaining PresetLoadCache parser/session path is still transitional |
 
 ---
 
@@ -79,6 +80,10 @@ Session 012 completed the Phase 5 front-panel transport/protocol split. The fron
 Session 013 closed out the Phase 6 cleanup/naming pass and then turned the refactor into its next-phase handoff. The remaining useful material from the old refactor docs was migrated into the new Phase 7+ consolidation audit plus the two session-in-flight specs for UART comms and temporary/pattern/parameter load behavior. Session 013 also wrote the detailed handoff log, updated the session index, and refreshed MEMORY so the next session can start from the new canonical docs instead of the retired planning files.
 - **Find here**: Phase 6 closeout, `PRESET_CONSOLIDATION_AUDIT.md`, `COMMS_FLOW_SPEC.md`, `TEMPORARY_PAT_PARAM_LOAD_SPEC.md`, handoff log and index updates, retired planning-doc cleanup
 
+### 014 — Session 014: Phase 7 Runtime Caller Cutover (2026-06-13)
+Session 014 landed the first execution slice of Phase 7. `Sequencer`, `MidiParser`, and `MidiVoiceControl` now read live voice, pattern, and morph state directly from the owning modules instead of the shared cache header, and `presetLoad_finalizeTempBackgroundLoad()` moved to the `TempPlaybackSwitch`-facing interface so `sequencer.c` no longer needs the cache header for that call. The shared `PresetLoadCache` module still exists for the transitional parser/session path, so the remaining Phase 7 cleanup is to retire that path and delete the dead parser-local mirror block.
+- **Find here**: direct owner reads, live pattern/morph cutover, `TempPlaybackSwitch` finalizer prototype, transitional parser/session path, remaining mirror cleanup
+
 
 ---
 
@@ -110,7 +115,7 @@ Session 013 closed out the Phase 6 cleanup/naming pass and then turned the refac
 | Pattern storage and generators now live in Sequencer/Pattern; sequencer.c is trimmed back to the scheduler/trigger role | 011 |
 | Front-panel transport and parser code now live in uARTFrontSYX; opcode namespace is isolated in FrontPanelProtocol.h behind a compatibility include | 012 |
 | Phase 6 cleanup/naming is complete; the next refactor step is driven by PRESET_CONSOLIDATION_AUDIT.md and the old planning docs are no longer canonical | 013 |
-| `PresetLoadCache` is still transitional; `frontPanelParser.c` also carries a parser-local duplicate load-session helper block, so Phase 7 must delete both the shared module and the mirrored parser-side state machine | 013/014 |
+| Session 014 cut Sequencer/MIDI off the shared cache header and moved the background-load finalizer declaration to TempPlaybackSwitch; `PresetLoadCache` is still transitional for the parser/session path, and the parser-local mirror block still needs cleanup | 014 |
 
 
 ---

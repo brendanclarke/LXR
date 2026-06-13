@@ -40,9 +40,9 @@
 #include "HiHat.h"
 #include "MidiMessages.h"
 #include "CymbalVoice.h"
+#include "MidiParser.h"
 #include "sequencer.h"
 #include "uARTFrontSYX/frontPanelParser.h"
-#include "Preset/PresetLoadCache.h"
 #include "TriggerOut.h"
 #include "uARTFrontSYX/Uart.h"
 //#include "LCD_driver.h"
@@ -98,7 +98,7 @@ void voiceControl_noteOff(uint8_t voice)
       active_voices &= (~(1<<voice));
    
    	//send midi note off
-      uint8_t midiChannel = presetLoad_prfCacheLiveMidiChannel(voice);
+      uint8_t midiChannel = midi_MidiChannels[voice];
       if(midiChannel)
       {
          midiChan = midiChannel-1;

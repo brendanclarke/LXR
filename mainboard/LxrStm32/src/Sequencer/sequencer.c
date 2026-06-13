@@ -46,7 +46,6 @@
 #include "MidiVoiceControl.h"
 #include "CymbalVoice.h"
 #include "uARTFrontSYX/frontPanelParser.h"
-#include "Preset/PresetLoadCache.h"
 #include "Preset/EndpointRestore.h"
 #include "Preset/TempPlaybackSwitch.h"
 #include "sequencer.h"
@@ -187,6 +186,15 @@ static ModulationNode* seq_getLfoModNode(uint8_t voice);
 static uint8_t seq_isNextStepSyncStep();
 static void seq_resetNote(Step *step);
 static void seq_setStepIndexToStart();
+static inline uint8_t seq_voiceMidiChannel(uint8_t voice)
+{
+   return (voice < 8) ? midi_MidiChannels[voice] : 0;
+}
+
+static inline uint8_t seq_voiceNoteOverride(uint8_t voice)
+{
+   return (voice < 7) ? midi_NoteOverride[voice] : 0;
+}
 
 //------------------------------------------------------------------------------
 static ModulationNode* seq_getLfoModNode(uint8_t voice)
@@ -1025,24 +1033,24 @@ static void seq_parseAutomationNodes(uint8_t track, Step* stepData)
 //------------------------------------------------------------------------------
 static Step* seq_liveStepForTrack(uint8_t track, uint8_t step)
 {
-   if(presetLoad_prfCacheTrackUsesLivePattern(track))
-      return presetLoad_prfCacheLiveStep(track, step);
+   if(track >= NUM_TRACKS)
+      track = 0;
 
    return seq_getStepPtr(seq_perTrackActivePattern[track], track, step);
 }
 //------------------------------------------------------------------------------
 static LengthRotate seq_liveLengthRotateForTrack(uint8_t track)
 {
-   if(presetLoad_prfCacheTrackUsesLivePattern(track))
-      return presetLoad_prfCacheLiveLengthRotate(track);
+   if(track >= NUM_TRACKS)
+      track = 0;
 
    return *seq_getLengthRotatePtr(seq_perTrackActivePattern[track], track);
 }
 //------------------------------------------------------------------------------
 static uint8_t seq_liveMainStepActive(uint8_t track, uint8_t mainStep)
 {
-   if(presetLoad_prfCacheTrackUsesLivePattern(track))
-      return (presetLoad_prfCacheLiveMainSteps(track) & (1<<mainStep)) > 0;
+   if(track >= NUM_TRACKS)
+      track = 0;
 
    return (seq_getMainSteps(seq_perTrackActivePattern[track], track) & (1<<mainStep)) > 0;
 }
@@ -1099,14 +1107,14 @@ void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
    //Trigger internal synth voice
       voiceControl_noteOn(voiceNr, note, vol);
    }
-   uint8_t midiChannel = presetLoad_prfCacheLiveMidiChannel(voiceNr);
+   uint8_t midiChannel = seq_voiceMidiChannel(voiceNr);
    if(midiChannel)
    {
       midiChan = midiChannel-1;
    
    //--AS the note that is played will be whatever is received unless we have a note override set
    // A note override is any non-zero value for this parameter
-      uint8_t noteOverride = presetLoad_prfCacheLiveNoteOverrideValue(voiceNr);
+      uint8_t noteOverride = seq_voiceNoteOverride(voiceNr);
       if(noteOverride == 0)
          midiNote = note;
       else
@@ -1150,9 +1158,6 @@ uint8_t seq_getTransposedNote(uint8_t voice, uint8_t note)
 static uint8_t seq_determineNextPattern()
 {
    PatternSetting p;
-
-   if(presetLoad_prfCacheUseLivePattern())
-      return seq_activePattern;
 
    p = *seq_getPatternSettingPtr(seq_activePattern);
 
@@ -1199,13 +1204,14 @@ static void seq_nextStep()
    //---- do we need to do a voice morph
    if(!(seq_stepIndex[NUM_TRACKS]%4))
    {
-      uint8_t vMorphFlag = presetLoad_prfCacheTakeLiveVMorphFlag();
+      uint8_t vMorphFlag = seq_vMorphFlag;
+      seq_vMorphFlag = 0;
       if(vMorphFlag)
       {
          for (i=0;i<7;i++)
          {
             if (vMorphFlag&(0x01<<i))
-               sequencer_sendVMorph((uint8_t)(0x01<<i), presetLoad_prfCacheLiveVMorphAmountValue(i));
+               sequencer_sendVMorph((uint8_t)(0x01<<i), seq_vMorphAmount[i]);
          
          }
       }
@@ -1836,7 +1842,7 @@ void seq_setMute(uint8_t trackNr, uint8_t isMuted)
          seq_mutedTracks = 0xFF;
          for (idx=0;idx<7;idx++)
          {
-            uint8_t midiChannel = presetLoad_prfCacheLiveMidiChannel(idx);
+            uint8_t midiChannel = seq_voiceMidiChannel(idx);
             if(midiChannel)
                voiceControl_noteOff(midiChannel-1);
          }
@@ -1853,7 +1859,7 @@ void seq_setMute(uint8_t trackNr, uint8_t isMuted)
       	//mute track
          seq_mutedTracks |= (1<<trackNr);
       	// --AS turn off the midi note that may be playing on that track
-         uint8_t midiChannel = presetLoad_prfCacheLiveMidiChannel(trackNr);
+         uint8_t midiChannel = seq_voiceMidiChannel(trackNr);
          if(midiChannel)
             voiceControl_noteOff(midiChannel-1);
       } 
@@ -2557,7 +2563,7 @@ void seq_sendMidiNoteOn(const uint8_t channel, const uint8_t note, const uint8_t
  */
 static void seq_sendProgChg(const uint8_t ptn)
 {
-   uint8_t midiChannel = presetLoad_prfCacheLiveMidiChannel(7);
+   uint8_t midiChannel = seq_voiceMidiChannel(7);
    if(midiChannel)
    {
       static MidiMsg msg = {0,0,0, {0,0,1}};

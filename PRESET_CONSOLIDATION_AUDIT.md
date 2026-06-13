@@ -1,7 +1,7 @@
 # PRESET_CONSOLIDATION_AUDIT
 
 Date: 2026-06-13
-Status: planning draft for Phase 7, Phase 8, and later cleanup
+Status: planning draft for Phase 7, with the runtime caller cutover already landing in Session 014
 
 ## Purpose
 
@@ -68,6 +68,25 @@ state that already exists elsewhere in `/Preset/`:
 
 So the right next move is not to keep polishing `PresetLoadCache`. The right
 move is to make it unnecessary.
+
+### Session 014 progress
+
+Session 014 has already removed the shared-cache dependency from the runtime
+voice/pattern callers:
+
+- `Sequencer` now reads live step, length, pattern, MIDI channel, note
+  override, and morph state directly from the owner arrays instead of the
+  shared cache mirror.
+- `MidiParser` now resolves note override and MIDI channel routing directly
+  from `midi_MidiChannels[]` and `midi_NoteOverride[]`.
+- `MidiVoiceControl` now reads the voice channel directly from
+  `midi_MidiChannels[]`.
+- `TempPlaybackSwitch.h` now carries the `presetLoad_finalizeTempBackgroundLoad()`
+  declaration so `sequencer.c` no longer needs the old cache header just for
+  the finalizer call.
+
+The shared load/session module still exists for the parser/session path, and
+the parser-local dead mirror block is still pending its own cleanup pass.
 
 ## AVR-Side Processes That Currently Feed This System
 
@@ -264,6 +283,8 @@ replaces:
 The first two families are the strongest candidates for direct replacement by
 the temp pattern / parameter machinery. The last family is mostly legacy
 compatibility residue that should disappear once the new route is stable.
+Session 014 already cut the runtime caller side over to the direct owner reads;
+what remains here is the transitional parser/session path.
 
 ### AVR-facing implementation strategy
 
@@ -535,7 +556,9 @@ The consolidation strategy is now:
 
 - Phase 7: remove `PresetLoadCache` and the parser-local duplicate load-session
   mirror by reusing the existing temp pattern and parameter structures instead
-  of a separate cache/session model.
+  of a separate cache/session model. Session 014 already cut the Sequencer and
+  MIDI runtime callers over to direct owner reads; the remaining work is to
+  retire the transitional parser/session path.
 - Phase 8: consolidate the remaining `/Preset/` files into one core ownership
   layer plus the true async workers, including `ParameterArray` into `/Preset/`.
 - Phase 9 and beyond: split the front-panel protocol and MIDI parser into
