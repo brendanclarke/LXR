@@ -20,20 +20,20 @@ extern volatile uint8_t preset_tmpKitHandshakeAck;
 /* Requests a restore-service pass. The restore queue lives in the Preset
    module so the sequencer only schedules work and does not own the queue
    policy. */
-void seq_serviceEndpointRestore(void);
+void preset_serviceEndpointRestore(void);
 
 /* Reports whether the restore queue or the active restore phase still has work
    in flight. */
-uint8_t seq_endpointRestoreBusy(void);
+uint8_t preset_endpointRestoreBusy(void);
 
 /* Schedules a restore of the affected endpoint subset after a voice-source
    change. The restore service uses this to keep the AVR menu in sync when the
    temp/normal boundary changes. */
-void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask);
+void preset_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask);
 
 /* Schedules a full-kit restore push for the supplied image, with the global
    morph report preserved when the current temp boundary needs to be mirrored
    on the AVR menu. */
-void seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit);
+void preset_maybePushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit);
 
 #endif /* PRESET_ENDPOINTRESTORE_H_ */

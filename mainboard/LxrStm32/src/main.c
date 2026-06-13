@@ -56,6 +56,7 @@
 #include "Snare.h"
 #include "EuklidGenerator.h"
 #include "Preset/ParameterArray.h"
+#include "Preset/EndpointRestore.h"
 #include "modulationNode.h"
 #include "SomGenerator.h"
 
@@ -296,7 +297,7 @@ int main(void)
 		preset_serviceMorphInterpolation();
 
 		// Advance any queued AVR endpoint/menu restore outside the sequencer boundary path.
-		seq_serviceEndpointRestore();
+		preset_serviceEndpointRestore();
 	    }
 #endif
 }

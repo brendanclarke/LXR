@@ -2375,12 +2375,12 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_SET_SHOWN_PATTERN:
          if (frontParser_midiMsg.data2==frontParser_shownPattern)
          {
-            if(!seq_consumeTmpBoundaryPatternSwitchAck())
+            if(!preset_consumeTmpBoundaryPatternSwitchAck())
                seq_realign();
          }
          else
          {
-            (void)seq_consumeTmpBoundaryPatternSwitchAck();
+            (void)preset_consumeTmpBoundaryPatternSwitchAck();
             frontParser_shownPattern = seq_normalizePatternNumber(frontParser_midiMsg.data2);
          }
          break;   

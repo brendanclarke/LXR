@@ -11,7 +11,7 @@
 
 #include "stm32f4xx.h"
 
-/* Phase 8 collapses the temp-switch booleans into one explicit state object.
+/* Phase 8 collapsed the temp-switch booleans into one explicit state object.
    The legacy `seq_*` names remain as macros so the sequencer and parser can
    keep compiling while the ownership boundary is simplified. */
 enum
@@ -42,30 +42,30 @@ extern PresetTempPlaybackSwitchState preset_tempPlaybackSwitchState;
 
 /* Updates the temp-image selection and performs the restore/report work that
    accompanies a normal/temp boundary change. */
-void seq_setTmpKitActive(uint8_t active);
+void preset_setTempPlaybackActive(uint8_t active);
 
 /* Returns whether a pattern number resolves to the temp image. */
-uint8_t seq_trackPatternUsesTmp(uint8_t pattern);
+uint8_t preset_trackPatternUsesTmp(uint8_t pattern);
 
 /* Returns whether the track pattern selection for a voice routes that voice
    through the temp image, including the shared hihat voice coupling. */
-uint8_t seq_synthVoiceUsesTmpFromTrackPatterns(const uint8_t *patternForTrack,
-                                              uint8_t synthVoice);
+uint8_t preset_synthVoiceUsesTmpFromTrackPatterns(const uint8_t *patternForTrack,
+                                                 uint8_t synthVoice);
 
 /* Reports whether every voice source currently points at the temp image. */
-uint8_t seq_allVoiceSourcesUseTmp(void);
+uint8_t preset_allVoiceSourcesUseTmp(void);
 
 /* Reports whether every voice source currently points at the normal image. */
-uint8_t seq_allVoiceSourcesUseNormal(void);
+uint8_t preset_allVoiceSourcesUseNormal(void);
 
 /* Updates the per-voice source state after a pattern change and optionally
    pushes any affected endpoint changes to the AVR restore queue. */
-void seq_updateVoiceSourcesForPatternChange(const uint8_t *oldPatternForTrack,
-                                            uint8_t pushEndpointUpdates);
+void preset_updateVoiceSourcesForPatternChange(const uint8_t *oldPatternForTrack,
+                                               uint8_t pushEndpointUpdates);
 
 /* Consumes the temp-boundary acknowledgement bit that the sequencer raises
    when a pattern switch crosses the normal/temp boundary. */
-uint8_t seq_consumeTmpBoundaryPatternSwitchAck(void);
+uint8_t preset_consumeTmpBoundaryPatternSwitchAck(void);
 
 /* Temporary load-session finalization hook used by the sequencer while the
    cache cutover still routes background-load completion through Preset. */

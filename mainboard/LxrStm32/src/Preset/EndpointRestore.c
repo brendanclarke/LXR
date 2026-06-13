@@ -12,16 +12,16 @@
 #include "uARTFrontSYX/Uart.h"
 #include "Sequencer/sequencer.h"
 
-#define SEQ_ENDPOINT_RESTORE_NONE 0
-#define SEQ_ENDPOINT_RESTORE_FULL 1
-#define SEQ_ENDPOINT_RESTORE_MASK 2
-#define SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH 4
-#define SEQ_ENDPOINT_RESTORE_PHASE_IDLE 0
-#define SEQ_ENDPOINT_RESTORE_PHASE_WAIT_READY 1
-#define SEQ_ENDPOINT_RESTORE_PHASE_SEND_FRONT 2
-#define SEQ_ENDPOINT_RESTORE_PHASE_SEND_MORPH 3
-#define SEQ_ENDPOINT_RESTORE_PHASE_WAIT_ACK 4
-#define SEQ_ENDPOINT_RESTORE_WAIT_TIMEOUT 30000
+#define PRESET_ENDPOINT_RESTORE_NONE 0
+#define PRESET_ENDPOINT_RESTORE_FULL 1
+#define PRESET_ENDPOINT_RESTORE_MASK 2
+#define PRESET_ENDPOINT_RESTORE_QUEUE_LENGTH 4
+#define PRESET_ENDPOINT_RESTORE_PHASE_IDLE 0
+#define PRESET_ENDPOINT_RESTORE_PHASE_WAIT_READY 1
+#define PRESET_ENDPOINT_RESTORE_PHASE_SEND_FRONT 2
+#define PRESET_ENDPOINT_RESTORE_PHASE_SEND_MORPH 3
+#define PRESET_ENDPOINT_RESTORE_PHASE_WAIT_ACK 4
+#define PRESET_ENDPOINT_RESTORE_WAIT_TIMEOUT 30000
 
 typedef struct SeqEndpointRestoreRequestStruct
 {
@@ -34,20 +34,20 @@ typedef struct SeqEndpointRestoreRequestStruct
 volatile uint8_t preset_tmpKitHandshakeReady = 0;
 volatile uint8_t preset_tmpKitHandshakeAck = 0;
 
-static uint8_t seq_tmpKitPushParamsToFrontEnabled = 1;
-static SeqEndpointRestoreRequest seq_endpointRestoreQueue[SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH];
-static uint8_t seq_endpointRestoreQueueHead = 0;
-static uint8_t seq_endpointRestoreQueueCount = 0;
-static SeqEndpointRestoreRequest seq_endpointRestoreCurrent;
-static uint8_t seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_IDLE;
-static uint16_t seq_endpointRestoreParamCursor = 0;
-static uint8_t seq_endpointRestoreVoiceCursor = 0;
-static uint8_t seq_endpointRestoreVoiceParamCursor = 0;
-static uint16_t seq_endpointRestoreWaitCounter = 0;
+static uint8_t preset_tmpKitPushParamsToFrontEnabled = 1;
+static SeqEndpointRestoreRequest preset_endpointRestoreQueue[PRESET_ENDPOINT_RESTORE_QUEUE_LENGTH];
+static uint8_t preset_endpointRestoreQueueHead = 0;
+static uint8_t preset_endpointRestoreQueueCount = 0;
+static SeqEndpointRestoreRequest preset_endpointRestoreCurrent;
+static uint8_t preset_endpointRestorePhase = PRESET_ENDPOINT_RESTORE_PHASE_IDLE;
+static uint16_t preset_endpointRestoreParamCursor = 0;
+static uint8_t preset_endpointRestoreVoiceCursor = 0;
+static uint8_t preset_endpointRestoreVoiceParamCursor = 0;
+static uint16_t preset_endpointRestoreWaitCounter = 0;
 
 /* Writes a single endpoint byte to the AVR front panel, using the restore
    packet family that matches the raw parameter index. */
-static void seq_pushSingleParameterToFront(uint16_t param, uint8_t value)
+static void preset_pushSingleParameterToFront(uint16_t param, uint8_t value)
 {
    if(param >= END_OF_SOUND_PARAMETERS)
       return;
@@ -69,7 +69,7 @@ static void seq_pushSingleParameterToFront(uint16_t param, uint8_t value)
 /* Writes a single morph endpoint byte to the AVR front panel. Morph endpoint
    pushes are separated from normal endpoint pushes so restore traffic can keep
    the menu state coherent while leaving the morph image intact. */
-static void seq_pushSingleMorphParameterToFront(uint16_t param, uint8_t value)
+static void preset_pushSingleMorphParameterToFront(uint16_t param, uint8_t value)
 {
    if(param >= END_OF_SOUND_PARAMETERS)
       return;
@@ -90,7 +90,7 @@ static void seq_pushSingleMorphParameterToFront(uint16_t param, uint8_t value)
 
 /* Reports the global morph amount to the AVR so the display can reflect the
    current kit image when the temp/normal boundary changes. */
-static void seq_pushGlobalMorphToFront(const SeqKitState *kit)
+static void preset_pushGlobalMorphToFront(const SeqKitState *kit)
 {
    uint8_t amount;
 
@@ -111,7 +111,7 @@ static void seq_pushGlobalMorphToFront(const SeqKitState *kit)
 /* Enqueues a restore request. When a request for the same kit/mode is already
    at the tail of the queue, the voice masks are merged so repeated callers do
    not create redundant restore traffic. */
-static void seq_pushKitEndpointVoiceMaskToFrontInternal(const SeqKitState *kit,
+static void preset_pushKitEndpointVoiceMaskToFrontInternal(const SeqKitState *kit,
                                                         uint8_t voiceMask,
                                                         uint8_t reportGlobalMorph)
 {
@@ -123,194 +123,194 @@ static void seq_pushKitEndpointVoiceMaskToFrontInternal(const SeqKitState *kit,
       return;
 
    request.kit = kit;
-   request.mode = (voiceMask == 0xff) ? SEQ_ENDPOINT_RESTORE_FULL
-                                      : SEQ_ENDPOINT_RESTORE_MASK;
+   request.mode = (voiceMask == 0xff) ? PRESET_ENDPOINT_RESTORE_FULL
+                                      : PRESET_ENDPOINT_RESTORE_MASK;
    request.voiceMask = voiceMask;
    request.reportGlobalMorph = reportGlobalMorph;
 
-   if(seq_endpointRestoreQueueCount)
+   if(preset_endpointRestoreQueueCount)
    {
-      last = (uint8_t)((seq_endpointRestoreQueueHead +
-                        seq_endpointRestoreQueueCount - 1) %
-                       SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH);
+      last = (uint8_t)((preset_endpointRestoreQueueHead +
+                        preset_endpointRestoreQueueCount - 1) %
+                       PRESET_ENDPOINT_RESTORE_QUEUE_LENGTH);
 
-      if(seq_endpointRestoreQueue[last].kit == request.kit &&
-         seq_endpointRestoreQueue[last].mode == request.mode)
+      if(preset_endpointRestoreQueue[last].kit == request.kit &&
+         preset_endpointRestoreQueue[last].mode == request.mode)
       {
-         if(request.mode == SEQ_ENDPOINT_RESTORE_MASK)
-            seq_endpointRestoreQueue[last].voiceMask |= request.voiceMask;
+         if(request.mode == PRESET_ENDPOINT_RESTORE_MASK)
+            preset_endpointRestoreQueue[last].voiceMask |= request.voiceMask;
          if(request.reportGlobalMorph)
-            seq_endpointRestoreQueue[last].reportGlobalMorph = 1;
+            preset_endpointRestoreQueue[last].reportGlobalMorph = 1;
          return;
       }
    }
 
-   if(seq_endpointRestoreQueueCount >= SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH)
+   if(preset_endpointRestoreQueueCount >= PRESET_ENDPOINT_RESTORE_QUEUE_LENGTH)
    {
-      last = (uint8_t)((seq_endpointRestoreQueueHead +
-                        seq_endpointRestoreQueueCount - 1) %
-                       SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH);
-      seq_endpointRestoreQueue[last] = request;
+      last = (uint8_t)((preset_endpointRestoreQueueHead +
+                        preset_endpointRestoreQueueCount - 1) %
+                       PRESET_ENDPOINT_RESTORE_QUEUE_LENGTH);
+      preset_endpointRestoreQueue[last] = request;
       return;
    }
 
-   tail = (uint8_t)((seq_endpointRestoreQueueHead + seq_endpointRestoreQueueCount) %
-                    SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH);
-   seq_endpointRestoreQueue[tail] = request;
-   seq_endpointRestoreQueueCount++;
+   tail = (uint8_t)((preset_endpointRestoreQueueHead + preset_endpointRestoreQueueCount) %
+                    PRESET_ENDPOINT_RESTORE_QUEUE_LENGTH);
+   preset_endpointRestoreQueue[tail] = request;
+   preset_endpointRestoreQueueCount++;
 }
 
-static void seq_pushKitEndpointsToFront(const SeqKitState *kit)
+static void preset_pushKitEndpointsToFront(const SeqKitState *kit)
 {
    if(!kit)
       return;
 
-   seq_pushKitEndpointVoiceMaskToFrontInternal(kit, 0xff, 0);
+   preset_pushKitEndpointVoiceMaskToFrontInternal(kit, 0xff, 0);
 }
 
-static void seq_pushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit)
+static void preset_pushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit)
 {
    if(!kit)
       return;
 
-   seq_pushKitEndpointVoiceMaskToFrontInternal(kit, 0xff, 1);
+   preset_pushKitEndpointVoiceMaskToFrontInternal(kit, 0xff, 1);
 }
 
-static void seq_pushKitEndpointVoiceMaskToFront(const SeqKitState *kit,
+static void preset_pushKitEndpointVoiceMaskToFront(const SeqKitState *kit,
                                                 uint8_t voiceMask)
 {
-   seq_pushKitEndpointVoiceMaskToFrontInternal(kit, voiceMask, 0);
+   preset_pushKitEndpointVoiceMaskToFrontInternal(kit, voiceMask, 0);
 }
 
-static uint8_t seq_endpointRestorePopRequest(void)
+static uint8_t preset_endpointRestorePopRequest(void)
 {
-   if(!seq_endpointRestoreQueueCount)
+   if(!preset_endpointRestoreQueueCount)
       return 0;
 
-   seq_endpointRestoreCurrent = seq_endpointRestoreQueue[seq_endpointRestoreQueueHead];
-   seq_endpointRestoreQueueHead =
-      (uint8_t)((seq_endpointRestoreQueueHead + 1) % SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH);
-   seq_endpointRestoreQueueCount--;
+   preset_endpointRestoreCurrent = preset_endpointRestoreQueue[preset_endpointRestoreQueueHead];
+   preset_endpointRestoreQueueHead =
+      (uint8_t)((preset_endpointRestoreQueueHead + 1) % PRESET_ENDPOINT_RESTORE_QUEUE_LENGTH);
+   preset_endpointRestoreQueueCount--;
 
-   seq_endpointRestoreParamCursor = 0;
-   seq_endpointRestoreVoiceCursor = 0;
-   seq_endpointRestoreVoiceParamCursor = 0;
-   seq_endpointRestoreWaitCounter = 0;
+   preset_endpointRestoreParamCursor = 0;
+   preset_endpointRestoreVoiceCursor = 0;
+   preset_endpointRestoreVoiceParamCursor = 0;
+   preset_endpointRestoreWaitCounter = 0;
    return 1;
 }
 
-static void seq_endpointRestoreClearCurrent(void)
+static void preset_endpointRestoreClearCurrent(void)
 {
-   seq_endpointRestoreCurrent.kit = 0;
-   seq_endpointRestoreCurrent.mode = SEQ_ENDPOINT_RESTORE_NONE;
-   seq_endpointRestoreCurrent.voiceMask = 0;
-   seq_endpointRestoreCurrent.reportGlobalMorph = 0;
-   seq_endpointRestoreParamCursor = 0;
-   seq_endpointRestoreVoiceCursor = 0;
-   seq_endpointRestoreVoiceParamCursor = 0;
-   seq_endpointRestoreWaitCounter = 0;
-   seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_IDLE;
+   preset_endpointRestoreCurrent.kit = 0;
+   preset_endpointRestoreCurrent.mode = PRESET_ENDPOINT_RESTORE_NONE;
+   preset_endpointRestoreCurrent.voiceMask = 0;
+   preset_endpointRestoreCurrent.reportGlobalMorph = 0;
+   preset_endpointRestoreParamCursor = 0;
+   preset_endpointRestoreVoiceCursor = 0;
+   preset_endpointRestoreVoiceParamCursor = 0;
+   preset_endpointRestoreWaitCounter = 0;
+   preset_endpointRestorePhase = PRESET_ENDPOINT_RESTORE_PHASE_IDLE;
 }
 
-static uint8_t seq_endpointRestoreWaitTimedOut(void)
+static uint8_t preset_endpointRestoreWaitTimedOut(void)
 {
-   if(seq_endpointRestoreWaitCounter < SEQ_ENDPOINT_RESTORE_WAIT_TIMEOUT)
+   if(preset_endpointRestoreWaitCounter < PRESET_ENDPOINT_RESTORE_WAIT_TIMEOUT)
    {
-      seq_endpointRestoreWaitCounter++;
+      preset_endpointRestoreWaitCounter++;
       return 0;
    }
 
    return 1;
 }
 
-static uint8_t seq_endpointRestoreSendNextFull(uint8_t morphEndpoint)
+static uint8_t preset_endpointRestoreSendNextFull(uint8_t morphEndpoint)
 {
    uint16_t param;
-   const SeqKitState *kit = seq_endpointRestoreCurrent.kit;
+   const SeqKitState *kit = preset_endpointRestoreCurrent.kit;
    const uint8_t *values = morphEndpoint ? kit->morphEndpointParams
                                          : kit->kitEndpointParams;
 
-   param = seq_endpointRestoreParamCursor;
+   param = preset_endpointRestoreParamCursor;
    if(param < END_OF_SOUND_PARAMETERS)
    {
       if(morphEndpoint)
-         seq_pushSingleMorphParameterToFront(param, values[param]);
+         preset_pushSingleMorphParameterToFront(param, values[param]);
       else
-         seq_pushSingleParameterToFront(param, values[param]);
+         preset_pushSingleParameterToFront(param, values[param]);
 
-      seq_endpointRestoreParamCursor = (uint16_t)(param + 1);
+      preset_endpointRestoreParamCursor = (uint16_t)(param + 1);
       return 1;
    }
 
    return 0;
 }
 
-static uint8_t seq_endpointRestoreSendNextMasked(uint8_t morphEndpoint)
+static uint8_t preset_endpointRestoreSendNextMasked(uint8_t morphEndpoint)
 {
-   const SeqKitState *kit = seq_endpointRestoreCurrent.kit;
+   const SeqKitState *kit = preset_endpointRestoreCurrent.kit;
    const uint8_t *values = morphEndpoint ? kit->morphEndpointParams
                                          : kit->kitEndpointParams;
 
-   while(seq_endpointRestoreVoiceCursor < SEQ_SYNTH_VOICES)
+   while(preset_endpointRestoreVoiceCursor < SEQ_SYNTH_VOICES)
    {
-      uint8_t synthVoice = seq_endpointRestoreVoiceCursor;
+      uint8_t synthVoice = preset_endpointRestoreVoiceCursor;
 
-      if(!(seq_endpointRestoreCurrent.voiceMask & (uint8_t)(1 << synthVoice)))
+      if(!(preset_endpointRestoreCurrent.voiceMask & (uint8_t)(1 << synthVoice)))
       {
-         seq_endpointRestoreVoiceCursor++;
-         seq_endpointRestoreVoiceParamCursor = 0;
+         preset_endpointRestoreVoiceCursor++;
+         preset_endpointRestoreVoiceParamCursor = 0;
          continue;
       }
 
-      while(seq_endpointRestoreVoiceParamCursor < SEQ_VOICE_PARAM_LENGTH)
+      while(preset_endpointRestoreVoiceParamCursor < SEQ_VOICE_PARAM_LENGTH)
       {
          uint16_t param =
-            seq_canonicalParamFromVoiceMask(
-               seq_voiceParamMask[synthVoice][seq_endpointRestoreVoiceParamCursor]);
+            preset_canonicalParamFromVoiceMask(
+               preset_voiceParamMask[synthVoice][preset_endpointRestoreVoiceParamCursor]);
 
-         seq_endpointRestoreVoiceParamCursor++;
+         preset_endpointRestoreVoiceParamCursor++;
 
          if(param < END_OF_SOUND_PARAMETERS)
          {
             if(morphEndpoint)
-               seq_pushSingleMorphParameterToFront(param, values[param]);
+               preset_pushSingleMorphParameterToFront(param, values[param]);
             else
-               seq_pushSingleParameterToFront(param, values[param]);
+               preset_pushSingleParameterToFront(param, values[param]);
 
             return 1;
          }
       }
 
-      seq_endpointRestoreVoiceCursor++;
-      seq_endpointRestoreVoiceParamCursor = 0;
+      preset_endpointRestoreVoiceCursor++;
+      preset_endpointRestoreVoiceParamCursor = 0;
    }
 
    return 0;
 }
 
-static uint8_t seq_endpointRestoreSendNext(uint8_t morphEndpoint)
+static uint8_t preset_endpointRestoreSendNext(uint8_t morphEndpoint)
 {
-   if(!seq_endpointRestoreCurrent.kit)
+   if(!preset_endpointRestoreCurrent.kit)
       return 0;
 
-   if(seq_endpointRestoreCurrent.mode == SEQ_ENDPOINT_RESTORE_FULL)
-      return seq_endpointRestoreSendNextFull(morphEndpoint);
+   if(preset_endpointRestoreCurrent.mode == PRESET_ENDPOINT_RESTORE_FULL)
+      return preset_endpointRestoreSendNextFull(morphEndpoint);
 
-   return seq_endpointRestoreSendNextMasked(morphEndpoint);
+   return preset_endpointRestoreSendNextMasked(morphEndpoint);
 }
 
-uint8_t seq_endpointRestoreBusy(void)
+uint8_t preset_endpointRestoreBusy(void)
 {
-   return (uint8_t)((seq_endpointRestorePhase != SEQ_ENDPOINT_RESTORE_PHASE_IDLE) ||
-                    (seq_endpointRestoreQueueCount != 0));
+   return (uint8_t)((preset_endpointRestorePhase != PRESET_ENDPOINT_RESTORE_PHASE_IDLE) ||
+                    (preset_endpointRestoreQueueCount != 0));
 }
 
-void seq_serviceEndpointRestore(void)
+void preset_serviceEndpointRestore(void)
 {
-   switch(seq_endpointRestorePhase)
+   switch(preset_endpointRestorePhase)
    {
-      case SEQ_ENDPOINT_RESTORE_PHASE_IDLE:
-         if(!seq_endpointRestorePopRequest())
+      case PRESET_ENDPOINT_RESTORE_PHASE_IDLE:
+         if(!preset_endpointRestorePopRequest())
             return;
 
          preset_tmpKitHandshakeReady = 0;
@@ -318,90 +318,90 @@ void seq_serviceEndpointRestore(void)
          uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_BEGIN);
          uart_sendFrontpanelPriorityByteWait(0);
          uart_sendFrontpanelPriorityByteWait(0);
-         seq_endpointRestoreWaitCounter = 0;
-         seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_WAIT_READY;
+         preset_endpointRestoreWaitCounter = 0;
+         preset_endpointRestorePhase = PRESET_ENDPOINT_RESTORE_PHASE_WAIT_READY;
          return;
 
-      case SEQ_ENDPOINT_RESTORE_PHASE_WAIT_READY:
+      case PRESET_ENDPOINT_RESTORE_PHASE_WAIT_READY:
          if(preset_tmpKitHandshakeReady)
          {
-            seq_endpointRestoreParamCursor = 0;
-            seq_endpointRestoreVoiceCursor = 0;
-            seq_endpointRestoreVoiceParamCursor = 0;
-            seq_endpointRestoreWaitCounter = 0;
-            seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_SEND_FRONT;
+            preset_endpointRestoreParamCursor = 0;
+            preset_endpointRestoreVoiceCursor = 0;
+            preset_endpointRestoreVoiceParamCursor = 0;
+            preset_endpointRestoreWaitCounter = 0;
+            preset_endpointRestorePhase = PRESET_ENDPOINT_RESTORE_PHASE_SEND_FRONT;
          }
-         else if(seq_endpointRestoreWaitTimedOut())
+         else if(preset_endpointRestoreWaitTimedOut())
          {
             uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
             uart_sendFrontpanelPriorityByteWait(0);
             uart_sendFrontpanelPriorityByteWait(0);
-            seq_endpointRestoreClearCurrent();
+            preset_endpointRestoreClearCurrent();
          }
          return;
 
-      case SEQ_ENDPOINT_RESTORE_PHASE_SEND_FRONT:
-         if(seq_endpointRestoreSendNext(0))
+      case PRESET_ENDPOINT_RESTORE_PHASE_SEND_FRONT:
+         if(preset_endpointRestoreSendNext(0))
             return;
 
-         seq_endpointRestoreParamCursor = 0;
-         seq_endpointRestoreVoiceCursor = 0;
-         seq_endpointRestoreVoiceParamCursor = 0;
-         seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_SEND_MORPH;
+         preset_endpointRestoreParamCursor = 0;
+         preset_endpointRestoreVoiceCursor = 0;
+         preset_endpointRestoreVoiceParamCursor = 0;
+         preset_endpointRestorePhase = PRESET_ENDPOINT_RESTORE_PHASE_SEND_MORPH;
          return;
 
-      case SEQ_ENDPOINT_RESTORE_PHASE_SEND_MORPH:
-         if(seq_endpointRestoreSendNext(1))
+      case PRESET_ENDPOINT_RESTORE_PHASE_SEND_MORPH:
+         if(preset_endpointRestoreSendNext(1))
             return;
 
          preset_tmpKitHandshakeAck = 0;
-         if(seq_endpointRestoreCurrent.reportGlobalMorph)
-            seq_pushGlobalMorphToFront(seq_endpointRestoreCurrent.kit);
+         if(preset_endpointRestoreCurrent.reportGlobalMorph)
+            preset_pushGlobalMorphToFront(preset_endpointRestoreCurrent.kit);
          uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
          uart_sendFrontpanelPriorityByteWait(0);
          uart_sendFrontpanelPriorityByteWait(0);
-         seq_endpointRestoreWaitCounter = 0;
-         seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_WAIT_ACK;
+         preset_endpointRestoreWaitCounter = 0;
+         preset_endpointRestorePhase = PRESET_ENDPOINT_RESTORE_PHASE_WAIT_ACK;
          return;
 
-      case SEQ_ENDPOINT_RESTORE_PHASE_WAIT_ACK:
+      case PRESET_ENDPOINT_RESTORE_PHASE_WAIT_ACK:
          if(preset_tmpKitHandshakeAck)
          {
-            seq_endpointRestoreClearCurrent();
+            preset_endpointRestoreClearCurrent();
          }
-         else if(seq_endpointRestoreWaitTimedOut())
+         else if(preset_endpointRestoreWaitTimedOut())
          {
-            seq_endpointRestoreClearCurrent();
+            preset_endpointRestoreClearCurrent();
          }
          return;
 
       default:
-         seq_endpointRestoreClearCurrent();
+         preset_endpointRestoreClearCurrent();
          return;
    }
 }
 
-void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask)
+void preset_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask)
 {
    uint8_t synthVoice;
    uint8_t normalVoiceMask = 0;
    uint8_t tmpVoiceMask = 0;
 
-   if(!seq_tmpKitPushParamsToFrontEnabled || !changedVoiceMask)
+   if(!preset_tmpKitPushParamsToFrontEnabled || !changedVoiceMask)
       return;
 
-   if(seq_allVoiceSourcesUseTmp())
+   if(preset_allVoiceSourcesUseTmp())
    {
-      if(!seq_tmpKitState.valid)
+      if(!preset_tmpKitState.valid)
          preset_captureTmpKitState();
 
-      seq_pushKitEndpointsToFront(&seq_tmpKitState);
+      preset_pushKitEndpointsToFront(&preset_tmpKitState);
       return;
    }
 
-   if(seq_allVoiceSourcesUseNormal())
+   if(preset_allVoiceSourcesUseNormal())
    {
-      seq_pushKitEndpointsToFront(&seq_normalKitState);
+      preset_pushKitEndpointsToFront(&preset_normalKitState);
       return;
    }
 
@@ -412,7 +412,7 @@ void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask)
       if(!(changedVoiceMask & bit))
          continue;
 
-      if(seq_voiceSourceState[synthVoice] == SEQ_VOICE_SOURCE_TMP)
+      if(preset_voiceSourceState[synthVoice] == PRESET_VOICE_SOURCE_TMP)
          tmpVoiceMask |= bit;
       else
          normalVoiceMask |= bit;
@@ -420,20 +420,20 @@ void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask)
 
    if(tmpVoiceMask)
    {
-      if(!seq_tmpKitState.valid)
+      if(!preset_tmpKitState.valid)
          preset_captureTmpKitState();
 
-      seq_pushKitEndpointVoiceMaskToFront(&seq_tmpKitState, tmpVoiceMask);
+      preset_pushKitEndpointVoiceMaskToFront(&preset_tmpKitState, tmpVoiceMask);
    }
 
    if(normalVoiceMask)
-      seq_pushKitEndpointVoiceMaskToFront(&seq_normalKitState, normalVoiceMask);
+      preset_pushKitEndpointVoiceMaskToFront(&preset_normalKitState, normalVoiceMask);
 }
 
-void seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit)
+void preset_maybePushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit)
 {
-   if(!seq_tmpKitPushParamsToFrontEnabled)
+   if(!preset_tmpKitPushParamsToFrontEnabled)
       return;
 
-   seq_pushKitEndpointsToFrontWithGlobalMorphReport(kit);
+   preset_pushKitEndpointsToFrontWithGlobalMorphReport(kit);
 }

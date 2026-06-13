@@ -376,7 +376,7 @@ static void seq_updateVoiceSourcesForPatternChange(const uint8_t *oldPatternForT
    }
 
    if(pushEndpointUpdates && changedVoiceMask)
-      seq_pushEndpointUpdateForVoiceSourceChange(changedVoiceMask);
+      preset_pushEndpointUpdateForVoiceSourceChange(changedVoiceMask);
 }
 
 /* RESTORE PUSH-UP PROCESS (STM32 Side)
@@ -829,7 +829,7 @@ static void seq_setTmpKitActive(uint8_t active)
 
       /* RESTORE: Push the full temporary kit endpoints (Main + Morph) to the AVR.
          These may come from copy-to-temp or from lazy temp-kit initialization. */
-      seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(&preset_tmpKitState);
+      preset_maybePushKitEndpointsToFrontWithGlobalMorphReport(&preset_tmpKitState);
       return;
    }
 
@@ -844,7 +844,7 @@ static void seq_setTmpKitActive(uint8_t active)
    preset_invalidateLiveMorphApplyCache(PRESET_MORPH_IMAGE_NORMAL);
 
    /* RESTORE: Push the full captured normal kit endpoints (Main + Morph) to the AVR. */
-   seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(&preset_normalKitState);
+   preset_maybePushKitEndpointsToFrontWithGlobalMorphReport(&preset_normalKitState);
 }
 #endif
 
@@ -1320,7 +1320,7 @@ static void seq_nextStep()
          uint8_t tmpBoundaryPatternChanged = 0;
          
          seq_activePattern = newActivePattern;
-         seq_setTmpKitActive(seq_activePattern == SEQ_TMP_PATTERN);
+         preset_setTempPlaybackActive(seq_activePattern == SEQ_TMP_PATTERN);
          seq_newPatternExecuted=1;
          if (seq_loadPendingFlag)
          {
@@ -1343,14 +1343,14 @@ static void seq_nextStep()
          
          }
 
-         seq_updateVoiceSourcesForPatternChange(oldTrackPattern, !activePatternChanged);
+         preset_updateVoiceSourcesForPatternChange(oldTrackPattern, !activePatternChanged);
          tmpBoundaryPatternChanged =
-            (seq_trackPatternUsesTmp(oldActivePattern)
-             != seq_trackPatternUsesTmp(newActivePattern));
+            (preset_trackPatternUsesTmp(oldActivePattern)
+             != preset_trackPatternUsesTmp(newActivePattern));
          for(i=0;i<NUM_TRACKS;i++)
          {
-            if(seq_trackPatternUsesTmp(oldTrackPattern[i])
-               != seq_trackPatternUsesTmp(seq_perTrackActivePattern[i]))
+            if(preset_trackPatternUsesTmp(oldTrackPattern[i])
+               != preset_trackPatternUsesTmp(seq_perTrackActivePattern[i]))
             {
                tmpBoundaryPatternChanged = 1;
             }
