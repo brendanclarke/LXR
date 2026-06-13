@@ -24,6 +24,7 @@
 | 013 | 2026-06-13 | local repo, session 013 closeout | Phase 6 cleanup/naming closeout, Phase 7+ consolidation audit, comms/temp spec reshaping, and handoff prep for session 014 |
 | 014 | 2026-06-13 | local repo, Phase 7 shared-module removal | Sequencer/MIDI now read live owner state directly, the background-load finalizer stays on TempPlaybackSwitch, and the remaining parser/session bridge now lives inside frontPanelParser.c |
 | 015 | 2026-06-13 | local repo, AVR encoder Timer1 compare cutover | AVR front-panel encoder now uses Timer1 compare polling; the dead 2-step API is gone, and the hardware re-test passed though reversals remain rough |
+| 016 | 2026-06-13 | local repo, AVR encoder rest-FSM final | AVR main encoder now uses only `encode_stableRead4()` backed by a Timer1 16 kHz fixed-`AB=11` rest-phase FSM; hardware test passed and debug scaffolding was removed |
 
 ---
 
@@ -89,6 +90,10 @@ Session 014 finished the Phase 7 shared-module removal. `Sequencer`, `MidiParser
 Session 015 closed the AVR front-panel encoder follow-up by replacing the fragile stable-driver experiment with Timer1 compare polling, removing the dead 2-step encoder surface, and making the 4-step reader direction-aware again. The user re-tested the hardware, confirmed it works, and accepted the remaining rough feel on reversals and fast spins so the encoder work could be parked for now.
 - **Find here**: Timer1 compare encoder path, dead 2-step API removal, direction-aware detent accumulator, hardware re-test, log/memory refresh
 
+### 016 — AVR Encoder Fixed-Rest FSM Finalization (2026-06-13)
+Session 016 completed the main encoder stabilization. The final AVR encoder path exposes only `encode_stableRead4()` for rotation, removes legacy/selectable read modes, samples PC0/PC1/PC2 from `TIMER1_COMPA_vect` at 16 kHz, and emits detents only after a legal sequence leaves and returns to the fixed hardware rest phase `AB=11`. Temporary boot LCD diagnostics identified the true rest phase and were removed after the user confirmed the final behavior works well on hardware.
+- **Find here**: final Timer1 16 kHz encoder FSM, fixed `ENCODER_REST_STATE = 0x03`, `encode_stableRead4()`-only API, removed debug hooks, hardware-approved encoder behavior, updated hardware archive
+
 
 ---
 
@@ -121,7 +126,7 @@ Session 015 closed the AVR front-panel encoder follow-up by replacing the fragil
 | Front-panel transport and parser code now live in uARTFrontSYX; opcode namespace is isolated in FrontPanelProtocol.h behind a compatibility include | 012 |
 | Phase 6 cleanup/naming is complete; the next refactor step is driven by PRESET_CONSOLIDATION_AUDIT.md and the old planning docs are no longer canonical | 013 |
 | Session 014 cut Sequencer/MIDI off the shared cache header, deleted the shared PresetLoadCache module, and left the remaining parser/session bridge inside frontPanelParser.c | 014 |
-| AVR front-panel encoder now runs on Timer1 compare polling; the dead 2-step API is removed, and the result is usable but still rough on reversals/fast spins | 015 |
+| AVR front-panel encoder uses only `encode_stableRead4()` backed by Timer1 16 kHz sampling and a fixed `AB=11` rest-phase FSM; do not reintroduce legacy read modes, PCINT decoding, or Timer0 encoder sampling | 016 |
 
 
 ---

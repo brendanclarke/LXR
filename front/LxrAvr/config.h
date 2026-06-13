@@ -16,12 +16,4 @@
 #define UART_DEBUG_ECHO_MODE 0
 #define DEBUG_CRASH_MODE 0
 
-// -----------------------------------------------------------------------
-// Encoder driver selection
-// 0 = original Dannegger polling (~1ms), backward compatible
-// 1 = Timer 1 compare driver with the same quadrature polling logic
-//     as the legacy path, but driven from Timer 1 instead of Timer 0
-// -----------------------------------------------------------------------
-#define ENC_USE_STABLE_DRIVER  1
-
 #endif /* CONFIG_H_ */

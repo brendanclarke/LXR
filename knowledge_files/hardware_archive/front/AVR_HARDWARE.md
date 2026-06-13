@@ -180,7 +180,7 @@ A single incremental encoder with push-button (ENC1, 24 clicks per revolution, 2
 | B | PC1 | Internal | Quadrature phase B |
 | Button | PC2 | Internal | Encoder push-button (active-low) |
 
-The encoder driver (Peter Dannegger algorithm, modified) uses **Timer0** (see Section 5.2) to sample both phases at ~1 ms intervals and accumulates delta values into `enc_delta`. The main loop reads delta via `encode_read4()` which provides 4-step resolution (i.e. one increment per physical detent on a 4× encoder). Button debouncing is handled within the same ISR by comparing the current and previous button states.
+The encoder driver uses **Timer1 compare A** to sample both phases at 16 kHz. The physical detent rest phase is hardware-verified as `AB=11`, encoded in firmware as `ENCODER_REST_STATE = 0x03`. The ISR applies a two-sample symmetric phase filter, runs a rest-phase anchored quadrature FSM, and accumulates only complete detents into `enc_delta`. The main loop reads rotation only through `encode_stableRead4()`. Legacy one-step/two-step/read-wrapper modes, PCINT decoding, and Timer0 encoder sampling are intentionally not supported. Encoder button debouncing is handled in the same Timer1 ISR with a 48-sample integrator.
 
 ---
 

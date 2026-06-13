@@ -33,9 +33,12 @@ make firmware
 
 **Current status after Session 015 implementation pass (2026-06-13)**: Phase 8 has started in code. `mainboard/LxrStm32/src/Preset/ParameterArray.c/.h` now owns the parameter table plus the classification helpers that used to live in `ParameterMap.c`, `ParameterMap.c` and `ParameterMap.h` have both been deleted, `mainboard/LxrStm32/src/MIDI/ParameterArray.h` has been deleted, and `TempPlaybackSwitch` now stores its transition flags inside one explicit state struct with legacy names preserved only as macros. Phase 9 now covers the prefix cleanup: the temp-switch state object is `preset_tempPlaybackSwitchState`, the AVR restore handshake mailboxes are `preset_tmpKitHandshakeReady` / `preset_tmpKitHandshakeAck`, and `make -C mainboard/LxrStm32 -j4 stm32` is green again after a clean rebuild. The remaining Phase 9 judgment call is whether `ParameterIngress` should stay as the final narrow router or be collapsed further in a later pass; Phase 10 will extract the live-apply helpers, Phase 11 will rename the remaining Preset exports to `preset_`, and Phase 12 will move the remaining Preset-state accessors out of `Sequencer`. The remaining stale `seq_` / `Seq` ownership names are being cataloged separately, starting with the restore queue/cursor block and the push-disable flag. Later in Session 015, the AVR front-panel encoder was reworked onto a Timer1 compare polling path, the dead 2-step API was removed, and the user re-tested it successfully even though reversals and fast spins still feel rough.
 
+**Current status after Session 016 implementation pass (2026-06-13)**: The AVR front-panel main encoder is now hardware-approved with the final Timer1 16 kHz rest-phase FSM. The only supported rotation read is `encode_stableRead4()`, `front/LxrAvr/encoder.h` exposes only `encode_init()`, `encode_stableRead4()`, and `encode_readButton()`, and `front/LxrAvr/config.h` no longer has `ENC_USE_STABLE_DRIVER`. The physical rest phase is fixed at `AB=11` (`ENCODER_REST_STATE = 0x03`), and the decoder emits detents only after a legal full sequence leaves and returns to that rest phase. Do not reintroduce legacy read modes, PCINT decoding, Timer0 encoder sampling, or the temporary LCD/debug hooks used during Session 016. `make -C front/LxrAvr avr -j4` and `make firmware` are green, with the usual AVR IO-register warnings.
+
 **Current consolidation planning artifact**: `PRESET_CONSOLIDATION_AUDIT.md` now captures the Phase 7+ `/Preset/` cleanup pass. Session 014 removed the shared `PresetLoadCache` module and concentrated the remaining transitional bridge in `frontPanelParser.c`; Phase 8 handles the remaining `/Preset/` consolidation work, Phase 9+ stays on Preset naming and live-apply extraction, and `MIDI_UART_SPLIT_AUDIT.md` tracks the protocol/parser cleanup outside `/Preset/`.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/016_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/015_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/014_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/013_SESSION_HANDOFF_LOG.md`
@@ -53,7 +56,7 @@ Canonical current WIP docs:
 - `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`
 
 Session 005 closeout / remaining follow-up:
-- Encoder follow-up was revisited in Session 015; it now works on the Timer1 compare path, but reversals and fast spins still feel rough and should stay parked unless tuning is explicitly requested.
+- Encoder follow-up was completed in Session 016. The hardware-approved implementation is the Timer1 16 kHz fixed-`AB=11` rest-phase FSM with `encode_stableRead4()` as the only rotation read path. Keep it unchanged unless new hardware testing reveals a regression.
 - Automate the temp-pattern switch/background-load process if it remains desired.
 - Add global parameter switches for background loading if that work is revived.
 - Keep the temporary SEQ16 pattern keyhole in place until after the future preset/morph refactor.
@@ -306,8 +309,17 @@ Sample flash map:
 
 ## Encoder
 
-- Session 002 encoder work completed successfully. See `knowledge_files/session_in_flight/ENCODER_AUDIT-COMPLETE.md` and `knowledge_files/log_archive/002_SESSION_HANDOFF_LOG.md`.
-- Timer/resource details and implementation notes are in the completed audit.
+- Session 016 supersedes older encoder notes. See `knowledge_files/log_archive/016_SESSION_HANDOFF_LOG.md`.
+- Final AVR main encoder implementation:
+  - Wiring is immutable: phase A = PC0, phase B = PC1, button = PC2.
+  - Timer1 CTC samples at 16 kHz from `TIMER1_COMPA_vect`.
+  - Phase filtering requires two stable samples per phase.
+  - Button debounce uses a 48-sample integrator in the same Timer1 ISR.
+  - Physical detent rest is fixed as `AB=11` (`ENCODER_REST_STATE = 0x03`).
+  - The rest-phase FSM emits one detent only after a legal full sequence leaves rest and returns to rest.
+  - `encode_stableRead4()` is the only supported rotation read and drains complete detents atomically.
+  - `encode_readButton()` is the only button read.
+- Do not reintroduce `encode_stableRead1()`, `encode_read1()`, `encode_read4()`, `encode_stableRead2()`, `ENC_USE_STABLE_DRIVER`, PCINT decoding, Timer0 encoder sampling, or temporary LCD/debug hooks.
 
 ---
 
@@ -406,7 +418,6 @@ Sample flash map:
 - Do not make the temp pattern loadable/saveable unless explicitly requested.
 - Future background-load automation should build on the Session 004 STM-owned normal/temp image model and should not revive AVR-owned temp staging.
 - The current `front`/`mainboard` diff may contain PRF cache/state-machine work (`SEQ_PRF_CACHE_*`, live-pattern getters, pending counters). Treat it as WIP until reconciled with the post-morph temp-slot plan.
-- Current-only backup files `front/LxrAvr/config.h.bak`, `front/LxrAvr/encoder.c.bak`, and `front/LxrAvr/encoder.h.bak` exist in the diff and should not be committed as canonical code without an explicit decision.
 
 ### Morph Move Completed In Session 003
 

@@ -1,199 +1,282 @@
 /************************************************************************/
 /*                                                                      */
 /*                      Reading rotary encoder                          */
-/*                      one and four step encoders supported            */
+/*                      stable four-step encoder support                 */
 /*                                                                      */
 /*              Author: Peter Dannegger                                 */
 /*                                                                      */
 /************************************************************************/
 #include "encoder.h"
 
-                // target: ATmega644
+#include <avr/interrupt.h>
+#include <avr/io.h>
+#include <limits.h>
+#include <util/atomic.h>
+
+// target: ATmega644
 //------------------------------------------------------------------------
 
-volatile int8_t     enc_delta;          // -128 ... 127
-static int8_t       last;
-static int8_t       lastButton;
-volatile uint8_t    buttonValue;
+#ifndef F_CPU
+#define F_CPU 20000000UL
+#endif
+
+#ifndef ENCODER_SAMPLE_HZ
+#define ENCODER_SAMPLE_HZ 16000UL
+#endif
+
+#ifndef ENCODER_PHASE_STABLE_SAMPLES
+#define ENCODER_PHASE_STABLE_SAMPLES 2
+#endif
+
+#ifndef ENCODER_BUTTON_STABLE_SAMPLES
+#define ENCODER_BUTTON_STABLE_SAMPLES 48
+#endif
+
+#ifndef ENCODER_REST_STATE
+#define ENCODER_REST_STATE 0x03
+#endif
+
+#if ENCODER_PHASE_STABLE_SAMPLES < 1 || ENCODER_PHASE_STABLE_SAMPLES > 8
+#error "ENCODER_PHASE_STABLE_SAMPLES must be between 1 and 8"
+#endif
+
+#if ENCODER_REST_STATE > 0x03
+#error "ENCODER_REST_STATE must be a two-bit AB state"
+#endif
+
+#if ENCODER_SAMPLE_HZ == 0
+#error "ENCODER_SAMPLE_HZ must be greater than zero"
+#endif
+
+#if ENCODER_BUTTON_STABLE_SAMPLES > 255
+#error "ENCODER_BUTTON_STABLE_SAMPLES must fit in uint8_t"
+#endif
+
+#define ENCODER_TIMER_PRESCALE 64UL
+#define ENCODER_TIMER_TOP ((F_CPU / ENCODER_TIMER_PRESCALE / ENCODER_SAMPLE_HZ) - 1UL)
+
+#if ENCODER_TIMER_TOP > 65535UL
+#error "ENCODER_SAMPLE_HZ is too low for Timer1 CTC with the selected prescaler"
+#endif
+
+#define PIN_A           (1 << PC0)
+#define PIN_B           (1 << PC1)
+#define PIN_BUTTON      (1 << PC2)
+
+#define ENCODER_PHASE_MASK ((uint8_t)((1U << ENCODER_PHASE_STABLE_SAMPLES) - 1U))
+
+#define ENCODER_PORT    PORTC
+#define ENCODER_PIN     PINC
+#define ENCODER_DDR     DDRC
+
+static volatile int8_t enc_delta;       // complete four-step detents
+static volatile uint8_t button_pressed; // true when encoder button is pressed
+
+static uint8_t enc_phase_history_a;
+static uint8_t enc_phase_history_b;
+static uint8_t enc_rest_state;
+static uint8_t enc_stable_state;
+static int8_t enc_fsm_dir;
+static uint8_t enc_fsm_phase;
+static uint8_t button_integrator;
 
 
-void encode_init( void )
+static uint8_t encoder_readPhaseState(uint8_t portValue)
 {
-    // port init — set PC0, PC1, PC2 as inputs with pull-ups
-    uint8_t pins = PIN_A |
-                   PIN_B |
-                   PIN_BUTTON;
+    uint8_t state = 0;
 
-    ENCODER_DDR &= (uint8_t)~pins;     // configure as input
-    ECODER_PORT |= pins;               // enable internal pull-ups
+    if( portValue & PIN_A )
+        state |= 2;
+    if( portValue & PIN_B )
+        state |= 1;
 
-    // Capture power-on Gray code state
-    int8_t new = 0;
-    if( PHASE_A )
-        new = 3;
-    if( PHASE_B )
-        new ^= 1;                       // convert gray to binary
-    last      = new;                    // power on state
+    return state;
+}
+
+
+static int8_t encoder_decodeStep(uint8_t previous, uint8_t current)
+{
+    switch( (uint8_t)((previous << 2) | current) )
+    {
+        // Positive direction matches the original Dannegger mapping:
+        // 00 -> 01 -> 11 -> 10 -> 00.
+        case 0x01:
+        case 0x07:
+        case 0x08:
+        case 0x0E:
+            return 1;
+
+        case 0x02:
+        case 0x04:
+        case 0x0B:
+        case 0x0D:
+            return -1;
+
+        default:
+            return 0;
+    }
+}
+
+
+static void encoder_resetFsm(void)
+{
+    enc_fsm_dir = 0;
+    enc_fsm_phase = 0;
+}
+
+
+static void encoder_addDetent(int8_t dir)
+{
+    if( dir > 0 )
+    {
+        if( enc_delta < INT8_MAX )
+            enc_delta++;
+    }
+    else if( dir < 0 )
+    {
+        if( enc_delta > INT8_MIN )
+            enc_delta--;
+    }
+}
+
+
+static void encoder_handleStateChange(uint8_t previous, uint8_t current)
+{
+    const int8_t step = encoder_decodeStep(previous, current);
+
+    if( step == 0 )
+    {
+        encoder_resetFsm();
+        return;
+    }
+
+    if( enc_fsm_dir == 0 )
+    {
+        if( previous == enc_rest_state && current != enc_rest_state )
+        {
+            enc_fsm_dir = step;
+            enc_fsm_phase = 1;
+        }
+        return;
+    }
+
+    if( step != enc_fsm_dir )
+    {
+        encoder_resetFsm();
+        return;
+    }
+
+    if( enc_fsm_phase < 4 )
+        enc_fsm_phase++;
+
+    if( current == enc_rest_state )
+    {
+        if( enc_fsm_phase == 4 )
+            encoder_addDetent(enc_fsm_dir);
+
+        encoder_resetFsm();
+    }
+    else if( enc_fsm_phase >= 4 )
+    {
+        encoder_resetFsm();
+    }
+}
+
+
+void encode_init(void)
+{
+    const uint8_t pins = PIN_A | PIN_B | PIN_BUTTON;
+    uint8_t initialPort;
+    uint8_t initialState;
+
+    ENCODER_DDR &= (uint8_t)~pins;
+    ENCODER_PORT |= pins;
+
+    initialPort = ENCODER_PIN;
+    initialState = encoder_readPhaseState(initialPort);
+
+    enc_phase_history_a = (initialState & 2) ? ENCODER_PHASE_MASK : 0;
+    enc_phase_history_b = (initialState & 1) ? ENCODER_PHASE_MASK : 0;
+    enc_rest_state = ENCODER_REST_STATE;
+    enc_stable_state = initialState;
+    encoder_resetFsm();
     enc_delta = 0;
 
-    // ----------------------------------------------------------------
-    // Timer 0 — CTC, prescaler 64, OCR0A = 78 => ~250 us period.
-    // Used for button debounce in both driver modes.
-    // In legacy mode (ENC_USE_STABLE_DRIVER == 0) also handles encoder
-    // polling. Faster than the original prescaler-256 (~1 ms) setup;
-    // this benefits button debounce in both modes at no cost.
-    // ----------------------------------------------------------------
-    TCCR0A  =  (1 << WGM01);                       // CTC mode
-    TCCR0B  =  (1 << CS01) | (1 << CS00);          // prescaler 64
-    OCR0A   =  (uint8_t)(F_CPU / 64.0f * 0.000250f); // = 78 => ~250 us
-    TIMSK0 |=  (1 << OCIE0A);
+    button_pressed = (initialPort & PIN_BUTTON) ? 0 : 1;
+    button_integrator = button_pressed ? ENCODER_BUTTON_STABLE_SAMPLES : 0;
 
-#if ENC_USE_STABLE_DRIVER == 1
-
-    // ----------------------------------------------------------------
-    // Timer 1 — CTC, prescaler 64, OCR1A = 77 => ~250 us period.
-    // Used as the encoder sampling ISR in stable mode.
-    // ----------------------------------------------------------------
+    // Timer1 CTC, prescaler 64. At 20 MHz and 16 kHz, OCR1A is 18.
     TCCR1A = 0;
-    TCCR1B = (1 << WGM12) | (1 << CS11) | (1 << CS10);   // CTC, prescaler 64
-    OCR1A  = (uint16_t)(F_CPU / 64 / 4000) - 1;           // ~250 us
+    TCCR1B = (1 << WGM12) | (1 << CS11) | (1 << CS10);
+    OCR1A = (uint16_t)ENCODER_TIMER_TOP;
     TIMSK1 |= (1 << OCIE1A);
-
-#endif /* ENC_USE_STABLE_DRIVER == 1 */
-
-    lastButton  = 0;
-    buttonValue = 1;
 }
 
 
-// -----------------------------------------------------------------------
-// Timer 0 CTC ISR — ~250 us period
-//
-// Legacy mode (ENC_USE_STABLE_DRIVER == 0):
-//   Polls PHASE_A / PHASE_B and accumulates enc_delta on every valid
-//   single-bit Gray-code transition. Identical to original Dannegger
-//   algorithm; only the Timer 0 rate has changed (256->64 prescaler).
-//
-// Stable mode (ENC_USE_STABLE_DRIVER == 1):
-//   Encoder polling runs from TIMER1_COMPA_vect instead of TIMER0.
-//   Button debounce runs unchanged in both modes.
-// -----------------------------------------------------------------------
-ISR( TIMER0_COMPA_vect )
-{
-#if ENC_USE_STABLE_DRIVER == 0
-
-    int8_t new, diff;
-
-    new = 0;
-    if( PHASE_A )
-        new = 3;
-    if( PHASE_B )
-        new ^= 1;                               // convert gray to binary
-    diff = (int8_t)(last - new);                // difference last - new
-    if( diff & 1 ){                             // bit 0 = valid transition
-        last      = new;                        // store new as next last
-        enc_delta = (int8_t)(enc_delta + (diff & 2) - 1); // bit 1 = dir
-    }
-
-#endif /* ENC_USE_STABLE_DRIVER == 0 */
-
-    // button debounce — two consecutive matching samples required
-    if( ENCODER_BUTTON == lastButton )
-    {
-        buttonValue = (uint8_t)lastButton;
-    }
-    lastButton = ENCODER_BUTTON;
-}
-
-
-#if ENC_USE_STABLE_DRIVER == 1
-
-// -----------------------------------------------------------------------
-// Timer 1 CTC ISR — stable driver only
-//
-// Same Gray-code polling as the legacy path, but sampled by Timer 1
-// instead of Timer 0. This keeps the stable driver on a dedicated timer
-// while preserving the original encoder semantics.
-// -----------------------------------------------------------------------
 ISR( TIMER1_COMPA_vect )
 {
-    int8_t new, diff;
+    const uint8_t portValue = ENCODER_PIN;
+    const uint8_t rawA = (portValue & PIN_A) ? 1 : 0;
+    const uint8_t rawB = (portValue & PIN_B) ? 1 : 0;
+    uint8_t filteredState = enc_stable_state;
 
-    new = 0;
-    if( PHASE_A )
-        new = 3;
-    if( PHASE_B )
-        new ^= 1;                               // convert gray to binary
-    diff = (int8_t)(last - new);                // difference last - new
-    if( diff & 1 ){                             // bit 0 = valid transition
-        last      = new;                        // store new as next last
-        enc_delta = (int8_t)(enc_delta + (diff & 2) - 1); // bit 1 = dir
+    enc_phase_history_a =
+        (uint8_t)(((enc_phase_history_a << 1) | rawA) & ENCODER_PHASE_MASK);
+    enc_phase_history_b =
+        (uint8_t)(((enc_phase_history_b << 1) | rawB) & ENCODER_PHASE_MASK);
+
+    if( enc_phase_history_a == 0 )
+        filteredState &= (uint8_t)~2;
+    else if( enc_phase_history_a == ENCODER_PHASE_MASK )
+        filteredState |= 2;
+
+    if( enc_phase_history_b == 0 )
+        filteredState &= (uint8_t)~1;
+    else if( enc_phase_history_b == ENCODER_PHASE_MASK )
+        filteredState |= 1;
+
+    if( filteredState != enc_stable_state )
+    {
+        const uint8_t previousState = enc_stable_state;
+
+        enc_stable_state = filteredState;
+        encoder_handleStateChange(previousState, filteredState);
     }
+
+    if( portValue & PIN_BUTTON )
+    {
+        if( button_integrator > 0 )
+            button_integrator--;
+    }
+    else
+    {
+        if( button_integrator < ENCODER_BUTTON_STABLE_SAMPLES )
+            button_integrator++;
+    }
+
+    if( button_integrator == 0 )
+        button_pressed = 0;
+    else if( button_integrator >= ENCODER_BUTTON_STABLE_SAMPLES )
+        button_pressed = 1;
 }
 
-#endif /* ENC_USE_STABLE_DRIVER == 1 */
 
-
-// -----------------------------------------------------------------------
-// Read functions
-// Both read functions are identical in both driver modes — the only
-// difference is which timer accumulated enc_delta (Timer0 vs Timer1).
-// cli/sei ensures an atomic snapshot of the volatile enc_delta from the
-// main loop.
-// -----------------------------------------------------------------------
-
-int8_t encode_stableRead1( void )       // read single step encoders
+int8_t encode_stableRead4(void)
 {
     int8_t val;
-    cli();
-    val       = enc_delta;
-    enc_delta = 0;
-    sei();
-    return val;                         // counts since last call
-}
 
-
-int8_t encode_stableRead4( void )       // read four step encoders
-{
-    static int16_t detent_accum;
-    int16_t raw;
-    int8_t val = 0;
-    cli();
-    raw       = enc_delta;
-    enc_delta = 0;
-    sei();
-
-    if( raw == 0 )
-        return 0;
-
-    // If the user reverses direction, throw away the stale partial turn
-    // instead of forcing the new direction to work through old residue.
-    if( (detent_accum > 0 && raw < 0) ||
-        (detent_accum < 0 && raw > 0) )
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
     {
-        detent_accum = 0;
-    }
-
-    detent_accum += raw;
-
-    while( detent_accum >= 4 )
-    {
-        val++;
-        detent_accum -= 4;
-    }
-
-    while( detent_accum <= -4 )
-    {
-        val--;
-        detent_accum += 4;
+        val = enc_delta;
+        enc_delta = 0;
     }
 
     return val;
 }
 
 
-// get the button value — returns true if button is pressed
-uint8_t encode_readButton()
+// get the button value - returns true if button is pressed
+uint8_t encode_readButton(void)
 {
-    return (buttonValue == 0);
+    return button_pressed;
 }

@@ -25,26 +25,30 @@ The crystal is loaded by C5 and C6 (22 pF each), matching the HC-49V crystal's s
 
 ## 3. Timer Allocation
 
-The ATmega644 has three hardware timers: Timer0 (8-bit), Timer1 (16-bit), and Timer2 (8-bit). All three are used.
+The ATmega644 has three hardware timers: Timer0 (8-bit), Timer1 (16-bit), and Timer2 (8-bit). The main application currently uses Timer1 for the encoder/button sampler and Timer2 for the coarse system timebase. Timer0 is not used by the final Session 016 encoder implementation.
 
-### 3.1 Timer0 — Encoder Sampling (~1 ms CTC ISR)
+### 3.1 Timer0 — Currently Unused By The Encoder
+
+Session 016 removed the legacy Timer0 encoder/button path. Do not reintroduce `TIMER0_COMPA_vect` for encoder sampling unless there is a fresh hardware decision and the Timer1 rest-phase FSM is explicitly retired.
+
+### 3.2 Timer1 — Encoder/Button Sampling (16 kHz CTC ISR)
 
 **Source:** `encoder.c`, `encode_init()`
 
 | Parameter | Value | Calculation |
 |---|---|---|
-| Mode | CTC (Clear Timer on Compare Match A) | `WGM01 = 1` |
-| Prescaler | /256 | `CS02 = 1` |
-| Timer clock | 78,125 Hz | 20 MHz / 256 |
-| OCR0A value | 78 | `F_CPU / 256.0 * 0.001` ≈ 78.125 → 78 |
-| Actual ISR frequency | **1001.64 Hz** ≈ 1 ms period | 78,125 / (78+1) |
-| Interrupt | `TIMER0_COMPA_vect` |
+| Mode | CTC (Clear Timer on Compare Match A) | `WGM12 = 1` |
+| Prescaler | /64 | `CS11=1, CS10=1` |
+| Timer clock | 312,500 Hz | 20 MHz / 64 |
+| OCR1A value | 18 | `(F_CPU / 64 / 16000) - 1` = 18.53125 truncated to 18 |
+| Actual ISR frequency | **16,447.37 Hz** ≈ 60.8 us period | 312,500 / (18+1) |
+| Interrupt | `TIMER1_COMPA_vect` |
 
-**ISR function:** `ISR(TIMER0_COMPA_vect)` — Reads both encoder phases (PC0/PC1) using the Gray-code to binary conversion algorithm. Computes the signed delta (`enc_delta`) accumulated since last read. Also samples the encoder button (PC2) and compares with the previous state to debounce it. This ISR is the only place the encoder state machine runs; the main loop merely reads and clears `enc_delta` atomically.
+**ISR function:** `ISR(TIMER1_COMPA_vect)` — Samples encoder phases PC0/PC1 and the encoder button PC2. The phase path uses a two-sample symmetric filter and a rest-phase anchored quadrature FSM. The physical rest phase is hardware-verified as `AB=11` and fixed in firmware as `ENCODER_REST_STATE = 0x03`. The ISR adds to `enc_delta` only when a legal full sequence leaves rest and returns to rest. Button debouncing uses a 48-sample integrator in the same ISR.
 
-**Timing note:** The 1 ms period gives adequate encoder resolution. At 24 clicks/revolution the mechanical detent period at moderate hand speed (~2 rev/sec) is ~20 ms per click, so 20 samples per detent = good anti-bounce margin.
+**Timing note:** The 16 kHz sample rate was selected after hardware testing in Session 016. The ISR must remain small because `TIMER1_COMPA_vect` has higher vector priority than USART0 RX, and the 500 kBaud UART can receive one byte every 20 us.
 
-### 3.2 Timer2 — System Timebase (Overflow ISR)
+### 3.3 Timer2 — System Timebase (Overflow ISR)
 
 **Source:** `Hardware/timebase.c`, `time_initTimer()`
 
@@ -61,7 +65,7 @@ The ATmega644 has three hardware timers: Timer0 (8-bit), Timer1 (16-bit), and Ti
 - `volatile uint16_t time_sysTick` — 16-bit system tick counter. Rolls over every 65535 × 13.1072 ms ≈ **14.3 minutes**. Used for coarse time references.
 - `screensaver_timer` — dedicated screensaver tick counter (defined in `screensaver.c`), compared against a threshold to activate the display screensaver after inactivity.
 
-**Note:** Timer1 (16-bit) is **not used** by the main application firmware. It is available for future expansion.
+**Note:** Timer1 is no longer available for unrelated expansion; it owns the final main-encoder sampler.
 
 ---
 
@@ -71,7 +75,7 @@ The ATmega644 uses a vectored interrupt controller. The following vectors are ac
 
 | Vector | Source | ISR | Period / Trigger |
 |---|---|---|---|
-| `TIMER0_COMPA_vect` | Timer0 Compare Match A | Encoder sampling | ~1 ms |
+| `TIMER1_COMPA_vect` | Timer1 Compare Match A | Encoder/button sampling | ~60.8 us |
 | `TIMER2_OVF_vect` | Timer2 Overflow | System tick + screensaver tick | ~13.1 ms |
 | `USART0_RX_vect` | UART RX Complete | Store byte in `uart_rxBuffer` FIFO | Per received byte at 500 kBaud |
 | `USART0_UDRE_vect` | UART TX Data Register Empty | Drain `uart_txBuffer` FIFO or disable interrupt | Per transmitted byte |
@@ -79,12 +83,12 @@ The ATmega644 uses a vectored interrupt controller. The following vectors are ac
 
 **Interrupt enable:** The main loop calls `sei()` only after all hardware is initialised (LCD, UART, ADC, encoder, DIN, DOUT, LED, timer). SD card and preset initialisation happen after `sei()` since they require UART interrupts for communication with the STM32F4.
 
-**Atomicity:** Where the main loop reads `enc_delta`, it disables interrupts with `cli()`, reads and clears the value, then restores with `sei()`:
+**Atomicity:** The main loop reads complete encoder detents through `encode_stableRead4()`, which snapshots and clears `enc_delta` inside an `ATOMIC_BLOCK(ATOMIC_RESTORESTATE)`:
 ```c
-cli();
-val = enc_delta;
-enc_delta = val & 3;   // preserve remainder bits
-sei();
+ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    val = enc_delta;
+    enc_delta = 0;
+}
 ```
 
 ---
@@ -198,7 +202,7 @@ The following sequence is executed from `main()`, in order, before the main loop
 4. `uart_init()` — initialises FIFO buffers, configures USART0 at 500 kBaud, enables RX/TX/RX-interrupt.
 5. Display boot message ("Sonic Potions / LXR Drums V0.37").
 6. `adc_init()` — configures ADC, executes one dummy conversion.
-7. `encode_init()` — configures encoder pins (PC0–PC2) as inputs with pull-ups; initialises Timer0 for ~1 ms CTC.
+7. `encode_init()` — configures encoder pins (PC0–PC2) as inputs with pull-ups; initialises Timer1 CTC for the 16 kHz fixed-`AB=11` rest-phase encoder/button sampler.
 8. `din_init()` — configures shift-register pins; executes initial parallel load.
 9. `dout_init()` — configures LED output shift-register pins; clears output data array.
 10. `led_init()` — initialises LED state machine.
@@ -226,7 +230,7 @@ The main loop runs continuously with no sleep or yield. Approximate per-iteratio
 | 1 | `din_readNextInput()` | ~5 μs |
 | 2 | `dout_updateOutputs()` | ~8 μs |
 | 3 | `uart_checkAndParse()` (×1) | ~2–20 μs |
-| 4 | `encode_read4()` + `encode_readButton()` | <1 μs |
+| 4 | `encode_stableRead4()` + `encode_readButton()` | <1 μs |
 | 5 | `menu_parseEncoder()` | <1 μs (no update) |
 | 6 | `uart_checkAndParse()` (×4) | ~8–80 μs |
 | 7 | `adc_checkPots()` | ~690 μs |
