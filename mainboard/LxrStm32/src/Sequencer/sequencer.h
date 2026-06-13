@@ -42,9 +42,10 @@
 #include "stm32f4xx.h"
 #include "globals.h"
 #include "Preset/KitState.h"
-#include "Preset/ParameterMap.h"
+#include "Preset/ParameterArray.h"
 #include "Preset/ParameterIngress.h"
 #include "Preset/MorphEngine.h"
+#include "Preset/TempPlaybackSwitch.h"
 #include "PatternData.h"
 #include "EuklidGenerator.h"
 
@@ -74,11 +75,8 @@ enum Seq_QuantisationEnum
 };
 
 extern uint8_t seq_activePattern;
-extern uint8_t seq_pendingPattern;
 extern uint8_t seq_perTrackActivePattern[7];
-extern uint8_t seq_perTrackPendingPattern[7];
 extern int8_t seq_stepIndex[NUM_TRACKS+1];
-extern uint8_t seq_newPatternAvailable;
 extern uint8_t seq_recordActive;				/**< set to 1 to activate the reording mode*/
 
 //extern PatternSet* seq_activePatternSetPtr;
@@ -86,8 +84,8 @@ extern uint8_t seq_recordActive;				/**< set to 1 to activate the reording mode*
 extern uint8_t seq_transpose_voiceAmount[7];
 extern uint8_t seq_transposeOnOff;
 
-extern volatile uint8_t seq_tmpKitHandshakeReady;
-extern volatile uint8_t seq_tmpKitHandshakeAck;
+extern volatile uint8_t preset_tmpKitHandshakeReady;
+extern volatile uint8_t preset_tmpKitHandshakeAck;
 
 extern uint8_t seq_selectedStep;
 

@@ -9,18 +9,36 @@
 #ifndef PRESET_TEMPPLAYBACKSWITCH_H_
 #define PRESET_TEMPPLAYBACKSWITCH_H_
 
-#include "Sequencer/sequencer.h"
+#include "stm32f4xx.h"
 
-/* Pattern switch request state. These flags are owned by the temp-switch
-   module and are consumed by the sequencer when it advances to the next
-   boundary. */
-extern uint8_t seq_pendingPattern;
-extern uint8_t seq_perTrackPendingPattern[NUM_TRACKS];
-extern uint8_t seq_newPatternAvailable;
-extern uint8_t seq_newPatternExecuted;
-extern uint8_t seq_loadPendingFlag;
-extern uint8_t seq_loadSeqNow;
-extern uint8_t seq_tmpBoundaryPatternSwitchAck;
+/* Phase 8 collapses the temp-switch booleans into one explicit state object.
+   The legacy `seq_*` names remain as macros so the sequencer and parser can
+   keep compiling while the ownership boundary is simplified. */
+enum
+{
+   PRESET_TEMP_PLAYBACK_TRACKS = 7
+};
+
+typedef struct PresetTempPlaybackSwitchStateStruct
+{
+   uint8_t pendingPattern;
+   uint8_t perTrackPendingPattern[PRESET_TEMP_PLAYBACK_TRACKS];
+   uint8_t newPatternAvailable;
+   uint8_t newPatternExecuted;
+   uint8_t loadPendingFlag;
+   uint8_t loadSeqNow;
+   uint8_t tmpBoundaryPatternSwitchAck;
+} PresetTempPlaybackSwitchState;
+
+extern PresetTempPlaybackSwitchState preset_tempPlaybackSwitchState;
+
+#define seq_pendingPattern (preset_tempPlaybackSwitchState.pendingPattern)
+#define seq_perTrackPendingPattern (preset_tempPlaybackSwitchState.perTrackPendingPattern)
+#define seq_newPatternAvailable (preset_tempPlaybackSwitchState.newPatternAvailable)
+#define seq_newPatternExecuted (preset_tempPlaybackSwitchState.newPatternExecuted)
+#define seq_loadPendingFlag (preset_tempPlaybackSwitchState.loadPendingFlag)
+#define seq_loadSeqNow (preset_tempPlaybackSwitchState.loadSeqNow)
+#define seq_tmpBoundaryPatternSwitchAck (preset_tempPlaybackSwitchState.tmpBoundaryPatternSwitchAck)
 
 /* Updates the temp-image selection and performs the restore/report work that
    accompanies a normal/temp boundary change. */

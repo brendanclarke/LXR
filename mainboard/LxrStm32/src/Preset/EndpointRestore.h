@@ -14,8 +14,8 @@
 /* The AVR restore handshake uses these two flags as a small shared mailbox.
    The parser raises them when the AVR is ready/acknowledged and the restore
    service consumes them while sending the staged endpoint bytes. */
-extern volatile uint8_t seq_tmpKitHandshakeReady;
-extern volatile uint8_t seq_tmpKitHandshakeAck;
+extern volatile uint8_t preset_tmpKitHandshakeReady;
+extern volatile uint8_t preset_tmpKitHandshakeAck;
 
 /* Requests a restore-service pass. The restore queue lives in the Preset
    module so the sequencer only schedules work and does not own the queue

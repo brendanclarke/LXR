@@ -1,7 +1,7 @@
 /************************************************************************/
 /*                                                                      */
 /*                      Reading rotary encoder                          */
-/*                      one, two and four step encoders supported       */
+/*                      one and four step encoders supported            */
 /*                                                                      */
 /*              Author: Peter Dannegger                                 */
 /*                                                                      */
@@ -51,24 +51,13 @@ void encode_init( void )
 #if ENC_USE_STABLE_DRIVER == 1
 
     // ----------------------------------------------------------------
-    // Timer 1 — free-running 16-bit counter, prescaler 8.
-    // Tick period: 8 / 20000000 = 400 ns. Overflow: ~26.2 ms.
-    // Used as timestamp source for PCINT1 debounce gating.
-    // No ISR, no output compare, no input capture — TCNT1 is read-only
-    // by the PCINT1 handler. Safe to share with future subsystems that
-    // also only read TCNT1.
+    // Timer 1 — CTC, prescaler 64, OCR1A = 77 => ~250 us period.
+    // Used as the encoder sampling ISR in stable mode.
     // ----------------------------------------------------------------
     TCCR1A = 0;
-    TCCR1B = (1 << CS11);              // prescaler 8
-    TCNT1  = 0;
-
-    // ----------------------------------------------------------------
-    // PCINT1 — enable PC0 (PCINT8) and PC1 (PCINT9) only.
-    // PC2 (button) is deliberately excluded from PCMSK1; the ISR also
-    // guards against it explicitly for future robustness.
-    // ----------------------------------------------------------------
-    PCMSK1 |= (1 << PCINT8) | (1 << PCINT9);
-    PCICR  |= (1 << PCIE1);
+    TCCR1B = (1 << WGM12) | (1 << CS11) | (1 << CS10);   // CTC, prescaler 64
+    OCR1A  = (uint16_t)(F_CPU / 64 / 4000) - 1;           // ~250 us
+    TIMSK1 |= (1 << OCIE1A);
 
 #endif /* ENC_USE_STABLE_DRIVER == 1 */
 
@@ -86,7 +75,7 @@ void encode_init( void )
 //   algorithm; only the Timer 0 rate has changed (256->64 prescaler).
 //
 // Stable mode (ENC_USE_STABLE_DRIVER == 1):
-//   Encoder polling block is excluded; enc_delta is driven by PCINT1_vect.
+//   Encoder polling runs from TIMER1_COMPA_vect instead of TIMER0.
 //   Button debounce runs unchanged in both modes.
 // -----------------------------------------------------------------------
 ISR( TIMER0_COMPA_vect )
@@ -120,81 +109,25 @@ ISR( TIMER0_COMPA_vect )
 #if ENC_USE_STABLE_DRIVER == 1
 
 // -----------------------------------------------------------------------
-// PCINT1 ISR — edge-triggered, stable driver only
+// Timer 1 CTC ISR — stable driver only
 //
-// Fires on any logic change on an unmasked pin in the PCINT1 group
-// (PC0 and PC1 only — PC2/button is not in PCMSK1).
-//
-// Two-layer noise rejection:
-//   1. Time gate: edges arriving within ENC_DEBOUNCE_TICKS Timer-1 ticks
-//      of the last accepted edge are discarded (default 500 us at 400
-//      ns/tick). Absorbs contact bounce completely for most encoders.
-//   2. Consecutive-direction confirmation: ENC_CONFIRM_COUNT same-
-//      direction edges must be seen before enc_delta is incremented.
-//      Eliminates residual flyback that passes the time gate.
-//
-// enc_delta is only written here (stable mode); TIMER0_COMPA_vect does
-// not touch it in stable mode. The read functions still use cli/sei to
-// atomically snapshot and clear enc_delta from the main loop.
+// Same Gray-code polling as the legacy path, but sampled by Timer 1
+// instead of Timer 0. This keeps the stable driver on a dedicated timer
+// while preserving the original encoder semantics.
 // -----------------------------------------------------------------------
-ISR( PCINT1_vect )
+ISR( TIMER1_COMPA_vect )
 {
-    // one-shot baseline init: seed last_portc from real pin state on the
-    // first invocation so the first real edge decodes correctly.
-    static uint8_t  initialised = 0;
-    static uint8_t  last_portc  = 0;
-    static uint16_t last_time   = 0;
-    static int8_t   last_dir    = 0;
-    static uint8_t  consec      = 0;
+    int8_t new, diff;
 
-    uint8_t current = PINC;
-
-    if( !initialised )
-    {
-        last_portc  = current;
-        last_time   = TCNT1;
-        initialised = 1;
-        return;
-    }
-
-    // guard: only proceed if an encoder pin actually changed
-    uint8_t changed = (uint8_t)(current ^ last_portc);
-    last_portc = current;
-
-    if( !(changed & ((1 << PC0) | (1 << PC1))) )
-        return;
-
-    // time gate — unsigned subtraction wraps correctly across TCNT1 overflow
-    uint16_t now = TCNT1;
-    if( (uint16_t)(now - last_time) < ENC_DEBOUNCE_TICKS )
-        return;
-
-    // Gray code decode — identical to Dannegger
-    int8_t new = 0;
-    if( PHASE_A ) new = 3;
-    if( PHASE_B ) new ^= 1;
-
-    int8_t diff = (int8_t)(last - new);
-    if( diff & 1 )
-    {
-        last      = new;
-        last_time = now;
-
-        int8_t dir = (int8_t)((diff & 2) - 1);     // +1 or -1
-
-        if( dir == last_dir )
-        {
-            if( ++consec >= ENC_CONFIRM_COUNT )
-            {
-                enc_delta = (int8_t)(enc_delta + dir);
-                consec    = 0;
-            }
-        }
-        else
-        {
-            last_dir = dir;
-            consec   = 1;
-        }
+    new = 0;
+    if( PHASE_A )
+        new = 3;
+    if( PHASE_B )
+        new ^= 1;                               // convert gray to binary
+    diff = (int8_t)(last - new);                // difference last - new
+    if( diff & 1 ){                             // bit 0 = valid transition
+        last      = new;                        // store new as next last
+        enc_delta = (int8_t)(enc_delta + (diff & 2) - 1); // bit 1 = dir
     }
 }
 
@@ -203,9 +136,10 @@ ISR( PCINT1_vect )
 
 // -----------------------------------------------------------------------
 // Read functions
-// All three are identical in both driver modes — the only difference is
-// how enc_delta was accumulated (polling vs PCINT). cli/sei ensures an
-// atomic snapshot of the volatile enc_delta from the main loop.
+// Both read functions are identical in both driver modes — the only
+// difference is which timer accumulated enc_delta (Timer0 vs Timer1).
+// cli/sei ensures an atomic snapshot of the volatile enc_delta from the
+// main loop.
 // -----------------------------------------------------------------------
 
 int8_t encode_stableRead1( void )       // read single step encoders
@@ -219,25 +153,42 @@ int8_t encode_stableRead1( void )       // read single step encoders
 }
 
 
-int8_t encode_stableRead2( void )       // read two step encoders
-{
-    int8_t val;
-    cli();
-    val       = enc_delta;
-    enc_delta = val & 1;
-    sei();
-    return val >> 1;
-}
-
-
 int8_t encode_stableRead4( void )       // read four step encoders
 {
-    int8_t val;
+    static int16_t detent_accum;
+    int16_t raw;
+    int8_t val = 0;
     cli();
-    val       = enc_delta;
-    enc_delta = val & 3;
+    raw       = enc_delta;
+    enc_delta = 0;
     sei();
-    return val >> 2;
+
+    if( raw == 0 )
+        return 0;
+
+    // If the user reverses direction, throw away the stale partial turn
+    // instead of forcing the new direction to work through old residue.
+    if( (detent_accum > 0 && raw < 0) ||
+        (detent_accum < 0 && raw > 0) )
+    {
+        detent_accum = 0;
+    }
+
+    detent_accum += raw;
+
+    while( detent_accum >= 4 )
+    {
+        val++;
+        detent_accum -= 4;
+    }
+
+    while( detent_accum <= -4 )
+    {
+        val--;
+        detent_accum += 4;
+    }
+
+    return val;
 }
 
 

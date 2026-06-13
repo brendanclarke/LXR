@@ -31,8 +31,8 @@ typedef struct SeqEndpointRestoreRequestStruct
    uint8_t reportGlobalMorph;
 } SeqEndpointRestoreRequest;
 
-volatile uint8_t seq_tmpKitHandshakeReady = 0;
-volatile uint8_t seq_tmpKitHandshakeAck = 0;
+volatile uint8_t preset_tmpKitHandshakeReady = 0;
+volatile uint8_t preset_tmpKitHandshakeAck = 0;
 
 static uint8_t seq_tmpKitPushParamsToFrontEnabled = 1;
 static SeqEndpointRestoreRequest seq_endpointRestoreQueue[SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH];
@@ -313,8 +313,8 @@ void seq_serviceEndpointRestore(void)
          if(!seq_endpointRestorePopRequest())
             return;
 
-         seq_tmpKitHandshakeReady = 0;
-         seq_tmpKitHandshakeAck = 0;
+         preset_tmpKitHandshakeReady = 0;
+         preset_tmpKitHandshakeAck = 0;
          uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_BEGIN);
          uart_sendFrontpanelPriorityByteWait(0);
          uart_sendFrontpanelPriorityByteWait(0);
@@ -323,7 +323,7 @@ void seq_serviceEndpointRestore(void)
          return;
 
       case SEQ_ENDPOINT_RESTORE_PHASE_WAIT_READY:
-         if(seq_tmpKitHandshakeReady)
+         if(preset_tmpKitHandshakeReady)
          {
             seq_endpointRestoreParamCursor = 0;
             seq_endpointRestoreVoiceCursor = 0;
@@ -354,7 +354,7 @@ void seq_serviceEndpointRestore(void)
          if(seq_endpointRestoreSendNext(1))
             return;
 
-         seq_tmpKitHandshakeAck = 0;
+         preset_tmpKitHandshakeAck = 0;
          if(seq_endpointRestoreCurrent.reportGlobalMorph)
             seq_pushGlobalMorphToFront(seq_endpointRestoreCurrent.kit);
          uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
@@ -365,7 +365,7 @@ void seq_serviceEndpointRestore(void)
          return;
 
       case SEQ_ENDPOINT_RESTORE_PHASE_WAIT_ACK:
-         if(seq_tmpKitHandshakeAck)
+         if(preset_tmpKitHandshakeAck)
          {
             seq_endpointRestoreClearCurrent();
          }

@@ -171,8 +171,8 @@ sei();
 		dout_updateOutputs();
 		
 		uart_checkAndParse();
-		//get the encoder values
-		const int8_t encoderValue = encode_stableRead4();  
+		// get the encoder values
+		const int8_t encoderValue = encode_stableRead4();
 		const uint8_t button = encode_readButton();
 		
 		//update the menu according to the encoder values
@@ -185,7 +185,7 @@ sei();
 		uart_checkAndParse();
 		uart_checkAndParse();
 		
-      midiMsg_checkLongOps(); // resolve any long MIDI ops that need to happen
+      	midiMsg_checkLongOps(); // resolve any long MIDI ops that need to happen
                               // for now, these include automated bank and pattern
                               // change, and midi morph
       

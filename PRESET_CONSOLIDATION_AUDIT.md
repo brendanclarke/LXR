@@ -1,7 +1,7 @@
 # PRESET_CONSOLIDATION_AUDIT
 
 Date: 2026-06-13
-Status: Phase 7 implementation landed in Session 014; the shared cache module is gone and Phase 8 now owns the remaining `/Preset/` consolidation work
+Status: Phase 7 implementation landed in Session 014; Phase 8 landed in Session 015; Phase 9 now covers Preset-owned prefix normalization, and the follow-on Preset extraction work is being detailed here while the UART/MIDI split tracking now lives in `MIDI_UART_SPLIT_AUDIT.md`
 
 ## Purpose
 
@@ -39,8 +39,14 @@ The current phase order is therefore:
   structures.
 - Phase 8: perform the remaining `/Preset/` consolidation work that the current
   consolidation audit already identified, including moving `ParameterArray`
-  into `/Preset/`.
-- Phase 9 and beyond: protocol and parser cleanup outside `/Preset/`.
+  into `/Preset/` and deciding whether `ParameterMap`, `ParameterIngress`, and
+  `TempPlaybackSwitch` collapse into the same core or remain thin helpers.
+- Phase 9: normalize the Preset-owned public surface so exported functions and
+  variables in `/Preset/` use `preset_`, not `seq_`, and catalog the remaining
+  compatibility holdovers that still need a wider cutover.
+- Phase 10 and beyond: continue extracting live parameter, modulation, and
+  automation application out of `Sequencer`, then finish the remaining
+  Preset-owned state accessors and compatibility cleanup.
 
 ## Why `PresetLoadCache` Is The First Target
 
@@ -392,6 +398,62 @@ shape is:
   main preset routing API;
 - separate async workers only where they are actually justified.
 
+### Phase 8 coordination plan
+
+Phase 8 should be treated as one coordinated structural pass, not as a loose
+collection of file moves.
+
+Recommended order:
+
+1. Move `ParameterArray.c/h` under `/Preset/` first.
+   - This is the widest include fan-out and the clearest ownership fix.
+   - Keep the public include path stable during the move if a compatibility
+     shim is needed.
+   - Do not combine the move with a semantic rename unless the old include path
+     can stay as a bridge for one transition step.
+2. Decide whether `ParameterMap.c/h` stays public or becomes an internal
+   implementation detail of the consolidated preset core.
+   - If it stays visible, it should be a thin helper, not a second subsystem.
+   - If it collapses, the parameter-classification API should live next to the
+     consolidated preset state instead of as a free-standing mapping layer.
+3. Collapse `ParameterIngress.c/h` around a single routing entry point.
+   - Keep live-vs-restore routing, normal-vs-temp storage selection, and
+     automation-sideband refresh in one place.
+   - Avoid splitting the ownership rules between the new core and a second
+     router.
+4. Narrow or fold `TempPlaybackSwitch.c/h`.
+   - This module already carries the boundary state machine; the open question
+     is whether that state belongs in the core or in a tiny helper.
+   - If it survives, it should own one explicit state struct rather than a pile
+     of exported flags.
+5. Replace the remaining flat `seq_*` transition flags with an explicit
+   boundary/state object.
+   - The state object should capture pending pattern selection, per-track
+     pending selection, load gating, and ack/execution state together.
+   - Keep the machine observable through query/update helpers, not through a
+     scatter of globals.
+6. Leave `MorphEngine.c/h` and `EndpointRestore.c/h` separate.
+   - Their async ownership, queueing, and timing make them different from the
+     storage/routing collapse work.
+   - Do not broaden Phase 8 into worker rewrites.
+
+### Session 015 Result
+
+Session 015 completed the first structural slices of Phase 8:
+
+- `ParameterArray.c/.h` is now the preset-owned home for the parameter table
+  and the voice/selector classification helpers.
+- `ParameterMap.c` and `ParameterMap.h` are both gone.
+- `mainboard/LxrStm32/src/MIDI/ParameterArray.h` is gone as well, so the old
+  MIDI-side include path no longer exists.
+- `TempPlaybackSwitch` now stores the boundary flags in one explicit state
+  object and keeps the legacy names only as macros.
+- The STM32 build is green after a clean rebuild.
+
+The remaining Phase 8 judgment call is whether `ParameterIngress` wants one
+more narrowing pass or whether the current router shape is already the right
+stopping point for this phase.
+
 ### What Phase 8 should absorb
 
 #### `ParameterArray.c/h`
@@ -406,6 +468,27 @@ Why:
 
 This is one of the clearest moves in the consolidation pass.
 
+Coordination notes:
+
+- The include fan-out currently reaches `main.c`, `sequencer.c`,
+  `uARTFrontSYX/frontPanelParser.c`, `DSPAudio/modulationNode.h`,
+  `DSPAudio/DrumVoice.c`, and `Preset/KitState.h`.
+- Because of that fan-out, this move likely needs either a compatibility
+  header or a very small include-path bridge while the call sites are updated.
+- Keep the move semantically neutral; do not mix it with a behavior change or
+  a data-model rename in the same patch if that can be avoided.
+
+Session 015 progress:
+
+- `mainboard/LxrStm32/src/Preset/ParameterArray.c/.h` now owns the parameter
+  table and the parameter-classification helpers.
+- `mainboard/LxrStm32/src/Preset/ParameterMap.c` has been deleted.
+- `mainboard/LxrStm32/src/Preset/ParameterMap.h` has been deleted as well, so
+  the old helper module no longer survives as a compatibility shell.
+- `mainboard/LxrStm32/src/MIDI/ParameterArray.h` has been deleted, and the
+  callers that were touched now include `Preset/ParameterArray.h` directly.
+- The deprecation path has therefore completed for the parameter-table move.
+
 #### `ParameterMap.c/h`
 
 Fold the parameter classification helpers into the consolidated preset core, or
@@ -414,6 +497,25 @@ manageable.
 
 The key point is that `ParameterMap` is metadata for the same ownership domain
 as `KitState`; it should not remain a separate conceptual island.
+
+Coordination notes:
+
+- `ParameterMap` is already consumed by `MorphEngine`, `ParameterIngress`, and
+  the compatibility wrappers in `sequencer.h`, so the public shape is already
+  mostly about preset ownership, not transport.
+- The preferred outcome is to make the mapping logic an internal detail of the
+  new core, or at least a very thin helper that does not look like a separate
+  subsystem.
+- Do not duplicate the canonical selector and voice classification logic in
+  more than one file during the transition.
+
+Implementation status:
+
+- The helper implementations now live in `Preset/ParameterArray.c`.
+- `ParameterMap.h` no longer exists.
+- The next cleanup step is to decide whether any further `ParameterIngress`
+  narrowing is still worth carving out in Phase 8, or whether the current
+  router shape is already the right stopping point.
 
 #### `ParameterIngress.c/h`
 
@@ -426,6 +528,15 @@ This should be the one place that decides:
 - whether it lands in normal or temp storage;
 - whether automation selector bytes should refresh the matching sideband
   structures.
+
+Coordination notes:
+
+- This is the policy boundary that keeps live-vs-restore and normal-vs-temp
+  behavior coherent.
+- If this module survives, it should be a tiny routing layer around the core,
+  not a second policy engine.
+- Keep the automation sideband refresh close to the route decision so raw
+  selector bytes and resolved endpoint structures do not drift apart.
 
 #### `TempPlaybackSwitch.c/h`
 
@@ -442,6 +553,31 @@ Phase 8 should decide one of two outcomes:
 
 The important thing is that it should not remain a second large state-machine
 module beside the new consolidated core.
+
+Coordination notes:
+
+- The current exported globals are already acting like a state-machine
+  boundary, so the first goal is to stop exposing them as a loose pile of
+  externs.
+- If the module survives, it should own a single explicit state object, with
+  setters and getters layered on top of it.
+- The fields that should travel together are the selection state
+  (`seq_pendingPattern`, `seq_perTrackPendingPattern[]`), the transition state
+  (`seq_newPatternAvailable`, `seq_newPatternExecuted`), the load gate
+  (`seq_loadPendingFlag`, `seq_loadSeqNow`), and the temp-boundary ack
+  (`seq_tmpBoundaryPatternSwitchAck`).
+- The parser currently touches some of those flags directly, so the call sites
+  will need to move to the new API in the same pass that introduces the state
+  object.
+
+Implementation status:
+
+- The temp-switch booleans now live inside one
+  `SeqTempPlaybackSwitchState` struct.
+- The legacy `seq_*` names remain as macros for compatibility, but the actual
+  storage is no longer a pile of stand-alone globals.
+- `TempPlaybackSwitch.c` and the parser/sequencer callers now compile against
+  the single state object without changing the runtime behavior.
 
 ### What should stay separate
 
@@ -465,6 +601,88 @@ Reason:
 - it owns a queue and handshake state machine;
 - it is not part of the storage model itself.
 
+### Structural collapse candidates
+
+The main consolidation candidates in Phase 8 are not just file moves; they are
+also state-shape reductions.
+
+#### Candidate 1: `ParameterArray` as a true preset-owned storage table
+
+Likely outcome:
+
+- move the file into `/Preset/`;
+- keep a compatibility include if the fan-out is too broad to update in one
+  step;
+- consider a later rename only after the include churn has settled.
+
+Why this matters:
+
+- it removes the last obvious "MIDI directory" ownership mismatch from the
+  preset data model;
+- it makes the storage table line up with the other preset-owned structures;
+- it reduces the risk of future code recreating a second parameter table in a
+  different subsystem.
+
+#### Candidate 2: `ParameterMap` as an internal detail of the core
+
+Likely outcome:
+
+- collapse the helper into the new core, or keep it as a private helper file
+  that is not conceptually separate;
+- avoid a public header unless the remaining call sites genuinely need one.
+
+Why this matters:
+
+- the mapping logic is pure metadata for the same preset ownership domain as
+  `KitState`;
+- a separate public module would keep the conceptual split alive even after the
+  file move work is done.
+
+#### Candidate 3: `ParameterIngress` as the canonical routing entry point
+
+Likely outcome:
+
+- keep one routing API that decides live vs restore and normal vs temp
+  placement;
+- if the core absorbs it, the ingress module should disappear rather than
+  becoming a second router.
+
+Why this matters:
+
+- this is the policy boundary that keeps parameter writes coherent;
+- duplicate ingress policy would make the normal/temp and live/restore rules
+  drift apart again.
+
+#### Candidate 4: `TempPlaybackSwitch` as a compact boundary state object
+
+Likely outcome:
+
+- either fold the module into the core or reduce it to a tiny helper around a
+  single explicit state object;
+- replace direct extern use with query/update functions.
+
+Why this matters:
+
+- the module is already carrying pattern-boundary and source-selection logic;
+- the current global flags are the most obvious place where a single state
+  object would remove ambiguity.
+
+#### Candidate 5: the remaining `seq_*` transition globals as one explicit machine
+
+Likely outcome:
+
+- group the transition flags into one state struct rather than several related
+  booleans;
+- expose the state through helpers so the transition rules stay visible and
+  testable.
+
+Why this matters:
+
+- it reduces the chance that one caller updates half the transition state and
+  leaves the rest stale;
+- it makes the phase boundary between selection, execution, and acknowledgement
+  explicit instead of implicit.
+
 ### What Phase 8 should remove
 
 Phase 8 should actively reduce the number of flat globals and compatibility
@@ -480,6 +698,8 @@ Good candidates for structification or collapse:
 - the remaining `seq_*` pattern/session flags that still encode one small
   state machine as a pile of booleans
 - the remaining flat snapshot mirrors in the old load/session logic
+- direct external writes to the temp-boundary transition flags where a setter
+  would make the ownership clearer
 
 The exact reduction can be staged, but the goal is explicit state, not more
 alias variables.
@@ -489,67 +709,206 @@ alias variables.
 - `ParameterArray.c/h` lives under `/Preset/`.
 - The remaining preset storage and routing code is centralized into one core
   API.
+- `ParameterMap` is gone rather than merely hidden behind a compatibility
+  shell.
+- `TempPlaybackSwitch` now exposes one explicit state object instead of a pile
+  of exported globals.
+- `ParameterIngress` is the remaining narrow router candidate, and its final
+  shape can be judged independently now that the other consolidation slices are
+  in place.
 - The loader/session redundancy from Phase 7 is gone, so the remaining preset
   files are either the core API or true async workers.
 - `TempPlaybackSwitch` is no longer a second overlapping state machine unless
   a very narrow boundary helper is still justified.
 
-## Phase 9 And Beyond: Protocol And Parser Cleanup
+## Phase 9: Normalize Preset-Owned Prefixes
 
-Once `/Preset/` is consolidated, the remaining cleanup outside it can happen in
-smaller, easier-to-review steps.
+Phase 9 is the naming cleanup pass that follows the structural Phase 8 work.
+It exists to catalog the remaining stale `seq_` / `Seq` ownership signals in
+`/Preset/` and remove the ones that are clearly just internal state names, while
+leaving compatibility entry points intact until the broader API cutover is
+ready. The rule for exported Preset API is now stricter: public functions and
+variables from `/Preset/` should be `preset_`-prefixed, not `seq_`-prefixed.
 
-### `uARTFrontSYX` split
+### Goal
 
-The current `mainboard/LxrStm32/src/uARTFrontSYX/` layout should eventually be
-reshaped into six files total:
+Make the mutable Preset-owned state read as Preset-owned state, not as state
+that Sequencer still controls directly.
 
-- `Uart.c`
-- `Uart.h`
-- `frontPanelReceivingProtocol.c`
-- `frontPanelReceivingProtocol.h`
-- `frontPanelSendingProtocol.c`
-- `frontPanelSendingProtocol.h`
+### What belongs here
 
-This means the current three protocol-facing files:
+- Rename the explicit state objects and mailboxes that are already Preset-owned
+  but still carry `seq_` names.
+- Keep the public compatibility wrappers stable when they are still needed by
+  the old call graph.
+- Catalog the remaining `Seq`-prefixed type names and the larger restore-queue
+  mirror separately so they can be removed in a deliberate follow-up pass.
 
-- `frontPanelParser.c`
-- `frontPanelParser.h`
-- `FrontPanelProtocol.h`
+### First cleanup slice
 
-should be eliminated or replaced as part of the split.
+- `TempPlaybackSwitch` should expose a `preset_`-named storage object for the
+  boundary flags while retaining the legacy `seq_*` aliases only as temporary
+  compatibility macros.
+- `EndpointRestore` should rename the handshake mailboxes and the other
+  clearly-owned internal state variables away from `seq_` so the ownership
+  boundary is visible in the storage names themselves.
+- Keep the broader restore-queue/cursor compatibility island for the follow-up
+  inventory unless it can be collapsed without widening the API surface.
 
-The point of this later phase is to make the send/receive split obvious in the
-filesystem and in the code paths, not to keep the parser doing everything.
+### Exit criteria
 
-### MIDI parser split
+- The obvious Preset-owned mutable state no longer advertises Sequencer as the
+  owner through its storage names.
+- The remaining `seq_` / `Seq` references are either compatibility wrappers or
+  explicitly cataloged holdovers for the next cleanup pass.
 
-Keep general MIDI processing in `MidiParser.c`, but add the channel/global
-split around it:
+### Session 015 prefix cleanup note
 
-- `ChannelMidiParser.c`
-- `ChannelMidiParser.h`
-- `GlobalMidiParser.c`
-- `GlobalMidiParser.h`
-
-These should mostly be stubbed at first.
-
-Do not redirect the call graph to them too early.
-
-The intent is:
-
-- `MidiParser.c` continues to own the broad MIDI stream handling;
-- channel-specific handling can eventually move into the channel parser;
-- global-channel handling can eventually move into the global parser;
-- the first implementation pass should preserve current behavior and only make
-  the ownership split visible.
+- `TempPlaybackSwitch` now stores its boundary flags in
+  `PresetTempPlaybackSwitchState preset_tempPlaybackSwitchState`, so the owned
+  state object no longer carries a sequencer-prefixed storage name.
+- The AVR restore handshake mailboxes now live as
+  `preset_tmpKitHandshakeReady` and `preset_tmpKitHandshakeAck`.
+- The broader restore-queue/cursor prefix scrub remains cataloged for the
+  follow-up Phase 9 inventory pass so we can decide whether to collapse it
+  separately from the live compatibility mailboxes.
+- The remaining `seq_tmpKitPushParamsToFrontEnabled` and
+  `seq_endpointRestore*` queue/cursor names are still part of that inventory
+  set and were intentionally left for the wider compatibility review.
 
 ### Phase 9 exit criteria
 
-- `uARTFrontSYX` has a visible send/receive split in the file layout.
-- The MIDI parser split exists without forcing behavior changes too early.
-- The `/Preset/` refactor is stable enough that protocol cleanup no longer has
-  to carry the loader/session redesign at the same time.
+- The obvious Preset-owned mutable state no longer advertises Sequencer as the
+  owner through its storage names.
+- The exported Preset API uses `preset_` names, not `seq_` names.
+- Any remaining `seq_` / `Seq` references are either private helpers or
+  explicitly cataloged holdovers for the next cleanup pass.
+
+## Phase 10: Extract Live Apply Helpers From `Sequencer`
+
+Phase 10 should move the non-pattern-read parameter, modulation, and
+automation-application helpers out of `Sequencer` and into `/Preset/`.
+
+The best-fit home for the functions around `sequencer.c:200-280` is probably a
+new file pair named `mainboard/LxrStm32/src/Preset/PresetAutomationApply.c`
+and `.h`.
+
+### Primary candidates
+
+- `seq_applyVoiceAutomationTargets()`
+- `seq_applySharedAutomationTargets()`
+- `seq_applyNormalEndpointAutomationTargets()`
+
+These functions apply Preset-owned automation targets to modulation nodes and
+live endpoints. They are not part of the step-pattern reader, so they are good
+fit for a Preset-owned live-apply module.
+
+### Secondary candidates
+
+- `seq_applyVoiceSource()`
+- `seq_markVoiceSourceTarget()`
+- `seq_allVoiceSourcesUseTmp()`
+- `seq_allVoiceSourcesUseNormal()`
+- `seq_updateVoiceSourcesForPatternChange()`
+- `seq_pushEndpointUpdateForVoiceSourceChange()`
+- `seq_maybePushKitEndpointsToFrontWithGlobalMorphReport()`
+- `sequencer_sendVMorph()`
+
+These helpers sit on the boundary between live preset ownership, voice-source
+selection, and endpoint restore synchronization. If they do not belong in the
+same file as the automation apply helpers, a companion module named
+`PresetVoiceRouting.c/.h` would be a sensible split point.
+
+### Keep in Sequencer
+
+- `seq_parseAutomationNodes()` should stay in `Sequencer` because it reads step
+  automation out of the pattern data.
+- The live-apply module should only consume the already-read values and
+  Preset-owned targets.
+
+### Phase 10 goals
+
+- Remove the `seq_`-named Preset application helpers from `sequencer.c`.
+- Re-home the exported API in `/Preset/` with `preset_` prefixes.
+- Keep the pattern reader in `Sequencer` and move the live application logic
+  next to the Preset-owned state that it mutates.
+
+## Phase 11: Rename Remaining Preset Exports To `preset_`
+
+Phase 11 should finish the public API rename inside `/Preset/`.
+
+This phase is the hard line for the naming rule:
+
+- exported functions in `/Preset/` must be `preset_`-prefixed;
+- exported variables in `/Preset/` must be `preset_`-prefixed;
+- compatibility names may exist only as private transition glue while the
+  callers are being migrated.
+
+### Scope
+
+- `TempPlaybackSwitch`
+- `EndpointRestore`
+- any new live-apply module introduced by Phase 10
+- any other `/Preset/` header that still exposes `seq_` symbols
+
+### Example holdouts
+
+- `seq_setTmpKitActive()`
+- `seq_trackPatternUsesTmp()`
+- `seq_synthVoiceUsesTmpFromTrackPatterns()`
+- `seq_serviceEndpointRestore()`
+- `seq_endpointRestoreBusy()`
+- `seq_pushEndpointUpdateForVoiceSourceChange()`
+- `seq_maybePushKitEndpointsToFrontWithGlobalMorphReport()`
+- `seq_consumeTmpBoundaryPatternSwitchAck()`
+- `seq_tmpKitPushParamsToFrontEnabled`
+- `seq_endpointRestoreQueue*`
+
+### Exit criteria
+
+- No exported `/Preset/` symbol uses a `seq_` prefix.
+- Any remaining `seq_` symbols in `/Preset/` are internal-only helpers or
+  already scheduled for deletion.
+
+## Phase 12: Extract Remaining Preset State Accessors
+
+Phase 12 should move the remaining state-lookup helpers that still live inside
+`Sequencer` but are really just Preset-owned accessors.
+
+Good candidates observed in `sequencer.c` include:
+
+- `seq_liveStepForTrack()`
+- `seq_liveLengthRotateForTrack()`
+- `seq_liveMainStepActive()`
+- any other helper that only wraps `seq_getStepPtr()`,
+  `seq_getLengthRotatePtr()`, or `seq_getMainSteps()` for the current preset
+  image
+
+The best-fit filename for that extraction would be
+`mainboard/LxrStm32/src/Preset/PresetPatternAccess.c/.h`.
+
+### Why this phase exists
+
+- It keeps pattern-reading and pattern-data ownership separate from the timing
+  engine.
+- It gives Preset a clear home for lookups that are really current-image state
+  access, not sequencer policy.
+- It reduces the amount of current-image knowledge still embedded in
+  `sequencer.c`.
+
+### Exit criteria
+
+- Sequencer no longer carries Preset-state getter helpers unless they truly
+  belong to timing logic.
+- Preset-owned current-image lookups live in `/Preset/` with `preset_`
+  prefixes.
+
+## Protocol Split Tracking
+
+The front-panel UART / MIDI parser split work is tracked in
+[MIDI_UART_SPLIT_AUDIT.md](MIDI_UART_SPLIT_AUDIT.md). That file now owns the
+send/receive and MIDI channel/global split planning so this audit can stay
+focused on Preset ownership and naming.
 
 ## Review Notes
 
@@ -564,6 +923,8 @@ Before implementation, the main questions to keep in mind are:
    versus parameter+pattern loads?
 4. Should `ParameterArray` be renamed as part of the move, for example to make
    it read more like preset metadata than a MIDI utility?
+5. Should the remaining `seq_*` transition flags collapse into one explicit
+   state object before or after the `ParameterArray` move?
 
 ## Summary
 
@@ -576,9 +937,21 @@ The consolidation strategy is now:
   runtime callers over to direct owner reads and deleted the shared cache
   module; the remaining work is to retire the parser-local bridge.
 - Phase 8: consolidate the remaining `/Preset/` files into one core ownership
-  layer plus the true async workers, including `ParameterArray` into `/Preset/`.
-- Phase 9 and beyond: split the front-panel protocol and MIDI parser into
-  cleaner send/receive and channel/global layers.
+  layer plus the true async workers, with an explicit pass to move
+  `ParameterArray`, internalize or thin out `ParameterMap`, narrow or fold
+  `ParameterIngress` and `TempPlaybackSwitch`, and collapse the remaining flat
+  transition flags. Session 015 has already landed the first slice of that
+  work by moving `ParameterArray` into `/Preset/`, deleting the old
+  `ParameterMap` split, and folding the temp-switch flags into a single state
+  object.
+- Phase 9: normalize the Preset-owned public surface and clear the remaining
+  exported `seq_` names from `/Preset/`.
+- Phase 10: extract the live-apply helpers out of `Sequencer` into Preset.
+- Phase 11: rename the remaining Preset exports to `preset_`.
+- Phase 12: move the remaining Preset-state accessor helpers out of
+  `Sequencer`.
+- Protocol and parser split planning now lives in
+  `MIDI_UART_SPLIT_AUDIT.md`.
 
 That is the cleanest path to the single consolidated preset API you want
 without trying to solve every cleanup problem at once.

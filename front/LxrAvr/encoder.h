@@ -1,7 +1,7 @@
 /************************************************************************/
 /*                                                                      */
 /*                      Reading rotary encoder                          */
-/*                      one, two and four step encoders supported       */
+/*                      one and four step encoders supported            */
 /*                                                                      */
 /*              Author: Peter Dannegger                                 */
 /*              Modified: Julian Schmidt                                 */
@@ -33,35 +33,29 @@
 //------------------------------------------------------------------------
 void encode_init( void );
 
-// Timer 0 CTC ISR — encoder polling (legacy mode) and button debounce
+// Timer 0 CTC ISR — button debounce in both modes
 ISR( TIMER0_COMPA_vect );
 
 #if ENC_USE_STABLE_DRIVER == 1
-// PCINT1 ISR — edge-triggered quadrature decode with time-gated debounce
+// Timer 1 CTC ISR — quadrature decode using the same polling logic as
+// legacy mode, but driven from Timer 1 instead of Timer 0.
 // Active only when ENC_USE_STABLE_DRIVER == 1.
-// Handles PC0 (PCINT8) and PC1 (PCINT9). PC2 (button) is excluded from
-// PCMSK1 and filtered in the ISR; button events do not produce encoder counts.
-ISR( PCINT1_vect );
+ISR( TIMER1_COMPA_vect );
 #endif
 
 // Stable read functions.
 // encode_stableRead4: one count per four Gray-code transitions (one full
 //   quadrature cycle). Use for encoders where 1 detent = 4 state changes.
-// encode_stableRead2: one count per two transitions.
 // encode_stableRead1: one count per transition.
-// In legacy mode (ENC_USE_STABLE_DRIVER == 0) the behaviour of all three
-// is identical to the original encode_read* functions.
+// In both driver modes the behaviour matches the original encode_read*
+// functions; the only difference is which timer feeds enc_delta.
 int8_t encode_stableRead1( void );
-int8_t encode_stableRead2( void );
 int8_t encode_stableRead4( void );
 
 // Deprecated wrappers — retained for backward compatibility only.
 // New code should call encode_stableRead*() directly.
 static inline __attribute__((deprecated("use encode_stableRead1")))
 int8_t encode_read1(void) { return encode_stableRead1(); }
-
-static inline __attribute__((deprecated("use encode_stableRead2")))
-int8_t encode_read2(void) { return encode_stableRead2(); }
 
 static inline __attribute__((deprecated("use encode_stableRead4")))
 int8_t encode_read4(void) { return encode_stableRead4(); }

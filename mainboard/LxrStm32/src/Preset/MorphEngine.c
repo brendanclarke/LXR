@@ -8,7 +8,7 @@
 
 #include "Preset/MorphEngine.h"
 #include "Preset/KitState.h"
-#include "Preset/ParameterMap.h"
+#include "Preset/ParameterArray.h"
 #include "Preset/ParameterIngress.h"
 #include "Sequencer/sequencer.h"
 #include "DSPAudio/modulationNode.h"

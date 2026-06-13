@@ -39,7 +39,7 @@
 #include "MidiMessages.h"
 #include "FrontPanelProtocol.h"
 #include "MidiParser.h"
-#include "ParameterArray.h"
+#include "Preset/ParameterArray.h"
 #include "sequencer.h"
 #include "PatternData.h"
 #include "Preset/ParameterIngress.h"
@@ -1477,11 +1477,11 @@ void frontParser_handleMidiMessage(void)
    switch(frontParser_midiMsg.status)
    {
       case PARAM_RESTORE_READY:
-         seq_tmpKitHandshakeReady = 1;
+         preset_tmpKitHandshakeReady = 1;
          return;
 
       case PARAM_RESTORE_ACK:
-         seq_tmpKitHandshakeAck = 1;
+         preset_tmpKitHandshakeAck = 1;
          return;
 
       default:

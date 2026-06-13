@@ -11,7 +11,7 @@
 
 #include "stm32f4xx.h"
 #include "Preset/KitState.h"
-#include "Preset/ParameterMap.h"
+#include "Preset/ParameterArray.h"
 
 /* These routing flags tell Preset whether incoming raw bytes should land in
    the current image or the normal-kit endpoint, and whether automation sideband

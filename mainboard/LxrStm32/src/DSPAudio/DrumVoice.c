@@ -40,7 +40,7 @@
 #include "math.h"
 #include "squareRootLut.h"
 #include "BufferTools.h"
-#include "ParameterArray.h"
+#include "Preset/ParameterArray.h"
 #include "modulationNode.h"
 #include "TriggerOut.h"
 
@@ -294,5 +294,4 @@ void calcDrumVoiceSyncBlock(const uint8_t voiceNr, int16_t* buf, const uint8_t s
 	bufferTool_addGain(buf,voiceArray[voiceNr].vol,size);
 }
 //---------------------------------------------------
-
 

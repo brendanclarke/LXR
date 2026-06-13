@@ -38,7 +38,7 @@
 #define VELOCITYMODULATION_H_
 
 #include "stm32f4xx.h"
-#include "ParameterArray.h"
+#include "Preset/ParameterArray.h"
 
 typedef struct ModulatorStruct
 {

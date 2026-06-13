@@ -23,6 +23,7 @@
 | 012 | 2026-06-12 | local repo, Phase 5 complete | refactor phase 5: moved front-panel UART/protocol layer into uARTFrontSYX, split opcode namespace into FrontPanelProtocol.h, smoke-tested .ALL/temp-switch flow |
 | 013 | 2026-06-13 | local repo, session 013 closeout | Phase 6 cleanup/naming closeout, Phase 7+ consolidation audit, comms/temp spec reshaping, and handoff prep for session 014 |
 | 014 | 2026-06-13 | local repo, Phase 7 shared-module removal | Sequencer/MIDI now read live owner state directly, the background-load finalizer stays on TempPlaybackSwitch, and the remaining parser/session bridge now lives inside frontPanelParser.c |
+| 015 | 2026-06-13 | local repo, AVR encoder Timer1 compare cutover | AVR front-panel encoder now uses Timer1 compare polling; the dead 2-step API is gone, and the hardware re-test passed though reversals remain rough |
 
 ---
 
@@ -84,6 +85,10 @@ Session 013 closed out the Phase 6 cleanup/naming pass and then turned the refac
 Session 014 finished the Phase 7 shared-module removal. `Sequencer`, `MidiParser`, and `MidiVoiceControl` now read live voice, pattern, and morph state directly from the owning modules, `presetLoad_finalizeTempBackgroundLoad()` stays on the `TempPlaybackSwitch`-facing interface so `sequencer.c` no longer needs the old cache header, and `PresetLoadCache.c/.h` were deleted in favor of the parser-local transitional bridge inside `frontPanelParser.c`. The code still has one remaining parser-local holdover to retire in the follow-on consolidation work, but the shared cache module itself is gone and the build is green.
 - **Find here**: direct owner reads, live pattern/morph cutover, `TempPlaybackSwitch` finalizer interface, parser-local transitional bridge, shared cache deletion, build verified
 
+### 015 — AVR Encoder Timer1 Compare Cutover + API Pruning (2026-06-13)
+Session 015 closed the AVR front-panel encoder follow-up by replacing the fragile stable-driver experiment with Timer1 compare polling, removing the dead 2-step encoder surface, and making the 4-step reader direction-aware again. The user re-tested the hardware, confirmed it works, and accepted the remaining rough feel on reversals and fast spins so the encoder work could be parked for now.
+- **Find here**: Timer1 compare encoder path, dead 2-step API removal, direction-aware detent accumulator, hardware re-test, log/memory refresh
+
 
 ---
 
@@ -116,6 +121,7 @@ Session 014 finished the Phase 7 shared-module removal. `Sequencer`, `MidiParser
 | Front-panel transport and parser code now live in uARTFrontSYX; opcode namespace is isolated in FrontPanelProtocol.h behind a compatibility include | 012 |
 | Phase 6 cleanup/naming is complete; the next refactor step is driven by PRESET_CONSOLIDATION_AUDIT.md and the old planning docs are no longer canonical | 013 |
 | Session 014 cut Sequencer/MIDI off the shared cache header, deleted the shared PresetLoadCache module, and left the remaining parser/session bridge inside frontPanelParser.c | 014 |
+| AVR front-panel encoder now runs on Timer1 compare polling; the dead 2-step API is removed, and the result is usable but still rough on reversals/fast spins | 015 |
 
 
 ---

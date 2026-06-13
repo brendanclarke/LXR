@@ -55,7 +55,7 @@
 #include "HiHat.h"
 #include "Snare.h"
 #include "EuklidGenerator.h"
-#include "ParameterArray.h"
+#include "Preset/ParameterArray.h"
 #include "modulationNode.h"
 #include "SomGenerator.h"
 

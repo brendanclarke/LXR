@@ -7,17 +7,12 @@
  */
 
 #include "Preset/TempPlaybackSwitch.h"
+#include "Sequencer/sequencer.h"
 #include "Preset/KitState.h"
 #include "Preset/MorphEngine.h"
 #include "Preset/EndpointRestore.h"
 
-uint8_t seq_pendingPattern = 0;
-uint8_t seq_perTrackPendingPattern[NUM_TRACKS];
-uint8_t seq_newPatternAvailable = 0;
-uint8_t seq_newPatternExecuted = 0;
-uint8_t seq_loadPendingFlag = 0;
-uint8_t seq_loadSeqNow = 0;
-uint8_t seq_tmpBoundaryPatternSwitchAck = 0;
+PresetTempPlaybackSwitchState preset_tempPlaybackSwitchState = {0};
 
 /* Returns the active temp/normal source selector for a pattern number. The
    temp pattern is preserved as its own sentinel so pattern lookups stay fast

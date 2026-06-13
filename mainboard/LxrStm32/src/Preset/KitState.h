@@ -11,7 +11,7 @@
 
 #include "stm32f4xx.h"
 #include "globals.h"
-#include "ParameterArray.h"
+#include "Preset/ParameterArray.h"
 
 /* Preset keeps these image/source constants local so callers can describe the
    active sound-state image without reaching back into Sequencer internals.

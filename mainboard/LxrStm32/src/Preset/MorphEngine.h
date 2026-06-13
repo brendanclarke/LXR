@@ -11,7 +11,7 @@
 
 #include "stm32f4xx.h"
 #include "Preset/KitState.h"
-#include "Preset/ParameterMap.h"
+#include "Preset/ParameterArray.h"
 
 /* Trigger flag used to signal when a morph amount has changed and the
    interpolation worker should refresh the live DSP state. */

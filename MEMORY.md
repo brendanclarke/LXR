@@ -31,9 +31,12 @@ make firmware
 
 **Current status after Session 014 implementation pass (2026-06-13)**: `Sequencer`, `MidiParser`, and `MidiVoiceControl` now read live voice/pattern/morph state directly from the owner modules instead of the shared cache header. `presetLoad_finalizeTempBackgroundLoad()` is exposed through the `TempPlaybackSwitch` interface so `sequencer.c` no longer needs `PresetLoadCache.h` for the finalizer call. `PresetLoadCache.c/.h` were deleted, and the remaining parser/session bridge now lives inside `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c` as the transitional holdover. `make -C mainboard/LxrStm32 -j4 stm32` is green after the cutover, and the user re-test confirmed the Phase 7 cutover behaves correctly.
 
-**Current consolidation planning artifact**: `PRESET_CONSOLIDATION_AUDIT.md` now captures the Phase 7+ `/Preset/` cleanup pass. Session 014 removed the shared `PresetLoadCache` module and concentrated the remaining transitional bridge in `frontPanelParser.c`; Phase 8 handles the remaining `/Preset/` consolidation work, and Phase 9+ covers the protocol/parser cleanup outside `/Preset/`.
+**Current status after Session 015 implementation pass (2026-06-13)**: Phase 8 has started in code. `mainboard/LxrStm32/src/Preset/ParameterArray.c/.h` now owns the parameter table plus the classification helpers that used to live in `ParameterMap.c`, `ParameterMap.c` and `ParameterMap.h` have both been deleted, `mainboard/LxrStm32/src/MIDI/ParameterArray.h` has been deleted, and `TempPlaybackSwitch` now stores its transition flags inside one explicit state struct with legacy names preserved only as macros. Phase 9 now covers the prefix cleanup: the temp-switch state object is `preset_tempPlaybackSwitchState`, the AVR restore handshake mailboxes are `preset_tmpKitHandshakeReady` / `preset_tmpKitHandshakeAck`, and `make -C mainboard/LxrStm32 -j4 stm32` is green again after a clean rebuild. The remaining Phase 9 judgment call is whether `ParameterIngress` should stay as the final narrow router or be collapsed further in a later pass; Phase 10 will extract the live-apply helpers, Phase 11 will rename the remaining Preset exports to `preset_`, and Phase 12 will move the remaining Preset-state accessors out of `Sequencer`. The remaining stale `seq_` / `Seq` ownership names are being cataloged separately, starting with the restore queue/cursor block and the push-disable flag. Later in Session 015, the AVR front-panel encoder was reworked onto a Timer1 compare polling path, the dead 2-step API was removed, and the user re-tested it successfully even though reversals and fast spins still feel rough.
+
+**Current consolidation planning artifact**: `PRESET_CONSOLIDATION_AUDIT.md` now captures the Phase 7+ `/Preset/` cleanup pass. Session 014 removed the shared `PresetLoadCache` module and concentrated the remaining transitional bridge in `frontPanelParser.c`; Phase 8 handles the remaining `/Preset/` consolidation work, Phase 9+ stays on Preset naming and live-apply extraction, and `MIDI_UART_SPLIT_AUDIT.md` tracks the protocol/parser cleanup outside `/Preset/`.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/015_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/014_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/013_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/012_SESSION_HANDOFF_LOG.md`
@@ -45,11 +48,12 @@ Canonical current WIP docs:
 - `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/000_SESSION_INDEX.md`
 - `PRESET_CONSOLIDATION_AUDIT.md`
+- `MIDI_UART_SPLIT_AUDIT.md`
 - `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`
 - `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`
 
 Session 005 closeout / remaining follow-up:
-- Encoder phase is slightly unbalanced and may still need a small fix.
+- Encoder follow-up was revisited in Session 015; it now works on the Timer1 compare path, but reversals and fast spins still feel rough and should stay parked unless tuning is explicitly requested.
 - Automate the temp-pattern switch/background-load process if it remains desired.
 - Add global parameter switches for background loading if that work is revived.
 - Keep the temporary SEQ16 pattern keyhole in place until after the future preset/morph refactor.

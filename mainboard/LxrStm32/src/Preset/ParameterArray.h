@@ -423,6 +423,30 @@ enum ParamEnums
 
 #include "stm32f4xx.h"
 
+/* Phase 8 folds the parameter classification helpers into the preset-owned
+   parameter table module so ParameterMap can become compatibility-only. */
+enum
+{
+   PRESET_VOICE_PARAM_LENGTH = 37
+};
+
+/* Canonical voice ownership map used by the preset parameter classifiers. The
+   first dimension is intentionally left unsized so the table can stay aligned
+   with PRESET_SYNTH_VOICES without forcing this header to include KitState.h. */
+extern const uint16_t preset_voiceParamMask[][PRESET_VOICE_PARAM_LENGTH];
+
+uint16_t preset_canonicalParamFromVoiceMask(uint16_t param);
+uint8_t preset_firstVoiceForMask(uint8_t voiceMask);
+uint8_t preset_voiceMaskForParameter(uint16_t param);
+uint8_t preset_isVoiceParameter(uint16_t param);
+uint16_t preset_resolveAutomationTargetSelector(uint8_t selector);
+uint8_t preset_selectorForAutomationTargetDestination(uint16_t destination);
+uint8_t preset_voiceSelectorForAutomationTargetDestination(uint16_t destination,
+                                                           uint8_t fallback);
+uint8_t preset_isAutomationTargetSelectorParam(uint16_t param);
+uint8_t preset_isMorphAmountParam(uint16_t param);
+uint8_t preset_morphVoiceForParam(uint16_t param);
+
 typedef union
 {
 	float 	 flt;
