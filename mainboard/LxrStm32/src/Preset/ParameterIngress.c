@@ -1,8 +1,18 @@
 /*
  * ParameterIngress.c
  *
- * This file owns the raw endpoint-byte routing rules for live edits, normal
- * kit restores, and automation target sideband updates.
+ * Preset owns the raw ingress side of the boundary here. External parsers and
+ * front-panel handlers write into Preset through:
+ *   - preset_storeParameterIngress()
+ *   - preset_storeMorphParameterIngress()
+ *   - preset_storeLfoDestinationIngress()
+ *   - preset_storeVelocityDestinationIngress()
+ *   - preset_storeMacroDestinationIngress()
+ *
+ * This file also keeps the ingress-side automation target mirrors coherent via
+ * preset_updateInterpolatedAutomationTarget() and
+ * preset_updateFrontAndInterpolatedAutomationTargets(), and it owns the final
+ * DSP-facing parameter emit helper preset_applySingleParameterValue().
  */
 
 #include "Preset/ParameterIngress.h"
@@ -23,9 +33,9 @@ static uint8_t preset_automationIngressTarget = PRESET_AUTOMATION_INGRESS_NONE;
    `preset_automationIngressTarget`, then returns either the front-panel target,
    the morph-endpoint target, or zero when the current mode should not store
    automation data at all. */
-static SeqKitAutomationTargets* preset_getIngressAutomationTarget(void)
+static PresetAutomationTargets* preset_getIngressAutomationTarget(void)
 {
-   SeqKitState *kit = preset_getCurrentImageKitState();
+   PresetKitState *kit = preset_getCurrentImageKitState();
 
    if(preset_paramIngressTarget == PRESET_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
    {
@@ -50,7 +60,7 @@ static SeqKitAutomationTargets* preset_getIngressAutomationTarget(void)
    current write. This is separate from the front-panel target helper because
    the normal-kit restore path can intentionally suppress interpolated writes
    while still keeping the live front-panel copy coherent. */
-static SeqKitAutomationTargets* preset_getIngressInterpolatedAutomationTarget(void)
+static PresetAutomationTargets* preset_getIngressInterpolatedAutomationTarget(void)
 {
    if(preset_paramIngressTarget == PRESET_PARAM_INGRESS_NORMAL_KIT_ENDPOINT)
    {
@@ -66,7 +76,7 @@ static SeqKitAutomationTargets* preset_getIngressInterpolatedAutomationTarget(vo
 /* Updates only the interpolated automation target image for selector-bearing
    parameters. The helper uses `kit` as the destination owner and `selector` as
    the raw compact byte to decode into the destination fields. */
-void preset_updateInterpolatedAutomationTarget(SeqKitState *kit,
+void preset_updateInterpolatedAutomationTarget(PresetKitState *kit,
                                                uint16_t param,
                                                uint8_t selector)
 {
@@ -98,7 +108,7 @@ void preset_updateInterpolatedAutomationTarget(SeqKitState *kit,
    to be reflected in two storage images. The helper first refreshes the
    interpolated cache and then mirrors the resolved destination into the
    front-panel image. */
-void preset_updateFrontAndInterpolatedAutomationTargets(SeqKitState *kit,
+void preset_updateFrontAndInterpolatedAutomationTargets(PresetKitState *kit,
                                                         uint16_t param,
                                                         uint8_t selector)
 {
@@ -182,7 +192,7 @@ void preset_setAutomationIngressTarget(uint8_t target)
    the normal image, but it always writes only the raw morph endpoint array. */
 void preset_storeMorphParameterIngress(uint16_t param, uint8_t value)
 {
-   SeqKitState *kit;
+   PresetKitState *kit;
    uint8_t voiceMask;
 
    if(param >= END_OF_SOUND_PARAMETERS)
@@ -231,7 +241,7 @@ void preset_storeMorphParameterIngress(uint16_t param, uint8_t value)
    updates the front-panel plus interpolated automation targets. */
 void preset_storeParameterIngress(uint16_t param, uint8_t value)
 {
-   SeqKitState *kit;
+   PresetKitState *kit;
 
    if(param >= END_OF_SOUND_PARAMETERS)
       return;
@@ -286,10 +296,10 @@ void preset_storeParameterIngress(uint16_t param, uint8_t value)
    live edits and restore writes. */
 void preset_storeLfoDestinationIngress(uint8_t voice, uint16_t destination)
 {
-   SeqKitAutomationTargets *target = preset_getIngressAutomationTarget();
-   SeqKitAutomationTargets *interpolatedTarget =
+   PresetAutomationTargets *target = preset_getIngressAutomationTarget();
+   PresetAutomationTargets *interpolatedTarget =
       preset_getIngressInterpolatedAutomationTarget();
-   SeqKitState *kit = 0;
+   PresetKitState *kit = 0;
    uint16_t voiceParam;
    uint16_t targetParam;
    uint8_t selector;
@@ -366,8 +376,8 @@ void preset_storeLfoDestinationIngress(uint8_t voice, uint16_t destination)
    velocity destinations do not need the extra voice-selector bookkeeping. */
 void preset_storeVelocityDestinationIngress(uint8_t voice, uint16_t destination)
 {
-   SeqKitAutomationTargets *target = preset_getIngressAutomationTarget();
-   SeqKitAutomationTargets *interpolatedTarget =
+   PresetAutomationTargets *target = preset_getIngressAutomationTarget();
+   PresetAutomationTargets *interpolatedTarget =
       preset_getIngressInterpolatedAutomationTarget();
 
    if(!target || voice >= PRESET_SYNTH_VOICES)
@@ -389,8 +399,8 @@ void preset_storeVelocityDestinationIngress(uint8_t voice, uint16_t destination)
    edits and restore traffic. */
 void preset_storeMacroDestinationIngress(uint8_t destinationNr, uint16_t destination)
 {
-   SeqKitAutomationTargets *target = preset_getIngressAutomationTarget();
-   SeqKitAutomationTargets *interpolatedTarget =
+   PresetAutomationTargets *target = preset_getIngressAutomationTarget();
+   PresetAutomationTargets *interpolatedTarget =
       preset_getIngressInterpolatedAutomationTarget();
 
    if(!target || destinationNr >= 4)

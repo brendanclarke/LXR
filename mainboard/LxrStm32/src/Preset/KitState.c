@@ -2,7 +2,19 @@
  * KitState.c
  *
  * Preset owns the authoritative normal and temp kit images plus the minimal
- * voice-source bookkeeping required to choose which image is active.
+ * voice-source bookkeeping required to choose which image is active. The
+ * boundary helpers here are the state-selection side of the contract:
+ *   - preset_getCurrentImageKitState()
+ *   - preset_getMorphKitForImage()
+ *   - preset_isTmpKitActive()
+ *   - preset_setTmpKitActive()
+ *   - preset_getMorphImageForVoice()
+ *   - preset_getVoiceSourceState()
+ *   - preset_setVoiceSourceState()
+ *   - preset_captureTmpKitState()
+ *
+ * Those helpers are what Preset uses when live DSP emission or restore work
+ * needs to know which image owns the state change.
  */
 
 #include "Preset/KitState.h"
@@ -12,10 +24,10 @@
    playback and any current-image writes that route to the temp bank. Keeping it
    global here gives later phases a single authoritative location for temp
    state instead of scattering copies through sequencer-owned code. */
-SeqKitState preset_tmpKitState;
+PresetKitState preset_tmpKitState;
 /* The normal kit image holds the canonical preset data used by restore, file
    load, and the default live-edit path when temp playback is inactive. */
-SeqKitState preset_normalKitState;
+PresetKitState preset_normalKitState;
 /* Current-image ingress only needs a compact boolean, so this flag tells the
    routing helpers whether to pick the temp image or the normal image. */
 uint8_t preset_tmpKitActive = 0;
@@ -27,7 +39,7 @@ uint8_t preset_voiceSourceState[PRESET_SYNTH_VOICES];
    The function reads `preset_tmpKitActive` and then hands back either
    `preset_tmpKitState` or `preset_normalKitState`, which keeps callers out of
    the image-selection policy. */
-SeqKitState* preset_getCurrentImageKitState(void)
+PresetKitState* preset_getCurrentImageKitState(void)
 {
    return preset_tmpKitActive ? &preset_tmpKitState : &preset_normalKitState;
 }
@@ -35,7 +47,7 @@ SeqKitState* preset_getCurrentImageKitState(void)
 /* Maps the compact morph-image enum to the matching kit pointer so morph and
    restore code can address the right image without knowing the global symbol
    layout. */
-SeqKitState* preset_getMorphKitForImage(uint8_t image)
+PresetKitState* preset_getMorphKitForImage(uint8_t image)
 {
    return (image == PRESET_MORPH_IMAGE_TMP) ? &preset_tmpKitState
                                             : &preset_normalKitState;

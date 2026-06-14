@@ -1,7 +1,7 @@
 # PRESET_CONSOLIDATION_AUDIT
 
 Date: 2026-06-13
-Status: Phase 7 implementation landed in Session 014; Phase 8 completed and closed in Session 015; Phase 9 implementation landed in Session 017 and the remaining `seq_` surface is now compatibility-only, while the follow-on Preset extraction work is being detailed here and the UART/MIDI split tracking now lives in `MIDI_UART_SPLIT_AUDIT.md`
+Status: Phase 7 implementation landed in Session 014; Phase 8 completed and closed in Session 015; Phase 9 implementation landed in Session 017; Phase 10 implementation landed in Session 018; Phase 11 rename completion landed in Session 019; the remaining `seq_` surface is compatibility-only outside `/Preset/`, and the UART/MIDI split tracking now lives in `MIDI_UART_SPLIT_AUDIT.md`
 
 ## Purpose
 
@@ -864,80 +864,63 @@ Session 017 completed the Phase 9 renaming pass:
   `preset_` entry points where they reach the Preset-owned boundary logic.
 - `make -C mainboard/LxrStm32 -j4 stm32` is green after the rename pass.
 
-## Phase 10: Extract Live Apply Helpers From `Sequencer`
+## Phase 10: Rehome Live Apply Helpers Into Existing Preset Boundaries
 
-Phase 10 moves the remaining live automation bridge out of `sequencer.c` and
-into `/Preset/`. Sequencer keeps reading pattern data and advancing the clock;
-Preset owns the code that turns the already-read targets into modulation-node
-and endpoint writes.
+Phase 10 still removes the remaining live automation bridge from `sequencer.c`,
+but the split should follow the existing Preset ownership rules instead of
+creating a new automation-only file.
 
-The best-fit home for this work is a new file pair named
-`mainboard/LxrStm32/src/Preset/PresetAutomationApply.c` and `.h`.
+- if outside code needs to store or change Preset-owned data, the write should
+  go through `ParameterIngress.c`;
+- if Preset state needs to drive an emission elsewhere, `KitState.c` should
+  expose the state accessors or setters that prompt that emission;
+- live DSP application belongs with the existing Preset worker/state code that
+  already owns morphing and boundary refresh behavior.
 
-### New module boundary
+### Ownership split
 
-`PresetAutomationApply` should own the live application of automation targets
-that are already part of the Preset data model:
+- `ParameterIngress.c` remains the ingress-side home for external writes into
+  Preset-owned endpoint and automation storage.
+- `KitState.c` remains the state-selection home for current-image, temp-image,
+  and voice-source queries, plus any setter that should trigger later emission.
+- `MorphEngine.c` remains the live DSP application home for automation-target
+  updates and parameter replay.
+- `TempPlaybackSwitch.c` remains the state machine that decides when source
+  ownership changes and when live reapply work should be requested.
+- `EndpointRestore.c` remains the AVR/front-panel restore emitter.
 
-- voice-specific automation target application;
-- shared macro-target application;
-- normal-image endpoint re-application after a temp-kit boundary.
+### Functions that must move or be re-homed
 
-The module should depend on the Preset ownership headers it needs, especially
-`Preset/KitState.h` and `Preset/ParameterArray.h`. It will also need the DSP
-modulation headers that provide `ModulationNode`, `macroModulators[]`, and
-`velocityModulators[]`.
+- `seq_applyVoiceAutomationTargets()` becomes `preset_applyVoiceAutomationTargets()`
+  in the Preset live-apply path, with the current LFO-node selector logic moved
+  alongside it.
+- `seq_applySharedAutomationTargets()` stays private to the same live-apply
+  implementation and should not remain as a Sequencer-owned helper.
+- `seq_applyNormalEndpointAutomationTargets()` becomes a Preset-owned boundary
+  replay helper that is called when a temp-kit or restore boundary closes.
+- `seq_applySingleParameterValue()` already lives in `ParameterIngress.c`, so
+  Phase 10 should only remove the Sequencer-facing call sites that still route
+  through the old wrapper.
 
-The module should not depend on Sequencer for the live apply implementation
-once the move is complete.
-
-### Functions that must move
-
-- `seq_applyVoiceAutomationTargets()` becomes
-  `preset_applyVoiceAutomationTargets()`.
-- `seq_applySharedAutomationTargets()` becomes a private helper in the new
-  module rather than a public Sequencer helper.
-- `seq_applyNormalEndpointAutomationTargets()` becomes
-  `preset_applyNormalEndpointAutomationTargets()`.
-
-The implementation move is not just a rename. The local LFO-node selector
-helper currently embedded in `sequencer.c` must move with
-`seq_applyVoiceAutomationTargets()`, because the new Preset-owned function
-still needs the voice-to-modulation-node mapping.
-
-The new functions must preserve the existing behavior:
-
-- `preset_applyVoiceAutomationTargets()` still applies the per-voice LFO and
-  velocity destinations for the supplied `SeqKitAutomationTargets`.
-- the velocity-destination branch still suppresses live destination writes when
-  the destination parameter is a morph-amount parameter, using
-  `preset_isMorphAmountParam()`;
-- `preset_applySharedAutomationTargets()` still updates the four shared macro
-  destinations and reapplies the current value after a destination change;
-- `preset_applyNormalEndpointAutomationTargets()` still only reapplies
-  per-voice targets for voices that currently live in the normal morph image,
-  and it still skips the shared target refresh when the temp kit is active.
+The important detail is that the live application logic should remain inside
+the existing Preset modules that already own the relevant caches and state. The
+goal is to remove the Sequencer facade, not to invent a separate layer just for
+automation-node bridging.
 
 ### Call sites to update
 
-- `mainboard/LxrStm32/src/Preset/MorphEngine.c` should include the new
-  `PresetAutomationApply` header and call
-  `preset_applyVoiceAutomationTargets()` from
-  `preset_applyLiveAutomationTargetSelector()`.
-- `mainboard/LxrStm32/src/Preset/MorphEngine.c` should stop routing the live
-  parameter write through `seq_applySingleParameterValue()` and call
-  `preset_applySingleParameterValue()` directly instead. This is a call-site
-  cleanup only; the implementation already lives in `ParameterIngress`.
-- `mainboard/LxrStm32/src/Preset/TempPlaybackSwitch.c` should include the new
-  header and call `preset_applyVoiceAutomationTargets()` from
-  `preset_applyVoiceSource()`.
-- `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c` should include the
-  new header and call `preset_applyNormalEndpointAutomationTargets()` when the
-  temp-kit endpoint bracket closes.
-
-Those call-site changes matter because they remove the last live-apply path
-from the Sequencer facade and make the Preset module the canonical owner of
-the automation-target application step.
+- `mainboard/LxrStm32/src/Preset/MorphEngine.c` should call
+  `preset_applySingleParameterValue()` directly for live parameter writes.
+- `mainboard/LxrStm32/src/Preset/MorphEngine.c` should own the body of
+  `preset_applyVoiceAutomationTargets()` and its shared-target helper, instead
+  of relying on Sequencer to perform DSP destination updates.
+- `mainboard/LxrStm32/src/Preset/TempPlaybackSwitch.c` should request the
+  Preset live-apply helper directly when a voice source changes.
+- `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c` should call the
+  Preset boundary replay helper directly when the temp-kit endpoint bracket
+  closes.
+- any path that still needs to know whether the live image is normal or temp
+  should ask `KitState.c` instead of peeking at Sequencer globals.
 
 ### Sequencer cleanup
 
@@ -957,7 +940,8 @@ the automation-target application step.
 - If a temporary compatibility wrapper is still needed while the call sites are
   being migrated, it must be a short-lived bridge only, not the new canonical
   entry point.
-- The canonical API for the moved functionality must be the `preset_` form.
+- The canonical API for the moved functionality must be the `preset_` form,
+  even if the implementation lands inside an existing Preset source file.
 
 ### Explicitly deferred
 
@@ -972,57 +956,86 @@ the automation-target application step.
 
 - no active Preset caller reaches Sequencer for live automation-target
   application;
-- the new Preset module compiles and owns the live bridge logic;
+- the live apply path is owned by Preset code that already manages the relevant
+  state and caches;
 - `MorphEngine` uses Preset-owned parameter writes directly;
-- the remaining `seq_` live-apply names, if any survive temporarily, are clearly
-  compatibility-only.
+- `TempPlaybackSwitch` and `frontPanelParser` trigger boundary replay through
+  Preset-owned helpers, not Sequencer wrappers;
+- the remaining `seq_` live-apply names, if any survive temporarily, are
+  clearly compatibility-only.
 
 ### Verification
 
 - build the firmware after the move;
-- exercise a temp-kit boundary and confirm the normal endpoint automation
-  targets still reapply when the boundary closes;
+- exercise a temp-kit boundary and confirm the normal endpoint replay still
+  happens when the boundary closes;
 - exercise a live morph/automation update and confirm voice-specific targets
   and single-parameter writes still reach the DSP;
 - confirm that temp playback source changes still propagate the correct live
   targets without relying on Sequencer-owned live-apply helpers.
 
+### Session 018 Result
+
+Session 018 implemented the Phase 10 live-apply rehome:
+
+- `Preset/MorphEngine.c` now exports the live automation bridge via
+  `preset_applyVoiceAutomationTargets()` and
+  `preset_applyNormalEndpointAutomationTargets()`.
+- `Preset/MorphEngine.c` now calls `preset_applySingleParameterValue()`
+  directly for live parameter emission instead of routing through the
+  Sequencer wrapper.
+- `Preset/TempPlaybackSwitch.c` now replays voice automation through the
+  Preset-owned live bridge.
+- `uARTFrontSYX/frontPanelParser.c` now calls the Preset-owned normal-endpoint
+  replay helper when the temp-kit endpoint bracket closes.
+- `Sequencer/sequencer.c` no longer owns the active live-apply implementations,
+  and the old `seq_apply*` bridge declarations were removed from
+  `sequencer.h`.
+- `seq_applySingleParameterValue()` remains only as a documented compatibility
+  shim in `sequencer.h`; new live-emission code now calls the Preset-owned
+  entry point directly.
+- `make -C mainboard/LxrStm32 -j4 stm32` is green after the move.
+
 ## Phase 11: Rename Remaining Preset Exports To `preset_`
 
-Phase 11 should finish the public API rename inside `/Preset/`.
+Session 019 completed the remaining Preset-owned rename work and verified the
+tree still builds cleanly.
 
-This phase is the hard line for the naming rule:
+### Completed changes
 
-- exported functions in `/Preset/` must be `preset_`-prefixed;
-- exported variables in `/Preset/` must be `preset_`-prefixed;
-- compatibility names may exist only as private transition glue while the
-  callers are being migrated.
-
-### Scope
-
-- `TempPlaybackSwitch`
-- `EndpointRestore`
-- any new live-apply module introduced by Phase 10
-- any other `/Preset/` header that still exposes `seq_` symbols
-
-### Example holdouts
-
-- `seq_setTmpKitActive()`
-- `seq_trackPatternUsesTmp()`
-- `seq_synthVoiceUsesTmpFromTrackPatterns()`
-- `seq_serviceEndpointRestore()`
-- `seq_endpointRestoreBusy()`
-- `seq_pushEndpointUpdateForVoiceSourceChange()`
-- `seq_maybePushKitEndpointsToFrontWithGlobalMorphReport()`
-- `seq_consumeTmpBoundaryPatternSwitchAck()`
-- `seq_tmpKitPushParamsToFrontEnabled`
-- `seq_endpointRestoreQueue*`
+- `KitState.h` and `KitState.c` now export `PresetKitState` and
+  `PresetAutomationTargets` instead of the old `Seq*` type names.
+- `EndpointRestore.h` and `EndpointRestore.c` now use `PresetKitState` and
+  `PresetEndpointRestoreRequest` throughout the restore queue and push-up
+  helpers.
+- `MorphEngine.h` and `MorphEngine.c` now use `PresetKitState` and
+  `PresetAutomationTargets` in all signatures and locals.
+- `ParameterIngress.h` and `ParameterIngress.c` now use `PresetKitState` and
+  `PresetAutomationTargets` in their ingress helpers.
+- `TempPlaybackSwitch.h` no longer exports the temporary `seq_*` aliases for
+  Preset-owned boundary state; callers use `preset_tempPlaybackSwitchState.*`
+  directly.
+- `TempPlaybackSwitch.c` now reads and writes `preset_voiceSourceState`
+  directly.
+- `sequencer.h` no longer re-exports Preset-owned state as `seq_*` aliases and
+  its compatibility wrappers now return `PresetKitState*`.
+- `sequencer.c`, `frontPanelParser.c`, `MidiParser.c`, and
+  `modulationNode.c` were updated to use `preset_*` names directly for the
+  Preset-owned morph and temp-switch state.
+- `ParameterArray.c` now binds the morph parameters to `preset_vMorphAmount`.
+- The STM32 build passes after the rename sweep.
 
 ### Exit criteria
 
 - No exported `/Preset/` symbol uses a `seq_` prefix.
-- Any remaining `seq_` symbols in `/Preset/` are internal-only helpers or
-  already scheduled for deletion.
+- `TempPlaybackSwitch.h` no longer exposes `seq_` aliases for Preset-owned
+  state.
+- `sequencer.h` no longer re-exports Preset-owned state or handshake mailboxes.
+- `sequencer.c` no longer reaches Preset-owned state through `seq_` aliases.
+- `KitState.h` no longer exports `SeqKitState` or `SeqKitAutomationTargets`,
+  and `EndpointRestore` no longer uses `SeqEndpointRestoreRequest`.
+- any remaining `seq_` names in the tree are Sequencer-owned APIs or
+  explicitly documented compatibility shims outside `/Preset/`.
 
 ## Phase 12 Retrospective: Sequencer Boundary Review
 
@@ -1043,10 +1056,23 @@ The main follow-up items to keep in mind for later review are:
   Phase 9 rename work is complete;
 - whether a future phase wants to revisit the `seq_get*` compatibility layer
   separately from the orchestration helpers.
+- whether the remaining front-panel UART emitters in `sequencer.c`,
+  `EndpointRestore.c`, `MidiParser.c`, `MidiVoiceControl.c`, and
+  `frontPanelParser.c` should be tracked only as protocol-split work instead of
+  being mistaken for more Preset ownership cleanup;
+- whether the send-side protocol split should absorb the repeated
+  `uart_sendFrontpanel*` composition patterns into a single reusable helper
+  surface before any more ownership work is attempted.
 
 The key conclusion for this audit is that the pattern/state lookup helpers in
 `sequencer.c` should stay in Sequencer unless a later refactor reveals a more
 specific ownership split.
+
+One extra boundary note from the UART review: the remaining direct front-panel
+transmit calls in the STM code are not a Phase 12 Preset target. They should be
+tracked as protocol work in `MIDI_UART_SPLIT_AUDIT.md`, because they are about
+packet composition and transport policy rather than about who owns the preset
+state itself.
 
 ## Protocol Split Tracking
 
@@ -1090,8 +1116,10 @@ The consolidation strategy is now:
   `preset_` endpoint-restore and temp-switch exports, renamed the Preset-owned
   restore state storage, and kept the temporary compatibility bridge only
   where the Sequencer facade still needs it.
-- Phase 10: extract the live-apply helpers out of `Sequencer` into Preset.
-- Phase 11: rename the remaining Preset exports to `preset_`.
+- Phase 10: rehome the live-apply helpers into the existing Preset boundary
+  modules.
+- Phase 11: rename the remaining Preset exports to `preset_`. Session 019
+  completed that rename sweep and verified the build.
 - Phase 12: retrospective review of the Sequencer/Preset boundary; no
   extraction target is active.
 - Protocol and parser split planning now lives in

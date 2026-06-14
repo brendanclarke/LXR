@@ -35,9 +35,12 @@ make firmware
 
 **Current status after Session 016 implementation pass (2026-06-13)**: The AVR front-panel main encoder is now hardware-approved with the final Timer1 16 kHz rest-phase FSM. The only supported rotation read is `encode_stableRead4()`, `front/LxrAvr/encoder.h` exposes only `encode_init()`, `encode_stableRead4()`, and `encode_readButton()`, and `front/LxrAvr/config.h` no longer has `ENC_USE_STABLE_DRIVER`. The physical rest phase is fixed at `AB=11` (`ENCODER_REST_STATE = 0x03`), and the decoder emits detents only after a legal full sequence leaves and returns to that rest phase. Do not reintroduce legacy read modes, PCINT decoding, Timer0 encoder sampling, or the temporary LCD/debug hooks used during Session 016. `make -C front/LxrAvr avr -j4` and `make firmware` are green, with the usual AVR IO-register warnings.
 
-**Current consolidation planning artifact**: `PRESET_CONSOLIDATION_AUDIT.md` now captures the Phase 7+ `/Preset/` cleanup pass. Session 014 removed the shared `PresetLoadCache` module and concentrated the remaining transitional bridge in `frontPanelParser.c`; Phase 8 handles the remaining `/Preset/` consolidation work, Phase 9+ stays on Preset naming and live-apply extraction, and `MIDI_UART_SPLIT_AUDIT.md` tracks the protocol/parser cleanup outside `/Preset/`.
+**Current status after Session 017 closeout (2026-06-14)**: Phase 10/11 Preset cleanup is complete and the remaining Phase 12 review is retrospective only. `KitState`, `EndpointRestore`, `MorphEngine`, `ParameterIngress`, `TempPlaybackSwitch`, `sequencer.c`, and the parser/MIDI call sites were switched to the canonical `Preset*` / `preset_*` names, the last Preset-owned `seq_` aliases were removed, and the UART send-side work is now clearly tracked as protocol refactor work rather than more Preset ownership cleanup. The STM32 build was re-run successfully after the rename sweep, and the user re-tested the firmware and reported nothing obviously broken.
+
+**Current consolidation / protocol planning artifacts**: the durable notes from the Preset cleanup work now live in `knowledge_files/log_archive/017_SESSION_HANDOFF_LOG.md`, `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`, `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`, and `MIDI_UART_SPLIT_AUDIT.md`. `PRESET_CONSOLIDATION_AUDIT.md` was only a temporary scratch plan for the Phase 10/11/12 cleanup and should not be treated as the canonical long-term reference after this handoff.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/017_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/016_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/015_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/014_SESSION_HANDOFF_LOG.md`
@@ -50,7 +53,6 @@ Canonical current WIP docs:
 - `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/000_SESSION_INDEX.md`
-- `PRESET_CONSOLIDATION_AUDIT.md`
 - `MIDI_UART_SPLIT_AUDIT.md`
 - `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`
 - `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`
@@ -205,7 +207,7 @@ User-referenced checkpoints:
 | Session 004 temp/background loading closeout | `knowledge_files/log_archive/004_SESSION_HANDOFF_LOG.md` |
 | Session 006 refactor planning details | `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md` |
 | Session 007 refactor Phase 1 details | `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md` |
-| Current preset/morph refactor knowledge | `PRESET_CONSOLIDATION_AUDIT.md`, `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md` |
+| Current preset/morph refactor knowledge | `knowledge_files/log_archive/017_SESSION_HANDOFF_LOG.md`, `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`, `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`, `MIDI_UART_SPLIT_AUDIT.md` |
 | Current comms/protocol knowledge | `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`, `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
 
 ---
@@ -379,7 +381,7 @@ Sample flash map:
 - `seq_serviceMorphInterpolation()` runs one parameter per STM main-loop pass and is the only intended writer of `interpolatedParams[]`.
 - `seq_serviceMorphInterpolation()` now has phase 0 for standard morph and optional later phases for source voices whose LFO targets voice morph. Each main-loop pass must still perform at most one interpolation/application unit.
 - Automation selector parameters, morph amount parameters, and LFO target voice selector parameters are carved out of ordinary interpolation and return kit/front endpoint values.
-- Automation target endpoint bytes and resolved sideband structures must stay coherent. For LFO target ingress, raw selector bytes must be written to `kitEndpointParams[]` for kit endpoints or `morphEndpointParams[]` for morph endpoints, and the matching `SeqKitAutomationTargets` sideband must be refreshed. If only the sideband is changed, normal/temp switching can later restore stale/off raw bytes and drop the assignment.
+- Automation target endpoint bytes and resolved sideband structures must stay coherent. For LFO target ingress, raw selector bytes must be written to `kitEndpointParams[]` for kit endpoints or `morphEndpointParams[]` for morph endpoints, and the matching `PresetAutomationTargets` sideband must be refreshed. If only the sideband is changed, normal/temp switching can later restore stale/off raw bytes and drop the assignment.
 
 ---
 
@@ -407,7 +409,7 @@ Sample flash map:
 - SEQ16 is used as a SELECT button for `SEQ_TMP_PATTERN`.
 - Session 004 made normal/temporary pattern and parameter exchange functional again after the Session 003 morph move.
 - AVR-to-STM endpoint dump (Opcodes 0x65/0x66) is implemented and captures `parameter_values_fileLoadSnapshot`, `parameters2_fileLoadSnapshot`, and all 16 mod targets.
-- STM-side `seq_normalKitState` and `seq_tmpKitState` are the source of truth for menu pushbacks.
+- STM-side `preset_normalKitState` and `preset_tmpKitState` are the source of truth for menu pushbacks.
 - STM-to-AVR parameter pushback on temp-pattern transitions must happen on every normal/temp switch so the menu stays in sync. Global morph push-up on those boundaries is now handled by display-only report traffic.
 - Endpoint storage uses raw AVR/menu parameter indices. Do not apply low `+1/-1` offsets to endpoint arrays or PRF restore opcodes.
 - Sound engine live morph path uses `interpolatedParams` after the STM worker writes it; menu pushback uses `kitEndpointParams`.
@@ -417,7 +419,7 @@ Sample flash map:
 - No extraneous LCD/debug writes should occur during copy/paste, temp/normal switching, endpoint restore, or file-load operations.
 - Do not make the temp pattern loadable/saveable unless explicitly requested.
 - Future background-load automation should build on the Session 004 STM-owned normal/temp image model and should not revive AVR-owned temp staging.
-- The current `front`/`mainboard` diff may contain PRF cache/state-machine work (`SEQ_PRF_CACHE_*`, live-pattern getters, pending counters). Treat it as WIP until reconciled with the post-morph temp-slot plan.
+- The old PRF cache/state-machine work was retired in Session 014. Treat any remaining `SEQ_PRF_CACHE_*` mentions, live-pattern getter references, or pending-counter notes as historical context only.
 
 ### Morph Move Completed In Session 003
 
@@ -449,7 +451,7 @@ Sample flash map:
 - Changing PAT_CHAIN to pair-level ACK without changing the AVR sender; current protocol expects byte-by-byte callbacks.
 - Using `midiParser_originalCcValues` as the source of truth for current loaded STM voice parameters.
 - Using `parameterArray` to reconstruct raw menu parameter bytes for the temp cache; it points into live converted/modulated DSP state.
-- Reintroducing per-parameter valid arrays in `SeqKitState`; sound parameter arrays are always-defined from zero init.
+- Reintroducing per-parameter valid arrays in `PresetKitState`; sound parameter arrays are always-defined from zero init.
 - Letting file load or AVR endpoint restore write directly into `interpolatedParams[]`; the STM morph worker owns interpolation arrays.
 - Using `interpolatedParams[]` equality as a proxy for live DSP state; this skipped zero-valued file parameters when DSP init defaults were nonzero.
 - Applying every parameter to DSP on every morph scan pass; this caused a loud continuous low-Hz overlay.
@@ -500,6 +502,7 @@ You, the agent, and each delegate assigned to a task must read, understand, and 
 
 ### 4. Coding Workflow Practice
 
+- Session number, begining, and end are defined by user input messages only. 
 - A 'turn' is one user message plus one agent response. The turn type is defined by the initiating user message and is immutable for the turn.
 - Keep planning, coding, and logging turns separate, with the following document permissions:
     - Planning creates/edits markup documents (*.md), does not ever modify other file types or logs (./knowledge_files/log_archive/).

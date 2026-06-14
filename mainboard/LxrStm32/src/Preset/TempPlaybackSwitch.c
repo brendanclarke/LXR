@@ -1,9 +1,11 @@
 /*
  * TempPlaybackSwitch.c
  *
- * Preset owns the temp/normal pattern boundary state machine. The sequencer
+ * Preset owns the temp/normal pattern boundary state machine and the
+ * follow-on live replay requests that boundary changes trigger. Sequencer
  * still advances the clock and decides when a switch should happen, but the
- * source-selection policy and the bookkeeping for temp playback live here.
+ * source-selection policy, the per-voice ownership bookkeeping, and the call
+ * into MorphEngine's live DSP bridge all live here.
  */
 
 #include "Preset/TempPlaybackSwitch.h"
@@ -45,10 +47,10 @@ uint8_t preset_synthVoiceUsesTmpFromTrackPatterns(const uint8_t *patternForTrack
    decide which kit image feeds the live DSP when a voice source changes. */
 static void preset_applyVoiceSource(uint8_t synthVoice, uint8_t useTmp)
 {
-   const SeqKitState *kit = useTmp ? &preset_tmpKitState : &preset_normalKitState;
+   const PresetKitState *kit = useTmp ? &preset_tmpKitState : &preset_normalKitState;
 
    preset_applyVoiceParameterValues(kit, synthVoice);
-   seq_applyVoiceAutomationTargets(&kit->interpolatedAutomationTargets, synthVoice);
+   preset_applyVoiceAutomationTargets(&kit->interpolatedAutomationTargets, synthVoice);
 }
 
 /* Marks a voice as belonging to the temp or normal image and applies the

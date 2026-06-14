@@ -29,7 +29,7 @@ extern uint8_t preset_morphLoadDisabled;
 void preset_syncVMorphAmountMirrorsFromLiveSources(void);
 
 /* Updates the morph mirror for a specific voice from its active kit. */
-void preset_selectVoiceMorphAmountFromKit(uint8_t synthVoice, const SeqKitState *kit);
+void preset_selectVoiceMorphAmountFromKit(uint8_t synthVoice, const PresetKitState *kit);
 
 /* Sets the live morph amount for a voice, updating both the kit state and the
    mirror array. */
@@ -55,6 +55,17 @@ uint8_t preset_interpolateMorphValue(uint8_t a, uint8_t b, uint8_t x);
 /* Applies a single morphed parameter value to the DSP, respecting the
    live-apply cache. */
 void preset_applyLiveMorphParameterValue(uint8_t image, uint8_t synthVoice, uint16_t param, uint8_t value);
+
+/* Applies the resolved automation targets for one voice to the live DSP.
+   Temp playback, restore replay, and morph-driven target changes all use this
+   helper once the target selector bytes have already been decoded. */
+void preset_applyVoiceAutomationTargets(const PresetAutomationTargets *source,
+                                        uint8_t synthVoice);
+
+/* Reapplies the normal-image voice and shared automation targets after a temp
+   boundary or endpoint restore closes. This keeps the live DSP in sync with
+   the current normal kit image. */
+void preset_applyNormalEndpointAutomationTargets(void);
 
 /* Converts a 7-bit automation value (0-127) to an 8-bit morph amount (0-255). */
 uint8_t preset_morphAutomationValueToAmount(uint8_t morphValue);
@@ -94,10 +105,10 @@ void preset_updateLiveSharedParameterCache(uint16_t param, uint8_t value);
 
 /* Applies all shared (non-voice) parameters from a kit to the DSP,
    respecting the live-shared parameter cache. */
-void preset_applySharedParameterValues(const SeqKitState *kit);
+void preset_applySharedParameterValues(const PresetKitState *kit);
 
 /* Applies all voice-specific parameters from a kit for a specific voice
    to the DSP. */
-void preset_applyVoiceParameterValues(const SeqKitState *kit, uint8_t synthVoice);
+void preset_applyVoiceParameterValues(const PresetKitState *kit, uint8_t synthVoice);
 
 #endif /* PRESET_MORPHENGINE_H_ */

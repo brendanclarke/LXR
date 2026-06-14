@@ -294,7 +294,7 @@ void modNode_updateValue(ModulationNode* vm, float val)
 //-----------------------------------------------------------------------
 void modNode_vMorph(ModulationNode* vm, float val)
 {
-   if(seq_morphLoadDisabled)
+   if(preset_morphLoadDisabled)
       return;
 
    if(modNode_isLfoModTarget(vm))

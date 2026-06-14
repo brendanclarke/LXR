@@ -4,6 +4,19 @@
  * Phase 1 of the preset refactor moves the core sound-state images out of
  * sequencer.c so Preset becomes the canonical owner of normal/temp kit state
  * and the voice-image selection flags that decide which image is active.
+ *
+ * This is the state-selection boundary for the rest of Preset. Callers use the
+ * getters/setters here when they need to choose an image, query whether temp
+ * playback is active, or seed the temp image before a live replay. The helper
+ * names that matter most for that boundary are:
+ *   - preset_getCurrentImageKitState()
+ *   - preset_getMorphKitForImage()
+ *   - preset_isTmpKitActive()
+ *   - preset_setTmpKitActive()
+ *   - preset_captureTmpKitState()
+ *   - preset_getMorphImageForVoice()
+ *   - preset_getVoiceSourceState()
+ *   - preset_setVoiceSourceState()
  */
 
 #ifndef PRESET_KITSTATE_H_
@@ -31,7 +44,7 @@ enum
 /* Automation target groups travel with each kit image so restore and live-edit
    paths can store selector destinations, know which voice slots are valid, and
    keep front-panel and interpolated target images coherent when values move. */
-typedef struct SeqKitAutomationTargetsStruct
+typedef struct PresetAutomationTargetsStruct
 {
    uint16_t lfoDestination[PRESET_SYNTH_VOICES];
    uint16_t velocityDestination[PRESET_SYNTH_VOICES];
@@ -39,7 +52,7 @@ typedef struct SeqKitAutomationTargetsStruct
    uint8_t lfoDestinationValid;
    uint8_t velocityDestinationValid;
    uint8_t macroDestinationValid;
-} SeqKitAutomationTargets;
+} PresetAutomationTargets;
 
 /* Kit state is the always-defined preset image that Phase 1 moves out of the
    sequencer. The kit-endpoint array stores the raw live/edit endpoint, the
@@ -48,7 +61,7 @@ typedef struct SeqKitAutomationTargetsStruct
    sources. The automation target blocks mirror the same split so the protocol
    layer can preserve selector bytes while the morph and restore workers
    decide which image is authoritative. */
-typedef struct SeqKitStateStruct
+typedef struct PresetKitStateStruct
 {
    /* These arrays are always-defined sound state from zero init. File/front
       ingress writes endpoint bytes here, and the morph worker later rebuilds
@@ -56,23 +69,23 @@ typedef struct SeqKitStateStruct
    uint8_t kitEndpointParams[END_OF_SOUND_PARAMETERS];
    uint8_t morphEndpointParams[END_OF_SOUND_PARAMETERS];
    uint8_t interpolatedParams[END_OF_SOUND_PARAMETERS];
-   SeqKitAutomationTargets frontPanelAutomationTargets;
-   SeqKitAutomationTargets morphParameterEndpointAutomationTargets;
-   SeqKitAutomationTargets interpolatedAutomationTargets;
+   PresetAutomationTargets frontPanelAutomationTargets;
+   PresetAutomationTargets morphParameterEndpointAutomationTargets;
+   PresetAutomationTargets interpolatedAutomationTargets;
    uint8_t globalMorphAmount;
    uint8_t voiceMorphBaseAmount[PRESET_SYNTH_VOICES];
    uint8_t voiceMorphAmount[PRESET_SYNTH_VOICES];
    uint8_t valid;
-} SeqKitState;
+} PresetKitState;
 
 /* Temporary kit image used for temp-pattern playback and any current-image
    routing that needs to land in the temporary bank instead of the normal kit.
    This stays externally visible so the compatibility façade and future preset
    phases can inspect or seed the image without duplicating storage. */
-extern SeqKitState preset_tmpKitState;
+extern PresetKitState preset_tmpKitState;
 /* Normal kit image that holds the canonical preset data for restore, file
    load, and the default live-edit path when no temp image is active. */
-extern SeqKitState preset_normalKitState;
+extern PresetKitState preset_normalKitState;
 /* Boolean runtime flag that tells current-image helpers whether live routing
    should point at the temporary kit or the normal kit. */
 extern uint8_t preset_tmpKitActive;
@@ -83,11 +96,11 @@ extern uint8_t preset_voiceSourceState[PRESET_SYNTH_VOICES];
 /* Returns whichever kit image is currently active for current-image ingress.
    The helper reads `preset_tmpKitActive` so callers do not need to inspect the
    storage flags or duplicate the temp-vs-normal selection rule. */
-SeqKitState* preset_getCurrentImageKitState(void);
+PresetKitState* preset_getCurrentImageKitState(void);
 /* Translates the compact morph-image enum into a concrete kit pointer so the
    morph and restore code can address the correct storage block without caring
    about the underlying global variable names. */
-SeqKitState* preset_getMorphKitForImage(uint8_t image);
+PresetKitState* preset_getMorphKitForImage(uint8_t image);
 
 /* Reports whether the temporary kit is currently selected as the active
    current-image target. This remains a tiny compatibility hook while the temp

@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
-Date: 2026-06-13
-Status: current AVR<->STM comms reference; Session 014 already moved the Sequencer/MIDI runtime callers off the load cache, deleted the shared cache module, and Phase 9 will split the send/receive protocol files.
+Date: 2026-06-14
+Status: current AVR<->STM comms reference; Session 014 moved the Sequencer/MIDI runtime callers off the load cache, Session 017 expanded the outbound send inventory, and the remaining work is the actual send/receive protocol split.
 
 ## Purpose
 
@@ -50,6 +50,66 @@ The future shape should split that responsibility into:
 `Pattern` owns pattern storage and pattern-specific temp behavior.
 
 The comms layer should route bytes into those owners, not duplicate their state.
+
+### Outbound Send Contract
+
+The future send-side split should land in `frontPanelSendingProtocol.c/.h`.
+That module should own outbound AVR command framing so the rest of the STM code
+can reuse the same packet helpers instead of rebuilding the same byte triples
+everywhere.
+
+The reusable helper surface should cover:
+
+- ordinary command/status byte triples;
+- priority command/status byte triples for flow-control and restore traffic;
+- wait-for-space variants for restore sequencing and any other blocking packet
+  family;
+- SysEx-aware packet emission for front-panel streams that stay open across
+  multiple bytes;
+- common packet families such as restore begin/done, restore param, restore
+  morph param, flow grant/abort, pattern change, run-stop, LED updates, and
+  query replies.
+
+The send header should also document the transmit mode bits or flags clearly so
+callers can tell whether a packet is:
+
+- normal or priority;
+- blocking or non-blocking;
+- SysEx-safe or ordinary command traffic;
+- allowed to bypass the quiet UI gate or not.
+
+The files that currently emit front-panel bytes directly and should migrate to
+the future send module are:
+
+- `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c`
+  - flow grant/abort replies;
+  - cache status replies;
+  - restore-ready/ack responses;
+  - LED updates;
+  - SysEx framing and query replies;
+  - step/pattern/sample response packets.
+- `mainboard/LxrStm32/src/Sequencer/sequencer.c`
+  - restore begin/done packets;
+  - global morph reports during temp/normal boundary transitions;
+  - pattern-change and run-stop notifications;
+  - LED updates;
+  - SysEx pattern/step export packets.
+- `mainboard/LxrStm32/src/Preset/EndpointRestore.c`
+  - restore parameter packets;
+  - restore morph parameter packets;
+  - restore begin/done sequencing;
+  - global morph report packets.
+- `mainboard/LxrStm32/src/MIDI/MidiParser.c`
+  - front-panel run-stop echoes;
+  - bank-change echoes;
+  - parameter-echo packets for MIDI-driven edits;
+  - patch reset and other mirrored global messages.
+- `mainboard/LxrStm32/src/MIDI/MidiVoiceControl.c`
+  - voice activity feedback packets.
+
+`Uart.c/.h` should remain transport-only. The MIDI transport helpers
+`uart_sendMidi()` and `uart_sendMidiByte()` stay outside this split because
+they are not AVR front-panel command traffic.
 
 ## Current Message Families
 
@@ -180,6 +240,36 @@ These are the file-load and menu-preservation flows that start the transport/ses
 
 They are the right place to keep the user-facing initiation logic.
 They are not the right place to own the in-flight load-session state.
+
+## Send-Side Inventory
+
+This is the concrete map of the remaining direct front-panel transmit callers.
+It mirrors the send-contract section above so the eventual
+`frontPanelSendingProtocol.c/.h` split has an explicit migration target.
+
+- `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c`
+  - flow grant and abort helpers;
+  - cache status replies;
+  - restore-ready/ack responses;
+  - LED and sample-count replies;
+  - query response packets and SysEx framing.
+- `mainboard/LxrStm32/src/Sequencer/sequencer.c`
+  - restore begin/done traffic;
+  - global morph reporting;
+  - pattern-change/run-stop notifications;
+  - LED updates;
+  - SysEx step and pattern exports.
+- `mainboard/LxrStm32/src/Preset/EndpointRestore.c`
+  - restore begin/done traffic;
+  - restore param and restore morph packets;
+  - global morph reporting.
+- `mainboard/LxrStm32/src/MIDI/MidiParser.c`
+  - front-panel run-stop echoes;
+  - bank-change echoes;
+  - parameter-echo packets for incoming edits;
+  - patch reset mirroring.
+- `mainboard/LxrStm32/src/MIDI/MidiVoiceControl.c`
+  - note-on/voice activity feedback.
 
 ## The `.pat` Rule
 

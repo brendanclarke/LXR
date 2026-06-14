@@ -1,7 +1,7 @@
 # TEMPORARY / PATTERN / PARAMETER LOAD SPEC
 
-Date: 2026-06-13
-Status: current storage and switching spec; Session 014 already moved the Sequencer/MIDI runtime callers off `PresetLoadCache`, deleted the shared cache module, and left the remaining parser/session bridge inside `frontPanelParser.c`.
+Date: 2026-06-14
+Status: current storage and switching spec; Session 014 moved the Sequencer/MIDI runtime callers off `PresetLoadCache`, Session 017 finished the Preset rename sweep, and the remaining parser/session bridge still lives inside `frontPanelParser.c`.
 
 ## Purpose
 
@@ -33,6 +33,10 @@ Each kit image carries:
 - resolved automation target images;
 - global morph amount and per-voice morph values.
 
+The exposed type names are now `PresetKitState` and `PresetAutomationTargets`.
+The storage behavior did not change during the rename sweep; only the public
+names did.
+
 ### Pattern storage
 
 `mainboard/LxrStm32/src/Sequencer/Pattern/` owns pattern storage:
@@ -62,7 +66,7 @@ It does not own a second copy of the storage model itself.
 
 The shared `mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h` files were removed in Session 014.
 
-Session 014 already moved the live Sequencer/MIDI caller paths to direct owner reads, so the parser-local bridge is now transitional only for the remaining load/session compatibility path.
+Session 014 already moved the live Sequencer/MIDI caller paths to direct owner reads, and Session 017 completed the Preset rename sweep, so the parser-local bridge is now transitional only for the remaining load/session compatibility path.
 
 Phase 8 is expected to absorb or eliminate that last parser-local bridge.
 
@@ -104,6 +108,14 @@ The current target rule is:
 - never create a second sound-authority cache just because a file is being loaded.
 
 If a newer background load starts before the old one finishes, the newer one may replace the older one.
+
+Implementation reminder:
+
+- `.pat` is the special case that should never switch parameter read/write away
+  from normal storage;
+- the temp/background storage rules are about where bytes land, not about
+  changing which module owns the storage model;
+- `TempPlaybackSwitch` still owns the audible-image selection state.
 
 ### 4. Pattern and parameter temp ownership stay separate
 

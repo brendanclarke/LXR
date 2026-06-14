@@ -34,6 +34,6 @@ void preset_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask);
 /* Schedules a full-kit restore push for the supplied image, with the global
    morph report preserved when the current temp boundary needs to be mirrored
    on the AVR menu. */
-void preset_maybePushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit);
+void preset_maybePushKitEndpointsToFrontWithGlobalMorphReport(const PresetKitState *kit);
 
 #endif /* PRESET_ENDPOINTRESTORE_H_ */

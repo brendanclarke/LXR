@@ -1,9 +1,17 @@
 /*
  * ParameterIngress.h
  *
- * Preset keeps the raw endpoint ingress state here so sequencer and the front
- * panel parser can route live edits and restore traffic through the same
- * policy boundary.
+ * Preset keeps the raw ingress policy here so Sequencer and the front-panel
+ * parser can route live edits and restore traffic through the same boundary.
+ *
+ * Ingress-side writes use preset_storeParameterIngress(),
+ * preset_storeMorphParameterIngress(), preset_storeLfoDestinationIngress(),
+ * preset_storeVelocityDestinationIngress(), and
+ * preset_storeMacroDestinationIngress(). The restore helpers
+ * preset_updateInterpolatedAutomationTarget() and
+ * preset_updateFrontAndInterpolatedAutomationTargets() keep the endpoint
+ * mirrors coherent, while preset_applySingleParameterValue() is the final
+ * DSP-facing emit helper for decoded parameter values.
  */
 
 #ifndef PRESET_PARAMETERINGRESS_H_
@@ -47,13 +55,13 @@ void preset_setAutomationIngressTarget(uint8_t target);
 /* Updates the interpolated automation target image only. This helper exists so
    the restore path can rebuild the worker-owned target cache without touching
    the front-panel copy. */
-void preset_updateInterpolatedAutomationTarget(SeqKitState *kit,
+void preset_updateInterpolatedAutomationTarget(PresetKitState *kit,
                                                uint16_t param,
                                                uint8_t selector);
 /* Updates both the front-panel and interpolated automation target images so
    live edits and restore writes stay in sync when the same selector byte must
    be reflected in two places. */
-void preset_updateFrontAndInterpolatedAutomationTargets(SeqKitState *kit,
+void preset_updateFrontAndInterpolatedAutomationTargets(PresetKitState *kit,
                                                         uint16_t param,
                                                         uint8_t selector);
 

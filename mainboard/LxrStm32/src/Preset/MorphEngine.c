@@ -1,9 +1,12 @@
 /*
  * MorphEngine.c
  *
- * This file handles async parameter drain, interpolation mechanics, and voice
- * morph modulations. It manages the sound interpolation pipeline that
- * transforms morph endpoints into live audio parameters.
+ * Preset owns the live DSP application path here: async parameter drain,
+ * interpolation mechanics, voice morph modulations, and the live replay of
+ * automation targets that have already been decoded by the ingress layer.
+ * ParameterIngress stores the raw bytes, KitState owns the image selection,
+ * and this file emits the resulting values into the modulation nodes and live
+ * DSP parameters.
  */
 
 #include "Preset/MorphEngine.h"
@@ -71,14 +74,14 @@ void preset_syncVMorphAmountMirrorsFromLiveSources(void)
 
    for(synthVoice=0;synthVoice<PRESET_SYNTH_VOICES;synthVoice++)
    {
-      const SeqKitState *kit =
+      const PresetKitState *kit =
          preset_getMorphKitForImage(preset_getMorphImageForVoice(synthVoice));
       preset_vMorphAmount[synthVoice + 1] = kit->voiceMorphAmount[synthVoice];
    }
 }
 
 /* Updates the morph mirror for a specific voice from its active kit. */
-void preset_selectVoiceMorphAmountFromKit(uint8_t synthVoice, const SeqKitState *kit)
+void preset_selectVoiceMorphAmountFromKit(uint8_t synthVoice, const PresetKitState *kit)
 {
    if(!kit || synthVoice >= PRESET_SYNTH_VOICES)
       return;
@@ -89,7 +92,7 @@ void preset_selectVoiceMorphAmountFromKit(uint8_t synthVoice, const SeqKitState 
 /* Sets the live morph amount for a voice. */
 void preset_setVoiceMorphLiveAmount(uint8_t synthVoice, uint8_t morphAmount)
 {
-   SeqKitState *kit;
+   PresetKitState *kit;
 
    if(synthVoice >= PRESET_SYNTH_VOICES)
       return;
@@ -110,6 +113,80 @@ static uint8_t preset_morphImageVoiceIsLive(uint8_t image, uint8_t synthVoice)
    sourceState = (image == PRESET_MORPH_IMAGE_TMP) ? PRESET_VOICE_SOURCE_TMP
                                                    : PRESET_VOICE_SOURCE_NORMAL;
    return preset_getVoiceSourceState(synthVoice) == sourceState;
+}
+
+/* Applies a live voice-specific automation target block to the modulation
+   nodes that drive the current voice. This is the DSP emission side of the
+   automation bridge and is used by temp playback, restore replay, and morph
+   target updates once the target selector bytes have already been resolved. */
+void preset_applyVoiceAutomationTargets(const PresetAutomationTargets *source,
+                                        uint8_t synthVoice)
+{
+   ModulationNode *lfoNode;
+
+   if(!source || synthVoice >= SEQ_SYNTH_VOICES)
+      return;
+
+   lfoNode = preset_getLfoModNode(synthVoice);
+   if(source->lfoDestinationValid & (1 << synthVoice))
+   {
+      modNode_setDestination(lfoNode, source->lfoDestination[synthVoice]);
+      modNode_updateValue(lfoNode, lfoNode->lastVal);
+   }
+
+   if(source->velocityDestinationValid & (1 << synthVoice))
+   {
+      if(preset_isMorphAmountParam(source->velocityDestination[synthVoice]))
+      {
+         modNode_setDestination(&velocityModulators[synthVoice], PAR_NONE);
+      }
+      else
+      {
+         modNode_setDestination(&velocityModulators[synthVoice],
+                                source->velocityDestination[synthVoice]);
+         modNode_updateValue(&velocityModulators[synthVoice],
+                             velocityModulators[synthVoice].lastVal);
+      }
+   }
+}
+
+/* Applies the shared macro-target destinations for a live kit image. The
+   helper remains private because it is only meaningful as part of the live
+   replay path, not as a standalone API. */
+static void preset_applySharedAutomationTargets(const PresetAutomationTargets *source)
+{
+   uint8_t i;
+
+   if(!source)
+      return;
+
+   for(i=0;i<4;i++)
+   {
+      if(source->macroDestinationValid & (1 << i))
+      {
+         modNode_setDestination(&macroModulators[i], source->macroDestination[i]);
+         modNode_updateValue(&macroModulators[i], macroModulators[i].lastVal);
+      }
+   }
+}
+
+/* Replays the normal kit image's live automation targets after the temp/normal
+   boundary closes. The per-voice bridge only targets voices that currently live
+   in the normal image, and the shared target refresh is skipped while the temp
+   kit remains active. */
+void preset_applyNormalEndpointAutomationTargets(void)
+{
+   uint8_t synthVoice;
+
+   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
+   {
+      if(preset_getMorphImageForVoice(synthVoice) == PRESET_MORPH_IMAGE_NORMAL)
+         preset_applyVoiceAutomationTargets(&preset_normalKitState.frontPanelAutomationTargets,
+                                            synthVoice);
+   }
+
+   if(!preset_isTmpKitActive())
+      preset_applySharedAutomationTargets(&preset_normalKitState.frontPanelAutomationTargets);
 }
 
 /* Invalidates the live-apply cache for a specific morph image. */
@@ -167,12 +244,15 @@ uint8_t preset_interpolateMorphValue(uint8_t a, uint8_t b, uint8_t x)
    return (uint8_t)((fixedPointValue & 0xff) < 0x7f ? result : result + 1);
 }
 
-/* Internal helper to apply live automation target selector. */
+/* Applies a selector-bearing automation change to the live DSP when the
+   relevant voice is currently active. This keeps the decoded ingress value and
+   the live modulation node in sync without forcing callers to know the bridge
+   details. */
 static void preset_applyLiveAutomationTargetSelector(uint8_t image,
                                                      uint16_t param,
                                                      uint8_t selector)
 {
-   SeqKitAutomationTargets target;
+   PresetAutomationTargets target;
    uint8_t synthVoice;
 
    memset(&target, 0, sizeof(target));
@@ -196,9 +276,8 @@ static void preset_applyLiveAutomationTargetSelector(uint8_t image,
       return;
    }
 
-   /* Note: seq_applyVoiceAutomationTargets remains in Sequencer for now. */
    if(preset_morphImageVoiceIsLive(image, synthVoice))
-      seq_applyVoiceAutomationTargets(&target, synthVoice);
+      preset_applyVoiceAutomationTargets(&target, synthVoice);
 }
 
 /* Applies a single morphed parameter value to the DSP. */
@@ -214,8 +293,7 @@ void preset_applyLiveMorphParameterValue(uint8_t image,
       return;
 
    preset_applyLiveAutomationTargetSelector(image, param, value);
-   /* seq_applySingleParameterValue remains in Sequencer for now. */
-   seq_applySingleParameterValue(param, value);
+   preset_applySingleParameterValue(param, value);
 }
 
 /* Converts automation value to morph amount. */
@@ -241,7 +319,7 @@ static uint8_t preset_lfoMorphAssignmentForSource(uint8_t sourceVoice,
                                                   ModulationNode **lfoNode)
 {
    uint8_t image;
-   SeqKitState *kit;
+   PresetKitState *kit;
    uint16_t destination;
    uint8_t morphVoice;
 
@@ -314,7 +392,7 @@ static void preset_advanceMorphDrainPhase(void)
 /* Sets the global morph amount. */
 void preset_setGlobalMorphAmount(uint8_t morphAmount)
 {
-   SeqKitState *kit = preset_getCurrentImageKitState();
+   PresetKitState *kit = preset_getCurrentImageKitState();
    uint8_t voice;
 
    kit->globalMorphAmount = morphAmount;
@@ -343,7 +421,7 @@ void preset_setGlobalMorphAutomationValue(uint8_t morphValue)
 /* Resets per-voice morph amounts to global. */
 void preset_resetVoiceMorphAmountsToGlobal(void)
 {
-   SeqKitState *kit = preset_getCurrentImageKitState();
+   PresetKitState *kit = preset_getCurrentImageKitState();
    uint8_t synthVoice;
 
    for(synthVoice=0;synthVoice<PRESET_SYNTH_VOICES;synthVoice++)
@@ -358,7 +436,7 @@ void preset_resetVoiceMorphAmountsToGlobal(void)
 /* Sets morph amount for a specific voice. */
 void preset_setVoiceMorphAmount(uint8_t synthVoice, uint8_t morphAmount)
 {
-   SeqKitState *kit;
+   PresetKitState *kit;
 
    if(synthVoice >= PRESET_SYNTH_VOICES)
       return;
@@ -410,7 +488,7 @@ void preset_applyVelocityVoiceMorphOnTrigger(uint8_t voiceNr, uint8_t velocity)
    uint16_t destination;
    float amount;
    float scaled;
-   SeqKitState *kit;
+   PresetKitState *kit;
 
    if(!velocity)
       return;
@@ -452,7 +530,7 @@ void preset_modulateVoiceMorphAmount(uint8_t synthVoice, float amount, float val
    float travel;
    uint8_t modulationAmount;
    uint8_t image;
-   SeqKitState *kit;
+   PresetKitState *kit;
    uint8_t i;
 
    if(synthVoice >= PRESET_SYNTH_VOICES)
@@ -499,7 +577,7 @@ void preset_modulateVoiceMorphAmount(uint8_t synthVoice, float amount, float val
 /* Background morph worker. */
 void preset_serviceMorphInterpolation(void)
 {
-   SeqKitState *kit;
+   PresetKitState *kit;
    uint8_t synthVoice;
    uint8_t image;
    uint8_t voiceMask;
@@ -603,7 +681,7 @@ void preset_updateLiveSharedParameterCache(uint16_t param, uint8_t value)
 }
 
 /* Applies all shared (non-voice) parameters from a kit to the DSP. */
-void preset_applySharedParameterValues(const SeqKitState *kit)
+void preset_applySharedParameterValues(const PresetKitState *kit)
 {
    uint16_t param;
 
@@ -626,7 +704,7 @@ void preset_applySharedParameterValues(const SeqKitState *kit)
 }
 
 /* Applies all voice-specific parameters from a kit for a specific voice. */
-void preset_applyVoiceParameterValues(const SeqKitState *kit, uint8_t synthVoice)
+void preset_applyVoiceParameterValues(const PresetKitState *kit, uint8_t synthVoice)
 {
    uint8_t i;
 

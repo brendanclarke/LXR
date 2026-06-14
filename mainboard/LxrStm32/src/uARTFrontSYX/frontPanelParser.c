@@ -39,6 +39,8 @@
 #include "MidiMessages.h"
 #include "FrontPanelProtocol.h"
 #include "MidiParser.h"
+#include "Preset/EndpointRestore.h"
+#include "Preset/MorphEngine.h"
 #include "Preset/ParameterArray.h"
 #include "sequencer.h"
 #include "PatternData.h"
@@ -307,7 +309,7 @@ static void presetLoad_clearPrfCacheSession()
 static void presetLoad_clearPrfRuntimeFlags()
 {
    presetLoad_prfCacheLiveVMorphFlag = 0;
-   seq_vMorphFlag = 0;
+   preset_vMorphFlag = 0;
 }
 
 static uint8_t presetLoad_prfCacheSessionActive()
@@ -349,13 +351,13 @@ static void presetLoad_capturePrfStmLiveSnapshot()
    uint8_t pattern = (uint8_t)(presetLoad_prfCacheProtectedPattern & 0x07);
 
    presetLoad_prfCacheLiveActivePattern = seq_activePattern;
-   presetLoad_prfCacheLivePendingPattern = seq_pendingPattern;
+   presetLoad_prfCacheLivePendingPattern = preset_tempPlaybackSwitchState.pendingPattern;
    presetLoad_prfCacheLivePattern.seq_patternSettings = seq_patternSet.seq_patternSettings[pattern];
 
    for(track=0;track<NUM_TRACKS;track++)
    {
       presetLoad_prfCacheLivePerTrackActivePattern[track] = seq_perTrackActivePattern[track];
-      presetLoad_prfCacheLivePerTrackPendingPattern[track] = seq_perTrackPendingPattern[track];
+      presetLoad_prfCacheLivePerTrackPendingPattern[track] = preset_tempPlaybackSwitchState.perTrackPendingPattern[track];
       presetLoad_prfCacheLivePattern.seq_mainSteps[track] = seq_patternSet.seq_mainSteps[pattern][track];
       presetLoad_prfCacheLivePattern.seq_patternLengthRotate[track] =
          seq_patternSet.seq_patternLengthRotate[pattern][track];
@@ -376,10 +378,10 @@ static void presetLoad_capturePrfStmLiveSnapshot()
    for(track=0;track<7;track++)
    {
       presetLoad_prfCacheLiveNoteOverride[track] = midi_NoteOverride[track];
-      presetLoad_prfCacheLiveVMorphAmount[track] = seq_vMorphAmount[track];
+      presetLoad_prfCacheLiveVMorphAmount[track] = preset_vMorphAmount[track];
    }
 
-   presetLoad_prfCacheLiveVMorphFlag = seq_vMorphFlag;
+   presetLoad_prfCacheLiveVMorphFlag = preset_vMorphFlag;
    presetLoad_prfCacheLiveSeqVoicesLoading = seq_voicesLoading;
    presetLoad_prfCacheLiveSeqNewVoiceAvailable = seq_newVoiceAvailable;
    presetLoad_prfCacheLiveSeqTracksLocked = seq_tracksLocked;
@@ -468,8 +470,8 @@ uint8_t presetLoad_prfCacheTakeLiveVMorphFlag()
       return flag;
    }
 
-   flag = seq_vMorphFlag;
-   seq_vMorphFlag = 0;
+   flag = preset_vMorphFlag;
+   preset_vMorphFlag = 0;
    return flag;
 }
 
@@ -481,7 +483,7 @@ uint8_t presetLoad_prfCacheLiveVMorphAmountValue(uint8_t voice)
    if(presetLoad_prfCacheUseLivePattern())
       return presetLoad_prfCacheLiveVMorphAmount[voice];
 
-   return seq_vMorphAmount[voice];
+   return preset_vMorphAmount[voice];
 }
 
 static void presetLoad_sendPrfRestoreParam(uint16_t paramNr, uint8_t value, uint8_t isMorph)
@@ -1299,7 +1301,7 @@ static void frontParser_handleSysexData(unsigned char data)
          // signal new pattern after receiving all the data
          /*
             if( seq_isRunning() && (frontParser_sysexSeqStepNr == NUM_TRACKS*NUM_PATTERN)) {
-               seq_newPatternAvailable = 1;
+               preset_tempPlaybackSwitchState.newPatternAvailable = 1;
             }
             */
             uart_sendFrontpanelSysExByte(SYSEX_RECEIVE_PAT_SCALE_DATA);
@@ -1453,7 +1455,7 @@ static void frontParser_handleSysexData(unsigned char data)
                   && seq_isRunning()
                   && !seq_loadFastMode)
                {
-                  seq_newPatternAvailable=1;
+                  preset_tempPlaybackSwitchState.newPatternAvailable=1;
                }
                uart_sendFrontpanelSysExByte(SYSEX_BEGIN_PATTERN_TRANSMIT);
             }
@@ -1534,7 +1536,7 @@ void frontParser_handleMidiMessage(void)
                }
                else
                {
-                  seq_normalKitState.morphEndpointParams[paramNr] = frontParser_midiMsg.data2;
+                  preset_normalKitState.morphEndpointParams[paramNr] = frontParser_midiMsg.data2;
                }
             }
          }
@@ -2065,7 +2067,7 @@ static void frontParser_handleSeqCC()
          uint8_t endpointMode = frontParser_midiMsg.data2;
 
          /* RESTORE: Switch ingress target to normal kit endpoint buffer.
-            Subsequent parameter and target messages will populate seq_normalKitState endpoint images.
+            Subsequent parameter and target messages will populate preset_normalKitState endpoint images.
             The data byte selects which endpoint group is being refreshed, so file
             loads can update only the kit/front endpoint or only the morph parameter
             endpoint without clearing the other side. */
@@ -2074,18 +2076,18 @@ static void frontParser_handleSeqCC()
 
          if(endpointMode != FRONT_SEQ_TMP_KIT_ENDPOINT_MORPH_ONLY)
          {
-            memset(seq_normalKitState.kitEndpointParams, 0, END_OF_SOUND_PARAMETERS);
-            memset(&seq_normalKitState.frontPanelAutomationTargets,
+            memset(preset_normalKitState.kitEndpointParams, 0, END_OF_SOUND_PARAMETERS);
+            memset(&preset_normalKitState.frontPanelAutomationTargets,
                    0,
-                   sizeof(seq_normalKitState.frontPanelAutomationTargets));
+                   sizeof(preset_normalKitState.frontPanelAutomationTargets));
          }
 
          if(endpointMode != FRONT_SEQ_TMP_KIT_ENDPOINT_FRONT_ONLY)
          {
-            memset(seq_normalKitState.morphEndpointParams, 0, END_OF_SOUND_PARAMETERS);
-            memset(&seq_normalKitState.morphParameterEndpointAutomationTargets,
+            memset(preset_normalKitState.morphEndpointParams, 0, END_OF_SOUND_PARAMETERS);
+            memset(&preset_normalKitState.morphParameterEndpointAutomationTargets,
                    0,
-                   sizeof(seq_normalKitState.morphParameterEndpointAutomationTargets));
+                   sizeof(preset_normalKitState.morphParameterEndpointAutomationTargets));
          }
          break;
       }
@@ -2104,7 +2106,7 @@ static void frontParser_handleSeqCC()
          break;
 
       case FRONT_SEQ_TMP_KIT_ENDPOINT_END:
-         seq_applyNormalEndpointAutomationTargets();
+         preset_applyNormalEndpointAutomationTargets();
 
          /* RESTORE: Switch ingress target back to the surrounding context. During
             file load, endpoint dumps are nested inside normal kit-endpoint ingress. */
@@ -2652,7 +2654,7 @@ static void frontParser_handleSeqCC()
             
             	CASE 2: global load fast mode is off. voice params get applied 
                (presetLoad_uncacheVoice) when the sequence changes 
-               (flag seq_newPatternExecuted). This happens if the voice is trigged OR on 
+               (flag preset_tempPlaybackSwitchState.newPatternExecuted). This happens if the voice is trigged OR on 
                corresponding substep(mod 8) (0=drum1, 3=snare etc.). when 
             
             presetLoad_uncacheVoice(voice) actually applies the parameters
@@ -2693,8 +2695,8 @@ static void frontParser_handleSeqCC()
          if((frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
             || (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_ALL))
          {
-            seq_morphLoadDisabled = 1;
-            seq_vMorphFlag = 0;
+            preset_morphLoadDisabled = 1;
+            preset_vMorphFlag = 0;
          }
          if((frontParser_midiMsg.data2 != FRONT_FILE_DONE_TYPE_PERFORMANCE)
             || (presetLoad_prfCacheState == PRF_CACHE_IDLE))
@@ -2706,8 +2708,8 @@ static void frontParser_handleSeqCC()
          if((frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
             || (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_ALL))
          {
-            seq_morphLoadDisabled = 0;
-            seq_vMorphFlag = 0;
+            preset_morphLoadDisabled = 0;
+            preset_vMorphFlag = 0;
          }
          if(presetLoad_prfCacheSessionActive()
             && (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE))

@@ -25,6 +25,7 @@
 | 014 | 2026-06-13 | local repo, Phase 7 shared-module removal | Sequencer/MIDI now read live owner state directly, the background-load finalizer stays on TempPlaybackSwitch, and the remaining parser/session bridge now lives inside frontPanelParser.c |
 | 015 | 2026-06-13 | local repo, AVR encoder Timer1 compare cutover | AVR front-panel encoder now uses Timer1 compare polling; the dead 2-step API is gone, and the hardware re-test passed though reversals remain rough |
 | 016 | 2026-06-13 | local repo, AVR encoder rest-FSM final | AVR main encoder now uses only `encode_stableRead4()` backed by a Timer1 16 kHz fixed-`AB=11` rest-phase FSM; hardware test passed and debug scaffolding was removed |
+| 017 | 2026-06-14 | local repo, Preset rename completion + UART send split mapping | Phase 10/11 Preset cleanup was finalized, Phase 12 was confirmed as retrospective only, and the outbound front-panel send split was mapped into the comms reference |
 
 ---
 
@@ -94,6 +95,10 @@ Session 015 closed the AVR front-panel encoder follow-up by replacing the fragil
 Session 016 completed the main encoder stabilization. The final AVR encoder path exposes only `encode_stableRead4()` for rotation, removes legacy/selectable read modes, samples PC0/PC1/PC2 from `TIMER1_COMPA_vect` at 16 kHz, and emits detents only after a legal sequence leaves and returns to the fixed hardware rest phase `AB=11`. Temporary boot LCD diagnostics identified the true rest phase and were removed after the user confirmed the final behavior works well on hardware.
 - **Find here**: final Timer1 16 kHz encoder FSM, fixed `ENCODER_REST_STATE = 0x03`, `encode_stableRead4()`-only API, removed debug hooks, hardware-approved encoder behavior, updated hardware archive
 
+### 017 — Preset Rename Completion + UART Send Split Mapping (2026-06-14)
+Session 017 completed the remaining Preset-owned rename sweep, removed the last Preset-specific `seq_` aliases, and confirmed that the remaining Sequencer lookup helpers are orchestration rather than missed ownership split points. The session also expanded the comms audit so the outbound front-panel transmit work is clearly mapped to the future `frontPanelSendingProtocol` split, and refreshed the temporary load/spec docs so the permanent reference material carries the useful planning notes.
+- **Find here**: `PresetKitState` / `PresetAutomationTargets` rename, `PresetEndpointRestoreRequest`, temp-switch alias removal, `sequencer.h` compatibility cleanup, Phase 12 retrospective, direct front-panel send inventory, `frontPanelSendingProtocol` planning, comms/temp spec refresh
+
 
 ---
 
@@ -127,6 +132,7 @@ Session 016 completed the main encoder stabilization. The final AVR encoder path
 | Phase 6 cleanup/naming is complete; the next refactor step is driven by PRESET_CONSOLIDATION_AUDIT.md and the old planning docs are no longer canonical | 013 |
 | Session 014 cut Sequencer/MIDI off the shared cache header, deleted the shared PresetLoadCache module, and left the remaining parser/session bridge inside frontPanelParser.c | 014 |
 | AVR front-panel encoder uses only `encode_stableRead4()` backed by Timer1 16 kHz sampling and a fixed `AB=11` rest-phase FSM; do not reintroduce legacy read modes, PCINT decoding, or Timer0 encoder sampling | 016 |
+| Preset-owned exports/types now use `preset_` / `Preset*`, and the remaining AVR front-panel transmit calls are protocol work for `frontPanelSendingProtocol.c/.h` | 017 |
 
 
 ---

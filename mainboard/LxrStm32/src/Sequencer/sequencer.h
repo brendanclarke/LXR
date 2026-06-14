@@ -84,9 +84,6 @@ extern uint8_t seq_recordActive;				/**< set to 1 to activate the reording mode*
 extern uint8_t seq_transpose_voiceAmount[7];
 extern uint8_t seq_transposeOnOff;
 
-extern volatile uint8_t preset_tmpKitHandshakeReady;
-extern volatile uint8_t preset_tmpKitHandshakeAck;
-
 extern uint8_t seq_selectedStep;
 
 extern uint8_t seq_resetBarOnPatternChange;
@@ -103,10 +100,6 @@ extern uint8_t seq_rollNote;
 extern uint8_t seq_rollVelocity;
 extern uint8_t seq_kitResetFlag;
 extern uint8_t seq_skipFirstRoll;
-
-#define seq_vMorphAmount preset_vMorphAmount
-#define seq_vMorphFlag preset_vMorphFlag
-#define seq_morphLoadDisabled preset_morphLoadDisabled
 
 void sequencer_sendVMorph(uint8_t voiceArray, uint8_t morphAmount);
 //------------------------------------------------------------------------------
@@ -129,23 +122,17 @@ void seq_setShuffle(float shuffle);
 #define SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT PRESET_AUTOMATION_INGRESS_FRONT_ENDPOINT
 #define SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT PRESET_AUTOMATION_INGRESS_MORPH_ENDPOINT
 
-#define seq_normalKitState preset_normalKitState
-#define seq_tmpKitState preset_tmpKitState
-#define seq_tmpKitActive preset_tmpKitActive
-#define seq_voiceSourceState preset_voiceSourceState
-#define seq_voiceParamMask preset_voiceParamMask
-
 /* Compatibility wrapper for the active kit-image selector. This preserves the
    old `seq_*` name while delegating the actual temp-vs-normal choice to
    `Preset`, which now owns the routing policy. */
-static inline SeqKitState* seq_getCurrentImageKitState(void)
+static inline PresetKitState* seq_getCurrentImageKitState(void)
 {
    return preset_getCurrentImageKitState();
 }
 
 /* Compatibility wrapper for the image-to-kit lookup helper. It keeps callers
    from learning the new file layout while still routing through `Preset`. */
-static inline SeqKitState* seq_getMorphKitForImage(uint8_t image)
+static inline PresetKitState* seq_getMorphKitForImage(uint8_t image)
 {
    return preset_getMorphKitForImage(image);
 }
@@ -245,7 +232,7 @@ static inline uint8_t seq_morphVoiceForParam(uint16_t param)
 /* Compatibility wrapper for the helper that updates interpolated automation
    targets only. The real implementation now lives in `Preset`, but the old
    call shape stays intact for callers migrating in smaller steps. */
-static inline void seq_updateInterpolatedAutomationTarget(SeqKitState *kit,
+static inline void seq_updateInterpolatedAutomationTarget(PresetKitState *kit,
                                                           uint16_t param,
                                                           uint8_t selector)
 {
@@ -254,7 +241,7 @@ static inline void seq_updateInterpolatedAutomationTarget(SeqKitState *kit,
 
 /* Compatibility wrapper for the helper that keeps the front-panel and
    interpolated automation targets coherent together. */
-static inline void seq_updateFrontAndInterpolatedAutomationTargets(SeqKitState *kit,
+static inline void seq_updateFrontAndInterpolatedAutomationTargets(PresetKitState *kit,
                                                                    uint16_t param,
                                                                    uint8_t selector)
 {
@@ -378,15 +365,13 @@ static inline void seq_modulateVoiceMorphAmount(uint8_t synthVoice, float amount
    preset_modulateVoiceMorphAmount(synthVoice, amount, value);
 }
 
+/* Transitional wrapper retained for older Sequencer-facing call sites while
+   the live parameter emit path is fully owned by ParameterIngress. New code
+   should call `preset_applySingleParameterValue()` directly. */
 static inline void seq_applySingleParameterValue(uint16_t param, uint8_t value)
 {
    preset_applySingleParameterValue(param, value);
 }
-
-void seq_applyVoiceAutomationTargets(const SeqKitAutomationTargets *source,
-                                     uint8_t synthVoice);
-
-void seq_applyNormalEndpointAutomationTargets();
 //------------------------------------------------------------------------------
 void seq_armAutomationStep(uint8_t stepNr, uint8_t track,uint8_t isArmed);
 //------------------------------------------------------------------------------

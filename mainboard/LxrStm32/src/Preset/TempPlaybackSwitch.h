@@ -12,8 +12,10 @@
 #include "stm32f4xx.h"
 
 /* Phase 8 collapsed the temp-switch booleans into one explicit state object.
-   The legacy `seq_*` names remain as macros so the sequencer and parser can
-   keep compiling while the ownership boundary is simplified. */
+   The `preset_tempPlaybackSwitchState` fields below are the canonical names for
+   that boundary state. Sequencer and the front-panel parser should read or
+   write the struct fields directly so the ownership of pattern switching stays
+   visibly inside Preset. */
 enum
 {
    PRESET_TEMP_PLAYBACK_TRACKS = 7
@@ -31,14 +33,6 @@ typedef struct PresetTempPlaybackSwitchStateStruct
 } PresetTempPlaybackSwitchState;
 
 extern PresetTempPlaybackSwitchState preset_tempPlaybackSwitchState;
-
-#define seq_pendingPattern (preset_tempPlaybackSwitchState.pendingPattern)
-#define seq_perTrackPendingPattern (preset_tempPlaybackSwitchState.perTrackPendingPattern)
-#define seq_newPatternAvailable (preset_tempPlaybackSwitchState.newPatternAvailable)
-#define seq_newPatternExecuted (preset_tempPlaybackSwitchState.newPatternExecuted)
-#define seq_loadPendingFlag (preset_tempPlaybackSwitchState.loadPendingFlag)
-#define seq_loadSeqNow (preset_tempPlaybackSwitchState.loadSeqNow)
-#define seq_tmpBoundaryPatternSwitchAck (preset_tempPlaybackSwitchState.tmpBoundaryPatternSwitchAck)
 
 /* Updates the temp-image selection and performs the restore/report work that
    accompanies a normal/temp boundary change. */

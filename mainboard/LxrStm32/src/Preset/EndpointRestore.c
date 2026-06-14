@@ -23,22 +23,22 @@
 #define PRESET_ENDPOINT_RESTORE_PHASE_WAIT_ACK 4
 #define PRESET_ENDPOINT_RESTORE_WAIT_TIMEOUT 30000
 
-typedef struct SeqEndpointRestoreRequestStruct
+typedef struct PresetEndpointRestoreRequestStruct
 {
-   const SeqKitState *kit;
+   const PresetKitState *kit;
    uint8_t mode;
    uint8_t voiceMask;
    uint8_t reportGlobalMorph;
-} SeqEndpointRestoreRequest;
+} PresetEndpointRestoreRequest;
 
 volatile uint8_t preset_tmpKitHandshakeReady = 0;
 volatile uint8_t preset_tmpKitHandshakeAck = 0;
 
 static uint8_t preset_tmpKitPushParamsToFrontEnabled = 1;
-static SeqEndpointRestoreRequest preset_endpointRestoreQueue[PRESET_ENDPOINT_RESTORE_QUEUE_LENGTH];
+static PresetEndpointRestoreRequest preset_endpointRestoreQueue[PRESET_ENDPOINT_RESTORE_QUEUE_LENGTH];
 static uint8_t preset_endpointRestoreQueueHead = 0;
 static uint8_t preset_endpointRestoreQueueCount = 0;
-static SeqEndpointRestoreRequest preset_endpointRestoreCurrent;
+static PresetEndpointRestoreRequest preset_endpointRestoreCurrent;
 static uint8_t preset_endpointRestorePhase = PRESET_ENDPOINT_RESTORE_PHASE_IDLE;
 static uint16_t preset_endpointRestoreParamCursor = 0;
 static uint8_t preset_endpointRestoreVoiceCursor = 0;
@@ -90,7 +90,7 @@ static void preset_pushSingleMorphParameterToFront(uint16_t param, uint8_t value
 
 /* Reports the global morph amount to the AVR so the display can reflect the
    current kit image when the temp/normal boundary changes. */
-static void preset_pushGlobalMorphToFront(const SeqKitState *kit)
+static void preset_pushGlobalMorphToFront(const PresetKitState *kit)
 {
    uint8_t amount;
 
@@ -111,11 +111,11 @@ static void preset_pushGlobalMorphToFront(const SeqKitState *kit)
 /* Enqueues a restore request. When a request for the same kit/mode is already
    at the tail of the queue, the voice masks are merged so repeated callers do
    not create redundant restore traffic. */
-static void preset_pushKitEndpointVoiceMaskToFrontInternal(const SeqKitState *kit,
+static void preset_pushKitEndpointVoiceMaskToFrontInternal(const PresetKitState *kit,
                                                         uint8_t voiceMask,
                                                         uint8_t reportGlobalMorph)
 {
-   SeqEndpointRestoreRequest request;
+   PresetEndpointRestoreRequest request;
    uint8_t tail;
    uint8_t last;
 
@@ -160,7 +160,7 @@ static void preset_pushKitEndpointVoiceMaskToFrontInternal(const SeqKitState *ki
    preset_endpointRestoreQueueCount++;
 }
 
-static void preset_pushKitEndpointsToFront(const SeqKitState *kit)
+static void preset_pushKitEndpointsToFront(const PresetKitState *kit)
 {
    if(!kit)
       return;
@@ -168,7 +168,7 @@ static void preset_pushKitEndpointsToFront(const SeqKitState *kit)
    preset_pushKitEndpointVoiceMaskToFrontInternal(kit, 0xff, 0);
 }
 
-static void preset_pushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit)
+static void preset_pushKitEndpointsToFrontWithGlobalMorphReport(const PresetKitState *kit)
 {
    if(!kit)
       return;
@@ -176,7 +176,7 @@ static void preset_pushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitStat
    preset_pushKitEndpointVoiceMaskToFrontInternal(kit, 0xff, 1);
 }
 
-static void preset_pushKitEndpointVoiceMaskToFront(const SeqKitState *kit,
+static void preset_pushKitEndpointVoiceMaskToFront(const PresetKitState *kit,
                                                 uint8_t voiceMask)
 {
    preset_pushKitEndpointVoiceMaskToFrontInternal(kit, voiceMask, 0);
@@ -226,7 +226,7 @@ static uint8_t preset_endpointRestoreWaitTimedOut(void)
 static uint8_t preset_endpointRestoreSendNextFull(uint8_t morphEndpoint)
 {
    uint16_t param;
-   const SeqKitState *kit = preset_endpointRestoreCurrent.kit;
+   const PresetKitState *kit = preset_endpointRestoreCurrent.kit;
    const uint8_t *values = morphEndpoint ? kit->morphEndpointParams
                                          : kit->kitEndpointParams;
 
@@ -247,7 +247,7 @@ static uint8_t preset_endpointRestoreSendNextFull(uint8_t morphEndpoint)
 
 static uint8_t preset_endpointRestoreSendNextMasked(uint8_t morphEndpoint)
 {
-   const SeqKitState *kit = preset_endpointRestoreCurrent.kit;
+   const PresetKitState *kit = preset_endpointRestoreCurrent.kit;
    const uint8_t *values = morphEndpoint ? kit->morphEndpointParams
                                          : kit->kitEndpointParams;
 
@@ -430,7 +430,7 @@ void preset_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask)
       preset_pushKitEndpointVoiceMaskToFront(&preset_normalKitState, normalVoiceMask);
 }
 
-void preset_maybePushKitEndpointsToFrontWithGlobalMorphReport(const SeqKitState *kit)
+void preset_maybePushKitEndpointsToFrontWithGlobalMorphReport(const PresetKitState *kit)
 {
    if(!preset_tmpKitPushParamsToFrontEnabled)
       return;
