@@ -185,7 +185,7 @@ sei();
 		uart_checkAndParse();
 		uart_checkAndParse();
 		
-      	midiMsg_checkLongOps(); // resolve any long MIDI ops that need to happen
+      	frontPanel_checkLongOps(); // resolve any long front-panel ops that need to happen
                               // for now, these include automated bank and pattern
                               // change, and midi morph
       

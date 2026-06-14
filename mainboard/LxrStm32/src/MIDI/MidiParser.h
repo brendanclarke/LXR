@@ -40,15 +40,12 @@
 #include "stm32f4xx.h"
 #include "globals.h"
 #include "MidiMessages.h"
-#include "MidiVoiceControl.h"
+#include "MidiOutputControl.h"
 
 /* Stream parser entry point. This remains the top-level MIDI byte coordinator
    while channel/global ownership lives in the split helper modules. */
 void midiParser_parseUartData(unsigned char data);
 
-/* Shared CC entry point used by the higher-level parser and the ownership
-   split helpers. */
-void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue);
 void midiParser_parseMidiMessage(MidiMsg msg);
 void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue);
 float midiParser_calcDetune(uint8_t value);
@@ -60,13 +57,13 @@ void midiDebugSend(uint8_t b1, uint8_t b2);
 #endif
 
 /* Routing selection for the MIDI I/O bridge. */
-void midiParser_setRouting(uint8_t value);
+void midi_setRouting(uint8_t value);
 
 /* Per-direction MIDI filter bits. */
-void midiParser_setFilter(uint8_t is_tx, uint8_t value);
+void midi_setFilter(uint8_t is_tx, uint8_t value);
 
 /* Last seen CC values used by automation and live-apply feedback. */
-extern uint8_t midiParser_originalCcValues[0xff];
+extern uint8_t frontParser_originalCcValues[0xff];
 
 /* MIDI parser caches shared with the receive and voice-control code. */
 extern MidiMsg midi_midiCache[256];
@@ -96,7 +93,7 @@ extern uint8_t midi_KitChange[6];
 //	MIDI_MODE_NOTE,
 //} MidiModes;
 
-/* High nibble is TX, low nibble is RX. See midiParser_setFilter() for the
+/* High nibble is TX, low nibble is RX. See midi_setFilter() for the
    bit layout. */
 extern uint8_t midiParser_txRxFilter;
 

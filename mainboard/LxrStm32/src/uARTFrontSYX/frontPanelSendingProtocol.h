@@ -13,66 +13,101 @@
 
 #include "frontPanelReceivingProtocol.h"
 
-/* Low-level transport wrappers. These are the only helpers that should talk to
-   the raw front-panel UART primitives. */
+/* Raw STM->AVR byte wrappers. Only this send-side protocol module should call
+   the front-panel UART primitives directly for command traffic. */
 void frontPanelSending_sendByte(uint8_t data);
 void frontPanelSending_sendPriorityByte(uint8_t data);
 void frontPanelSending_sendPriorityByteWait(uint8_t data);
 void frontPanelSending_sendSysExByte(uint8_t data);
 
-/* Small packet builders used by the parser, sequencer, and restore code. */
+/* Emit ordinary three-byte STM->AVR command triples. */
 void frontPanelSending_sendTriplet(uint8_t status, uint8_t data1, uint8_t data2);
+/* Emit priority triples without waiting for UART drain. */
 void frontPanelSending_sendPriorityTriplet(uint8_t status, uint8_t data1, uint8_t data2);
+/* Emit priority triples and wait for each byte to be accepted. */
 void frontPanelSending_sendPriorityTripletWait(uint8_t status, uint8_t data1, uint8_t data2);
+
+/* Acknowledge an AVR callback request with FRONT_CALLBACK_ACK. */
 void frontPanelSending_sendCallbackAck(void);
+/* Acknowledge SAMPLE_START_UPLOAD after STM starts sample reload handling. */
 void frontPanelSending_sendSampleUploadAck(void);
+/* Reply to FRONT_SAMPLE_COUNT with the sample ROM count. */
 void frontPanelSending_sendSampleCountReply(void);
+/* Reply to a track-length query for trackNr. Caller must pass 0..6. */
 void frontPanelSending_sendTrackLengthReply(uint8_t trackNr);
+/* Reply to a track-rotation query for trackNr. Caller must pass 0..6. */
 void frontPanelSending_sendTrackRotationReply(uint8_t trackNr);
+/* Emit FRONT_SEQ_TRACK_ROTATION with an already computed rotation value. */
 void frontPanelSending_sendTrackRotationValue(uint8_t rotation);
+/* Echo a bank-change command/value pair back to the AVR. */
 void frontPanelSending_sendBankChange(uint8_t bankCode, uint8_t value);
+/* Echo an internal parameter value using PARAM_CC/PARAM_CC2 encoding. */
 void frontPanelSending_sendParameterEcho(uint16_t paramNr, uint8_t value);
+/* Send PATCH_RESET through the front-panel SysEx byte path. */
 void frontPanelSending_sendPatchReset(void);
+/* Pulse one front-panel voice activity LED with NOTE_ON encoding. */
 void frontPanelSending_sendVoiceActivity(uint8_t voice);
+/* Reply with pattern next/change-bar settings for patternNr. */
 void frontPanelSending_sendPatternParamsReply(uint8_t patternNr);
+/* Send pattern metadata inside an active SysEx pattern transfer. */
 void frontPanelSending_sendPatternDataReply(uint8_t patternNr);
+/* Reply with Euclidean/scale settings for trackNr. Caller must pass 0..6. */
 void frontPanelSending_sendEuklidParamsReply(uint8_t trackNr);
+/* Reply with active-track rotation and transpose state for trackNr. */
 void frontPanelSending_sendActiveTrackReply(uint8_t trackNr);
+/* Send one main-step LED state when the requested step is active. */
 void frontPanelSending_sendMainStepLedReply(uint8_t trackNr,
                                            uint8_t stepNr,
                                            uint8_t patternNr);
+/* Reply with the editable step parameter set for pattern/track/step. */
 void frontPanelSending_sendStepParamsReply(uint8_t patternNr,
                                           uint8_t trackNr,
                                           uint8_t stepNr);
+
+/* SysEx transfer acknowledgements sent over the front-panel SysEx byte path. */
 void frontPanelSending_sendSysexStartAck(void);
 void frontPanelSending_sendSysexEndAck(void);
 void frontPanelSending_sendSysexReceiveAck(uint8_t mode);
 void frontPanelSending_sendSysexStepAck(void);
 void frontPanelSending_sendSysexBeginPatternTransmitAck(void);
+
+/* Begin/end canonical restore packets. These use priority wait writes so the
+   AVR receives a coherent restore bracket. */
 void frontPanelSending_sendRestoreBegin(void);
 void frontPanelSending_sendRestoreDone(void);
+/* Send one front-end restore parameter, raw-indexed 0..END_OF_SOUND_PARAMETERS-1. */
 void frontPanelSending_sendRestoreParam(uint16_t param, uint8_t value);
+/* Send one morph-endpoint restore parameter, raw-indexed 0..END_OF_SOUND_PARAMETERS-1. */
 void frontPanelSending_sendRestoreMorphParam(uint16_t param, uint8_t value);
+/* Report global morph amount as low/high 7-bit FRONT_SEQ_CC commands. */
 void frontPanelSending_sendGlobalMorphReport(uint8_t amount);
+
+/* Runtime sequencer feedback commands for AVR UI state. */
 void frontPanelSending_sendPatternChange(uint8_t pattern);
 void frontPanelSending_sendRunStop(uint8_t isRunning);
 void frontPanelSending_sendBeatLed(uint8_t onOff);
 void frontPanelSending_sendCurrentStepLed(uint8_t stepNr);
+/* Send compact main-step or sub-step data inside the active SysEx reply. */
 void frontPanelSending_sendMainStepInfo(uint16_t stepNr);
 void frontPanelSending_sendStepInfo(uint16_t stepNr);
 
-/* Display helpers for the step LEDs. */
+/* Rebuild the visible 16-step main LED row and then refresh sub-step LEDs. */
 void frontPanelSending_updateTrackLeds(uint8_t trackNr,
                                       uint8_t patternNr,
                                       uint8_t activeStep);
+/* Rebuild the lower/upper four-bit sub-step LED rows around activeStep. */
 void frontPanelSending_updateSubStepLeds(uint8_t trackNr,
                                         uint8_t patternNr,
                                         uint8_t activeStep);
 
-/* Flow-control and parser cache status helpers. */
+/* Flow-control grants for long AVR->STM transfers. Non-waiting version is used
+   during normal parser progress; wait version is used when bracketing needs a
+   synchronous grant. */
 void frontPanelSending_sendFlowGrant(uint8_t channel, uint8_t credits);
 void frontPanelSending_sendFlowGrantWait(uint8_t channel, uint8_t credits);
+/* Abort a long-transfer flow-control session for channel. */
 void frontPanelSending_sendFlowAbort(uint8_t channel);
+/* Deprecated PRF compatibility status only; there is no active cache owner. */
 void frontPanelSending_sendPrfCacheStatus(uint8_t command, uint8_t status);
 
 #endif /* UARTFRONTSYX_FRONTPANELSENDINGPROTOCOL_H_ */

@@ -42,7 +42,6 @@
 #include "frontPanelReceivingProtocol.h"
 #include "MidiMessages.h"
 #include "frontPanelSendingProtocol.h"
-#include "MidiParser.h"
 #include "Preset/EndpointRestore.h"
 #include "Preset/MorphEngine.h"
 #include "Preset/ParameterArray.h"
@@ -54,6 +53,8 @@
 #include "EuklidGenerator.h"
 #include "config.h"
 #include "mixer.h"
+#include "valueShaper.h"
+#include "modulationNode.h"
 
 #include "DrumVoice.h"
 #include "CymbalVoice.h"
@@ -106,7 +107,1036 @@ static void frontParser_clearVoiceLoading(uint8_t voice)
       seq_voicesLoading &= (uint8_t)~(0x01 << voice);
 }
 
-extern MidiMsg frontParser_midiMsg;
+static uint16_t frontParser_activeNrpnNumber = 0;
+uint8_t frontParser_originalCcValues[0xff];
+uint8_t midi_envPosition[6];
+
+static ModulationNode* frontParser_getLfoModNode(uint8_t voice)
+{
+   switch(voice)
+   {
+      case 0:
+      case 1:
+      case 2:
+         return &voiceArray[voice].lfo.modTarget;
+      case 3:
+         return &snareVoice.lfo.modTarget;
+      case 4:
+         return &cymbalVoice.lfo.modTarget;
+      case 5:
+      default:
+         return &hatVoice.lfo.modTarget;
+   }
+}
+
+static void frontParser_setLfoModAmount(uint8_t voice, uint8_t value)
+{
+   ModulationNode *node;
+
+   if(voice >= 6)
+      return;
+
+   node = frontParser_getLfoModNode(voice);
+   node->amount = value / 127.f;
+   modNode_updateValue(node, node->lastVal);
+}
+
+static void frontParser_setVelocityModAmount(uint8_t voice, uint8_t value)
+{
+   if(voice >= 6)
+      return;
+
+   velocityModulators[voice].amount = value / 127.f;
+   modNode_updateValue(&velocityModulators[voice],
+                       velocityModulators[voice].lastVal);
+}
+
+static inline float calcPitchModAmount(uint8_t data2)
+{
+   const float val = data2/127.f;
+   return val*val*PITCH_AMOUNT_FACTOR;
+}
+
+//-----------------------------------------------------------
+static void frontParser_nrpnHandler(uint16_t value)
+{
+   MidiMsg msg2;
+   msg2.status = MIDI_CC2;
+   msg2.data1 = frontParser_activeNrpnNumber;
+   msg2.data2 = value;
+   frontParser_applyParameterCommand(msg2,true);
+}
+//-----------------------------------------------------------
+/* Apply an internal CC/CC2-shaped parameter command to live DSP state. */
+void frontParser_applyParameterCommand(MidiMsg msg, uint8_t updateOriginalValue)
+{
+   if(msg.status == MIDI_CC)
+   {
+   
+      const uint16_t paramNr = msg.data1-1;
+      if(updateOriginalValue) {
+         frontParser_originalCcValues[paramNr+1] = msg.data2;
+         preset_storeParameterIngress(paramNr+1, msg.data2);
+      }
+   
+      switch(msg.data1)
+      {
+      
+         case CC_MOD_WHEEL:
+         
+            break;
+      
+         case NRPN_DATA_ENTRY_COARSE:
+            frontParser_nrpnHandler(msg.data2);
+            return;
+            break;
+      
+         case NRPN_FINE:
+            frontParser_activeNrpnNumber &= ~(0x7f);	//clear lower 7 bit
+            frontParser_activeNrpnNumber |= (msg.data2&0x7f);
+            break;
+      
+         case NRPN_COARSE:
+            frontParser_activeNrpnNumber &= 0x7f;	//clear upper 7 bit
+            frontParser_activeNrpnNumber |= (msg.data2<<7);
+            break;
+      
+         case VOL_SLOPE1:
+            slopeEg2_setSlope(&voiceArray[0].oscVolEg,msg.data2);
+         
+            break;
+         case PITCH_SLOPE1:
+            DecayEg_setSlope(&voiceArray[0].oscPitchEg,msg.data2);
+            break;
+      
+         case VOL_SLOPE2:
+            slopeEg2_setSlope(&voiceArray[1].oscVolEg,msg.data2);
+            break;
+         case PITCH_SLOPE2:
+            DecayEg_setSlope(&voiceArray[1].oscPitchEg,msg.data2);
+            break;
+      
+         case VOL_SLOPE3:
+            slopeEg2_setSlope(&voiceArray[2].oscVolEg,msg.data2);
+            break;
+         case PITCH_SLOPE3:
+            DecayEg_setSlope(&voiceArray[2].oscPitchEg,msg.data2);
+            break;
+      
+         case PITCH_SLOPE4:
+            DecayEg_setSlope(&snareVoice.oscPitchEg,msg.data2);
+            break;
+         case VOL_SLOPE6:
+            slopeEg2_setSlope(&hatVoice.oscVolEg,msg.data2);
+            break;
+      
+         case FILTER_FREQ_DRUM1:
+         case FILTER_FREQ_DRUM2:
+         case FILTER_FREQ_DRUM3:
+            {
+               const float f = msg.data2/127.f;
+            //exponential full range freq
+               SVF_directSetFilterValue(&voiceArray[msg.data1-FILTER_FREQ_DRUM1].filter,valueShaperF2F(f,FILTER_SHAPER) );
+            }
+            break;
+         case RESO_DRUM1:
+         case RESO_DRUM2:
+         case RESO_DRUM3:
+            SVF_setReso(&voiceArray[msg.data1-RESO_DRUM1].filter, msg.data2/127.f);
+            break;
+      
+         case F_OSC1_COARSE:
+            {
+            //clear upper nibble
+               voiceArray[0].osc.midiFreq &= 0x00ff;
+            //set upper nibble
+               voiceArray[0].osc.midiFreq |= msg.data2 << 8;
+               osc_recalcFreq(&voiceArray[0].osc);
+            }
+            break;
+         case F_OSC2_COARSE:
+            {
+            //clear upper nibble
+               voiceArray[1].osc.midiFreq &= 0x00ff;
+            //set upper nibble
+               voiceArray[1].osc.midiFreq |= msg.data2 << 8;
+               osc_recalcFreq(&voiceArray[1].osc);
+            }
+            break;
+         case F_OSC3_COARSE:
+            {
+            //clear upper nibble
+               voiceArray[2].osc.midiFreq &= 0x00ff;
+            //set upper nibble
+               voiceArray[2].osc.midiFreq |= msg.data2 << 8;
+               osc_recalcFreq(&voiceArray[2].osc);
+            }
+            break;
+         case F_OSC4_COARSE:
+            {
+            //clear upper nibble
+               snareVoice.osc.midiFreq &= 0x00ff;
+            //set upper nibble
+               snareVoice.osc.midiFreq |= msg.data2 << 8;
+               osc_recalcFreq(&snareVoice.osc);
+            }
+            break;
+         case F_OSC5_COARSE:
+            {
+            //clear upper nibble
+               cymbalVoice.osc.midiFreq &= 0x00ff;
+            //set upper nibble
+               cymbalVoice.osc.midiFreq |= msg.data2 << 8;
+               osc_recalcFreq(&cymbalVoice.osc);
+            }
+            break;
+      
+         case F_OSC1_FINE:
+            {
+            //clear lower nibble
+               voiceArray[0].osc.midiFreq &= 0xff00;
+            //set lower nibble
+               voiceArray[0].osc.midiFreq |= msg.data2;
+               osc_recalcFreq(&voiceArray[0].osc);
+            }
+            break;
+         case F_OSC2_FINE:
+            {
+            //clear lower nibble
+               voiceArray[1].osc.midiFreq &= 0xff00;
+            //set lower nibble
+               voiceArray[1].osc.midiFreq |= msg.data2;
+               osc_recalcFreq(&voiceArray[1].osc);
+            }
+            break;
+         case F_OSC3_FINE:
+            {
+            //clear lower nibble
+               voiceArray[2].osc.midiFreq &= 0xff00;
+            //set lower nibble
+               voiceArray[2].osc.midiFreq |= msg.data2;
+               osc_recalcFreq(&voiceArray[2].osc);
+            }
+            break;
+         case F_OSC4_FINE:
+            {
+            //clear lower nibble
+               snareVoice.osc.midiFreq &= 0xff00;
+            //set lower nibble
+               snareVoice.osc.midiFreq |= msg.data2;
+               osc_recalcFreq(&snareVoice.osc);
+            }
+            break;
+      
+         case F_OSC5_FINE:
+            {
+            //clear lower nibble
+               cymbalVoice.osc.midiFreq &= 0xff00;
+            //set lower nibble
+               cymbalVoice.osc.midiFreq |= msg.data2;
+               osc_recalcFreq(&cymbalVoice.osc);
+            }
+            break;
+      
+         case F_OSC6_FINE:
+            {
+            //clear lower nibble
+               hatVoice.osc.midiFreq &= 0xff00;
+            //set lower nibble
+               hatVoice.osc.midiFreq |= msg.data2;
+               osc_recalcFreq(&hatVoice.osc);
+            }
+            break;
+      
+         case OSC_WAVE_DRUM1:
+            voiceArray[0].osc.waveform = msg.data2;
+            break;
+      
+         case MOD_WAVE_DRUM1:
+            voiceArray[0].modOsc.waveform = msg.data2;
+            break;
+      
+         case OSC_WAVE_DRUM2:
+            voiceArray[1].osc.waveform = msg.data2;
+            break;
+      
+         case MOD_WAVE_DRUM2:
+            voiceArray[1].modOsc.waveform = msg.data2;
+            break;
+      
+         case OSC_WAVE_DRUM3:
+            voiceArray[2].osc.waveform = msg.data2;
+            break;
+      
+         case MOD_WAVE_DRUM3:
+            voiceArray[2].modOsc.waveform = msg.data2;
+            break;
+      
+         case OSC_WAVE_SNARE:
+            snareVoice.osc.waveform = msg.data2;
+            break;
+      
+      
+         case OSC1_DIST:
+         #if USE_FILTER_DRIVE
+         voiceArray[0].filter.drive = 0.5f + (msg.data2/127.f) *6;
+         #else
+            setDistortionShape(&voiceArray[0].distortion,msg.data2);
+         #endif
+            break;
+         case OSC2_DIST:
+         #if USE_FILTER_DRIVE
+         voiceArray[1].filter.drive = 0.5f + (msg.data2/127.f)*6;
+         #else
+            setDistortionShape(&voiceArray[1].distortion,msg.data2);
+         #endif
+            break;
+         case OSC3_DIST:
+         #if USE_FILTER_DRIVE
+         voiceArray[3].filter.drive = 0.5f + (msg.data2/127.f)*6;
+         #else
+            setDistortionShape(&voiceArray[2].distortion,msg.data2);
+         #endif
+            break;
+      
+         case VELOA1:
+            slopeEg2_setAttack(&voiceArray[0].oscVolEg,msg.data2,AMP_EG_SYNC);
+            break;
+      
+         case VELOD1:
+            {
+               slopeEg2_setDecay(&voiceArray[0].oscVolEg,msg.data2,AMP_EG_SYNC);
+            }
+            break;
+      
+         case PITCHD1:
+            {
+               DecayEg_setDecay(&voiceArray[0].oscPitchEg,msg.data2);
+            }
+            break;
+      
+         case MODAMNT1:
+            voiceArray[0].egPitchModAmount = calcPitchModAmount(msg.data2);
+            break;
+      
+         case FMAMNT1:
+            voiceArray[0].fmModAmount = msg.data2/127.f;
+            break;
+      
+         case FMDTN1:
+         //clear upper nibble
+            voiceArray[0].modOsc.midiFreq &= 0x00ff;
+         //set upper nibble
+            voiceArray[0].modOsc.midiFreq |= msg.data2 << 8;
+            osc_recalcFreq(&voiceArray[0].modOsc);
+            break;
+      
+         case VOL1:
+            voiceArray[0].vol = msg.data2/127.f;
+            break;
+      
+         case PAN1:
+            setPan(0,msg.data2);
+            break;
+      
+         case VELOA2:
+            {
+               slopeEg2_setAttack(&voiceArray[1].oscVolEg,msg.data2,AMP_EG_SYNC);
+            }
+            break;
+      
+         case VELOD2:
+            {
+               slopeEg2_setDecay(&voiceArray[1].oscVolEg,msg.data2,AMP_EG_SYNC);
+            }
+            break;
+      
+         case PITCHD2:
+            {
+               DecayEg_setDecay(&voiceArray[1].oscPitchEg,msg.data2);
+            }
+            break;
+      
+         case MODAMNT2:
+            voiceArray[1].egPitchModAmount = calcPitchModAmount(msg.data2);
+            break;
+      
+         case FMAMNT2:
+            voiceArray[1].fmModAmount = msg.data2/127.f;
+            break;
+      
+         case FMDTN2:
+         //clear upper nibble
+            voiceArray[1].modOsc.midiFreq &= 0x00ff;
+         //set upper nibble
+            voiceArray[1].modOsc.midiFreq |= msg.data2 << 8;
+            osc_recalcFreq(&voiceArray[1].modOsc);
+            break;
+      
+         case VOL2:
+            voiceArray[1].vol = msg.data2/127.f;
+            break;
+      
+         case PAN2:
+            setPan(1,msg.data2);
+            break;
+      
+      
+         case VELOA3:
+            {
+               slopeEg2_setAttack(&voiceArray[2].oscVolEg,msg.data2,AMP_EG_SYNC);
+            }
+            break;
+      
+         case VELOD3:
+            {
+               slopeEg2_setDecay(&voiceArray[2].oscVolEg,msg.data2,AMP_EG_SYNC);
+            }
+            break;
+      
+         case PITCHD3:
+            {
+               DecayEg_setDecay(&voiceArray[2].oscPitchEg,msg.data2);
+            }
+            break;
+      
+         case MODAMNT3:
+            voiceArray[2].egPitchModAmount = calcPitchModAmount(msg.data2);
+            break;
+      
+         case FMAMNT3:
+            voiceArray[2].fmModAmount = msg.data2/127.f;
+            break;
+      
+         case FMDTN3:
+         	//clear upper nibble
+            voiceArray[2].modOsc.midiFreq &= 0x00ff;
+         	//set upper nibble
+            voiceArray[2].modOsc.midiFreq |= msg.data2 << 8;
+            osc_recalcFreq(&voiceArray[2].modOsc);
+            break;
+      
+         case VOL3:
+            voiceArray[2].vol = msg.data2/127.f;
+            break;
+      
+         case PAN3:
+            setPan(2,msg.data2);
+            break;
+      
+      	//snare
+         case VOL4:
+            snareVoice.vol = msg.data2/127.f;
+            break;
+      
+         case PAN4:
+            Snare_setPan(msg.data2);
+         
+            break;
+      
+         case SNARE_NOISE_F:
+            snareVoice.noiseOsc.freq = msg.data2/127.f*22000;
+         	//TODO respond to midi note
+            break;
+         case VELOA4:
+            {
+               slopeEg2_setAttack(&snareVoice.oscVolEg,msg.data2,false);
+            }
+            break;
+         case VELOD4:
+            {
+               slopeEg2_setDecay(&snareVoice.oscVolEg,msg.data2,false);
+            }
+         
+            break;
+         case PITCHD4:
+            {
+               DecayEg_setDecay(&snareVoice.oscPitchEg,msg.data2);
+            }
+         
+            break;
+         case MODAMNT4:
+            snareVoice.egPitchModAmount = calcPitchModAmount(msg.data2);
+            break;
+         case SNARE_FILTER_F:
+            {
+            #if USE_PEAK
+            		peak_setFreq(&snareVoice.filter, msg.data2/127.f*20000.f);
+            #else
+               const float f = msg.data2/127.f;
+            		//exponential full range freq
+               SVF_directSetFilterValue(&snareVoice.filter,valueShaperF2F(f,FILTER_SHAPER) );
+            #endif
+            }
+            break;
+      
+         case SNARE_RESO:
+         #if USE_PEAK
+         	peak_setGain(&snareVoice.filter, msg.data2/127.f);
+         #else
+            SVF_setReso(&snareVoice.filter, msg.data2/127.f);
+         #endif
+            break;
+      
+         case SNARE_MIX:
+            snareVoice.mix = msg.data2/127.f;
+            break;
+      
+      	//snare 2
+         case VOL5:
+            cymbalVoice.vol = msg.data2/127.f;
+            break;
+      
+         case PAN5:
+            Cymbal_setPan(msg.data2);
+         
+            break;
+      
+         case VELOA5:
+            {
+               slopeEg2_setAttack(&cymbalVoice.oscVolEg,msg.data2,false);
+            }
+         
+            break;
+         case VELOD5:
+            {
+               slopeEg2_setDecay(&cymbalVoice.oscVolEg,msg.data2,false);
+            }
+            break;
+      
+      
+         case CYM_WAVE1:
+            cymbalVoice.osc.waveform = msg.data2;
+            break;
+      
+         case CYM_WAVE2:
+            cymbalVoice.modOsc.waveform = msg.data2;
+            break;
+      
+         case CYM_WAVE3:
+            cymbalVoice.modOsc2.waveform = msg.data2;
+            break;
+      
+         case CYM_MOD_OSC_F1:
+         	//cymbalVoice.modOsc.freq = MidiNoteFrequencies[msg.data2];
+         	//clear upper nibble
+            cymbalVoice.modOsc.midiFreq &= 0x00ff;
+         	//set upper nibble
+            cymbalVoice.modOsc.midiFreq |= msg.data2 << 8;
+            osc_recalcFreq(&cymbalVoice.modOsc);
+         
+            break;
+         case CYM_MOD_OSC_F2:
+         	//clear upper nibble
+            cymbalVoice.modOsc2.midiFreq &= 0x00ff;
+         	//set upper nibble
+            cymbalVoice.modOsc2.midiFreq |= msg.data2 << 8;
+            osc_recalcFreq(&cymbalVoice.modOsc2);
+            break;
+         case CYM_MOD_OSC_GAIN1:
+            cymbalVoice.fmModAmount1 = msg.data2/127.f;
+            break;
+         case CYM_MOD_OSC_GAIN2:
+            cymbalVoice.fmModAmount2 = msg.data2/127.f;
+            break;
+      
+         case CYM_FIL_FREQ:
+            {
+               const float f = msg.data2/127.f;
+            //exponential full range freq
+               SVF_directSetFilterValue(&cymbalVoice.filter,valueShaperF2F(f,FILTER_SHAPER) );
+            }
+            break;
+      
+         case CYM_RESO:
+            SVF_setReso(&cymbalVoice.filter, msg.data2/127.f);
+            break;
+      
+         case CYM_REPEAT:
+            cymbalVoice.oscVolEg.repeat = msg.data2;
+            break;
+         case CYM_SLOPE:
+            slopeEg2_setSlope(&cymbalVoice.oscVolEg,msg.data2);
+            break;
+      
+      	// hat
+         case WAVE1_HH:
+            hatVoice.osc.waveform = msg.data2;
+            break;
+         case WAVE2_HH:
+            hatVoice.modOsc.waveform = msg.data2;
+            break;
+         case WAVE3_HH:
+            hatVoice.modOsc2.waveform = msg.data2;
+            break;
+      
+         case VELOD6:
+            hatVoice.decayClosed = slopeEg2_calcDecay(msg.data2);
+            break;
+      
+         case VELOD6_OPEN:
+            hatVoice.decayOpen = slopeEg2_calcDecay(msg.data2);
+            break;
+      
+         case HAT_FILTER_F:
+            {
+               const float f = msg.data2/127.f;
+            //exponential full range freq
+               SVF_directSetFilterValue(&hatVoice.filter,valueShaperF2F(f,FILTER_SHAPER) );
+            }
+            break;
+      
+         case HAT_RESO:
+            SVF_setReso(&hatVoice.filter, msg.data2/127.f);
+            break;
+      
+         case VOL6:
+            hatVoice.vol = msg.data2/127.f;
+            break;
+      
+         case PAN6:
+            HiHat_setPan(msg.data2);
+            break;
+      
+         case F_OSC6_COARSE:
+            {
+            //clear upper nibble
+               hatVoice.osc.midiFreq &= 0x00ff;
+            //set upper nibble
+               hatVoice.osc.midiFreq |= msg.data2 << 8;
+               osc_recalcFreq(&hatVoice.osc);
+            }
+            break;
+      
+         case MOD_OSC_F1:
+         	//clear upper nibble
+            hatVoice.modOsc.midiFreq &= 0x00ff;
+         	//set upper nibble
+            hatVoice.modOsc.midiFreq |= msg.data2 << 8;
+            osc_recalcFreq(&hatVoice.modOsc);
+            break;
+      
+         case MOD_OSC_F2:
+         	//clear upper nibble
+            hatVoice.modOsc2.midiFreq &= 0x00ff;
+         	//set upper nibble
+            hatVoice.modOsc2.midiFreq |= msg.data2 << 8;
+            osc_recalcFreq(&hatVoice.modOsc2);
+            break;
+      
+         case MOD_OSC_GAIN1:
+            hatVoice.fmModAmount1 = msg.data2/127.f;
+            break;
+      
+         case MOD_OSC_GAIN2:
+            hatVoice.fmModAmount2 = msg.data2/127.f;
+            break;
+      
+         case VELOA6:
+            slopeEg2_setAttack(&hatVoice.oscVolEg,msg.data2,false);
+            break;
+      
+         case REPEAT1:
+            snareVoice.oscVolEg.repeat = msg.data2;
+            break;
+      
+      
+         case EG_SNARE1_SLOPE:
+            slopeEg2_setSlope(&snareVoice.oscVolEg,msg.data2);
+            break;
+      
+         case SNARE_DISTORTION:
+            setDistortionShape(&snareVoice.distortion,msg.data2);
+            break;
+      
+         case CYMBAL_DISTORTION:
+            setDistortionShape(&cymbalVoice.distortion,msg.data2);
+            break;
+      
+         case HAT_DISTORTION:
+            setDistortionShape(&hatVoice.distortion,msg.data2);
+            break;
+      
+         case FREQ_LFO1:
+         case FREQ_LFO2:
+         case FREQ_LFO3:
+            lfo_setFreq(&voiceArray[msg.data1-FREQ_LFO1].lfo,msg.data2);
+            break;
+         case FREQ_LFO4:
+            lfo_setFreq(&snareVoice.lfo,msg.data2);
+            break;
+         case FREQ_LFO5:
+            lfo_setFreq(&cymbalVoice.lfo,msg.data2);
+            break;
+         case FREQ_LFO6:
+            lfo_setFreq(&hatVoice.lfo,msg.data2);
+            break;
+      
+         case AMOUNT_LFO1:
+         case AMOUNT_LFO2:
+         case AMOUNT_LFO3:
+            frontParser_setLfoModAmount((uint8_t)(msg.data1-AMOUNT_LFO1), msg.data2);
+            break;
+         case AMOUNT_LFO4:
+            frontParser_setLfoModAmount(3, msg.data2);
+            break;
+         case AMOUNT_LFO5:
+            frontParser_setLfoModAmount(4, msg.data2);
+            break;
+         case AMOUNT_LFO6:
+            frontParser_setLfoModAmount(5, msg.data2);
+            break;
+      
+         case VOICE_DECIMATION1:
+         case VOICE_DECIMATION2:
+         case VOICE_DECIMATION3:
+         case VOICE_DECIMATION4:
+         case VOICE_DECIMATION5:
+         case VOICE_DECIMATION6:
+         case VOICE_DECIMATION_ALL:
+            mixer_decimation_rate[msg.data1-VOICE_DECIMATION1] = valueShaperI2F(msg.data2,-0.7f);
+            break;
+      
+         default:
+            break;
+      }
+      modNode_originalValueChanged(paramNr);
+   } //msg.status == MIDI_CC
+   
+   else //MIDI_CC2
+   {
+      const uint16_t paramNr = msg.data1+1 + 127;
+   
+      if(updateOriginalValue) {
+         frontParser_originalCcValues[paramNr] = msg.data2;
+         preset_storeParameterIngress(paramNr, msg.data2);
+      }
+      switch(msg.data1)
+      {
+      
+         case CC2_TRANS1_WAVE:
+            //voiceArray[0].transGen.waveform = msg.data2;
+            transient_setWaveform(&voiceArray[0].transGen, msg.data2);
+            break;
+      
+         case CC2_TRANS1_VOL:
+            voiceArray[0].transGen.volume = msg.data2/127.f;
+            break;
+      
+         case CC2_TRANS1_FREQ:
+            voiceArray[0].transGen.pitch = 1.f + ((msg.data2/33.9f)-0.75f) ;// range about  0.25 to 4 => 1/4 to 1*4
+            break;
+      
+         case CC2_TRANS2_WAVE:
+            //voiceArray[1].transGen.waveform = msg.data2;
+            transient_setWaveform(&voiceArray[1].transGen, msg.data2);
+            break;
+      
+         case CC2_TRANS2_VOL:
+            voiceArray[1].transGen.volume = msg.data2/127.f;
+            break;
+      
+         case CC2_TRANS2_FREQ:
+            voiceArray[1].transGen.pitch = 1.f + ((msg.data2/33.9f)-0.75f) ;
+            break;
+      
+         case CC2_TRANS3_WAVE:
+            //voiceArray[2].transGen.waveform = msg.data2;
+            transient_setWaveform(&voiceArray[2].transGen, msg.data2);
+            break;
+      
+         case CC2_TRANS3_VOL:
+            voiceArray[2].transGen.volume = msg.data2/127.f;
+            break;
+      
+         case CC2_TRANS3_FREQ:
+            voiceArray[2].transGen.pitch = 1.f + ((msg.data2/33.9f)-0.75f) ;
+            break;
+      
+         case CC2_TRANS4_WAVE:
+            //snareVoice.transGen.waveform = msg.data2;
+            transient_setWaveform(&snareVoice.transGen, msg.data2);
+            break;
+      
+         case CC2_TRANS4_VOL:
+            snareVoice.transGen.volume = msg.data2/127.f;
+            break;
+         case CC2_TRANS4_FREQ:
+            snareVoice.transGen.pitch = 1.f + ((msg.data2/33.9f)-0.75f) ;
+            break;
+      
+         case CC2_TRANS5_WAVE:
+            //cymbalVoice.transGen.waveform = msg.data2;
+            transient_setWaveform(&cymbalVoice.transGen, msg.data2);
+            break;
+      
+         case CC2_TRANS5_VOL:
+            cymbalVoice.transGen.volume = msg.data2/127.f;
+            break;
+         case CC2_TRANS5_FREQ:
+            cymbalVoice.transGen.pitch = 1.f + ((msg.data2/33.9f)-0.75f) ;
+            break;
+      
+         case CC2_TRANS6_WAVE:
+            //hatVoice.transGen.waveform = msg.data2;
+            transient_setWaveform(&hatVoice.transGen, msg.data2);
+            break;
+      
+         case CC2_TRANS6_VOL:
+            hatVoice.transGen.volume = msg.data2/127.f;
+            break;
+         case CC2_TRANS6_FREQ:
+            hatVoice.transGen.pitch = 1.f + ((msg.data2/33.9f)-0.75f) ;
+            break;
+      
+         case CC2_FILTER_TYPE_1:
+         case CC2_FILTER_TYPE_2:
+         case CC2_FILTER_TYPE_3:
+            voiceArray[msg.data1-CC2_FILTER_TYPE_1].filterType = msg.data2+1;
+            //SVF_reset(&voiceArray[msg.data1-CC2_FILTER_TYPE_1].filter);
+            break;
+         case CC2_FILTER_TYPE_4:
+            snareVoice.filterType = msg.data2 + 1; // +1 because 0 is filter off which results in silence
+            //SVF_reset(&snareVoice.filter);
+            break;
+         case CC2_FILTER_TYPE_5:
+         //cymbal filter
+            cymbalVoice.filterType = msg.data2+1;
+            //SVF_reset(&cymbalVoice.filter);
+            break;
+         case CC2_FILTER_TYPE_6:
+         //Hihat filter
+            hatVoice.filterType = msg.data2+1;
+            //SVF_reset(&hatVoice.filter);
+            break;
+      
+         case CC2_FILTER_DRIVE_1:
+         case CC2_FILTER_DRIVE_2:
+         case CC2_FILTER_DRIVE_3:
+         #if UNIT_GAIN_DRIVE
+         voiceArray[msg.data1-CC2_FILTER_DRIVE_1].filter.drive = (msg.data2/127.f);
+         #else
+            SVF_setDrive(&voiceArray[msg.data1-CC2_FILTER_DRIVE_1].filter,msg.data2);
+         #endif
+            break;
+         case CC2_FILTER_DRIVE_4:
+         #if UNIT_GAIN_DRIVE
+         snareVoice.filter.drive = (msg.data2/127.f);
+         #else
+            SVF_setDrive(&snareVoice.filter, msg.data2);
+         #endif
+         
+            break;
+         case CC2_FILTER_DRIVE_5:
+         #if UNIT_GAIN_DRIVE
+         cymbalVoice.filter.drive = (msg.data2/127.f);
+         #else
+            SVF_setDrive(&cymbalVoice.filter, msg.data2);
+         #endif
+         
+            break;
+         case CC2_FILTER_DRIVE_6:
+         #if UNIT_GAIN_DRIVE
+         hatVoice.filter.drive = (msg.data2/127.f);
+         #else
+            SVF_setDrive(&hatVoice.filter, msg.data2);
+         #endif
+         
+            break;
+      
+         case CC2_MIX_MOD_1:
+         case CC2_MIX_MOD_2:
+         case CC2_MIX_MOD_3:
+            voiceArray[msg.data1-CC2_MIX_MOD_1].mixOscs = msg.data2;
+            break;
+      
+         case CC2_VOLUME_MOD_ON_OFF1:
+         case CC2_VOLUME_MOD_ON_OFF2:
+         case CC2_VOLUME_MOD_ON_OFF3:
+            voiceArray[msg.data1-CC2_VOLUME_MOD_ON_OFF1].volumeMod = msg.data2;
+            break;
+         case CC2_VOLUME_MOD_ON_OFF4:
+            snareVoice.volumeMod = msg.data2;
+            break;
+         case CC2_VOLUME_MOD_ON_OFF5:
+            cymbalVoice.volumeMod = msg.data2;
+            break;
+         case CC2_VOLUME_MOD_ON_OFF6:
+            hatVoice.volumeMod = msg.data2;
+            break;
+      
+         case CC2_VELO_MOD_AMT_1:
+         case CC2_VELO_MOD_AMT_2:
+         case CC2_VELO_MOD_AMT_3:
+         case CC2_VELO_MOD_AMT_4:
+         case CC2_VELO_MOD_AMT_5:
+         case CC2_VELO_MOD_AMT_6:
+            frontParser_setVelocityModAmount((uint8_t)(msg.data1-CC2_VELO_MOD_AMT_1),
+                                            msg.data2);
+            break;
+      
+         case CC2_WAVE_LFO1:
+         case CC2_WAVE_LFO2:
+         case CC2_WAVE_LFO3:
+            voiceArray[msg.data1-CC2_WAVE_LFO1].lfo.waveform = msg.data2;
+            break;
+         case CC2_WAVE_LFO4:
+            snareVoice.lfo.waveform = msg.data2;
+            break;
+         case CC2_WAVE_LFO5:
+            cymbalVoice.lfo.waveform = msg.data2;
+            break;
+         case CC2_WAVE_LFO6:
+            hatVoice.lfo.waveform = msg.data2;
+            break;
+      
+         case CC2_RETRIGGER_LFO1:
+         case CC2_RETRIGGER_LFO2:
+         case CC2_RETRIGGER_LFO3:
+            voiceArray[msg.data1-CC2_RETRIGGER_LFO1].lfo.retrigger = msg.data2;
+            break;
+         case CC2_RETRIGGER_LFO4:
+            snareVoice.lfo.retrigger = msg.data2;
+            break;
+         case CC2_RETRIGGER_LFO5:
+            cymbalVoice.lfo.retrigger = msg.data2;
+            break;
+         case CC2_RETRIGGER_LFO6:
+            hatVoice.lfo.retrigger = msg.data2;
+            break;
+      
+         case CC2_SYNC_LFO1:
+         case CC2_SYNC_LFO2:
+         case CC2_SYNC_LFO3:
+            lfo_setSync(&voiceArray[msg.data1-CC2_SYNC_LFO1].lfo, msg.data2);
+            break;
+         case CC2_SYNC_LFO4:
+            lfo_setSync(&snareVoice.lfo, msg.data2);
+            break;
+         case CC2_SYNC_LFO5:
+            lfo_setSync(&cymbalVoice.lfo, msg.data2);
+            break;
+         case CC2_SYNC_LFO6:
+            lfo_setSync(&hatVoice.lfo, msg.data2);
+            break;
+      
+         case CC2_VOICE_LFO1:
+         case CC2_VOICE_LFO2:
+         case CC2_VOICE_LFO3:
+         case CC2_VOICE_LFO4:
+         case CC2_VOICE_LFO5:
+         case CC2_VOICE_LFO6:
+            break;
+      
+         case CC2_TARGET_LFO1:
+         case CC2_TARGET_LFO2:
+         case CC2_TARGET_LFO3:
+         case CC2_TARGET_LFO4:
+         case CC2_TARGET_LFO5:
+         case CC2_TARGET_LFO6:
+            break;
+      
+      
+      
+         case CC2_OFFSET_LFO1:
+         case CC2_OFFSET_LFO2:
+         case CC2_OFFSET_LFO3:
+            voiceArray[msg.data1-CC2_OFFSET_LFO1].lfo.phaseOffset = msg.data2/127.f * 0xffffffff;
+            break;
+         case CC2_OFFSET_LFO4:
+            snareVoice.lfo.phaseOffset = msg.data2/127.f * 0xffffffff;
+            break;
+         case CC2_OFFSET_LFO5:
+            cymbalVoice.lfo.phaseOffset = msg.data2/127.f * 0xffffffff;
+            break;
+         case CC2_OFFSET_LFO6:
+            hatVoice.lfo.phaseOffset = msg.data2/127.f * 0xffffffff;
+            break;
+      
+         case CC2_AUDIO_OUT1:
+         case CC2_AUDIO_OUT2:
+         case CC2_AUDIO_OUT3:
+         case CC2_AUDIO_OUT4:
+         case CC2_AUDIO_OUT5:
+         case CC2_AUDIO_OUT6:
+            mixer_audioRouting[msg.data1-CC2_AUDIO_OUT1] = msg.data2;
+            break;
+      
+      //--AS
+         case CC2_ENVELOPE_POSITION_1:
+         case CC2_ENVELOPE_POSITION_2:
+         case CC2_ENVELOPE_POSITION_3:
+         case CC2_ENVELOPE_POSITION_4:
+         case CC2_ENVELOPE_POSITION_5:
+         case CC2_ENVELOPE_POSITION_6:
+         //--AS set the note override for the voice. 0 means use the note value, anything else means
+         // that the note will always play with that note
+            midi_envPosition[msg.data1-CC2_ENVELOPE_POSITION_1] = msg.data2;
+            drumVoice_setEnvelope(msg.data1-CC2_ENVELOPE_POSITION_1,msg.data2);
+            break;
+      
+         case CC2_MUTE_1:
+         case CC2_MUTE_2:
+         case CC2_MUTE_3:
+         case CC2_MUTE_4:
+         case CC2_MUTE_5:
+         case CC2_MUTE_6:
+         case CC2_MUTE_7:
+            {
+               const uint8_t voiceNr = msg.data1 - CC2_MUTE_1;
+               if(msg.data2 == 0)
+               {
+                  seq_setMute(voiceNr,0);
+               }
+               else
+               {
+                  seq_setMute(voiceNr,1);
+               }
+            
+            }
+            break;
+         case CC2_MAC1_DST1:       // bc: these need to be handled with a separate status message like LFO dest's
+         case CC2_MAC1_DST2:       // this happens in frontPanelParser
+         case CC2_MAC2_DST1:
+         case CC2_MAC2_DST2:
+            break;
+         case CC2_MAC1_DST1_AMT:       // bc: change perf macro destination amounts
+            if (msg.data2)
+               macroModulators[0].amount = ((msg.data2+1)/64.f)-1;
+            else
+               macroModulators[0].amount = -1;
+            modNode_updateValue(&macroModulators[0],macroModulators[0].lastVal);
+            break;
+         case CC2_MAC1_DST2_AMT:
+            if (msg.data2)
+               macroModulators[1].amount = ((msg.data2+1)/64.f)-1;
+            else
+               macroModulators[1].amount = -1;
+            modNode_updateValue(&macroModulators[1],macroModulators[1].lastVal);
+            break;
+         case CC2_MAC2_DST1_AMT:
+            if (msg.data2)
+               macroModulators[2].amount = ((msg.data2+1)/64.f)-1;
+            else
+               macroModulators[2].amount = -1;
+            modNode_updateValue(&macroModulators[2],macroModulators[2].lastVal);
+            break;
+         case CC2_MAC2_DST2_AMT:
+            if (msg.data2)
+               macroModulators[3].amount = ((msg.data2+1)/64.f)-1;
+            else
+               macroModulators[3].amount = -1;
+            modNode_updateValue(&macroModulators[3],macroModulators[3].lastVal);
+            break;            
+         default:
+            break;
+      }
+      modNode_originalValueChanged(paramNr);
+   }
+}
+
+
+extern MidiMsg frontParser_command;
 extern uint8_t frontParser_sysexActive;
 
 /* Flow-control bookkeeping for the transitional receive-side parser. */
@@ -147,7 +1177,7 @@ static void frontParser_suspendCreditFlowForSysex()
 
 static void frontParser_flowMessageApplied()
 {
-   if(!comm_flowActive || frontParser_isFlowMessage(frontParser_midiMsg.status, frontParser_midiMsg.data1))
+   if(!comm_flowActive || frontParser_isFlowMessage(frontParser_command.status, frontParser_command.data1))
       return;
 
    if(comm_flowBudgetRemaining)
@@ -169,8 +1199,8 @@ uint8_t frontParser_isQuietUi()
    mode, and the current display/track selection. */
 uint8_t frontParser_rxCnt=0;
 
-/* Currently selected parameter / current assembled MIDI message. */
-MidiMsg frontParser_midiMsg;
+/* Currently selected parameter / current assembled front-panel command. */
+MidiMsg frontParser_command;
 
 /* Currently active front-panel track and the visible sequence display state. */
 uint8_t frontParser_activeFrontTrack=0;
@@ -205,7 +1235,7 @@ void frontParser_parseUartData(unsigned char data)
    {
    	//reset the byte counter
       frontParser_rxCnt = 0;
-      frontParser_midiMsg.status = data;
+      frontParser_command.status = data;
       if(data==SYSEX_START)
       {
          frontParser_suspendCreditFlowForSysex();
@@ -235,21 +1265,21 @@ void frontParser_parseUartData(unsigned char data)
    }
    else // data byte
    {
-      if(frontParser_midiMsg.status == SYSEX_START)
+      if(frontParser_command.status == SYSEX_START)
       {
          frontParser_handleSysexData(data);
       }
       else if(frontParser_rxCnt==0) //normal operation
       {
       	//parameter nr
-         frontParser_midiMsg.data1 = data;
+         frontParser_command.data1 = data;
          frontParser_rxCnt++;
       }
       else
       {
       	//parameter value
-         frontParser_midiMsg.data2 = data;
-      	//message received. process the midi message
+         frontParser_command.data2 = data;
+      	//message received. process the front-panel command
          frontParser_handleMidiMessage();
       }
    }
@@ -549,7 +1579,7 @@ static void frontParser_handleSysexData(unsigned char data)
 /* Handle a fully assembled front-panel message after byte decoding. */
 void frontParser_handleMidiMessage(void)
 {
-   switch(frontParser_midiMsg.status)
+   switch(frontParser_command.status)
    {
       case PARAM_RESTORE_READY:
          preset_tmpKitHandshakeReady = 1;
@@ -563,26 +1593,26 @@ void frontParser_handleMidiMessage(void)
          break;
    }
 
-   switch(frontParser_midiMsg.status)
+   switch(frontParser_command.status)
    {
       case PRF_RESTORE_PARAM_CC:
       case PRF_RESTORE_PARAM_CC2:
          {
-            uint16_t paramNr = frontParser_midiMsg.data1;
-            if(frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC2)
+            uint16_t paramNr = frontParser_command.data1;
+            if(frontParser_command.status == PRF_RESTORE_PARAM_CC2)
                paramNr += 128;
 
             /* PRF_RESTORE_PARAM_* carries raw kit/front endpoint bytes. These
                are not live low MIDI CC numbers, so do not apply the +1 offset. */
-            preset_storeParameterIngress(paramNr, frontParser_midiMsg.data2);
+            preset_storeParameterIngress(paramNr, frontParser_command.data2);
          }
          break;
 
       case PRF_RESTORE_MORPH_CC:
       case PRF_RESTORE_MORPH_CC2:
          {
-            uint16_t paramNr = frontParser_midiMsg.data1;
-            if(frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC2)
+            uint16_t paramNr = frontParser_command.data1;
+            if(frontParser_command.status == PRF_RESTORE_MORPH_CC2)
                paramNr += 128;
 
             /* RESTORE: Store morph parameter endpoint bytes into the endpoint image
@@ -593,17 +1623,17 @@ void frontParser_handleMidiMessage(void)
             {
                if(currentTarget == SEQ_PARAM_INGRESS_CURRENT_IMAGE)
                {
-                  preset_storeMorphParameterIngress(paramNr, frontParser_midiMsg.data2);
+                  preset_storeMorphParameterIngress(paramNr, frontParser_command.data2);
                }
                else
                {
-                  preset_normalKitState.morphEndpointParams[paramNr] = frontParser_midiMsg.data2;
+                  preset_normalKitState.morphEndpointParams[paramNr] = frontParser_command.data2;
                }
             }
          }
          break;
 
-      case FRONT_CC_MACRO_TARGET: //frontParser_midiMsg.status
+      case FRONT_CC_MACRO_TARGET: //frontParser_command.status
          {
             uint8_t applyLive = preset_shouldApplyIngressToLive();
          
@@ -618,8 +1648,8 @@ void frontParser_handleMidiMessage(void)
             byte3, data2 byte: xbbb bbbb : b=macro mod target value lower 7 bits or top level value full
             */
             
-            uint8_t upper = frontParser_midiMsg.data1;
-            uint8_t lower = frontParser_midiMsg.data2;
+            uint8_t upper = frontParser_command.data1;
+            uint8_t lower = frontParser_command.data2;
             //sequencer_sendVMorph(0,(uint8_t)(lower*macroModulators[0].amount));
             if (upper&0x20)
             {
@@ -657,12 +1687,12 @@ void frontParser_handleMidiMessage(void)
          }
          break; // case FRONT_CC_LFO_TARGET
       //SEQ MESSAGES
-      case FRONT_SEQ_CC: // frontParser_midiMsg.status
+      case FRONT_SEQ_CC: // frontParser_command.status
          frontParser_handleSeqCC();
          break;
    
       case SAMPLE_CC:
-         switch(frontParser_midiMsg.data1)
+         switch(frontParser_command.data1)
          {
          
             case FRONT_SAMPLE_START_UPLOAD:
@@ -684,54 +1714,54 @@ void frontParser_handleMidiMessage(void)
          break;
    
    //MIDI SYNTH MESSAGES
-      case MIDI_CC: //frontParser_midiMsg.status
+      case MIDI_CC: //frontParser_command.status
          // this is for parameters below 128
          {
-            uint8_t rawParam = frontParser_midiMsg.data1;
-            MidiMsg liveMsg = frontParser_midiMsg;
+            uint8_t rawParam = frontParser_command.data1;
+            MidiMsg liveMsg = frontParser_command;
 
             liveMsg.data1 = (uint8_t)((rawParam + 1) & 0x7f);
 
             if(preset_shouldApplyIngressToLive())
             {
-               preset_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
-               midiParser_ccHandler(liveMsg,0);
+               preset_storeParameterIngress(rawParam, frontParser_command.data2);
+               frontParser_applyParameterCommand(liveMsg,0);
 
             //record automation if record is turned on
-               seq_recordAutomation(frontParser_activeTrack, rawParam, frontParser_midiMsg.data2);
+               seq_recordAutomation(frontParser_activeTrack, rawParam, frontParser_command.data2);
             }
             else
             {
                /* FILE LOAD: Store normal-image params without changing the
                   temporary sound when the temporary pattern is active. */
-               preset_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
+               preset_storeParameterIngress(rawParam, frontParser_command.data2);
             }
          }
          break;
    
    //CC2 above 127
-      case FRONT_CC_2: // frontParser_midiMsg.status
+      case FRONT_CC_2: // frontParser_command.status
          {
             if(preset_shouldApplyIngressToLive())
             {
-               midiParser_ccHandler(frontParser_midiMsg,1);
+               frontParser_applyParameterCommand(frontParser_command,1);
                //record automation if record is turned on
-               seq_recordAutomation(frontParser_activeTrack, frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
+               seq_recordAutomation(frontParser_activeTrack, frontParser_command.data1+128, frontParser_command.data2);
             }
             else
             {
                /* FILE LOAD: Store normal-image params without changing the
                   temporary sound when the temporary pattern is active. */
-               preset_storeParameterIngress(frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
+               preset_storeParameterIngress(frontParser_command.data1+128, frontParser_command.data2);
             }
          }
          break;
    
    
-      case FRONT_CC_LFO_TARGET: //frontParser_midiMsg.status
+      case FRONT_CC_LFO_TARGET: //frontParser_command.status
          {
-            uint8_t upper = frontParser_midiMsg.data1;
-            uint8_t lower = frontParser_midiMsg.data2;
+            uint8_t upper = frontParser_command.data1;
+            uint8_t lower = frontParser_command.data2;
             uint8_t applyLive = preset_shouldApplyIngressToLive();
          // --AS **PATROT note that the only valid values for the following are listed in
          // the modTargets array in the AVR code
@@ -767,10 +1797,10 @@ void frontParser_handleMidiMessage(void)
          break; // case FRONT_CC_LFO_TARGET
    
       case FRONT_SET_P1_DEST: 
-         { // frontParser_midiMsg.status
+         { // frontParser_command.status
          // --AS **AUTOM add 1 to the value as our cortex parameters are off by 1 for the lower 127 params
-            uint8_t hi = frontParser_midiMsg.data1;
-            uint8_t lo = frontParser_midiMsg.data2;
+            uint8_t hi = frontParser_command.data1;
+            uint8_t lo = frontParser_command.data2;
             uint8_t val = (hi<<7)|lo;
             if(val && val < 128 )
                val++;
@@ -778,10 +1808,10 @@ void frontParser_handleMidiMessage(void)
          }
          break;
       case FRONT_SET_P2_DEST: 
-         { // frontParser_midiMsg.status
+         { // frontParser_command.status
          //--AS **AUTOM same here
-            uint8_t hi = frontParser_midiMsg.data1;
-            uint8_t lo = frontParser_midiMsg.data2;
+            uint8_t hi = frontParser_command.data1;
+            uint8_t lo = frontParser_command.data2;
             uint8_t val = (hi<<7)|lo;
             if(val && val < 128 )
                val++;
@@ -789,46 +1819,46 @@ void frontParser_handleMidiMessage(void)
          }
          break;
       case FRONT_SET_P1_VAL: 
-         { // frontParser_midiMsg.status
-            uint8_t stepNr = frontParser_midiMsg.data1;
-            uint8_t value = frontParser_midiMsg.data2;
+         { // frontParser_command.status
+            uint8_t stepNr = frontParser_command.data1;
+            uint8_t value = frontParser_command.data2;
             seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, stepNr)->param1Val = value;
          
          }
          break;
       case FRONT_SET_P2_VAL: 
-         { // frontParser_midiMsg.status
-            uint8_t stepNr = frontParser_midiMsg.data1;
-            uint8_t value = frontParser_midiMsg.data2;
+         { // frontParser_command.status
+            uint8_t stepNr = frontParser_command.data1;
+            uint8_t value = frontParser_command.data2;
             seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, stepNr)->param2Val = value;
          }
          break;
    
-      case FRONT_ARM_AUTOMATION_STEP: // frontParser_midiMsg.status
+      case FRONT_ARM_AUTOMATION_STEP: // frontParser_command.status
          {
-            const uint8_t stepNr 	= frontParser_midiMsg.data1;
-            const uint8_t onOff 	= frontParser_midiMsg.data2 & 0x40;
-            const uint8_t trackNr 	=  frontParser_midiMsg.data2 & 0x3f;
+            const uint8_t stepNr 	= frontParser_command.data1;
+            const uint8_t onOff 	= frontParser_command.data2 & 0x40;
+            const uint8_t trackNr 	=  frontParser_command.data2 & 0x3f;
          
             seq_armAutomationStep(stepNr,trackNr,onOff);
          
          }
          break;
    
-      case FRONT_MAIN_STEP_CC: // frontParser_midiMsg.status
+      case FRONT_MAIN_STEP_CC: // frontParser_command.status
          {
          //data 1 = track und pattern nr
          //data 2 = step nr
-            uint8_t voiceNr 	= frontParser_midiMsg.data1 >> 4;
-            uint8_t patternNr 	= seq_normalizePatternNumber(frontParser_midiMsg.data1 & 0x0f);
-            uint8_t stepNr 		= frontParser_midiMsg.data2 & 0x1f;
+            uint8_t voiceNr 	= frontParser_command.data1 >> 4;
+            uint8_t patternNr 	= seq_normalizePatternNumber(frontParser_command.data1 & 0x0f);
+            uint8_t stepNr 		= frontParser_command.data2 & 0x1f;
          
          
-            if (frontParser_midiMsg.data2 & 0x40) // flag for force ON
+            if (frontParser_command.data2 & 0x40) // flag for force ON
             {
                seq_setMainStep(patternNr, voiceNr, stepNr, 1);
             }
-            else if (frontParser_midiMsg.data2 & 0x20) // flag for force OFF
+            else if (frontParser_command.data2 & 0x20) // flag for force OFF
             {
                seq_setMainStep(patternNr, voiceNr, stepNr, 0);
             }
@@ -843,13 +1873,13 @@ void frontParser_handleMidiMessage(void)
          }
          break;
    
-      case FRONT_STEP_CC: // frontParser_midiMsg.status
+      case FRONT_STEP_CC: // frontParser_command.status
          {
          //data 1 = track und pattern nr
          //data 2 = step nr
-            uint8_t voiceNr 	= frontParser_midiMsg.data1 >> 4;
-            uint8_t patternNr 	= seq_normalizePatternNumber(frontParser_midiMsg.data1 & 0x0f);
-            uint8_t stepNr 		= frontParser_midiMsg.data2;
+            uint8_t voiceNr 	= frontParser_command.data1 >> 4;
+            uint8_t patternNr 	= seq_normalizePatternNumber(frontParser_command.data1 & 0x0f);
+            uint8_t stepNr 		= frontParser_command.data2;
          
          //toggle the step in the seq
             seq_toggleStep(voiceNr, stepNr, patternNr);
@@ -857,10 +1887,10 @@ void frontParser_handleMidiMessage(void)
          }
          break;
    
-      case FRONT_CC_VELO_TARGET: // frontParser_midiMsg.status
+      case FRONT_CC_VELO_TARGET: // frontParser_command.status
          {
-            uint8_t upper = frontParser_midiMsg.data1;
-            uint8_t lower = frontParser_midiMsg.data2;
+            uint8_t upper = frontParser_command.data1;
+            uint8_t lower = frontParser_command.data2;
             uint8_t applyLive = preset_shouldApplyIngressToLive();
          // --AS **PATROT note that the only valid values for the following are listed in
          // the modTargets array in the AVR code
@@ -885,13 +1915,13 @@ void frontParser_handleMidiMessage(void)
          break;
    
    //VOICE option Messages
-      case VOICE_CC: // frontParser_midiMsg.status
+      case VOICE_CC: // frontParser_command.status
          break;
    
    //BPM MESSAGE
       case FRONT_SET_BPM: 
-         { // frontParser_midiMsg.status
-            uint16_t bpm = frontParser_midiMsg.data1 |(uint16_t)(frontParser_midiMsg.data2<<7);
+         { // frontParser_command.status
+            uint16_t bpm = frontParser_command.data1 |(uint16_t)(frontParser_command.data2<<7);
             if(bpm == 0) {
                seq_setExtSync(1);
             }
@@ -904,14 +1934,14 @@ void frontParser_handleMidiMessage(void)
          break;
    
    //LED MESSAGES
-      case FRONT_STEP_LED_STATUS_BYTE: // frontParser_midiMsg.status
-         switch(frontParser_midiMsg.data1)
+      case FRONT_STEP_LED_STATUS_BYTE: // frontParser_command.status
+         switch(frontParser_command.data1)
          {
          //send all active step numbers to frontpanel to light up corresponding LEDs
             case FRONT_LED_QUERY_SEQ_TRACK:
             {
-                  uint8_t trackNr = frontParser_midiMsg.data2 >> 4;
-                  uint8_t patternNr = seq_normalizePatternNumber(frontParser_midiMsg.data2 & 0x0f);
+                  uint8_t trackNr = frontParser_command.data2 >> 4;
+                  uint8_t patternNr = seq_normalizePatternNumber(frontParser_command.data2 & 0x0f);
                
                   frontParser_activeFrontTrack = trackNr;
                   frontPanelSending_updateTrackLeds(trackNr, patternNr, frontParser_activeStep);
@@ -926,8 +1956,8 @@ void frontParser_handleMidiMessage(void)
                break;
             case FRONT_LED_ALL_SUBSTEP:
                {
-                  uint8_t trackNr = frontParser_midiMsg.data2 >> 4;
-                  uint8_t patternNr = seq_normalizePatternNumber(frontParser_midiMsg.data2 & 0x0f);
+                  uint8_t trackNr = frontParser_command.data2 >> 4;
+                  uint8_t patternNr = seq_normalizePatternNumber(frontParser_command.data2 & 0x0f);
                
                   frontPanelSending_updateSubStepLeds(trackNr, patternNr, frontParser_activeStep);               
                }
@@ -937,7 +1967,7 @@ void frontParser_handleMidiMessage(void)
                break;
          }
          break;
-   } // frontParser_midiMsg.status
+   } // frontParser_command.status
 
    frontParser_flowMessageApplied();
 }
@@ -946,10 +1976,10 @@ void frontParser_handleMidiMessage(void)
 // This is called when we have received a message with status FRONT_SEQ_CC
 static void frontParser_handleSeqCC()
 {
-   switch(frontParser_midiMsg.data1)
+   switch(frontParser_command.data1)
    {
       case FRONT_SEQ_FLOW_BEGIN:
-         if(frontParser_midiMsg.data2 == FLOW_CH_LOAD_SESSION)
+         if(frontParser_command.data2 == FLOW_CH_LOAD_SESSION)
          {
             comm_loadSessionActive = 1;
             comm_quietUi = 1;
@@ -960,14 +1990,14 @@ static void frontParser_handleSeqCC()
          else
          {
             comm_flowActive = 1;
-            comm_flowChannel = (uint8_t)(frontParser_midiMsg.data2 & 0x07);
+            comm_flowChannel = (uint8_t)(frontParser_command.data2 & 0x07);
             comm_flowBudgetRemaining = FLOW_INITIAL_GRANT;
             frontParser_sendFlowGrant(comm_flowChannel, FLOW_INITIAL_GRANT);
          }
          break;
 
       case FRONT_SEQ_FLOW_END:
-         if(frontParser_midiMsg.data2 == FLOW_CH_LOAD_SESSION)
+         if(frontParser_command.data2 == FLOW_CH_LOAD_SESSION)
          {
             comm_loadSessionActive = 0;
             comm_quietUi = 0;
@@ -977,7 +2007,7 @@ static void frontParser_handleSeqCC()
          }
          else
          {
-            uint8_t channel = (uint8_t)(frontParser_midiMsg.data2 & 0x07);
+            uint8_t channel = (uint8_t)(frontParser_command.data2 & 0x07);
             if(comm_flowActive && (comm_flowChannel == channel))
             {
                comm_flowActive = 0;
@@ -1033,7 +2063,7 @@ static void frontParser_handleSeqCC()
 
       case FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN:
       {
-         uint8_t endpointMode = frontParser_midiMsg.data2;
+         uint8_t endpointMode = frontParser_command.data2;
 
          /* RESTORE: Switch ingress target to normal kit endpoint buffer.
             Subsequent parameter and target messages will populate preset_normalKitState endpoint images.
@@ -1066,9 +2096,9 @@ static void frontParser_handleSeqCC()
             identify parameter_values[] vs parameters2[]. Resolved automation target
             sidebands need this explicit phase marker so the STM stores them with
             the matching endpoint image and does not apply them to live audio. */
-         if(frontParser_midiMsg.data2 == FRONT_SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT)
+         if(frontParser_command.data2 == FRONT_SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT)
             preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_FRONT_ENDPOINT);
-         else if(frontParser_midiMsg.data2 == FRONT_SEQ_TMP_KIT_AUTOMATION_MORPH_ENDPOINT)
+         else if(frontParser_command.data2 == FRONT_SEQ_TMP_KIT_AUTOMATION_MORPH_ENDPOINT)
             preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_MORPH_ENDPOINT);
          else
             preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
@@ -1089,18 +2119,18 @@ static void frontParser_handleSeqCC()
          /* AVR menu/global morph resets all STM per-voice morph amounts. Per
             voice step automation or modulation may later overwrite individual
             voices without asking AVR to recompute morph. */
-         seq_setGlobalMorphAmount(frontParser_midiMsg.data2);
+         seq_setGlobalMorphAmount(frontParser_command.data2);
          break;
 
       case FRONT_SEQ_SET_GLOBAL_MORPH_LSB:
-         frontParser_globalMorphLsb = (uint8_t)(frontParser_midiMsg.data2 & 0x7f);
+         frontParser_globalMorphLsb = (uint8_t)(frontParser_command.data2 & 0x7f);
          break;
 
       case FRONT_SEQ_SET_GLOBAL_MORPH_MSB:
       {
          uint8_t morphAmount =
             (uint8_t)(frontParser_globalMorphLsb
-               | ((frontParser_midiMsg.data2 & 0x01) << 7));
+               | ((frontParser_command.data2 & 0x01) << 7));
          seq_setGlobalMorphAmount(morphAmount);
          break;
       }
@@ -1112,32 +2142,32 @@ static void frontParser_handleSeqCC()
       
          break;
       case FRONT_SEQ_SET_PAT_BEAT:
-         seq_getPatternSettingPtr(frontParser_shownPattern)->changeBar = frontParser_midiMsg.data2;
+         seq_getPatternSettingPtr(frontParser_shownPattern)->changeBar = frontParser_command.data2;
          break;
       case FRONT_SEQ_SET_PAT_NEXT:
-         seq_getPatternSettingPtr(frontParser_shownPattern)->nextPattern = frontParser_midiMsg.data2;
+         seq_getPatternSettingPtr(frontParser_shownPattern)->nextPattern = frontParser_command.data2;
          break;
    
       case FRONT_SEQ_REC_ON_OFF:
-         seq_setRecordingMode(frontParser_midiMsg.data2);
+         seq_setRecordingMode(frontParser_command.data2);
          break;
    
       case FRONT_SEQ_ERASE_ON_OFF:
-         seq_setErasingMode(frontParser_midiMsg.data2);
+         seq_setErasingMode(frontParser_command.data2);
          break;
    
       case FRONT_SEQ_NOTE:
-         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->note = frontParser_midiMsg.data2;
+         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->note = frontParser_command.data2;
          break;
    
       case FRONT_SEQ_VOLUME:
          seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->volume &= ~(0x7f);
-         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->volume |= (frontParser_midiMsg.data2&0x7f);
+         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->volume |= (frontParser_command.data2&0x7f);
          break;
    
       case FRONT_SEQ_PROB:
       
-         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->prob = frontParser_midiMsg.data2;
+         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->prob = frontParser_command.data2;
          break;
          
       case FRONT_SEQ_EUKLID_RESET:
@@ -1148,8 +2178,8 @@ static void frontParser_handleSeqCC()
    
       case FRONT_SEQ_EUKLID_LENGTH:
          {
-            uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_midiMsg.data2&0x07);
-            uint8_t length 	= frontParser_midiMsg.data2 >> 3;
+            uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_command.data2&0x07);
+            uint8_t length 	= frontParser_command.data2 >> 3;
             length += 1;
             euklid_setLength(frontParser_activeTrack, pattern, length);
             frontParser_activeFrontTrack = frontParser_activeTrack;
@@ -1159,9 +2189,9 @@ static void frontParser_handleSeqCC()
    
       case FRONT_SEQ_EUKLID_STEPS:
          {
-            uint8_t steps 	= frontParser_midiMsg.data2 >> 3;
+            uint8_t steps 	= frontParser_command.data2 >> 3;
             steps += 1;
-            uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_midiMsg.data2 & 0x7);
+            uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_command.data2 & 0x7);
          
             euklid_setSteps(frontParser_activeTrack,steps,pattern);
             frontParser_activeFrontTrack = frontParser_activeTrack;
@@ -1171,9 +2201,9 @@ static void frontParser_handleSeqCC()
    
       case FRONT_SEQ_EUKLID_ROTATION:
          {
-            uint8_t rotation = frontParser_midiMsg.data2 >> 3;
+            uint8_t rotation = frontParser_command.data2 >> 3;
          //rotation += 1;
-            uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_midiMsg.data2 & 0x7);
+            uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_command.data2 & 0x7);
          
             euklid_setRotation(frontParser_activeTrack,rotation,pattern);
             frontParser_activeFrontTrack = frontParser_activeTrack;
@@ -1183,9 +2213,9 @@ static void frontParser_handleSeqCC()
          
       case FRONT_SEQ_EUKLID_SUBSTEP_ROTATION:
          {
-            uint8_t rotation = frontParser_midiMsg.data2 >> 3;
+            uint8_t rotation = frontParser_command.data2 >> 3;
          //rotation += 1;
-            uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_midiMsg.data2 & 0x7);
+            uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_command.data2 & 0x7);
          
             euklid_setSubStepRotation(frontParser_activeTrack,rotation,pattern);
             frontParser_activeFrontTrack = frontParser_activeTrack;
@@ -1195,34 +2225,34 @@ static void frontParser_handleSeqCC()
    
       case FRONT_SEQ_CLEAR_TRACK: 
          {
-            seq_clearTrack(frontParser_midiMsg.data2, frontParser_shownPattern);
+            seq_clearTrack(frontParser_command.data2, frontParser_shownPattern);
          }
          break;
    
       case FRONT_SEQ_CLEAR_PATTERN:
-         seq_clearPattern(frontParser_midiMsg.data2);
+         seq_clearPattern(frontParser_command.data2);
          break;
    
       case FRONT_SEQ_POSX:
-         som_setX(frontParser_midiMsg.data2);
+         som_setX(frontParser_command.data2);
          break;
    
       case FRONT_SEQ_POSY:
-         som_setY(frontParser_midiMsg.data2);
+         som_setY(frontParser_command.data2);
          break;
    
       case FRONT_SEQ_FLUX:
-         som_setFlux(frontParser_midiMsg.data2/127.f);
+         som_setFlux(frontParser_command.data2/127.f);
          break;
    
       case FRONT_SEQ_SOM_FREQ:
-         som_setFreq(frontParser_midiMsg.data2,frontParser_activeTrack);
+         som_setFreq(frontParser_command.data2,frontParser_activeTrack);
          break;
    
       case FRONT_SEQ_MIDI_CHAN:
          {
-            uint8_t voice = (frontParser_midiMsg.data2 >> 4)&0x07;
-            uint8_t channel = (frontParser_midiMsg.data2&0x0f)+1;
+            uint8_t voice = (frontParser_command.data2 >> 4)&0x07;
+            uint8_t channel = (frontParser_command.data2&0x0f)+1;
             
             // --AS if midi channel changed, and a note was playing on old channel, turn it off
             if(voice < 7 && midi_MidiChannels[voice] != channel)
@@ -1235,95 +2265,95 @@ static void frontParser_handleSeqCC()
          
       case FRONT_SEQ_MIDI_CHAN_OFF:
          {
-            midi_MidiChannels[frontParser_midiMsg.data2]=0;
+            midi_MidiChannels[frontParser_command.data2]=0;
          }
          break;
    
       // --AS not used anymore
       //case FRONT_SEQ_MIDI_MODE:
-      //	midi_mode = frontParser_midiMsg.data2;
+      //	midi_mode = frontParser_command.data2;
       //	break;
       
       
       //voice nr (0xf0) + autom track nr (0x0f)
       case FRONT_SEQ_CLEAR_AUTOM:
          {
-            const uint8_t voice 		= frontParser_midiMsg.data2 >> 4;
-            const uint8_t automTrack 	= frontParser_midiMsg.data2 &  0x0f;
+            const uint8_t voice 		= frontParser_command.data2 >> 4;
+            const uint8_t automTrack 	= frontParser_command.data2 &  0x0f;
             seq_clearAutomation(voice, frontParser_shownPattern, automTrack);
          }
          break;
    
       case FRONT_SEQ_COPY_TRACK:
          {
-            const uint8_t src = frontParser_midiMsg.data2>>4;
-            const uint8_t dst = frontParser_midiMsg.data2&0xf;
+            const uint8_t src = frontParser_command.data2>>4;
+            const uint8_t dst = frontParser_command.data2&0xf;
             seq_copyTrack(src,dst,frontParser_shownPattern);
          }
          break;
    
       case FRONT_SEQ_COPY_PATTERN:
          {
-            const uint8_t src = frontParser_midiMsg.data2>>4;
-            const uint8_t dst = frontParser_midiMsg.data2&0xf;
+            const uint8_t src = frontParser_command.data2>>4;
+            const uint8_t dst = frontParser_command.data2&0xf;
             seq_copyPattern(src,dst);
          }
          break;
          
       case FRONT_SEQ_COPY_TRACK_PATTERN:
          {
-            const uint8_t srcNr = frontParser_midiMsg.data2>>4;
-            const uint8_t dstPat = frontParser_midiMsg.data2&0xf;
+            const uint8_t srcNr = frontParser_command.data2>>4;
+            const uint8_t dstPat = frontParser_command.data2&0xf;
             seq_copyTrackPattern(srcNr,dstPat,frontParser_shownPattern);
          }
          break;
          
       case FRONT_SEQ_COPY_SRC:
          {
-            frontParser_stepCopySource = frontParser_midiMsg.data2;
+            frontParser_stepCopySource = frontParser_command.data2;
          }
          break;
       
       case FRONT_SEQ_COPY_DST:
          {
-            seq_copySubStep(frontParser_stepCopySource,frontParser_midiMsg.data2,frontParser_activeTrack);
+            seq_copySubStep(frontParser_stepCopySource,frontParser_command.data2,frontParser_activeTrack);
          }
          break;
    
       case FRONT_SEQ_TRACK_LENGTH:
-         seq_setTrackLength(frontParser_activeTrack,frontParser_midiMsg.data2);
+         seq_setTrackLength(frontParser_activeTrack,frontParser_command.data2);
          break;
          
       case FRONT_SEQ_TRACK_SCALE:
-         seq_setTrackScale(frontParser_activeTrack,frontParser_midiMsg.data2);
+         seq_setTrackScale(frontParser_activeTrack,frontParser_command.data2);
          break;
    
       case FRONT_SEQ_TRACK_ROTATION: //**PATROT handle incoming track rotation. apply to active track
-         seq_setTrackRotation(frontParser_activeTrack,frontParser_midiMsg.data2);
+         seq_setTrackRotation(frontParser_activeTrack,frontParser_command.data2);
          break;
    
       case FRONT_SEQ_SHUFFLE:
-         seq_setShuffle(frontParser_midiMsg.data2/127.f);
+         seq_setShuffle(frontParser_command.data2/127.f);
          break;
    
       case FRONT_SEQ_SELECT_ACTIVE_STEP:
-         seq_selectedStep = frontParser_midiMsg.data2;
+         seq_selectedStep = frontParser_command.data2;
          break;
    
       case FRONT_SEQ_SET_AUTOM_TRACK:
-         seq_setActiveAutomationTrack(frontParser_midiMsg.data2);
+         seq_setActiveAutomationTrack(frontParser_command.data2);
          break;
    
       case FRONT_SEQ_SET_QUANT:
-         seq_setQuantisation(frontParser_midiMsg.data2);
+         seq_setQuantisation(frontParser_command.data2);
          break;
    
       case FRONT_SEQ_REQUEST_EUKLID_PARAMS:
-         frontPanelSending_sendEuklidParamsReply(frontParser_midiMsg.data2);
+         frontPanelSending_sendEuklidParamsReply(frontParser_command.data2);
          break;
    
       case FRONT_SEQ_SET_SHOWN_PATTERN:
-         if (frontParser_midiMsg.data2==frontParser_shownPattern)
+         if (frontParser_command.data2==frontParser_shownPattern)
          {
             if(!preset_consumeTmpBoundaryPatternSwitchAck())
                seq_realign();
@@ -1331,14 +2361,14 @@ static void frontParser_handleSeqCC()
          else
          {
             (void)preset_consumeTmpBoundaryPatternSwitchAck();
-            frontParser_shownPattern = seq_normalizePatternNumber(frontParser_midiMsg.data2);
+            frontParser_shownPattern = seq_normalizePatternNumber(frontParser_command.data2);
          }
          break;   
       case FRONT_SEQ_SET_ACTIVE_TRACK:
-         if ( (frontParser_activeTrack==frontParser_midiMsg.data2)&&(!seq_isRunning()) )
+         if ( (frontParser_activeTrack==frontParser_command.data2)&&(!seq_isRunning()) )
             seq_triggerVoice(frontParser_activeTrack, seq_rollVelocity, seq_rollNote);
             
-         frontParser_activeTrack = frontParser_midiMsg.data2;
+         frontParser_activeTrack = frontParser_command.data2;
          frontPanelSending_sendActiveTrackReply(frontParser_activeTrack);
          
          break;
@@ -1348,90 +2378,90 @@ static void frontParser_handleSeqCC()
          /* send back probability, volume and note nr*/
             frontPanelSending_sendStepParamsReply(frontParser_shownPattern,
                                                  frontParser_activeTrack,
-                                                 frontParser_midiMsg.data2);
+                                                 frontParser_command.data2);
          
          
          
-            frontParser_activeStep = frontParser_midiMsg.data2;
+            frontParser_activeStep = frontParser_command.data2;
          }
          break;
    
       case FRONT_SEQ_ROLL_RATE:
-         seq_setRollRate(frontParser_midiMsg.data2);
+         seq_setRollRate(frontParser_command.data2);
          break;
       case FRONT_SEQ_ROLL_NOTE:
-         seq_setRollNote(frontParser_midiMsg.data2);
+         seq_setRollNote(frontParser_command.data2);
          break;
       case FRONT_SEQ_ROLL_VELOCITY:
-         seq_setRollVelocity(frontParser_midiMsg.data2);
+         seq_setRollVelocity(frontParser_command.data2);
          break;
       case FRONT_SEQ_ROLL_MODE:
-         if(frontParser_midiMsg.data2==ROLL_MODE_FIRST_ON)
+         if(frontParser_command.data2==ROLL_MODE_FIRST_ON)
             seq_skipFirstRoll=0;
-         else if(frontParser_midiMsg.data2==ROLL_MODE_FIRST_OFF)
+         else if(frontParser_command.data2==ROLL_MODE_FIRST_OFF)
             seq_skipFirstRoll=1;   
          else
-            seq_rollMode = frontParser_midiMsg.data2;
+            seq_rollMode = frontParser_command.data2;
          break;
       case FRONT_SEQ_TRANSPOSE:
-         seq_transpose_voiceAmount[frontParser_activeTrack]=frontParser_midiMsg.data2;
+         seq_transpose_voiceAmount[frontParser_activeTrack]=frontParser_command.data2;
          break;
       case FRONT_SEQ_TRANSPOSE_ON_OFF:
-         if (frontParser_midiMsg.data2==0x0f)
+         if (frontParser_command.data2==0x0f)
             seq_writeTranspose();
-         else if (frontParser_midiMsg.data2<=1)
-            seq_transposeOnOff = frontParser_midiMsg.data2;
+         else if (frontParser_command.data2<=1)
+            seq_transposeOnOff = frontParser_command.data2;
          break;
    
       case FRONT_SEQ_ROLL_ON_OFF:
          {
          
-            const uint8_t onOff = frontParser_midiMsg.data2 >> 4;
-            const uint8_t voice = frontParser_midiMsg.data2 & 0xf;
+            const uint8_t onOff = frontParser_command.data2 >> 4;
+            const uint8_t voice = frontParser_command.data2 & 0xf;
             seq_rollChange(voice,onOff);
          }
          break;
    
       case FRONT_SEQ_CHANGE_PAT:
          //switch to one of the 8 patterns on the next pattern start
-         seq_setNextPattern( (frontParser_midiMsg.data2&0x07),(frontParser_midiMsg.data2>>3) );
+         seq_setNextPattern( (frontParser_command.data2&0x07),(frontParser_command.data2>>3) );
          break;
 
       case FRONT_SEQ_CHANGE_TMP_PAT:
-         seq_setNextPattern(SEQ_TMP_PATTERN, (frontParser_midiMsg.data2>>3));
+         seq_setNextPattern(SEQ_TMP_PATTERN, (frontParser_command.data2>>3));
          break;
    
    
       case FRONT_SEQ_RUN_STOP:
-         seq_setRunning(frontParser_midiMsg.data2);
+         seq_setRunning(frontParser_command.data2);
          break;
    
       case FRONT_SEQ_MUTE_TRACK:
-         seq_setMute(frontParser_midiMsg.data2,1);
+         seq_setMute(frontParser_command.data2,1);
          break;
    
       case FRONT_SEQ_UNMUTE_TRACK:
-         seq_setMute(frontParser_midiMsg.data2,0);
+         seq_setMute(frontParser_command.data2,0);
          break;
       case FRONT_SEQ_MIDI_ROUTING:
-         midiParser_setRouting(frontParser_midiMsg.data2);
+         midi_setRouting(frontParser_command.data2);
          break;
       case FRONT_SEQ_MIDI_TX_FILTER:
       case FRONT_SEQ_MIDI_RX_FILTER:
-         midiParser_setFilter(frontParser_midiMsg.data1==FRONT_SEQ_MIDI_TX_FILTER, frontParser_midiMsg.data2);
+         midi_setFilter(frontParser_command.data1==FRONT_SEQ_MIDI_TX_FILTER, frontParser_command.data2);
          break;
       case FRONT_SEQ_BAR_RESET_MODE:
       // --AS a setting of 0 is default (keep track of bars in song), a setting of 1 is
       // to reset the bar counter when a manual pattern change occurs
-         seq_resetBarOnPatternChange = frontParser_midiMsg.data2;
+         seq_resetBarOnPatternChange = frontParser_command.data2;
          break;
       case FRONT_SEQ_PC_TIME_MODE:
       // a setting of 0 is default (pattern changes at end of current bar
       // a setting of 1 causes pattern to change on next step
-         switchOnNextStep = frontParser_midiMsg.data2;
+         switchOnNextStep = frontParser_command.data2;
          break;
       case FRONT_SEQ_TRIGGER_IN_PPQ:
-         switch(frontParser_midiMsg.data2)
+         switch(frontParser_command.data2)
          {
             case 0:
                trigger_prescalerClockInput = PRE_1_PPQ;
@@ -1454,7 +2484,7 @@ static void frontParser_handleSeqCC()
          }
          break;
       case FRONT_SEQ_TRIGGER_OUT1_PPQ:
-         switch(frontParser_midiMsg.data2)
+         switch(frontParser_command.data2)
          {
             case 0:
                trigger_dividerClockOut1 = PRE_1_PPQ;
@@ -1479,7 +2509,7 @@ static void frontParser_handleSeqCC()
          break;
    
       case FRONT_SEQ_TRIGGER_OUT2_PPQ:
-         switch(frontParser_midiMsg.data2)
+         switch(frontParser_command.data2)
          {
             case 0:
                trigger_dividerClockOut2 = PRE_1_PPQ;
@@ -1504,38 +2534,38 @@ static void frontParser_handleSeqCC()
          break;
    
       case FRONT_SEQ_TRIGGER_GATE_MODE:
-         trigger_setGatemode(frontParser_midiMsg.data2);
+         trigger_setGatemode(frontParser_command.data2);
          break;
          
       case FRONT_SEQ_SET_LOOP:
-         seq_setLoop(frontParser_midiMsg.data2);
+         seq_setLoop(frontParser_command.data2);
          break;
       case FRONT_SEQ_LOAD_VOICE:
          frontParser_beginFileLoadIngress(0);
-         seq_voicesLoading |= (0x01<<frontParser_midiMsg.data2);
+         seq_voicesLoading |= (0x01<<frontParser_command.data2);
          break;
       case FRONT_SEQ_UNHOLD_VOICE:
-         frontParser_clearVoiceLoading(frontParser_midiMsg.data2);
+         frontParser_clearVoiceLoading(frontParser_command.data2);
          if(!frontParser_fileLoadBracketActive && !seq_voicesLoading)
             frontParser_endFileLoadIngress();
          break;
       case FRONT_SEQ_LOAD_FAST:
-         seq_loadFastMode=frontParser_midiMsg.data2;
+         seq_loadFastMode=frontParser_command.data2;
          break;
       case FRONT_SEQ_FILE_BEGIN:
          frontParser_beginFileLoadIngress(1);
          seq_resetVoiceMorphAmountsToGlobal();
          seq_resetLiveMorphApplyCache();
-         if((frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
-            || (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_ALL))
+         if((frontParser_command.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
+            || (frontParser_command.data2 == FRONT_FILE_DONE_TYPE_ALL))
          {
             preset_morphLoadDisabled = 1;
             preset_vMorphFlag = 0;
          }
          break;
       case FRONT_SEQ_FILE_DONE:
-         if((frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
-            || (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_ALL))
+         if((frontParser_command.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
+            || (frontParser_command.data2 == FRONT_FILE_DONE_TYPE_ALL))
          {
             preset_morphLoadDisabled = 0;
             preset_vMorphFlag = 0;
@@ -1550,7 +2580,7 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_TRACK_NOTE5:
       case FRONT_SEQ_TRACK_NOTE6:
       case FRONT_SEQ_TRACK_NOTE7:
-         midi_NoteOverride[frontParser_midiMsg.data1-FRONT_SEQ_TRACK_NOTE1] = frontParser_midiMsg.data2;
+         midi_NoteOverride[frontParser_command.data1-FRONT_SEQ_TRACK_NOTE1] = frontParser_command.data2;
          break;
       default:
          break;

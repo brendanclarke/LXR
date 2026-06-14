@@ -38,7 +38,7 @@
 #define AUTOMATIONNODE_H_
 //-------------------------------------------------------------
 #include "stm32f4xx.h"
-#include "MidiParser.h"
+#include "uARTFrontSYX/frontPanelReceivingProtocol.h"
 //-------------------------------------------------------------
 typedef struct AutomationStruct
 {

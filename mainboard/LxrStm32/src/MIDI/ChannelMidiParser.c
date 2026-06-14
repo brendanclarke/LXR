@@ -9,7 +9,7 @@
 #include "DrumVoice.h"
 #include "HiHat.h"
 #include "MidiParser.h"
-#include "MidiVoiceControl.h"
+#include "MidiOutputControl.h"
 #include "GlobalMidiParser.h"
 #include "Snare.h"
 #include "TriggerOut.h"
@@ -457,7 +457,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
-            midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            frontParser_originalCcValues[LXRparamNr] = msg.data2;
             preset_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
@@ -471,7 +471,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                
                else{
                //midi data goes to kit params
-               //midiParser_ccHandler(msg,1);
+               //frontParser_applyParameterCommand(msg,1);
                //we received a midi cc message forward it to the front panel
                   channelMidiParser_sendParameterEcho(LXRparamNr, msg.data2);
                }
@@ -704,7 +704,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
-            midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            frontParser_originalCcValues[LXRparamNr] = msg.data2;
             preset_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
@@ -718,7 +718,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                
                else{
                //midi data goes to kit params
-               //midiParser_ccHandler(msg,1);
+               //frontParser_applyParameterCommand(msg,1);
                //we received a midi cc message forward it to the front panel
                   channelMidiParser_sendParameterEcho(LXRparamNr, msg.data2);
                }
@@ -952,7 +952,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
-            midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            frontParser_originalCcValues[LXRparamNr] = msg.data2;
             preset_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
@@ -966,7 +966,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                
                else{
                //midi data goes to kit params
-               //midiParser_ccHandler(msg,1);
+               //frontParser_applyParameterCommand(msg,1);
                //we received a midi cc message forward it to the front panel
                   channelMidiParser_sendParameterEcho(LXRparamNr, msg.data2);
                }
@@ -1201,7 +1201,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
-            midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            frontParser_originalCcValues[LXRparamNr] = msg.data2;
             preset_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
@@ -1215,7 +1215,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                
                else{
                //midi data goes to kit params
-               //midiParser_ccHandler(msg,1);
+               //frontParser_applyParameterCommand(msg,1);
                //we received a midi cc message forward it to the front panel
                   channelMidiParser_sendParameterEcho(LXRparamNr, msg.data2);
                }
@@ -1451,7 +1451,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
-            midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            frontParser_originalCcValues[LXRparamNr] = msg.data2;
             preset_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
@@ -1465,7 +1465,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                
                else{
                //midi data goes to kit params
-               //midiParser_ccHandler(msg,1);
+               //frontParser_applyParameterCommand(msg,1);
                //we received a midi cc message forward it to the front panel
                   channelMidiParser_sendParameterEcho(LXRparamNr, msg.data2);
                }
@@ -1696,7 +1696,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
-            midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            frontParser_originalCcValues[LXRparamNr] = msg.data2;
             preset_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
@@ -1710,7 +1710,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                
                else{
                //midi data goes to kit params
-               //midiParser_ccHandler(msg,1);
+               //frontParser_applyParameterCommand(msg,1);
                //we received a midi cc message forward it to the front panel
                   channelMidiParser_sendParameterEcho(LXRparamNr, msg.data2);
                }
@@ -1941,7 +1941,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
       
          if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
          {
-            midiParser_originalCcValues[LXRparamNr] = msg.data2;
+            frontParser_originalCcValues[LXRparamNr] = msg.data2;
             preset_storeParameterIngress(LXRparamNr, msg.data2);
             modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
          
@@ -1955,7 +1955,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                
                else{
                //midi data goes to kit params
-               //midiParser_ccHandler(msg,1);
+               //frontParser_applyParameterCommand(msg,1);
                //we received a midi cc message forward it to the front panel
                   channelMidiParser_sendParameterEcho(LXRparamNr, msg.data2);
                }

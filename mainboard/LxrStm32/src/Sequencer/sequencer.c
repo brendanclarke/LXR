@@ -41,16 +41,14 @@
 #include "HiHat.h"
 #include "random.h"
 #include "uARTFrontSYX/frontPanelReceivingProtocol.h"
-#include "uARTFrontSYX/Uart.h"
 #include "uARTFrontSYX/frontPanelSendingProtocol.h"
 #include "MidiMessages.h"
-#include "MidiVoiceControl.h"
+#include "MidiOutputControl.h"
 #include "CymbalVoice.h"
 #include "Preset/EndpointRestore.h"
 #include "Preset/TempPlaybackSwitch.h"
 #include "sequencer.h"
 #include <string.h>
-#include "usb_manager.h"
 #include "clockSync.h"
 #include "MidiParser.h"
 #include "automationNode.h"
@@ -176,7 +174,6 @@ uint8_t seq_transposeOnOff;
 //for the automation tracks each track needs 2 modNodes
 static AutomationNode seq_automationNodes[NUM_TRACKS][2];
 
-static void seq_sendMidi(MidiMsg msg);
 static void seq_sendRealtime(const uint8_t status);
 static void seq_sendProgChg(const uint8_t ptn);
 static void seq_eraseStepAndSubSteps(const uint8_t voice, const uint8_t mainStep);
@@ -805,18 +802,6 @@ void seq_setNextPattern(const uint8_t patNr, uint8_t voice)
    preset_tempPlaybackSwitchState.loadPendingFlag = 1;
    preset_tempPlaybackSwitchState.loadSeqNow = 1;
 }
-//------------------------------------------------------------------------------
-static void seq_sendMidi(MidiMsg msg)
-{
-	//send to usb midi
-   usb_sendMidi(msg);
-
-	//send to hardware midi out jack
-   uart_sendMidi(msg);
-
-}
-
-
 //------------------------------------------------------------------------------
 static void seq_parseAutomationNodes(uint8_t track, Step* stepData)
 {  
@@ -2276,7 +2261,7 @@ void seq_midiNoteOff(uint8_t chan)
          if((1<<i) & midi_notes_on) {
             msg.status=	NOTE_OFF | i;
             msg.data1=midi_chan_notes[i];
-            seq_sendMidi(msg);
+            outputControl_sendMidi(msg);
          }
    	// reset all
       midi_notes_on=0;
@@ -2287,7 +2272,7 @@ void seq_midiNoteOff(uint8_t chan)
    if((1<<chan) & midi_notes_on) {
       msg.status=	NOTE_OFF | chan;
       msg.data1=midi_chan_notes[chan];
-      seq_sendMidi(msg);
+      outputControl_sendMidi(msg);
    	// turn off our knowledge of that note playing
       midi_notes_on &= (~(1<<chan));
    }
@@ -2300,7 +2285,7 @@ static void seq_sendRealtime(const uint8_t status)
    if((midiParser_txRxFilter & 0x20)==0)
       return;
    msg.status=status;
-   seq_sendMidi(msg);
+   outputControl_sendMidi(msg);
 }
 
 /* Send a note on message. This will filter out these messages if appropriate
@@ -2315,7 +2300,7 @@ void seq_sendMidiNoteOn(const uint8_t channel, const uint8_t note, const uint8_t
    msg.status=NOTE_ON | channel;
    msg.data1=note;
    msg.data2=veloc;
-   seq_sendMidi(msg);
+   outputControl_sendMidi(msg);
    
    // bc - if velocity is zero, send note off also
    if (!veloc)
@@ -2323,7 +2308,7 @@ void seq_sendMidiNoteOn(const uint8_t channel, const uint8_t note, const uint8_t
       msg.status=NOTE_OFF | channel;
       msg.data1=note;
       msg.data2=veloc;
-      seq_sendMidi(msg);
+      outputControl_sendMidi(msg);
    }
    
 	// keep track of which notes are on so we can turn them off later
@@ -2349,7 +2334,7 @@ static void seq_sendProgChg(const uint8_t ptn)
       msg.status = PROG_CHANGE | (midiChannel-1);
       msg.data1=ptn;
       msg.bits.length=1;
-      seq_sendMidi(msg);
+      outputControl_sendMidi(msg);
    }
 }
 

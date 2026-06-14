@@ -17,7 +17,7 @@
 
 #include "Preset/ParameterIngress.h"
 #include "Sequencer/sequencer.h"
-#include "MIDI/MidiParser.h"
+#include "uARTFrontSYX/frontPanelReceivingProtocol.h"
 
 /* Current-image ingress starts in live-edit mode so the router lands on the
    active kit by default. This flag is intentionally private to the module so
@@ -477,5 +477,5 @@ void preset_applySingleParameterValue(uint16_t param, uint8_t value)
    }
 
    msg.data2 = value;
-   midiParser_ccHandler(msg, 0);
+   frontParser_applyParameterCommand(msg, 0);
 }

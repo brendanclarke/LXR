@@ -1,5 +1,5 @@
 /*
- * MidiVoiceControl.h
+ * MidiOutputControl.h
  *
  *  Created on: 03.04.2012
  * ------------------------------------------------------------------------------------------------------------------------
@@ -34,11 +34,12 @@
  */
 
 
-#ifndef MIDIVOICECONTROL_H_
-#define MIDIVOICECONTROL_H_
+#ifndef MIDIOUTPUTCONTROL_H_
+#define MIDIOUTPUTCONTROL_H_
 
 #include "stm32f4xx.h"
 #include "config.h"
+#include "MidiMessages.h"
 
 
 //-------------- DEFINES ----------------------------
@@ -60,6 +61,10 @@
 extern uint8_t voiceStatus[NUM_VOICES];
 //---------------------------------------------------
 //------------- Functions ---------------------------
+/* Send a MIDI message to the configured sequencer-originated output targets. */
+void outputControl_sendMidi(MidiMsg msg);
+/* Send a MIDI realtime status byte through the same output boundary. */
+void outputControl_sendRealtime(uint8_t status);
 /* Trigger a voice and update the live voice bookkeeping. */
 void voiceControl_noteOn(uint8_t voice, uint8_t note, uint8_t vel);
 /* Release a voice, or all voices when passed 0xff. */
@@ -67,4 +72,4 @@ void voiceControl_noteOff(uint8_t voice);//0xff == all voices
 /* Query whether a voice is currently marked active. */
 uint8_t voiceControl_isVoicePlaying(uint8_t voice);
 
-#endif /* MIDIVOICECONTROL_H_ */
+#endif /* MIDIOUTPUTCONTROL_H_ */

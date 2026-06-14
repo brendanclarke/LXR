@@ -265,7 +265,8 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SYSEX_WAIT						0x11    // wait for main to catch up
 #define SYSEX_ACTIVE_MODE_NONE			0x7f	/**< a placeholder message indicating that sysex is active but no mode is selected yet*/
 
-/** a struct defining a standard midi message*/
+/** Three-byte front-panel command storage. The wire format is MIDI-shaped, but
+    this object represents AVR/STM protocol traffic. */
 typedef struct MidiStruct {
 	uint8_t status;
 	uint8_t data1;
@@ -287,8 +288,8 @@ enum sysexCallBack
 /** parse incoming data from the cortex*/
 void frontPanel_parseData(uint8_t data);
 
-extern volatile MidiMsg frontParser_midiMsg;
+extern volatile MidiMsg frontParser_command;
 extern uint8_t frontParser_sysexCallback; 
-extern void midiMsg_checkLongOps();
+extern void frontPanel_checkLongOps();
 
 #endif /* FRONTPANELRECEIVINGPROTOCOL_H_ */

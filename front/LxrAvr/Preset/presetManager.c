@@ -993,7 +993,7 @@ static void preset_writePatternData()
 	//write the preset data
 	//initiate the sysex mode
 	
-   while( (frontParser_midiMsg.status != SYSEX_START))
+   while( (frontParser_command.status != SYSEX_START))
    {
       frontPanel_sendByte(SYSEX_START);
       uart_checkAndParse();
@@ -1027,9 +1027,9 @@ static void preset_writePatternData()
 	
 	//end sysex mode
    frontPanel_sendByte(SYSEX_END);
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
 	//now the main step data
-   while( (frontParser_midiMsg.status != SYSEX_START))
+   while( (frontParser_command.status != SYSEX_START))
    {
       frontPanel_sendByte(SYSEX_START);
       uart_checkAndParse();
@@ -1048,11 +1048,11 @@ static void preset_writePatternData()
 		
 	//end sysex mode
    frontPanel_sendByte(SYSEX_END);
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
 	
 	//----- pattern info (next/repeat) ------
 	
-   while( (frontParser_midiMsg.status != SYSEX_START))
+   while( (frontParser_command.status != SYSEX_START))
    {
       frontPanel_sendByte(SYSEX_START);
       uart_checkAndParse();
@@ -1073,7 +1073,7 @@ static void preset_writePatternData()
 		
 	//end sysex mode
    frontPanel_sendByte(SYSEX_END);
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
 	
 	
 	//----- shuffle setting ------
@@ -1083,7 +1083,7 @@ static void preset_writePatternData()
 	// --AS we reuse the same call from above (when saving main step data)
 	// but we only use the length info retrieved. We want to store it at the end
 	// to avoid breaking compatibility with save file
-   while( (frontParser_midiMsg.status != SYSEX_START))
+   while( (frontParser_command.status != SYSEX_START))
    {
       frontPanel_sendByte(SYSEX_START);
       uart_checkAndParse();
@@ -1110,7 +1110,7 @@ static void preset_writePatternData()
 
 	//end sysex mode
    frontPanel_sendByte(SYSEX_END);
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
 
 }
  //----------------------------------------------------
@@ -1204,9 +1204,9 @@ static void preset_readPatternScale()
    
    uint8_t scale[NUM_PATTERN*NUM_TRACKS];
    
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
    frontPanel_sendByte(SYSEX_START);
-   while(frontParser_midiMsg.status != SYSEX_START)
+   while(frontParser_command.status != SYSEX_START)
    {
       uart_checkAndParse();
    }
@@ -1261,9 +1261,9 @@ static void preset_readPatternScale()
    }
 
    // end sysex mode
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
    frontPanel_sendByte(SYSEX_END);
-   while(frontParser_midiMsg.status != SYSEX_END)
+   while(frontParser_command.status != SYSEX_END)
    {
       uart_checkAndParse();
    }
@@ -1326,9 +1326,9 @@ static void preset_readPatternLength()
    
    uint8_t length[NUM_PATTERN*NUM_TRACKS];
    
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
    frontPanel_sendByte(SYSEX_START);
-   while(frontParser_midiMsg.status != SYSEX_START)
+   while(frontParser_command.status != SYSEX_START)
    {
       uart_checkAndParse();
    }
@@ -1383,9 +1383,9 @@ static void preset_readPatternLength()
    }
    
    // end sysex mode
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
    frontPanel_sendByte(SYSEX_END);
-   while(frontParser_midiMsg.status != SYSEX_END)
+   while(frontParser_command.status != SYSEX_END)
    {
       uart_checkAndParse();
    }
@@ -1522,9 +1522,9 @@ static void preset_readPatternChain()
    uint8_t next[NUM_PATTERN];
    uint8_t repeat[NUM_PATTERN];
    
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
    frontPanel_sendByte(SYSEX_START);
-   while(frontParser_midiMsg.status != SYSEX_START)
+   while(frontParser_command.status != SYSEX_START)
    {
       uart_checkAndParse();
    }
@@ -1592,9 +1592,9 @@ static void preset_readPatternChain()
             
    }
    // end sysex mode
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
    frontPanel_sendByte(SYSEX_END);
-   while(frontParser_midiMsg.status != SYSEX_END)
+   while(frontParser_command.status != SYSEX_END)
    {
       uart_checkAndParse();
    }
@@ -1658,9 +1658,9 @@ static void preset_readPatternMainStep()
    
    uint16_t mainStep[NUM_PATTERN*NUM_TRACKS];
    
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
    frontPanel_sendByte(SYSEX_START);
-   while(frontParser_midiMsg.status != SYSEX_START)
+   while(frontParser_command.status != SYSEX_START)
    {
       uart_checkAndParse();
    }
@@ -1718,9 +1718,9 @@ static void preset_readPatternMainStep()
    }
    
    // end sysex mode
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
    frontPanel_sendByte(SYSEX_END);
-   while(frontParser_midiMsg.status != SYSEX_END)
+   while(frontParser_command.status != SYSEX_END)
    {
       uart_checkAndParse();
    }
@@ -1788,9 +1788,9 @@ static void preset_readPatternStepData(uint8_t track, uint8_t pattern)
       while(1){;}
    }
    
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
    frontPanel_sendByte(SYSEX_START);
-   while(frontParser_midiMsg.status != SYSEX_START)
+   while(frontParser_command.status != SYSEX_START)
    {
       uart_checkAndParse();
    }
@@ -1864,12 +1864,12 @@ static void preset_readPatternStepData(uint8_t track, uint8_t pattern)
    frontParser_sysexCallback=NO_CALLBACK;
    
    // end sysex mode
-   frontParser_midiMsg.status = 0;
+   frontParser_command.status = 0;
    frontPanel_sendByte(SYSEX_END);
    
    //menu_debug("WAIT SYSX", 9, track, pattern, 0);
    
-   while(frontParser_midiMsg.status != SYSEX_END)
+   while(frontParser_command.status != SYSEX_END)
    {
       uart_checkAndParse();
    }

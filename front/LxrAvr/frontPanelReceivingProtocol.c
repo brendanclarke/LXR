@@ -25,7 +25,7 @@
 //--
 
 static uint8_t frontParser_rxCnt=0;
-volatile MidiMsg frontParser_midiMsg;
+volatile MidiMsg frontParser_command;
 static uint16_t frontParser_nrpnNr = 0;
 
 volatile uint8_t frontParser_restoreActive = 0; // RESTORE: True during a canonical parameter dump from STM
@@ -138,25 +138,25 @@ void frontParser_parseNrpn(uint8_t value)
 void frontPanel_ccHandler()
 {
 	//get the real parameter number from the cc number
-   const uint8_t parNr =(uint8_t)( frontParser_midiMsg.data1 - 1);
+   const uint8_t parNr =(uint8_t)( frontParser_command.data1 - 1);
 	
    if(parNr == NRPN_DATA_ENTRY_COARSE) {
-      frontParser_parseNrpn(frontParser_midiMsg.data2);
+      frontParser_parseNrpn(frontParser_command.data2);
    }
 	
    if(parNr == NRPN_FINE) {
       frontParser_nrpnNr &= 0x80; //clear lower 7 bit
-      frontParser_nrpnNr |= frontParser_midiMsg.data2;
+      frontParser_nrpnNr |= frontParser_command.data2;
    }
 		
    if(parNr == NRPN_COARSE) {
       frontParser_nrpnNr &= 0x7f; //clear upper 7 bit
-      frontParser_nrpnNr |= (uint16_t)(frontParser_midiMsg.data2<<7);
+      frontParser_nrpnNr |= (uint16_t)(frontParser_command.data2<<7);
    }
 	
 	
 	//set the parameter value
-   parameter_values[parNr] = frontParser_midiMsg.data2;
+   parameter_values[parNr] = frontParser_command.data2;
 	
 	//repaint the LCD
    menu_repaint();
@@ -185,13 +185,13 @@ void frontPanel_parseData(uint8_t data)
       {
       	//reset the byte counter
          frontParser_rxCnt = 0;
-         frontParser_midiMsg.status = data;
+         frontParser_command.status = data;
       }
    
    }
    else
    {
-      if(frontParser_midiMsg.status == SYSEX_START)
+      if(frontParser_command.status == SYSEX_START)
       {
        
          switch(frontPanel_sysexMode)
@@ -349,40 +349,40 @@ void frontPanel_parseData(uint8_t data)
       else if(frontParser_rxCnt==0)
       {
          if(!frontParser_rxDisable
-            || (frontParser_midiMsg.status == SEQ_CC)
-            || (frontParser_midiMsg.status == PRF_CACHE_STATUS)
-            || (frontParser_midiMsg.status == PARAM_RESTORE_BEGIN)
-            || (frontParser_midiMsg.status == PARAM_RESTORE_DONE)
-            || (frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC)
-            || (frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC2)
-            || (frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC)
-            || (frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC2))
+            || (frontParser_command.status == SEQ_CC)
+            || (frontParser_command.status == PRF_CACHE_STATUS)
+            || (frontParser_command.status == PARAM_RESTORE_BEGIN)
+            || (frontParser_command.status == PARAM_RESTORE_DONE)
+            || (frontParser_command.status == PRF_RESTORE_PARAM_CC)
+            || (frontParser_command.status == PRF_RESTORE_PARAM_CC2)
+            || (frontParser_command.status == PRF_RESTORE_MORPH_CC)
+            || (frontParser_command.status == PRF_RESTORE_MORPH_CC2))
          {
       	   //parameter nr
-            frontParser_midiMsg.data1 = data;
+            frontParser_command.data1 = data;
             frontParser_rxCnt++;
          }
       }
       else
       {
       	//parameter value
-         frontParser_midiMsg.data2 = data;
+         frontParser_command.data2 = data;
          frontParser_rxCnt=0;
 
          if(frontParser_rxDisable)
          {
-            if((frontParser_midiMsg.status == SEQ_CC) && frontPanelSending_isFlowCommand(frontParser_midiMsg.data1))
-               frontPanelSending_handleFlowMessage(frontParser_midiMsg.data1, frontParser_midiMsg.data2);
-            else if(frontParser_midiMsg.status == PRF_CACHE_STATUS)
+            if((frontParser_command.status == SEQ_CC) && frontPanelSending_isFlowCommand(frontParser_command.data1))
+               frontPanelSending_handleFlowMessage(frontParser_command.data1, frontParser_command.data2);
+            else if(frontParser_command.status == PRF_CACHE_STATUS)
             {
-               frontPanelSending_handlePrfCacheStatus(frontParser_midiMsg.data1, frontParser_midiMsg.data2);
+               frontPanelSending_handlePrfCacheStatus(frontParser_command.data1, frontParser_command.data2);
             }
-            else if((frontParser_midiMsg.status == PARAM_RESTORE_BEGIN)
-               || (frontParser_midiMsg.status == PARAM_RESTORE_DONE)
-               || (frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC)
-               || (frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC2)
-               || (frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC)
-               || (frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC2))
+            else if((frontParser_command.status == PARAM_RESTORE_BEGIN)
+               || (frontParser_command.status == PARAM_RESTORE_DONE)
+               || (frontParser_command.status == PRF_RESTORE_PARAM_CC)
+               || (frontParser_command.status == PRF_RESTORE_PARAM_CC2)
+               || (frontParser_command.status == PRF_RESTORE_MORPH_CC)
+               || (frontParser_command.status == PRF_RESTORE_MORPH_CC2))
             {
                /* RESTORE: Allow these messages to fall through to the processor even when rxDisable is true. */
             }
@@ -392,23 +392,23 @@ void frontPanel_parseData(uint8_t data)
             }
          }
       	//process the received data
-         if(frontParser_midiMsg.status == MIDI_CC) //sound cc data from cortex 
+         if(frontParser_command.status == MIDI_CC) //sound parameter command from STM 
          {
             frontPanel_ccHandler();
          }
          else
          {
-            if(frontParser_midiMsg.status == PRESET_NAME)
+            if(frontParser_command.status == PRESET_NAME)
             {
             	
-               if(frontParser_midiMsg.data2 & 0x40)
+               if(frontParser_command.data2 & 0x40)
                {
                   frontParser_nameIndex = 0;
                }
             	
                preset_currentName[frontParser_nameIndex] =(char)(
-                  	(frontParser_midiMsg.data1&0x7f) |
-                  	((frontParser_midiMsg.data2&0x7f)<<7));
+                  	(frontParser_command.data1&0x7f) |
+                  	((frontParser_command.data2&0x7f)<<7));
                frontParser_nameIndex++;
                frontParser_nameIndex &= 0x7; //wrap at 8
                if(frontParser_nameIndex==0)
@@ -417,57 +417,57 @@ void frontPanel_parseData(uint8_t data)
                }						
             					
             } 
-            else if(frontParser_midiMsg.status == SET_P1_DEST)
+            else if(frontParser_command.status == SET_P1_DEST)
             {
             	//**AUTOM - translate cortex value to mod target index
             	// a value of FF means no automation (on the back end)
-               uint8_t dst=(uint8_t)((frontParser_midiMsg.data1<<7) | frontParser_midiMsg.data2);
+               uint8_t dst=(uint8_t)((frontParser_command.data1<<7) | frontParser_command.data2);
                if(dst==0xFF)
                   dst=0;
                parameter_values[PAR_P1_DEST] = paramToModTarget[dst];
                menu_repaintAll();
             }
-            else if(frontParser_midiMsg.status == SET_P2_DEST)
+            else if(frontParser_command.status == SET_P2_DEST)
             {
             	//**AUTOM - translate cortex value to mod target index
-               uint8_t dst=(uint8_t)((frontParser_midiMsg.data1<<7) | frontParser_midiMsg.data2);
+               uint8_t dst=(uint8_t)((frontParser_command.data1<<7) | frontParser_command.data2);
                if(dst==0xFF)
                   dst=0;
                parameter_values[PAR_P2_DEST] = paramToModTarget[dst];
                menu_repaintAll();
             }
-            else if(frontParser_midiMsg.status == SET_P1_VAL)
+            else if(frontParser_command.status == SET_P1_VAL)
             {
-               parameter_values[PAR_P1_VAL] = (uint8_t)((frontParser_midiMsg.data1<<7) | frontParser_midiMsg.data2);
+               parameter_values[PAR_P1_VAL] = (uint8_t)((frontParser_command.data1<<7) | frontParser_command.data2);
                menu_repaintAll();
             }
-            else if(frontParser_midiMsg.status == SET_P2_VAL)
+            else if(frontParser_command.status == SET_P2_VAL)
             {
-               parameter_values[PAR_P2_VAL] = (uint8_t)((frontParser_midiMsg.data1<<7) | frontParser_midiMsg.data2);
+               parameter_values[PAR_P2_VAL] = (uint8_t)((frontParser_command.data1<<7) | frontParser_command.data2);
                menu_repaintAll();
             }
-            else if(frontParser_midiMsg.status == SEQ_CC)
+            else if(frontParser_command.status == SEQ_CC)
             {
-               switch(frontParser_midiMsg.data1)
+               switch(frontParser_command.data1)
                {
                	
                   case SEQ_FLOW_BEGIN:
                   case SEQ_FLOW_GRANT:
                   case SEQ_FLOW_END:
                   case SEQ_FLOW_ABORT:
-                     frontPanelSending_handleFlowMessage(frontParser_midiMsg.data1, frontParser_midiMsg.data2);
+                     frontPanelSending_handleFlowMessage(frontParser_command.data1, frontParser_command.data2);
                      break;
 
                   case SEQ_REPORT_GLOBAL_MORPH_LSB:
                      frontParser_reportGlobalMorphLsb =
-                        (uint8_t)(frontParser_midiMsg.data2 & 0x7f);
+                        (uint8_t)(frontParser_command.data2 & 0x7f);
                      break;
 
                   case SEQ_REPORT_GLOBAL_MORPH_MSB:
                   {
                      uint8_t amount =
                         (uint8_t)(frontParser_reportGlobalMorphLsb
-                           | ((frontParser_midiMsg.data2 & 0x01) << 7));
+                           | ((frontParser_command.data2 & 0x01) << 7));
                      parameter_values[PAR_MORPH] = amount;
                      morphValue = amount;
                      menu_repaint();
@@ -475,27 +475,27 @@ void frontPanel_parseData(uint8_t data)
                   }
 
                   case SEQ_SET_PAT_BEAT:
-                     parameter_values[PAR_PATTERN_BEAT] = frontParser_midiMsg.data2;
+                     parameter_values[PAR_PATTERN_BEAT] = frontParser_command.data2;
                      menu_repaint();
                      break;	
                   case SEQ_SET_PAT_NEXT:
-                     parameter_values[PAR_PATTERN_NEXT] = frontParser_midiMsg.data2;
+                     parameter_values[PAR_PATTERN_NEXT] = frontParser_command.data2;
                      menu_repaint();
                      break;
                	
                   case SEQ_TRACK_LENGTH:
-                     parameter_values[PAR_TRACK_LENGTH] = frontParser_midiMsg.data2;
+                     parameter_values[PAR_TRACK_LENGTH] = frontParser_command.data2;
                      menu_repaint();
                      break;
                   case SEQ_TRACK_SCALE:
-                     parameter_values[PAR_TRACK_SCALE] = frontParser_midiMsg.data2;
+                     parameter_values[PAR_TRACK_SCALE] = frontParser_command.data2;
                      menu_repaint();
                      break;
                
                	// **PATROT - receive rotation value from back for active track
                  
                   case SEQ_TRACK_ROTATION:
-                     parameter_values[PAR_TRACK_ROTATION] = frontParser_midiMsg.data2;
+                     parameter_values[PAR_TRACK_ROTATION] = frontParser_command.data2;
                      menu_repaint();
                      if ((buttonHandler_getMode() == SELECT_MODE_PERF)&&shiftState)
                      {  // rotation amount updated while viewing rotation - update the display
@@ -509,42 +509,42 @@ void frontPanel_parseData(uint8_t data)
                      break;
                      
                   case SEQ_TRANSPOSE:
-                     parameter_values[PAR_TRANSPOSE] = frontParser_midiMsg.data2;
+                     parameter_values[PAR_TRANSPOSE] = frontParser_command.data2;
                      menu_repaint();
                      break;
                	
                   case SEQ_EUKLID_LENGTH:
-                     parameter_values[PAR_EUKLID_LENGTH] = frontParser_midiMsg.data2;
+                     parameter_values[PAR_EUKLID_LENGTH] = frontParser_command.data2;
                      menu_repaint();
                      break;
                	
                   case SEQ_EUKLID_STEPS:
-                     parameter_values[PAR_EUKLID_STEPS] = frontParser_midiMsg.data2;
+                     parameter_values[PAR_EUKLID_STEPS] = frontParser_command.data2;
                      menu_repaint();
                      break;
                	
                   case SEQ_EUKLID_ROTATION:
-                     parameter_values[PAR_EUKLID_ROTATION] = frontParser_midiMsg.data2;
+                     parameter_values[PAR_EUKLID_ROTATION] = frontParser_command.data2;
                      menu_repaint();
                      break;
                   
                   case SEQ_EUKLID_SUBSTEP_ROTATION:
-                     parameter_values[PAR_EUKLID_SUBSTEP_ROTATION] = frontParser_midiMsg.data2;
+                     parameter_values[PAR_EUKLID_SUBSTEP_ROTATION] = frontParser_command.data2;
                      menu_repaint();
                      break;
                
                   case SEQ_VOLUME:
-                     parameter_values[PAR_STEP_VOLUME] = frontParser_midiMsg.data2;
+                     parameter_values[PAR_STEP_VOLUME] = frontParser_command.data2;
                      menu_repaintAll();
                      break;
                	
                   case SEQ_PROB:
-                     parameter_values[PAR_STEP_PROB] = frontParser_midiMsg.data2;
+                     parameter_values[PAR_STEP_PROB] = frontParser_command.data2;
                      menu_repaintAll();
                      break;
                	
                   case SEQ_NOTE:
-                     parameter_values[PAR_STEP_NOTE] = frontParser_midiMsg.data2;
+                     parameter_values[PAR_STEP_NOTE] = frontParser_command.data2;
                      menu_repaintAll();
                      break;
                	
@@ -554,15 +554,15 @@ void frontPanel_parseData(uint8_t data)
                	//led_clearSequencerLeds9_16();
                	led_clearSelectLeds();
                	// set led to show active pattern
-               	led_setValue(1,LED_PART_SELECT1+frontParser_midiMsg.data2);
+               	led_setValue(1,LED_PART_SELECT1+frontParser_command.data2);
                	break;
                	*/
                	
                   case SEQ_CHANGE_PAT:
-                     if(frontParser_midiMsg.data2 > 15) 
+                     if(frontParser_command.data2 > 15) 
                         return;
                  	//ack message that the sequencer changed to the requested pattern
-                     uint8_t patMsg = frontParser_midiMsg.data2;
+                     uint8_t patMsg = frontParser_command.data2;
                      uint8_t hadHeldVoiceAck = preset_workingVoiceArray ? 1 : 0;
                      uint8_t oldPlayedPattern = menu_playedPattern;
                      if(patMsg != SEQ_TMP_PATTERN)
@@ -592,7 +592,7 @@ void frontPanel_parseData(uint8_t data)
                         } 
                         else {
                         	//store the pending pattern update for shift button release handler
-                           menu_shownPattern = frontParser_midiMsg.data2;
+                           menu_shownPattern = frontParser_command.data2;
                         }								
                      }	
                      if(hadHeldVoiceAck && (parameter_values[PAR_FOLLOW] || tempBoundaryAck) && (menu_activePage != PATTERN_SETTINGS_PAGE))
@@ -610,7 +610,7 @@ void frontPanel_parseData(uint8_t data)
                         led_clearAllBlinkLeds();
                      	// re init the LEDs shwoing active/viewed pattern
                         led_initPerformanceLeds();
-                     	//led_setValue(1,LED_PART_SELECT1+frontParser_midiMsg.data2);
+                     	//led_setValue(1,LED_PART_SELECT1+frontParser_command.data2);
                      }
                      
                      break;
@@ -618,7 +618,7 @@ void frontPanel_parseData(uint8_t data)
                  	// --AS This tells the front that the sequencer has started/stopped due to MTC msg
                   	// we simply use this to turn on/off the led and cause the next press of start
                  	// button to act properly
-                     buttonHandler_setRunStopState(frontParser_midiMsg.data2);
+                     buttonHandler_setRunStopState(frontParser_command.data2);
                      break;
                	
                   case LED_QUERY_SEQ_TRACK:
@@ -628,12 +628,12 @@ void frontPanel_parseData(uint8_t data)
                
                };						
             }
-            else if(frontParser_midiMsg.status == SAMPLE_CC)
+            else if(frontParser_command.status == SAMPLE_CC)
             {
-               switch(frontParser_midiMsg.data1)
+               switch(frontParser_command.data1)
                {
                   case SAMPLE_COUNT:
-                     menu_setNumSamples(frontParser_midiMsg.data2);
+                     menu_setNumSamples(frontParser_command.data2);
                      break;
                
                   default:
@@ -661,22 +661,22 @@ void frontPanel_parseData(uint8_t data)
                   - Sends PARAM_RESTORE_ACK back to STM.
                   - Clears frontParser_restoreActive = 0.
             */
-            else if(frontParser_midiMsg.status == PARAM_CC)
+            else if(frontParser_command.status == PARAM_CC)
             {
-               parameter_values[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
-               parameters2[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
+               parameter_values[frontParser_command.data1]=frontParser_command.data2;
+               parameters2[frontParser_command.data1]=frontParser_command.data2;
                menu_repaint();
             
             }
             
-            else if(frontParser_midiMsg.status == PARAM_CC2)
+            else if(frontParser_command.status == PARAM_CC2)
             {
-               parameter_values[frontParser_midiMsg.data1+128]=frontParser_midiMsg.data2;
-               parameters2[frontParser_midiMsg.data1+128]=frontParser_midiMsg.data2;
+               parameter_values[frontParser_command.data1+128]=frontParser_command.data2;
+               parameters2[frontParser_command.data1+128]=frontParser_command.data2;
                menu_repaint();
             
             }
-            else if(frontParser_midiMsg.status == PARAM_RESTORE_BEGIN)
+            else if(frontParser_command.status == PARAM_RESTORE_BEGIN)
             {
                // RESTORE: Start of a canonical parameter dump from STM.
                // lcd_setcursor(0,0);
@@ -686,44 +686,44 @@ void frontPanel_parseData(uint8_t data)
                // Inform STM we are ready to receive and have suppressed outbound traffic.
                frontPanel_sendData(PARAM_RESTORE_READY, 0, 0);
             }
-            else if(frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC)
+            else if(frontParser_command.status == PRF_RESTORE_PARAM_CC)
             {
                // RESTORE: Update main parameters only. Do not touch parameters2 (morph parameter endpoint)
                // to avoid corrupting morph state during a display-only synchronization.
-               parameter_values[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
+               parameter_values[frontParser_command.data1]=frontParser_command.data2;
                frontParser_restoreCount++;
             }
-            else if(frontParser_midiMsg.status == PRF_RESTORE_PARAM_CC2)
+            else if(frontParser_command.status == PRF_RESTORE_PARAM_CC2)
             {
-               uint16_t paramNr = (uint16_t)(frontParser_midiMsg.data1+128);
+               uint16_t paramNr = (uint16_t)(frontParser_command.data1+128);
                if(paramNr < NUM_PARAMS)
                {
-                  parameter_values[paramNr]=frontParser_midiMsg.data2;
+                  parameter_values[paramNr]=frontParser_command.data2;
                   frontParser_restoreCount++;
                   // RESTORE: Parameters2 mirroring explicitly removed for restore dumps.
                }
             }
-            else if(frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC)
+            else if(frontParser_command.status == PRF_RESTORE_MORPH_CC)
             {
                // RESTORE: Morph-specific restore messages still update parameters2.
-               if(frontParser_midiMsg.data1 < END_OF_SOUND_PARAMETERS)
+               if(frontParser_command.data1 < END_OF_SOUND_PARAMETERS)
                {
-                  parameters2[frontParser_midiMsg.data1]=frontParser_midiMsg.data2;
+                  parameters2[frontParser_command.data1]=frontParser_command.data2;
                   frontParser_restoreCount++;
                   frontParser_restoreMorphCount++;
                }
             }
-            else if(frontParser_midiMsg.status == PRF_RESTORE_MORPH_CC2)
+            else if(frontParser_command.status == PRF_RESTORE_MORPH_CC2)
             {
-               uint16_t paramNr = (uint16_t)(frontParser_midiMsg.data1+128);
+               uint16_t paramNr = (uint16_t)(frontParser_command.data1+128);
                if(paramNr < END_OF_SOUND_PARAMETERS)
                {
-                  parameters2[paramNr]=frontParser_midiMsg.data2;
+                  parameters2[paramNr]=frontParser_command.data2;
                   frontParser_restoreCount++;
                   frontParser_restoreMorphCount++;
                }
             }
-            else if(frontParser_midiMsg.status == PARAM_RESTORE_DONE)
+            else if(frontParser_command.status == PARAM_RESTORE_DONE)
             {
                // RESTORE: End of dump. Repaint the full menu to reflect new values.
                // char text[17];
@@ -736,24 +736,24 @@ void frontPanel_parseData(uint8_t data)
                // Inform STM we have finished and re-enabled normal operation.
                frontPanel_sendData(PARAM_RESTORE_ACK, 0, 0);
             }
-            else if(frontParser_midiMsg.status == PRF_CACHE_STATUS)
+            else if(frontParser_command.status == PRF_CACHE_STATUS)
             {
-               frontPanelSending_handlePrfCacheStatus(frontParser_midiMsg.data1, frontParser_midiMsg.data2);
+               frontPanelSending_handlePrfCacheStatus(frontParser_command.data1, frontParser_command.data2);
             }
             
-            else if(frontParser_midiMsg.status == BANK_CHANGE_CC)
+            else if(frontParser_command.status == BANK_CHANGE_CC)
             {
-               if (frontParser_midiMsg.data1&&(frontPanel_longOp<PATTERN_CHANGE_OP) )
+               if (frontParser_command.data1&&(frontPanel_longOp<PATTERN_CHANGE_OP) )
                {
                   // we have a valid message and we're not waiting for a pattern change to finish
                   // all bits in data1 are set - global bank change operation
-                  if ( frontParser_midiMsg.data1==0x7f ) 
+                  if ( frontParser_command.data1==0x7f ) 
                   // global bank change request or, all voice channels set the same
                   {
                      // this is a time-consuming operation, cache it and deal
                      // with only one per loop of main()
                      frontPanel_longOp=BANK_GLOBAL;
-                     frontPanel_longData=frontParser_midiMsg.data2;
+                     frontPanel_longData=frontParser_command.data2;
                      
                   
                   }
@@ -764,8 +764,8 @@ void frontPanel_parseData(uint8_t data)
                   {
                      // stack the operations so multiple voice bank changes can take place
                      
-                     frontPanel_longOp=frontParser_midiMsg.data1;
-                     frontPanel_longData=frontParser_midiMsg.data2;
+                     frontPanel_longOp=frontParser_command.data1;
+                     frontPanel_longData=frontParser_command.data2;
                   
                   }
                }
@@ -773,7 +773,7 @@ void frontPanel_parseData(uint8_t data)
             
             
             // morph operation
-            else if( (frontParser_midiMsg.status == MORPH_CC)||(frontParser_midiMsg.status == VOICE_MORPH) )
+            else if( (frontParser_command.status == MORPH_CC)||(frontParser_command.status == VOICE_MORPH) )
             {  
                /* STM owns live morph computation. Keep these legacy opcodes
                   inert so they cannot trigger AVR-side preset_morph(). */
@@ -785,15 +785,15 @@ void frontPanel_parseData(uint8_t data)
             
             
             
-            else if(frontParser_midiMsg.status == LED_CC)
+            else if(frontParser_command.status == LED_CC)
             {
                uint8_t offset=0;
-               switch(frontParser_midiMsg.data1)
+               switch(frontParser_command.data1)
                {
                   case LED_CURRENT_STEP_NR: 
                      {
                      
-                        if(frontParser_midiMsg.data2 >=128) 
+                        if(frontParser_command.data2 >=128) 
                            return;
                      
                         uint8_t shownPattern = menu_getViewedPattern();
@@ -802,7 +802,7 @@ void frontPanel_parseData(uint8_t data)
                         if(shownPattern == playedPattern) {
                         //only update chaselight LED when it step edit mode
                            if( (menu_activePage < MENU_MIDI_PAGE) || menu_activePage == PERFORMANCE_PAGE ||menu_activePage == SEQ_PAGE || menu_activePage == EUKLID_PAGE) {
-                              led_setActive_step(frontParser_midiMsg.data2);
+                              led_setActive_step(frontParser_command.data2);
                            }							
                         } 
                         else {
@@ -815,7 +815,7 @@ void frontPanel_parseData(uint8_t data)
                
                	
                   case LED_PULSE_BEAT:
-                     if(frontParser_midiMsg.data2!=0)
+                     if(frontParser_command.data2!=0)
                      {
                         led_setValue(1,LED_START_STOP);
                      }
@@ -830,7 +830,7 @@ void frontPanel_parseData(uint8_t data)
                      	//parse sub steps
                      	
                      	
-                        uint8_t stepNr = frontParser_midiMsg.data2 & 0x7f;
+                        uint8_t stepNr = frontParser_command.data2 & 0x7f;
                         uint8_t subStepRange = buttonHandler_selectedStep;
                      	//check if received step is a valid sub step
                         if( (stepNr >= subStepRange) && (stepNr<(subStepRange+8)) )
@@ -853,7 +853,7 @@ void frontPanel_parseData(uint8_t data)
                      {
                      	//parse sub steps
                         uint8_t i;
-                        uint8_t ledArray=(frontParser_midiMsg.data2 & 0x0f);
+                        uint8_t ledArray=(frontParser_command.data2 & 0x0f);
                         for (i=0;i<4;i++)
                         {
                            led_setValue( (uint8_t)(ledArray&(0x01<<i)),(uint8_t)(LED_STEP1+i+offset));
@@ -867,7 +867,7 @@ void frontPanel_parseData(uint8_t data)
                      {
                      	//parse sub steps
                         uint8_t i;
-                        uint8_t ledArray=(frontParser_midiMsg.data2 & 0x0f);
+                        uint8_t ledArray=(frontParser_command.data2 & 0x0f);
                         for (i=0;i<4;i++)
                         {
                            led_setValue( (uint8_t)(ledArray&(0x01<<i)),(uint8_t)(LED_PART_SELECT1+i));
@@ -880,7 +880,7 @@ void frontPanel_parseData(uint8_t data)
                      {
                      	//parse sub steps
                         uint8_t i;
-                        uint8_t ledArray=(frontParser_midiMsg.data2 & 0x0f);
+                        uint8_t ledArray=(frontParser_command.data2 & 0x0f);
                         for (i=0;i<4;i++)
                         {
                            led_setValue( (uint8_t)(ledArray&(0x01<<i)),(uint8_t)(LED_PART_SELECT1+4+i));
@@ -893,7 +893,7 @@ void frontPanel_parseData(uint8_t data)
                         if(menu_activePage != PERFORMANCE_PAGE) //do not show active steps on perf. page
                         {
                         //limit to 16 steps
-                           uint8_t stepNr = (uint8_t)((frontParser_midiMsg.data2&0x7f)/8); //limit to 127
+                           uint8_t stepNr = (uint8_t)((frontParser_command.data2&0x7f)/8); //limit to 127
                         
                            led_setValue(1,(uint8_t)(LED_STEP1+stepNr));
                         }
@@ -908,19 +908,19 @@ void frontPanel_parseData(uint8_t data)
                         // lcd_home();
                         // lcd_string_F(PSTR("cortex says"));
                         // lcd_setcursor(0,2);
-                        // itoa((int)frontParser_midiMsg.data2,text,10);
+                        // itoa((int)frontParser_command.data2,text,10);
                         // lcd_string(text);
                         // _delay_ms(2000);
                      }
                      break;
                }						
             }								
-            else if(frontParser_midiMsg.status == NOTE_ON)
+            else if(frontParser_command.status == NOTE_ON)
             {
-               if(frontParser_midiMsg.data1 > 6) 
+               if(frontParser_command.data1 > 6) 
                   return;
             	//only SELECT_MODE_VOICE and SELECT_MODE_MUTE
-               led_pulseLed((uint8_t)(LED_VOICE1+frontParser_midiMsg.data1));
+               led_pulseLed((uint8_t)(LED_VOICE1+frontParser_command.data1));
             }
          
          }				
@@ -928,7 +928,7 @@ void frontPanel_parseData(uint8_t data)
    }
 }
 //------------------------------------------------------------
-void midiMsg_checkLongOps()
+void frontPanel_checkLongOps()
 {
    if (frontPanel_longOp){
    

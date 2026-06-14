@@ -1,7 +1,7 @@
 # TEMPORARY / PATTERN / PARAMETER LOAD SPEC
 
 Date: 2026-06-14
-Status: current storage and switching spec after Session 020 finalization. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model.
+Status: current storage and switching spec after Session 020 finalization and cleanup. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`.
 
 ## Purpose
 
@@ -76,6 +76,13 @@ grow into one.
 The long-term plan is still for file-load-while-temp-active behavior to use the
 existing temp parameter/pattern copy and playback mechanisms, not a separate
 load-cache authority.
+
+The same receive/protocol file owns live internal parameter application through
+`frontParser_applyParameterCommand()`. AVR/front-panel parameter commands,
+automation-node restores, and final single-parameter emits all use that helper.
+External MIDI remains free to parse DIN/USB CC traffic, but shared internal
+parameter application should flow into this front-panel/protocol helper rather
+than calling back into `MidiParser.c`.
 
 ## Core Rules
 
@@ -206,6 +213,7 @@ These functions matter for the current normal/temp model:
 - `preset_storeLfoDestinationIngress()`
 - `preset_storeVelocityDestinationIngress()`
 - `preset_storeMacroDestinationIngress()`
+- `frontParser_applyParameterCommand()`
 - `seq_setTmpKitActive()`
 - `seq_updateVoiceSourcesForPatternChange()`
 

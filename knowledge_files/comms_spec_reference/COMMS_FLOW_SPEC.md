@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
 Date: 2026-06-14
-Status: current AVR<->STM comms reference after Session 020 finalization. STM and AVR now both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed in the Session 020 wrap-up, and the obsolete `PresetLoadCache` model is gone.
+Status: current AVR<->STM comms reference after Session 020 finalization and cleanup. STM and AVR now both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, and the internal CC/CC2 parameter apply layer now belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`.
 
 ## Purpose
 
@@ -31,7 +31,8 @@ STM protocol ownership is split explicitly:
 
 - `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c/.h`
   owns AVR UART receive parsing, SysEx ingress, load-session receive state, and
-  the STM front-panel opcode namespace.
+  the STM front-panel opcode namespace. It also owns internal CC/CC2-shaped
+  parameter application through `frontParser_applyParameterCommand()`.
 - `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelSendingProtocol.c/.h`
   owns STM-to-AVR packet construction.
 
@@ -60,6 +61,23 @@ Callers should include the receive or sending protocol header directly.
 `Pattern` owns pattern storage and pattern-specific temp behavior.
 
 The comms layer should route bytes into those owners, not duplicate their state.
+
+### MIDI Boundary
+
+`mainboard/LxrStm32/src/MIDI/` owns external DIN/USB MIDI byte parsing, MIDI
+routing/filter settings, channel/global MIDI interpretation, voice triggering,
+and sequencer-originated MIDI output fan-out.
+
+Internal parameter application is not owned by `MidiParser.c`. External MIDI may
+parse a CC/CC2 message and then call the front-panel receive/protocol helper
+when it needs to apply the internal parameter command cases. The dependency
+direction is MIDI -> uARTFrontSYX for shared internal CC/CC2 application, not
+uARTFrontSYX -> MIDI parser.
+
+`mainboard/LxrStm32/src/MIDI/MidiOutputControl.c/.h` is the current MIDI
+voice/output-control file. Existing `voiceControl_*` functions retain their
+names; sequencer-originated MIDI output helpers use the `outputControl_*`
+prefix. `Sequencer` must not own USB/DIN fan-out directly.
 
 ### Outbound Send Contract
 
@@ -120,7 +138,7 @@ Raw endpoint bytes are routed into `Preset` ingress helpers such as:
 Important rule:
 
 - Raw endpoint storage uses raw AVR/menu parameter indices.
-- The low-CC `+1` conversion only applies when the value is being applied as an ordinary live MIDI CC to DSP or parser-facing live apply logic.
+- The low-CC `+1` conversion only applies when the value is being applied as an ordinary live CC to DSP/front-panel parameter apply logic.
 - Do not apply that conversion to endpoint restore traffic.
 
 ### 2. Endpoint Restore and Display Sync

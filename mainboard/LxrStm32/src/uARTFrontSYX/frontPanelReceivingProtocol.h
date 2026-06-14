@@ -202,7 +202,9 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 /* Shared receive-side front-panel state. These globals are owned by the
    receive protocol while legacy frontParser_* call sites remain. */
 extern uint8_t frontParser_rxCnt;
-extern MidiMsg frontParser_midiMsg;
+/* Three-byte front-panel command assembly. The storage is MIDI-shaped because
+   the legacy wire format is MIDI-shaped, but this is AVR/STM protocol state. */
+extern MidiMsg frontParser_command;
 extern uint8_t frontParser_activeTrack;
 extern uint8_t frontParser_shownPattern;
 extern uint8_t frontParser_sysexActive;
@@ -212,10 +214,13 @@ extern uint8_t frontParser_sysexBuffer[16];
 extern uint16_t frontParser_sysexSeqStepNr;
 extern uint8_t frontParser_activeStep;
 extern uint8_t frontParser_stepCopySource;
+extern uint8_t frontParser_originalCcValues[0xff];
+extern uint8_t midi_envPosition[6];
 
 /* Receive-side entry points and parser state queries. */
 void frontParser_parseUartData(unsigned char data);
 void frontParser_handleMidiMessage(void);
+void frontParser_applyParameterCommand(MidiMsg msg, uint8_t updateOriginalValue);
 uint8_t frontParser_isQuietUi();
 
 #endif /* UARTFRONTSYX_FRONTPANELRECEIVINGPROTOCOL_H_ */

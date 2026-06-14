@@ -198,7 +198,7 @@ void frontPanel_updateSubstepLeds(void)
 void frontPanel_holdForBuffer(void)
 {
   // start and end sysex to make sure mainboard is caught up on messages and can respond
-// frontParser_midiMsg.status = 0;
+// frontParser_command.status = 0;
 frontPanel_wait=1;
 frontPanel_sendByte(CALLBACK_ACK);
 while(frontPanel_wait)

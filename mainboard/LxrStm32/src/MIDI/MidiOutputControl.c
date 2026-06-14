@@ -1,5 +1,5 @@
 /*
- * MidiVoiceControl.c
+ * MidiOutputControl.c
  *
  *  Created on: 03.04.2012
  * ------------------------------------------------------------------------------------------------------------------------
@@ -34,7 +34,7 @@
  */
 
 
-#include "MidiVoiceControl.h"
+#include "MidiOutputControl.h"
 #include "DrumVoice.h"
 #include "Snare.h"
 #include "HiHat.h"
@@ -43,8 +43,10 @@
 #include "MidiParser.h"
 #include "sequencer.h"
 #include "uARTFrontSYX/frontPanelReceivingProtocol.h"
+#include "uARTFrontSYX/Uart.h"
 #include "ChannelMidiParser.h"
 #include "TriggerOut.h"
+#include "usb_manager.h"
 //#include "LCD_driver.h"
 
 /* Live voice activity state consumed by the parser and LED feedback paths. */
@@ -52,6 +54,28 @@ uint8_t voiceStatus[NUM_VOICES];
 
 /* Tracks which voices are currently active for note-off and LED logic. */
 static uint8_t active_voices=0;
+//----------------------------------------------------------------
+void outputControl_sendMidi(MidiMsg msg)
+{
+   /* Sequencer-originated MIDI output is mirrored to USB and DIN MIDI. */
+   usb_sendMidi(msg);
+   uart_sendMidi(msg);
+}
+
+//----------------------------------------------------------------
+void outputControl_sendRealtime(uint8_t status)
+{
+   MidiMsg msg;
+
+   msg.status = status;
+   msg.data1 = 0;
+   msg.data2 = 0;
+   msg.bits.length = 0;
+   msg.bits.sysxbyte = 0;
+
+   outputControl_sendMidi(msg);
+}
+
 //----------------------------------------------------------------
 // this fn assumes a valid voice is sent
 void voiceControl_noteOn(uint8_t voice, uint8_t note, uint8_t vel)

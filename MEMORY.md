@@ -41,9 +41,9 @@ make firmware
 
 **Current status after Session 019 closeout (2026-06-14)**: The AVR front-panel main encoder was retuned after slow counter-clockwise missed decrements returned. The current hardware-approved implementation still uses only Timer1 compare A and raw `encode_stableRead4()` detents, but now samples at roughly 32.05 kHz with six stable phase samples, fixed `AB=11` rest anchoring, narrow rest-jump recovery for filtered `11 -> 00 -> adjacent -> 11` contact sequences, and 192-sample button debounce. Edit-mode parameter acceleration is config-driven from complete emitted detents only, with `ENC_ACCEL_MIN_REV_PER_SEC = 1`, `ENC_ACCEL_MAX_REV_PER_SEC = 2`, and final hardware-tested `ENC_ACCEL_MAX_MULT = 4`. Acceleration is applied only to menu edit-mode value changes; navigation/load/save/copy-clear selection remain unaccelerated. `make -C front/LxrAvr avr -j4` and `make firmware` are green with the usual AVR warnings, and the user reported the final encoder behavior is good.
 
-**Current status after Session 020 closeout (2026-06-14)**: The refactor finalization pass corrected the Session 018 planning regression and completed the cache/protocol split objectives. `mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h` are gone again, no active `presetLoad_*` cache API remains, file loads route directly to normal Preset/Pattern storage, and the existing normal/temp Preset and Pattern switching remains the only supported staging model. STM front-panel receive is now `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c/.h`, STM front-panel send is `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelSendingProtocol.c/.h`, and the old STM `FrontPanelProtocol.h` / `frontPanelParser.h` shim headers were removed after include redirection. AVR front-panel code is split into `front/LxrAvr/frontPanelReceivingProtocol.c/.h` and `front/LxrAvr/frontPanelSendingProtocol.c/.h`, and the old AVR `frontPanelParser.h` shim was removed after include/project redirection. `make -C mainboard/LxrStm32 -j4 stm32`, `make -C front/LxrAvr avr -j4`, and `make firmware` were verified, and the user hardware-tested Steps 1, 2, and 3 successfully.
+**Current status after Session 020 closeout (2026-06-14)**: The refactor finalization pass corrected the Session 018 planning regression and completed the cache/protocol split objectives. `mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h` are gone again, no active `presetLoad_*` cache API remains, file loads route directly to normal Preset/Pattern storage, and the existing normal/temp Preset and Pattern switching remains the only supported staging model. STM front-panel receive is now `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c/.h`, STM front-panel send is `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelSendingProtocol.c/.h`, and the old STM `FrontPanelProtocol.h` / `frontPanelParser.h` shim headers were removed after include redirection. AVR front-panel code is split into `front/LxrAvr/frontPanelReceivingProtocol.c/.h` and `front/LxrAvr/frontPanelSendingProtocol.c/.h`, and the old AVR `frontPanelParser.h` shim was removed after include/project redirection. The final cleanup also renamed front-panel receive state from `frontParser_midiMsg` to `frontParser_command`, moved the internal CC/CC2 parameter-apply ladder from `MIDI/MidiParser.c` to `uARTFrontSYX/frontPanelReceivingProtocol.c` as `frontParser_applyParameterCommand()`, renamed `MidiVoiceControl.c/.h` to `MidiOutputControl.c/.h`, and moved Sequencer MIDI fan-out behind `outputControl_*` helpers. `make -C mainboard/LxrStm32 -j4 stm32`, `make -C front/LxrAvr avr -j4`, and `make firmware` were verified, and the user hardware-tested Steps 1, 2, and 3 successfully.
 
-**Current consolidation / protocol planning artifacts**: the durable finalization notes now live in `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`, and `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`. Current encoder details live in `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` and supersede the temporary `ENCODER_AUDIT.md`. `REFACTOR_FINALIZATION.md`, `PRESET_CONSOLIDATION_AUDIT.md`, and `MIDI_UART_SPLIT_AUDIT_EDIT.md` were temporary working docs and may be deleted after Session 020.
+**Current consolidation / protocol planning artifacts**: the durable finalization notes now live in `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, and `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`. Current encoder details live in `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` and supersede the temporary `ENCODER_AUDIT.md`. `REFACTOR_FINALIZATION.md`, `REFACTOR_MY_MESS_CLEANUP.md`, `PRESET_CONSOLIDATION_AUDIT.md`, and `MIDI_UART_SPLIT_AUDIT_EDIT.md` were temporary working docs and may be deleted after Session 020.
 
 Canonical current WIP docs:
 - `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`
@@ -62,8 +62,8 @@ Canonical current WIP docs:
 - `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/000_SESSION_INDEX.md`
-- `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`
-- `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`
+- `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`
+- `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`
 
 Session 005 closeout / remaining follow-up:
 - Encoder follow-up was most recently completed in Session 019. The hardware-approved implementation is the Timer1 ~32.05 kHz fixed-`AB=11` rest-phase FSM with six stable phase samples, narrow rest-jump recovery, 192-sample button debounce, raw `encode_stableRead4()` rotation reads, and edit-mode-only acceleration. Keep it unchanged unless new hardware testing reveals a regression.
@@ -215,8 +215,8 @@ User-referenced checkpoints:
 | Session 004 temp/background loading closeout | `knowledge_files/log_archive/004_SESSION_HANDOFF_LOG.md` |
 | Session 006 refactor planning details | `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md` |
 | Session 007 refactor Phase 1 details | `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md` |
-| Current preset/morph refactor knowledge | `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`, `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md` |
-| Current comms/protocol knowledge | `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`, `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
+| Current preset/morph refactor knowledge | `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md` |
+| Current comms/protocol knowledge | `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
 
 ---
 
@@ -385,7 +385,7 @@ Sample flash map:
 
 - Standard morph operation is STM-owned after Session 003.
 - Normal/temp parameter switching is STM-owned after Session 004. AVR/front panel owns menu display, file I/O, and endpoint-byte transport/display, but must not compute or stream standard live morph or own canonical temp staging.
-- Raw endpoint parameter storage uses AVR/menu indices on both MCUs. Low `+1` is only for sending an ordinary low live CC to `midiParser_ccHandler(...)`.
+- Raw endpoint parameter storage uses AVR/menu indices on both MCUs. Low `+1` is only for applying an ordinary low live CC through `frontParser_applyParameterCommand(...)`.
 - Global morph writes all six STM per-voice morph amounts; actual interpolation uses per-voice morph amounts.
 - Per-voice morph may come from global morph, MIDI, step automation, or LFO/velocity modulation destinations.
 - Velocity-to-voice-morph is a one-shot trigger-time write to the active normal/temp per-voice morph value. Do not route velocity-to-voice-morph through the generic modulation matrix.
