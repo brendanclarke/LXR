@@ -36,7 +36,6 @@
 
 
 #include "frontPanelParser.h"
-#include "Preset/PresetLoadCache.h"
 #include "MidiMessages.h"
 #include "FrontPanelProtocol.h"
 #include "frontPanelSendingProtocol.h"
@@ -75,6 +74,34 @@ static uint8_t comm_quietUi = 0;
 static uint8_t comm_flowActive = 0;
 static uint8_t comm_flowChannel = 0;
 static uint8_t comm_flowBudgetRemaining = 0;
+static uint8_t frontParser_fileLoadIngressActive = 0;
+static uint8_t frontParser_fileLoadBracketActive = 0;
+
+static void frontParser_beginFileLoadIngress(uint8_t bracketed)
+{
+   frontParser_fileLoadIngressActive = 1;
+   if(bracketed)
+      frontParser_fileLoadBracketActive = 1;
+
+   preset_setIngressTarget(SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT);
+   preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
+}
+
+static void frontParser_endFileLoadIngress(void)
+{
+   frontParser_fileLoadIngressActive = 0;
+   frontParser_fileLoadBracketActive = 0;
+   preset_setIngressTarget(SEQ_PARAM_INGRESS_CURRENT_IMAGE);
+   preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
+}
+
+static void frontParser_clearVoiceLoading(uint8_t voice)
+{
+   if(voice >= 5)
+      seq_voicesLoading &= (uint8_t)~0x60;
+   else
+      seq_voicesLoading &= (uint8_t)~(0x01 << voice);
+}
 
 extern MidiMsg frontParser_midiMsg;
 extern uint8_t frontParser_sysexActive;
@@ -102,11 +129,6 @@ static void frontParser_sendFlowGrant(uint8_t channel, uint8_t credits)
 static void frontParser_sendFlowGrantWait(uint8_t channel, uint8_t credits)
 {
    frontPanelSending_sendFlowGrantWait(channel, credits);
-}
-
-static void frontParser_sendFlowAbort(uint8_t channel)
-{
-   frontPanelSending_sendFlowAbort(channel);
 }
 
 static void frontParser_sendPrfCacheStatus(uint8_t command, uint8_t status)
@@ -313,38 +335,9 @@ static void frontParser_handleSysexData(unsigned char data)
          
             uint16_t mainStepData = frontParser_sysexBuffer[1] | frontParser_sysexBuffer[2]<<7 | frontParser_sysexBuffer[3]<<14;
          
-         //first load into inactive track
+         // File receive writes directly to normal pattern storage.
             PatternSet* patternSet = &seq_patternSet;
-            
-            if(presetLoad_shouldStagePattern(currentPattern))
-            {
-               seq_tmpPattern.seq_mainSteps[currentTrack] = mainStepData;
-               presetLoad_markDeferredPatternPending();
-            }
-            else if(!presetLoad_prfCacheSessionActive()
-               && (currentPattern == seq_activePattern)
-               && seq_isRunning())
-            {  
-               if(seq_loadFastMode)
-               {
-                  seq_tracksLocked |= (0x01<<currentTrack);
-                  patternSet->seq_mainSteps[currentPattern][currentTrack] = mainStepData;
-               }
-               else
-               {
-                  seq_tmpPattern.seq_mainSteps[currentTrack] = mainStepData;
-               }
-            } 
-            else
-            {
-               patternSet->seq_mainSteps[currentPattern][currentTrack] = mainStepData;
-            }
-
-            if(presetLoad_prfCacheState == PRF_CACHE_RECEIVING_PENDING)
-            {
-               presetLoad_prfPendingMainStepCount++;
-               presetLoad_prfCacheCountPatternWrite(currentPattern);
-            }
+            patternSet->seq_mainSteps[currentPattern][currentTrack] = mainStepData;
          
             
             frontParser_rxCnt = 0;
@@ -363,24 +356,10 @@ static void frontParser_handleSysexData(unsigned char data)
             const uint8_t currentPattern	= frontParser_sysexSeqStepNr;
             uint8_t next = frontParser_sysexBuffer[0];
             uint8_t repeat = frontParser_sysexBuffer[1];
-            //first load into inactive track
+            // File receive writes directly to normal pattern storage.
             PatternSet* patternSet = &seq_patternSet;
-            if(presetLoad_shouldStagePattern(currentPattern))
-            {
-               seq_tmpPattern.seq_patternSettings.nextPattern=next;
-               seq_tmpPattern.seq_patternSettings.changeBar=repeat;
-               presetLoad_markDeferredPatternPending();
-            }
-            else
-            {
-               patternSet->seq_patternSettings[currentPattern].nextPattern = next;
-               patternSet->seq_patternSettings[currentPattern].changeBar = repeat;
-            }
-            if(presetLoad_prfCacheState == PRF_CACHE_RECEIVING_PENDING)
-            {
-               presetLoad_prfPendingChainCount++;
-               presetLoad_prfCacheCountPatternWrite(currentPattern);
-            }
+            patternSet->seq_patternSettings[currentPattern].nextPattern = next;
+            patternSet->seq_patternSettings[currentPattern].changeBar = repeat;
             //inc the step counter
             frontParser_sysexSeqStepNr++;
             frontParser_rxCnt = 0;
@@ -400,26 +379,10 @@ static void frontParser_handleSysexData(unsigned char data)
          //calculate the step pattern and track indices
             uint8_t currentTrack = (frontParser_sysexBuffer[0]>>3)&0x07;
             uint8_t currentPattern = (frontParser_sysexBuffer[0]&0x07);
-         //first load into inactive track
+         // File receive writes directly to normal pattern storage.
             PatternSet* patternSet = &seq_patternSet;
          
-         
-            if(presetLoad_shouldStagePattern(currentPattern))
-            {
-               seq_tmpPattern.seq_patternLengthRotate[currentTrack].length = data;
-               presetLoad_markDeferredPatternPending();
-            } 
-            else 
-            
-            {
-               patternSet->seq_patternLengthRotate[currentPattern][currentTrack].length = data;
-            }
-
-            if(presetLoad_prfCacheState == PRF_CACHE_RECEIVING_PENDING)
-            {
-               presetLoad_prfPendingLengthCount++;
-               presetLoad_prfCacheCountPatternWrite(currentPattern);
-            }
+            patternSet->seq_patternLengthRotate[currentPattern][currentTrack].length = data;
             
             frontParser_rxCnt = 0;
             frontPanelSending_sendSysexReceiveAck(SYSEX_RECEIVE_PAT_LEN_DATA);
@@ -444,32 +407,17 @@ static void frontParser_handleSysexData(unsigned char data)
             const uint8_t currentTrack  	= frontParser_sysexSeqStepNr - currentPattern*7;
             */
          
-         //first load into inactive track
+         // File receive writes directly to normal pattern storage.
             PatternSet* patternSet = &seq_patternSet;
          
-            
-            if(presetLoad_shouldStagePattern(currentPattern))
-            {
-               seq_tmpPattern.seq_patternLengthRotate[currentTrack].scale = data;
-               presetLoad_markDeferredPatternPending();
-            } 
-            else 
-            {
-               patternSet->seq_patternLengthRotate[currentPattern][currentTrack].scale = data;
-            }
-
-            if(presetLoad_prfCacheState == PRF_CACHE_RECEIVING_PENDING)
-            {
-               presetLoad_prfPendingScaleCount++;
-               presetLoad_prfCacheCountPatternWrite(currentPattern);
-            }
+            patternSet->seq_patternLengthRotate[currentPattern][currentTrack].scale = data;
          
          
             //inc the step counter
             frontParser_sysexSeqStepNr++;
             frontParser_rxCnt = 0;
          
-         // signal new pattern after receiving all the data
+         // File receive no longer stages a background pattern switch here.
          /*
             if( seq_isRunning() && (frontParser_sysexSeqStepNr == NUM_TRACKS*NUM_PATTERN)) {
                preset_tempPlaybackSwitchState.newPatternAvailable = 1;
@@ -517,28 +465,14 @@ static void frontParser_handleSysexData(unsigned char data)
                frontParser_sysexBuffer[6] = patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Val;
             }
          */
-         //do not overwrite playing pattern
-            if(presetLoad_shouldStagePattern(currentPattern))
-            {
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].volume 	= frontParser_sysexBuffer[0];
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].prob 	= frontParser_sysexBuffer[1];
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].note 	= frontParser_sysexBuffer[2];
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param1Nr = frontParser_sysexBuffer[3];
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param1Val 	= frontParser_sysexBuffer[4];
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param2Nr 	= frontParser_sysexBuffer[5];
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param2Val 	= frontParser_sysexBuffer[6];
-               presetLoad_markDeferredPatternPending();
-            } 
-            else {
-            
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].volume 	= frontParser_sysexBuffer[0];
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].prob 	= frontParser_sysexBuffer[1];
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].note 	= frontParser_sysexBuffer[2];
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Nr = frontParser_sysexBuffer[3];
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Val 	= frontParser_sysexBuffer[4];
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Nr 	= frontParser_sysexBuffer[5];
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Val 	= frontParser_sysexBuffer[6];
-            }
+         // File receive writes directly to normal pattern storage.
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].volume 	= frontParser_sysexBuffer[0];
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].prob 	= frontParser_sysexBuffer[1];
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].note 	= frontParser_sysexBuffer[2];
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Nr = frontParser_sysexBuffer[3];
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Val 	= frontParser_sysexBuffer[4];
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Nr 	= frontParser_sysexBuffer[5];
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Val 	= frontParser_sysexBuffer[6];
          //signal that a new data chunk is available
          //frontParser_newSeqDataAvailable = 1;
          //reset receive counter for next chunk
@@ -573,36 +507,15 @@ static void frontParser_handleSysexData(unsigned char data)
          
             PatternSet* patternSet = &seq_patternSet;
             
-         //do not overwrite playing pattern
+         // File receive writes directly to normal pattern storage.
          
-            if(presetLoad_shouldStagePattern(currentPattern))
-            {
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].volume 	= frontParser_sysexBuffer[0];
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].prob 	= frontParser_sysexBuffer[1];
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].note 	= frontParser_sysexBuffer[2];
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param1Nr = frontParser_sysexBuffer[3];
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param1Val 	= frontParser_sysexBuffer[4];
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param2Nr 	= frontParser_sysexBuffer[5];
-               seq_tmpPattern.seq_subStepPattern[currentTrack][currentStep].param2Val 	= frontParser_sysexBuffer[6];
-               presetLoad_markDeferredPatternPending();
-            } 
-            else 
-            {
-            
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].volume 	= frontParser_sysexBuffer[0];
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].prob 	= frontParser_sysexBuffer[1];
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].note 	= frontParser_sysexBuffer[2];
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Nr = frontParser_sysexBuffer[3];
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Val 	= frontParser_sysexBuffer[4];
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Nr 	= frontParser_sysexBuffer[5];
-               patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Val 	= frontParser_sysexBuffer[6];
-            }
-
-            if(presetLoad_prfCacheState == PRF_CACHE_RECEIVING_PENDING)
-            {
-               presetLoad_prfPendingStepCount++;
-               presetLoad_prfCacheCountPatternWrite(currentPattern);
-            }
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].volume 	= frontParser_sysexBuffer[0];
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].prob 	= frontParser_sysexBuffer[1];
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].note 	= frontParser_sysexBuffer[2];
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Nr = frontParser_sysexBuffer[3];
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Val 	= frontParser_sysexBuffer[4];
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Nr 	= frontParser_sysexBuffer[5];
+            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Val 	= frontParser_sysexBuffer[6];
             //signal that a new data chunk is available
             //frontParser_newSeqDataAvailable = 1;
             //reset receive counter for next chunk
@@ -615,19 +528,6 @@ static void frontParser_handleSysexData(unsigned char data)
             }
             else
             {
-               
-               if((currentPattern == seq_activePattern) && seq_loadFastMode)
-               {  
-                  seq_tracksLocked &= ~(0x01<<currentTrack);
-               }
-               else if (!presetLoad_deferredPerfLoadActive
-                  && !presetLoad_prfCacheSessionActive()
-                  && currentPattern == 7
-                  && seq_isRunning()
-                  && !seq_loadFastMode)
-               {
-                  preset_tempPlaybackSwitchState.newPatternAvailable=1;
-               }
                frontPanelSending_sendSysexBeginPatternTransmitAck();
             }
          }
@@ -658,18 +558,6 @@ void frontParser_handleMidiMessage(void)
 
       default:
          break;
-   }
-
-   if(presetLoad_cachePrfLiveSnapshotMessage())
-   {
-      frontParser_flowMessageApplied();
-      return;
-   }
-
-   if(presetLoad_cacheDeferredPerfMessage())
-   {
-      frontParser_flowMessageApplied();
-      return;
    }
 
    switch(frontParser_midiMsg.status)
@@ -801,28 +689,19 @@ void frontParser_handleMidiMessage(void)
 
             liveMsg.data1 = (uint8_t)((rawParam + 1) & 0x7f);
 
-            // are receiving a file transmit for voice?
-            // message is for loading voice, or if all voices loading, always hold message
-            if(seq_voicesLoading)
+            if(preset_shouldApplyIngressToLive())
             {
                preset_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
+               midiParser_ccHandler(liveMsg,0);
+
+            //record automation if record is turned on
+               seq_recordAutomation(frontParser_activeTrack, rawParam, frontParser_midiMsg.data2);
             }
             else
             {
-               if(preset_shouldApplyIngressToLive())
-               {
-                  preset_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
-                  midiParser_ccHandler(liveMsg,0);
-
-               //record automation if record is turned on
-                  seq_recordAutomation(frontParser_activeTrack, rawParam, frontParser_midiMsg.data2);
-               }
-               else
-               {
-                  /* FILE LOAD: Store normal-image params without changing the
-                     temporary sound when the temporary pattern is active. */
-                  preset_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
-               }
+               /* FILE LOAD: Store normal-image params without changing the
+                  temporary sound when the temporary pattern is active. */
+               preset_storeParameterIngress(rawParam, frontParser_midiMsg.data2);
             }
          }
          break;
@@ -830,26 +709,17 @@ void frontParser_handleMidiMessage(void)
    //CC2 above 127
       case FRONT_CC_2: // frontParser_midiMsg.status
          {
-            // are receiving a file transmit for voice?
-            // message is for loading voice, or if all voices loading, always hold message
-            if(seq_voicesLoading)
+            if(preset_shouldApplyIngressToLive())
             {
-               preset_storeParameterIngress(frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
+               midiParser_ccHandler(frontParser_midiMsg,1);
+               //record automation if record is turned on
+               seq_recordAutomation(frontParser_activeTrack, frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
             }
             else
             {
-               if(preset_shouldApplyIngressToLive())
-               {
-                  midiParser_ccHandler(frontParser_midiMsg,1);
-                  //record automation if record is turned on
-                  seq_recordAutomation(frontParser_activeTrack, frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
-               }
-               else
-               {
-                  /* FILE LOAD: Store normal-image params without changing the
-                     temporary sound when the temporary pattern is active. */
-                  preset_storeParameterIngress(frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
-               }
+               /* FILE LOAD: Store normal-image params without changing the
+                  temporary sound when the temporary pattern is active. */
+               preset_storeParameterIngress(frontParser_midiMsg.data1+128, frontParser_midiMsg.data2);
             }
          }
          break;
@@ -871,11 +741,6 @@ void frontParser_handleMidiMessage(void)
             {
                /* RESTORE: Endpoint-copy automation target sidebands are stored only.
                   They must not touch the currently sounding modulation nodes. */
-            }
-            else if(seq_voicesLoading&(0x01<<(lfoNr)))
-            {
-               /* Post-morph-move file load stores endpoint state on STM.
-                  Do not populate the legacy release cache. */
             }
             else
             {
@@ -1004,11 +869,6 @@ void frontParser_handleMidiMessage(void)
                /* RESTORE: Endpoint-copy automation target sidebands are stored only.
                   They must not touch the currently sounding modulation nodes. */
             }
-            else if(seq_voicesLoading&(0x01<<(velModNr)))
-            {
-               /* Post-morph-move file load stores endpoint state on STM.
-                  Do not populate the legacy release cache. */
-            }
             else
             {
                /* Velocity-to-VMORPH is applied once at trigger time by the
@@ -1129,91 +989,38 @@ static void frontParser_handleSeqCC()
          comm_quietUi = 0;
          comm_flowActive = 0;
          comm_flowBudgetRemaining = 0;
-         presetLoad_endFileLoadIngress();
-         presetLoad_clearPrfCacheSession();
-         presetLoad_clearDeferredPerfLoad();
+         frontParser_endFileLoadIngress();
          break;
 
       case FRONT_SEQ_FLOW_GRANT:
          break;
 
       case FRONT_SEQ_PRF_CACHE_BEGIN:
-      {
-         uint8_t cacheAccepted = PRF_CACHE_REJECTED;
-
-         presetLoad_clearPrfCacheSession();
-         if((frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
-            && seq_isRunning()
-            && presetLoad_deferPerfLoadCacheUntilPatternChange)
-         {
-            presetLoad_prfCacheProtectedPattern = seq_activePattern & 0x07;
-            presetLoad_capturePrfStmLiveSnapshot();
-            presetLoad_prfCacheState = PRF_CACHE_LIVE_ACTIVE;
-            presetLoad_prfCachePendingValid = 0;
-            presetLoad_clearDeferredPerfLoad();
-            cacheAccepted = PRF_CACHE_ACCEPTED;
-         }
-         frontParser_sendPrfCacheStatus(FRONT_SEQ_PRF_CACHE_BEGIN, cacheAccepted);
+         /* The PRF cache/background-load regime is deprecated. File loads now
+            write directly to normal storage; AVR may keep probing this opcode
+            until its initiators are removed, so reject it cleanly. */
+         frontParser_sendPrfCacheStatus(FRONT_SEQ_PRF_CACHE_BEGIN, PRF_CACHE_REJECTED);
          frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
          break;
-      }
 
       case FRONT_SEQ_PRF_PENDING_BEGIN:
-         if(presetLoad_prfCacheState != PRF_CACHE_IDLE)
-         {
-            presetLoad_resetPrfPendingCounters();
-            presetLoad_prfCachePendingValid = 0;
-            presetLoad_prfCacheState = PRF_CACHE_RECEIVING_PENDING;
-         }
          frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
          break;
 
       case FRONT_SEQ_PRF_PENDING_DONE:
-         if(presetLoad_prfCacheState == PRF_CACHE_RECEIVING_PENDING)
-         {
-            if(presetLoad_prfPendingCountsValid())
-            {
-               presetLoad_prfCachePendingValid = 1;
-               presetLoad_prfCacheState = PRF_CACHE_PENDING_VALID;
-               frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
-            }
-            else
-            {
-               presetLoad_prfCacheState = PRF_CACHE_ABORTING;
-               presetLoad_clearPrfCacheSession();
-               presetLoad_clearDeferredPerfLoad();
-               frontParser_sendFlowAbort(FLOW_CH_LOAD_SESSION);
-            }
-         }
-         else
-         {
-            frontParser_sendFlowAbort(FLOW_CH_LOAD_SESSION);
-         }
+         frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
          break;
 
       case FRONT_SEQ_PRF_CACHE_ABORT:
-         presetLoad_prfCacheState = PRF_CACHE_ABORTING;
-         presetLoad_endFileLoadIngress();
-         presetLoad_clearPrfCacheSession();
-         presetLoad_clearDeferredPerfLoad();
+         frontParser_endFileLoadIngress();
          frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
          break;
 
       case FRONT_SEQ_PRF_AVR_SNAPSHOT_BEGIN:
-         if(presetLoad_prfCacheState != PRF_CACHE_IDLE)
-         {
-            presetLoad_prfCacheState = PRF_CACHE_RECEIVING_AVR_LIVE;
-            presetLoad_prfCacheAvrLiveValid = 0;
-         }
          frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
          break;
 
       case FRONT_SEQ_PRF_AVR_SNAPSHOT_END:
-         if(presetLoad_prfCacheState == PRF_CACHE_RECEIVING_AVR_LIVE)
-         {
-            presetLoad_prfCacheAvrLiveValid = 1;
-            presetLoad_prfCacheState = PRF_CACHE_LIVE_ACTIVE;
-         }
          frontParser_sendFlowGrant(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
          break;
 
@@ -1269,7 +1076,7 @@ static void frontParser_handleSeqCC()
 
          /* RESTORE: Switch ingress target back to the surrounding context. During
             file load, endpoint dumps are nested inside normal kit-endpoint ingress. */
-         preset_setIngressTarget(presetLoad_fileLoadIngressActive
+         preset_setIngressTarget(frontParser_fileLoadIngressActive
                                 ? SEQ_PARAM_INGRESS_NORMAL_KIT_ENDPOINT
                                 : SEQ_PARAM_INGRESS_CURRENT_IMAGE);
          preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
@@ -1593,8 +1400,6 @@ static void frontParser_handleSeqCC()
    
    
       case FRONT_SEQ_RUN_STOP:
-         if(frontParser_midiMsg.data2 == 0)
-            presetLoad_finalizeTempBackgroundLoad();
          seq_setRunning(frontParser_midiMsg.data2);
          break;
    
@@ -1703,79 +1508,19 @@ static void frontParser_handleSeqCC()
          seq_setLoop(frontParser_midiMsg.data2);
          break;
       case FRONT_SEQ_LOAD_VOICE:
-         /*
-         seq_voicesLoading is only used in Mainboard>frontPanelParser.c 
-         it applies to case MIDI_CC and FRONT_CC_2, LFO_TARGET and VELO_TARGET. 
-         if this flag is set, the parameter is sent to cache. 
-         cache needs to be opened before any cached parameters are applied
-         
-         Further notes:
-         case FRONT_SEQ_LOAD_VOICE:
-            sets seq_voicesLoading (bit register)
-            seq_voicesLoading is only used in Mainboard>frontPanelParser.c 
-            it applies to case MIDI_CC and FRONT_CC_2, LFO_TARGET and VELO_TARGET. 
-            if this flag is set, the parameter received to fpp is sent to cache. 
-            midi_midi<type>CacheAvailable is the flag for each parameter for reg. 
-            MIDI, Lfo, and Velo.
-            
-            voice needs to be *uncached* before any cached parameters are applied
-            
-            seq_voicesLoading is UNSET by:
-            - FRONT_SEQ_FILE_DONE (completely set to 0)
-            - presetLoad_uncacheVoice(voice number), turns off each individual flag.
-            
-            case FRONT_SEQ_UNHOLD_VOICE (data for voice number):
-            calls presetLoad_unholdVoice(voice). also calls fp_uncacheVoice if seq not 
-            running.
-            frontParser_unHoldVoice:
-            	- sets seq_newVoiceAvailable (a register) for the voice
-            	- then this waits for one of 2 cases (below) to actually update the voice
-            	- searches cacheAvailable to see if any new params need to be applied
-            	- sends the param to midi_midiKit, midi_kitLfoCache, or midi_kitVeloCache. 
-               this is not the actual voiced parameter. those get applied below:
-            
-            	CASE 1: global load fast mode is on. voice params get applied 
-               (presetLoad_uncacheVoice) when seq_triggerVoice(voice #) is called. They 
-               also change over if the sequence is changed as case 2 below.
-            
-            	CASE 2: global load fast mode is off. voice params get applied 
-               (presetLoad_uncacheVoice) when the sequence changes 
-               (flag preset_tempPlaybackSwitchState.newPatternExecuted). This happens if the voice is trigged OR on 
-               corresponding substep(mod 8) (0=drum1, 3=snare etc.). when 
-            
-            presetLoad_uncacheVoice(voice) actually applies the parameters
-            
-            
-            NOTES:
-            PATCH_RESET sets seq_newVoiceAvailable for ALL.
-            
-            seq_tracksLocked
-            - only used in seq_triggerVoice to return. ie the voice does not play at all.
-            - set only by SYSEX_RECEIVE_MAIN_STEP_DATA, unset by SYSEX_BEGIN_PATTERN_TRANSMIT
-         */
-         
-         presetLoad_beginFileLoadIngress(0);
-         presetLoad_clearVoiceCache(frontParser_midiMsg.data2);
+         frontParser_beginFileLoadIngress(0);
          seq_voicesLoading |= (0x01<<frontParser_midiMsg.data2);
          break;
       case FRONT_SEQ_UNHOLD_VOICE:
-         if(presetLoad_deferredPerfLoadActive)
-         {
-            presetLoad_clearHeldVoiceLoad(frontParser_midiMsg.data2);
-         }
-         else
-         {
-            presetLoad_unholdLoadedVoice(frontParser_midiMsg.data2);
-         }
-         if(!presetLoad_fileLoadBracketActive && !seq_voicesLoading)
-            presetLoad_endFileLoadIngress();
+         frontParser_clearVoiceLoading(frontParser_midiMsg.data2);
+         if(!frontParser_fileLoadBracketActive && !seq_voicesLoading)
+            frontParser_endFileLoadIngress();
          break;
       case FRONT_SEQ_LOAD_FAST:
          seq_loadFastMode=frontParser_midiMsg.data2;
          break;
       case FRONT_SEQ_FILE_BEGIN:
-         presetLoad_beginFileLoadIngress(1);
-         presetLoad_clearDeferredPerfLoad();
+         frontParser_beginFileLoadIngress(1);
          seq_resetVoiceMorphAmountsToGlobal();
          seq_resetLiveMorphApplyCache();
          if((frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
@@ -1783,11 +1528,6 @@ static void frontParser_handleSeqCC()
          {
             preset_morphLoadDisabled = 1;
             preset_vMorphFlag = 0;
-         }
-         if((frontParser_midiMsg.data2 != FRONT_FILE_DONE_TYPE_PERFORMANCE)
-            || (presetLoad_prfCacheState == PRF_CACHE_IDLE))
-         {
-            presetLoad_clearPrfCacheSession();
          }
          break;
       case FRONT_SEQ_FILE_DONE:
@@ -1797,24 +1537,8 @@ static void frontParser_handleSeqCC()
             preset_morphLoadDisabled = 0;
             preset_vMorphFlag = 0;
          }
-         if(presetLoad_prfCacheSessionActive()
-            && (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE))
-         {
-            presetLoad_deferredPerfLoadActive = 0;
-         }
-         else if(presetLoad_deferredPerfLoadActive
-            && (frontParser_midiMsg.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE))
-         {
-            presetLoad_clearDeferredPerfLoad();
-         }
-         else
-         {
-            presetLoad_deferredPerfLoadActive = 0;
-            presetLoad_applyPendingVoiceCache();
-            presetLoad_clearDeferredPerfLoad();
-         }
          seq_voicesLoading=0;
-         presetLoad_endFileLoadIngress();
+         frontParser_endFileLoadIngress();
          break;
       case FRONT_SEQ_TRACK_NOTE1:
       case FRONT_SEQ_TRACK_NOTE2:

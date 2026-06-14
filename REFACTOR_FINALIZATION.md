@@ -1,7 +1,7 @@
 # REFACTOR_FINALIZATION
 
 Date: 2026-06-14
-Status: Session 020 planning document
+Status: Session 020 Step 1 implemented; STM32 build verified
 
 ## Purpose
 
@@ -14,8 +14,9 @@ The short version:
 - The STM front-panel send split is effectively complete.
 - The MIDI parser split is effectively complete for the audit goal.
 - Most Preset consolidation phases after Phase 8 are complete.
-- `PresetLoadCache.c/.h` still exist and should not.
-- `PresetLoadCache` is obsolete, not transitional ownership to preserve.
+- `PresetLoadCache.c/.h` were removed during Session 020 Step 1.
+- `PresetLoadCache` was treated as obsolete, not transitional ownership to
+  preserve.
 - The receive-side front-panel protocol rename/split is not complete.
 - The AVR-side `frontPanelParser.c/.h` still mixes opcode definitions,
   receive parsing, send helpers, flow control, and restore handling.
@@ -49,20 +50,20 @@ Completed:
 - Live automation application moved out of `Sequencer` into Preset-owned
   helpers.
 - The old Sequencer-owned Preset aliases are no longer the main public surface.
+- Session 020 Step 1 deleted `PresetLoadCache.c/.h` and removed the active
+  STM `presetLoad_*` API from source.
+- File-load pattern receive now writes directly to normal `PatternData`
+  storage instead of using the old background-load cache/staging path.
 
 Not completed:
 
-- `mainboard/LxrStm32/src/Preset/PresetLoadCache.c`
-  and `mainboard/LxrStm32/src/Preset/PresetLoadCache.h` still exist.
-- `PresetLoadCache.h` exports a large obsolete bridge surface: deferred performance
-  queues, PRF cache state, live pattern snapshots, MIDI channel/note/morph
-  mirrors, pending counters, voice-cache helpers, and
-  `presetLoad_finalizeTempBackgroundLoad()`.
-- `frontPanelParser.c` still includes `Preset/PresetLoadCache.h` and directly
-  reads/writes many `presetLoad_*` flags.
-- `sequencer.c` still calls `presetLoad_finalizeTempBackgroundLoad()`.
-- `TempPlaybackSwitch.h` still declares `presetLoad_finalizeTempBackgroundLoad()`
-  even though that is not a temp-switch API.
+- STM receive code is still named `frontPanelParser.c/.h`; the final
+  `frontPanelReceivingProtocol.c/.h` rename is still pending.
+- `frontPanelParser.c` carries a tiny parser-local file-load ingress bracket
+  only to route file bytes into normal Preset storage during the old AVR file
+  transfer envelope.
+- AVR-side PRF cache initiators still exist and are now deprecated
+  compatibility traffic from the STM point of view.
 
 Why this happened:
 
@@ -119,8 +120,8 @@ Not completed:
 
 - STM receive code is still named `frontPanelParser.c/.h`.
 - `FrontPanelProtocol.h` still exists as a separate STM opcode namespace.
-- The receive-side load/session path is split between
-  `frontPanelParser.c/.h` and `PresetLoadCache.c/.h`.
+- The receive-side file-load envelope is still in `frontPanelParser.c/.h` as a
+  normal-storage ingress bracket; there is no surviving STM load cache module.
 
 ### MIDI Split
 
@@ -379,3 +380,34 @@ That is the architectural bug that invalidates the Preset audit. The work
 should remove the obsolete cache path, not rehome it. The MIDI files should be
 left alone during that pass because they already satisfy the current split goal
 and were hardware-smoke-tested in Session 018.
+
+## Session 020 Step 1 Implementation Notes
+
+Implemented:
+
+- Removed the STM source dependency on `Preset/PresetLoadCache.h`.
+- Deleted `mainboard/LxrStm32/src/Preset/PresetLoadCache.c`.
+- Deleted `mainboard/LxrStm32/src/Preset/PresetLoadCache.h`.
+- Replaced the cache-owned file-load ingress calls with a tiny parser-local
+  ingress bracket that only switches `ParameterIngress` into normal-kit
+  endpoint mode for the duration of a file-load bracket.
+- Removed the PRF cache state machine, live snapshot interception, deferred
+  performance replay interception, pending-counter updates, and voice-cache
+  apply/finalize calls from STM active source.
+- Changed SysEx pattern receive paths to write directly to `seq_patternSet`
+  normal pattern storage instead of staging through `seq_tmpPattern` for
+  background-load/cache behavior.
+- Kept explicit normal/temp playback switching and explicit temp pattern
+  storage intact; this pass only removes file-load cache staging.
+- Changed deprecated PRF/cache STM command handling to reject/no-op
+  compatibility responses while AVR initiators still exist.
+- Removed `presetLoad_finalizeTempBackgroundLoad()` from
+  `TempPlaybackSwitch.h` and from the Sequencer stop path.
+- Verified `make -C mainboard/LxrStm32 -j4 stm32` after a clean dependency
+  rebuild. The remaining warnings are pre-existing except for none newly left
+  by this cache removal pass.
+
+Still to verify:
+
+- Hardware smoke test for file load, copy-to-temp, temp switch, parameter edit,
+  restore begin/done, and deprecated PRF/cache rejection behavior.

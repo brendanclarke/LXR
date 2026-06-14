@@ -1612,11 +1612,9 @@ uint8_t seq_isRunning() {
 void seq_setRunning(uint8_t isRunning)
 {
    seq_running = isRunning;
-	//jump to 1st step if sequencer is stopped
+   //jump to 1st step if sequencer is stopped
    if(!seq_running)
    {
-      presetLoad_finalizeTempBackgroundLoad();
-   
    	// --AS reset all track rotations to 0. We are not saving rotated value. it's a performance tool.
       uint8_t i;
       for(i=0;i<NUM_TRACKS;i++) {
