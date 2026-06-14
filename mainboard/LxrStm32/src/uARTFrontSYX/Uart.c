@@ -36,7 +36,7 @@
 #include "MidiParser.h"
 #include "Uart.h"
 #include "FIFO.h"
-#include "frontPanelParser.h"
+#include "frontPanelReceivingProtocol.h"
 #include "config.h"
 
  /* USART2 MIDI configured as follow:

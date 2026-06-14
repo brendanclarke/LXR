@@ -21,7 +21,7 @@
 #include "usb_manager.h"
 #include "valueShaper.h"
 #include "sequencer.h"
-#include "uARTFrontSYX/frontPanelParser.h"
+#include "uARTFrontSYX/frontPanelReceivingProtocol.h"
 #include "uARTFrontSYX/frontPanelSendingProtocol.h"
 
 #define BANK_1 0x01

@@ -37,28 +37,6 @@
 #ifndef FRONTPANELPARSER_H_
 #define FRONTPANELPARSER_H_
 
-#include <stdint.h>
-
-#include "MidiMessages.h"
-
-/* Shared receive-side front-panel state. These globals are owned by the parser
-   and consumed by the receive/session bridge while the split is still in
-   progress. */
-extern uint8_t frontParser_rxCnt;
-extern MidiMsg frontParser_midiMsg;
-extern uint8_t frontParser_activeTrack;
-extern uint8_t frontParser_shownPattern;
-extern uint8_t frontParser_sysexActive;
-extern uint8_t frontParser_activeFrontTrack;
-extern uint16_t frontParser_twoByteData;
-extern uint8_t frontParser_sysexBuffer[16];
-extern uint16_t frontParser_sysexSeqStepNr;
-extern uint8_t frontParser_activeStep;
-extern uint8_t frontParser_stepCopySource;
-
-/* Receive-side entry points and parser state queries. */
-void frontParser_parseUartData(unsigned char data);
-void frontParser_handleMidiMessage(void);
-uint8_t frontParser_isQuietUi();
+#include "frontPanelReceivingProtocol.h"
 
 #endif /* FRONTPANELPARSER_H_ */

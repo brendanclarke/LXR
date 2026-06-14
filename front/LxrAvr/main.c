@@ -24,7 +24,7 @@
 #include "ledHandler.h"
 #include "buttonHandler.h"
 #include "Menu/copyClearTools.h"
-#include "frontPanelParser.h"
+#include "frontPanelSendingProtocol.h"
 //-----------------------------------------------
 //defines
 //-----------------------------------------------

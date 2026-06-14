@@ -1,5 +1,9 @@
 /*
- * frontPanelParser.c
+ * frontPanelReceivingProtocol.c
+ *
+ * STM front-panel receive parser, SysEx ingress, and load-session receive
+ * state. The exported function names keep the legacy frontParser_* prefix
+ * until the remaining call sites are migrated.
  *
  *  Created on: 27.04.2012
  * ------------------------------------------------------------------------------------------------------------------------
@@ -35,9 +39,8 @@
 
 
 
-#include "frontPanelParser.h"
+#include "frontPanelReceivingProtocol.h"
 #include "MidiMessages.h"
-#include "FrontPanelProtocol.h"
 #include "frontPanelSendingProtocol.h"
 #include "MidiParser.h"
 #include "Preset/EndpointRestore.h"

@@ -548,7 +548,8 @@ enum
 };
 
 
-// Front-panel protocol opcodes now live in uARTFrontSYX/FrontPanelProtocol.h.
+// Compatibility include for front-panel opcodes; canonical owner is
+// uARTFrontSYX/frontPanelReceivingProtocol.h.
 #include "uARTFrontSYX/FrontPanelProtocol.h"
 
 //codec control messages

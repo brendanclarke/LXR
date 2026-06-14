@@ -10,7 +10,7 @@
 #include <string.h>
 #include "Hardware/timebase.h"
 #include "Menu/menu.h"
-#include "frontPanelParser.h"
+#include "frontPanelReceivingProtocol.h"
 
 //since we need an array to store the start time we have to limit the number of simultanousely pulsable LEDs
 #define NUM_OF_PULSABLE_LEDS 8	//MAX 8 at the moment (because of led_pulsingLeds)

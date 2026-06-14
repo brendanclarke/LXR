@@ -14,7 +14,7 @@
 #include "mixer.h"
 #include "modulationNode.h"
 #include "sequencer.h"
-#include "uARTFrontSYX/frontPanelParser.h"
+#include "uARTFrontSYX/frontPanelReceivingProtocol.h"
 #include "uARTFrontSYX/frontPanelSendingProtocol.h"
 #include "usb_manager.h"
 #include "valueShaper.h"

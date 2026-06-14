@@ -1,7 +1,7 @@
 # REFACTOR_FINALIZATION
 
 Date: 2026-06-14
-Status: Session 020 Step 1 implemented; STM32 build verified
+Status: Session 020 Step 3 implemented; AVR and firmware builds verified
 
 ## Purpose
 
@@ -17,9 +17,10 @@ The short version:
 - `PresetLoadCache.c/.h` were removed during Session 020 Step 1.
 - `PresetLoadCache` was treated as obsolete, not transitional ownership to
   preserve.
-- The receive-side front-panel protocol rename/split is not complete.
-- The AVR-side `frontPanelParser.c/.h` still mixes opcode definitions,
-  receive parsing, send helpers, flow control, and restore handling.
+- STM receive-side front-panel protocol rename/split is complete, with short
+  compatibility shims left in place.
+- AVR receive/send protocol split is complete, with `frontPanelParser.h` left
+  as a compatibility shim.
 
 ## Evidence Read For This Plan
 
@@ -33,7 +34,8 @@ The short version:
   - `mainboard/LxrStm32/src/uARTFrontSYX/`
   - `mainboard/LxrStm32/src/MIDI/`
   - `mainboard/LxrStm32/src/Preset/`
-  - `front/LxrAvr/frontPanelParser.c/.h`
+  - `front/LxrAvr/frontPanelReceivingProtocol.c/.h`
+  - `front/LxrAvr/frontPanelSendingProtocol.c/.h`
 
 ## Current Confirmed State
 
@@ -55,13 +57,13 @@ Completed:
 - File-load pattern receive now writes directly to normal `PatternData`
   storage instead of using the old background-load cache/staging path.
 
-Not completed:
+Remaining cleanup:
 
-- STM receive code is still named `frontPanelParser.c/.h`; the final
-  `frontPanelReceivingProtocol.c/.h` rename is still pending.
-- `frontPanelParser.c` carries a tiny parser-local file-load ingress bracket
-  only to route file bytes into normal Preset storage during the old AVR file
-  transfer envelope.
+- STM receive code now has a canonical `frontPanelReceivingProtocol.c/.h`
+  source/header pair.
+- `frontPanelReceivingProtocol.c` carries a tiny parser-local file-load ingress
+  bracket only to route file bytes into normal Preset storage during the old
+  AVR file transfer envelope.
 - AVR-side PRF cache initiators still exist and are now deprecated
   compatibility traffic from the STM point of view.
 
@@ -112,16 +114,18 @@ Completed:
   `frontPanelSendingProtocol.c`.
 - `sequencer.c`, `EndpointRestore.c`, `MidiParser.c`,
   `ChannelMidiParser.c`, `GlobalMidiParser.c`, `MidiVoiceControl.c`, and
-  `frontPanelParser.c` route visible front-panel output through the send helper
-  layer.
+  `frontPanelReceivingProtocol.c` route visible front-panel output through the
+  send helper layer.
 - `Uart.c` still owns raw USART/FIFO transport, which is correct.
 
-Not completed:
+Remaining cleanup:
 
-- STM receive code is still named `frontPanelParser.c/.h`.
-- `FrontPanelProtocol.h` still exists as a separate STM opcode namespace.
-- The receive-side file-load envelope is still in `frontPanelParser.c/.h` as a
-  normal-storage ingress bracket; there is no surviving STM load cache module.
+- STM receive code now has a canonical `frontPanelReceivingProtocol.c/.h`
+  source/header pair, with `frontPanelParser.h` kept as a compatibility shim.
+- `FrontPanelProtocol.h` still exists only as a compatibility shim.
+- The receive-side file-load envelope is still in
+  `frontPanelReceivingProtocol.c` as a normal-storage ingress bracket; there is
+  no surviving STM load cache module.
 
 ### MIDI Split
 
@@ -152,28 +156,24 @@ Conclusion:
 
 ### AVR Front-Panel Protocol
 
-Not completed:
+Completed:
 
-- `front/LxrAvr/frontPanelParser.c/.h` still mixes:
-  - opcode definitions;
-  - receive parsing from STM;
-  - send helpers to STM;
-  - flow-control helpers;
-  - PRF cache initiators;
-  - SysEx request/response state;
-  - restore handling;
-  - long-operation handling.
-- The AVR header still defines the front-panel opcode namespace locally.
-- There is no AVR-side `frontPanelSendingProtocol.c/.h` yet.
+- `front/LxrAvr/frontPanelReceivingProtocol.c/.h` owns the AVR opcode
+  namespace, STM response parsing, SysEx request/response state, restore
+  handling, and long-operation receive state.
+- `front/LxrAvr/frontPanelSendingProtocol.c/.h` owns AVR outbound helpers,
+  send-side flow-control state, LED/query request sends, macro sends, and
+  deprecated PRF cache control sends.
+- `front/LxrAvr/frontPanelParser.h` remains only as a compatibility shim.
+- `front/LxrAvr/IO/uart.c` includes the receiving protocol header and remains
+  raw UART transport.
 
-Desired final direction:
+Remaining cleanup:
 
-- Rename the AVR receive parser to `frontPanelReceivingProtocol.c/.h`.
-- Move AVR outbound helpers such as `frontPanel_sendData()`,
-  `frontPanel_sendByte()`, `frontPanel_sendMidiMsg()`, flow send helpers, and
-  PRF cache control sends into AVR-side `frontPanelSendingProtocol.c/.h`.
-- Keep shared protocol mechanisms in the receiving protocol only where they are
-  genuinely shared between send and receive.
+- Remove `frontPanelParser.h` once all external/editor/project references no
+  longer need the old include name.
+- Remove deprecated PRF cache initiators once AVR file-load code no longer
+  sends cache compatibility traffic during the existing transfer envelope.
 
 ### Future SysEx / Protocol Boundary
 
@@ -204,9 +204,11 @@ UART remain transport ingress/egress paths.
   then placeholder Phase 7/8/9 headings. The receive-side plan was not finished.
 - The Session 018 handoff explicitly calls the recreated `PresetLoadCache`
   module a success, which conflicts with the Preset audit's long-term goal.
-- The docs also blur two different `frontPanelParser.c` files:
-  - STM: `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c`
-  - AVR: `front/LxrAvr/frontPanelParser.c`
+- The old docs also blurred two different `frontPanelParser.c` files:
+  - STM, now renamed:
+    `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c`
+  - AVR, now renamed:
+    `front/LxrAvr/frontPanelReceivingProtocol.c`
 - The finalization plan must keep those two sides distinct.
 
 ## Finalization Plan
@@ -291,8 +293,8 @@ Implementation shape:
   until remaining includes are migrated.
 - Update comments so the file ownership is explicit:
   - `Uart.c/.h`: raw transport only;
-  - `frontPanelReceivingProtocol.c/.h`: AVR receive parsing, SysEx ingress,
-    load-session receive state;
+  - `frontPanelReceivingProtocol.c/.h`: AVR UART receive parsing, SysEx
+    ingress, load-session receive state;
   - `frontPanelSendingProtocol.c/.h`: outbound STM-to-AVR packet construction.
 
 Verification:
@@ -411,3 +413,83 @@ Still to verify:
 
 - Hardware smoke test for file load, copy-to-temp, temp switch, parameter edit,
   restore begin/done, and deprecated PRF/cache rejection behavior.
+
+Hardware result:
+
+- Step 1 hardware test accepted by the user before starting Step 2.
+
+## Session 020 Step 2 Implementation Notes
+
+Implemented:
+
+- Added `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.h`
+  as the canonical STM owner for the front-panel opcode namespace and
+  receive-side parser declarations.
+- Renamed STM `frontPanelParser.c` to `frontPanelReceivingProtocol.c`.
+- Kept `mainboard/LxrStm32/src/uARTFrontSYX/FrontPanelProtocol.h` as a short
+  compatibility shim for existing transitive opcode users.
+- Kept `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.h` as a short
+  compatibility shim while remaining external includes migrate.
+- Updated STM preferred includes in `Uart.c`, `frontPanelReceivingProtocol.c`,
+  `frontPanelSendingProtocol.h`, `sequencer.c`, and the MIDI split files to
+  include `frontPanelReceivingProtocol.h` directly.
+- Updated `MidiMessages.h` comments to document that front-panel opcode access
+  there is compatibility-only.
+- Left AVR `frontPanelParser.c/.h` untouched during Step 2; Step 3 later
+  renamed/split it.
+- Kept legacy `frontParser_*` symbol names for this pass to keep behavior
+  unchanged and avoid mixing filename cleanup with a call-site API migration.
+
+Verification:
+
+- `make -C mainboard/LxrStm32 -j4 stm32` passes after the header split and
+  receive source rename. The build still reports the known unrelated compiler
+  warnings from DSP/sequencer/MIDI files plus the pre-existing linker
+  LOAD-segment RWX warning.
+
+Still to verify:
+
+- Hardware smoke tests from Step 1 after the STM header split.
+
+Hardware result:
+
+- Step 2 hardware test accepted by the user before starting Step 3.
+
+## Session 020 Step 3 Implementation Notes
+
+Implemented:
+
+- Renamed AVR `frontPanelParser.c` to `frontPanelReceivingProtocol.c`.
+- Renamed the canonical AVR receive/protocol header to
+  `frontPanelReceivingProtocol.h`.
+- Kept `frontPanelParser.h` as a compatibility shim that includes both the
+  receive/protocol and sending headers.
+- Added AVR-side `frontPanelSendingProtocol.c/.h`.
+- Moved AVR outbound packet helpers into `frontPanelSendingProtocol.c`:
+  `frontPanel_sendByte()`, `frontPanel_sendData()`,
+  `frontPanel_sendMidiMsg()`, LED query helpers, macro sends, flow send
+  helpers, and PRF cache control sends.
+- Moved AVR send-side flow-control state and deprecated PRF cache status wait
+  state into `frontPanelSendingProtocol.c`.
+- Kept STM response parsing, SysEx receive state, restore handling, and
+  long-operation receive state in `frontPanelReceivingProtocol.c`.
+- Added receive-to-send hooks for callback ACK, flow messages, and PRF cache
+  status messages so receive parsing can update send-side wait state without
+  owning packet construction.
+- Updated AVR include sites so UART includes the receive/protocol header and
+  UI/preset/menu command emitters include the sending header.
+- Updated `DrumSynthFront.cproj` entries for the new AVR receive/send files.
+- Left PRF cache initiators deprecated but still present as compatibility
+  wrappers, since file-load code still calls them during existing transfer
+  envelopes and STM now rejects/no-ops the obsolete cache behavior.
+
+Verification:
+
+- `make -C front/LxrAvr avr -j4` passes. The build still reports known warning
+  noise, including AVR register array-bounds warnings, existing fallthrough
+  warnings, and warnings that moved with the renamed receive parser.
+- `make firmware` passes and rebuilt `firmware image/FIRMWARE.BIN`.
+
+Still to verify:
+
+- Hardware smoke tests from the Step 3 plan.

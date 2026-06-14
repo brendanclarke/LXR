@@ -14,7 +14,7 @@
 #include <util/delay.h>
 #include "../Hardware/lcd.h"
 #include <avr/pgmspace.h>
-#include "../frontPanelParser.h"
+#include "../frontPanelSendingProtocol.h"
 #include <stdlib.h>
 #include <util/atomic.h> 
 #include "../IO/uart.h"

@@ -7,7 +7,7 @@
 
 #include "uart.h"
 #include <avr/io.h>
-#include "../frontPanelParser.h"
+#include "../frontPanelReceivingProtocol.h"
 #include "../config.h"
 #if UART_DEBUG_ECHO_MODE
 #include <stdlib.h>

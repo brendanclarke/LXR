@@ -86,7 +86,16 @@
     <Compile Include="fifo.h">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="frontPanelParser.c">
+    <Compile Include="frontPanelReceivingProtocol.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="frontPanelReceivingProtocol.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="frontPanelSendingProtocol.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="frontPanelSendingProtocol.h">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="frontPanelParser.h">

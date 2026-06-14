@@ -42,7 +42,7 @@
 #include "CymbalVoice.h"
 #include "MidiParser.h"
 #include "sequencer.h"
-#include "uARTFrontSYX/frontPanelParser.h"
+#include "uARTFrontSYX/frontPanelReceivingProtocol.h"
 #include "ChannelMidiParser.h"
 #include "TriggerOut.h"
 //#include "LCD_driver.h"

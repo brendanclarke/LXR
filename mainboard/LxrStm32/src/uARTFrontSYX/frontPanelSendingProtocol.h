@@ -11,7 +11,7 @@
 
 #include <stdint.h>
 
-#include "FrontPanelProtocol.h"
+#include "frontPanelReceivingProtocol.h"
 
 /* Low-level transport wrappers. These are the only helpers that should talk to
    the raw front-panel UART primitives. */

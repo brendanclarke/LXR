@@ -10,7 +10,7 @@
 #include "ledHandler.h"
 #include "Hardware/lcd.h"
 #include <stdio.h>
-#include "frontPanelParser.h"
+#include "frontPanelSendingProtocol.h"
 #include "IO/din.h"
 #include "Menu/screensaver.h"
 #include "Menu/copyClearTools.h"

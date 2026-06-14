@@ -42,7 +42,7 @@
 #include "HiHat.h"
 #include "CymbalVoice.h"
 #include "uARTFrontSYX/Uart.h"
-#include "uARTFrontSYX/frontPanelParser.h"
+#include "uARTFrontSYX/frontPanelReceivingProtocol.h"
 #include "ChannelMidiParser.h"
 #include "GlobalMidiParser.h"
 #include "clockSync.h"
@@ -52,7 +52,7 @@
 #include "valueShaper.h"
 #include "modulationNode.h"
 #include "usb_manager.h"
-// front-panel opcodes are owned by FrontPanelProtocol.h via the send helpers
+// front-panel opcodes are owned by uARTFrontSYX/frontPanelReceivingProtocol.h
  #define MORPH_CC        0xac
  #define VOICE_CC			0xb4
    #define BANK_GLOBAL 0x7F
