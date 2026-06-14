@@ -505,8 +505,8 @@ You, the agent, and each delegate assigned to a task must read, understand, and 
 ### 3. Coding Standards
 
 - Make the smallest correct change to functional code possible for the request, preferring existing helpers and protocols over new abstractions.
-- By default, unless a refactor is explicitly specified, preserve ownership boundaries. Interface changes are allowed but discouraged unless clearly necessary.
-- If refactor is explicitly specified by user, operate in refactor mode for that session. In refactor mode, ownership boundaries and interfaces may change, but the functional expression of the code must not change.
+- By default, unless in refactor mode, prefer preserving ownership boundaries. Interface and module ownership changes are allowed but discouraged unless clearly necessary.
+- If refactor is explicitly specified by user, operate in refactor mode for that session. In refactor mode, ownership boundaries and interfaces may change, but the functional expression of the code should not change.
 - If the request is ambiguous or would move outside these bounds, stop and ask for explicit permission before proceeding.
 - All exported functions and variables should be accompanied by a commented-out note adjacent the code describing its function. All frequently-accessed variables in code files that are not function-local should have similar comments describing function.
 
