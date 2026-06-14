@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <limits.h>
 #include "../ledHandler.h"
 #include <avr/pgmspace.h>
 #include "../IO/uart.h"
@@ -21,6 +22,7 @@
 #include "CcNr2Text.h"
 #include "copyClearTools.h"
 #include "../buttonHandler.h"
+#include "../encoder.h"
 #include <ctype.h>
 #include "../front.h"
 
@@ -44,6 +46,8 @@ static void setNoteName(uint8_t num, char *buf);
 static void menu_moveToMenuItem(int8_t inc);
 static void menu_encoderChangeParameter(int8_t inc);
 static void menu_encoderChangeShiftParameter(int8_t inc);
+static int8_t menu_applyEncoderAcceleration(int8_t inc);
+static void menu_applyEncoderDeltaToByte(uint8_t *paramValue, int8_t inc);
 
 #define ARROW_SIGN '>'
 
@@ -2517,6 +2521,7 @@ void menu_parseEncoder(int8_t inc, uint8_t button)
 
 		} else if(editModeActive) {
 			// edit mode is active so change the value of the current parameter
+         inc = menu_applyEncoderAcceleration(inc);
          if (buttonHandler_getShift())
             menu_encoderChangeShiftParameter(inc);
          else
@@ -2528,6 +2533,40 @@ void menu_parseEncoder(int8_t inc, uint8_t button)
 
 	}
 	menu_repaintAll();
+}
+
+
+static int8_t menu_applyEncoderAcceleration(int8_t inc)
+{
+   const uint8_t multiplier = encode_getAccelerationMultiplier();
+   int16_t accelerated;
+
+   if(multiplier <= 1 || inc == 0)
+      return inc;
+
+   accelerated = (int16_t)inc * multiplier;
+
+   if(accelerated > INT8_MAX)
+      return INT8_MAX;
+   if(accelerated < INT8_MIN)
+      return INT8_MIN;
+
+   return (int8_t)accelerated;
+}
+
+
+static void menu_applyEncoderDeltaToByte(uint8_t *paramValue, int8_t inc)
+{
+   int16_t value = *paramValue;
+
+   value += inc;
+
+   if(value < 0)
+      value = 0;
+   else if(value > 255)
+      value = 255;
+
+   *paramValue = (uint8_t)value;
 }
 
 //-----------------------------------------------------------------
@@ -2550,21 +2589,7 @@ static void menu_encoderChangeParameter(int8_t inc)
       paramValue = &parameters2[paramNr];
    }
 
-	//increase parameter value
-	if(inc>0) //positive increase
-	{
-		if(*paramValue != 255) //omit wrap for 0B255 dtypes
-			*paramValue = (uint8_t)(*paramValue + inc);
-	}
-	else if (inc<0) //neg increase
-	{
-		if(*paramValue >= abs(inc)) //omit negative wrap. inc can also be -2 or -3 depending on turn speed!
-		{
-			DISABLE_CONV_WARNING
-			*paramValue += inc;
-			END_DISABLE_CONV_WARNING
-		}
-	}
+		menu_applyEncoderDeltaToByte(paramValue, inc);
 
 	switch(pgm_read_byte(&parameter_dtypes[paramNr]) & 0x0F)
 	{
@@ -2784,21 +2809,7 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
       paramValue = &parameter_values[paramNr];
    }
    
-	//increase parameter value
-	if(inc>0) //positive increase
-	{
-		if(*paramValue != 255) //omit wrap for 0B255 dtypes
-			*paramValue = (uint8_t)(*paramValue + inc);
-	}
-	else if (inc<0) //neg increase
-	{
-		if(*paramValue >= abs(inc)) //omit negative wrap. inc can also be -2 or -3 depending on turn speed!
-		{
-			DISABLE_CONV_WARNING
-			*paramValue += inc;
-			END_DISABLE_CONV_WARNING
-		}
-	}
+		menu_applyEncoderDeltaToByte(paramValue, inc);
 
 	switch(pgm_read_byte(&parameter_dtypes[paramNr]) & 0x0F)
 	{

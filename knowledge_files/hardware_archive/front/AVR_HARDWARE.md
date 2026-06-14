@@ -180,7 +180,7 @@ A single incremental encoder with push-button (ENC1, 24 clicks per revolution, 2
 | B | PC1 | Internal | Quadrature phase B |
 | Button | PC2 | Internal | Encoder push-button (active-low) |
 
-The encoder driver uses **Timer1 compare A** to sample both phases at 16 kHz. The physical detent rest phase is hardware-verified as `AB=11`, encoded in firmware as `ENCODER_REST_STATE = 0x03`. The ISR applies a two-sample symmetric phase filter, runs a rest-phase anchored quadrature FSM, and accumulates only complete detents into `enc_delta`. The main loop reads rotation only through `encode_stableRead4()`. Legacy one-step/two-step/read-wrapper modes, PCINT decoding, and Timer0 encoder sampling are intentionally not supported. Encoder button debouncing is handled in the same Timer1 ISR with a 48-sample integrator.
+The encoder driver uses **Timer1 compare A** to sample both phases at about 32.05 kHz. The physical detent rest phase is hardware-verified as `AB=11`, encoded in firmware as `ENCODER_REST_STATE = 0x03`. The ISR applies a six-sample symmetric phase filter, runs a rest-phase anchored quadrature FSM, and accumulates only complete detents into `enc_delta`. Session 019 added a narrow rest-jump recovery for filtered `11 -> 00 -> adjacent -> 11` contact sequences while preserving the fixed-rest return requirement. The main loop reads raw rotation only through `encode_stableRead4()`. Legacy one-step/two-step/read-wrapper modes, PCINT decoding, and Timer0 encoder sampling are intentionally not supported. Encoder button debouncing is handled in the same Timer1 ISR with a 192-sample integrator. Edit-mode parameter acceleration is applied in the menu layer only, based on complete emitted detents from this encoder path.
 
 ---
 

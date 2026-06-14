@@ -59,6 +59,7 @@ static FifoBig fifo_frontRx; //we use a bigger fifo here because we have lots of
 //-----------------------------------------------------------------------------
 void uart_clearFrontFifo()
 {
+	/* Transport-side FIFO reset for the front-panel RX/TX queues. */
 	fifo_clear(&fifo_frontTx);
 	fifoBig_clear(&fifo_frontRx);
 
@@ -67,6 +68,7 @@ void uart_clearFrontFifo()
 //the midi interrupt handler
 void USART2_IRQHandler(void)
 {
+	/* Raw USART2 MIDI IRQ plumbing. */
 	uint8_t data;
 	//if Receive interrupt (rx not empty)
 	if (USART_GetITStatus(USART2, USART_IT_RXNE) != RESET)
@@ -95,6 +97,7 @@ void USART2_IRQHandler(void)
 //the front panel interrupt handler
 void USART3_IRQHandler(void)
 {
+	/* Raw USART3 front-panel IRQ plumbing. */
 	uint8_t data;
 	//if Receive interrupt (rx not empty)
 	if (USART_GetITStatus(USART3, USART_IT_RXNE) != RESET)
@@ -122,6 +125,7 @@ void USART3_IRQHandler(void)
 //-----------------------------------------------------------------------------
 void uart_processMidi()
 {
+	/* Drain the MIDI RX FIFO into the parser. */
 	uint8_t data;
 	if(fifo_bufferOut(&fifo_midiRx,&data))
 	{
@@ -131,6 +135,7 @@ void uart_processMidi()
 
 void uart_sendMidi(MidiMsg msg)
 {
+	/* Serialize a MIDI message onto the raw MIDI transport FIFO. */
 	uart_sendMidiByte(msg.status);
 	if(msg.bits.length) {
 		uart_sendMidiByte(msg.data1);
@@ -142,6 +147,7 @@ void uart_sendMidi(MidiMsg msg)
 //-----------------------------------------------------------------------------
 void uart_sendMidiByte(uint8_t data)
 {
+	/* Queue a raw MIDI byte and enable TX. */
 	//put data in the output fifo
 	fifo_bufferIn(&fifo_midiTx,data);
 
@@ -151,6 +157,7 @@ void uart_sendMidiByte(uint8_t data)
 //-----------------------------------------------------------------------------
 void uart_processFront()
 {
+	/* Drain the front-panel RX FIFO into the front-panel parser. */
 #if UART_DEBUG_ECHO_MODE
 	uint8_t data;
 	if(fifoBig_bufferOut(&fifo_frontRx,&data))
@@ -169,6 +176,7 @@ void uart_processFront()
 //-----------------------------------------------------------------------------
 void uart_sendFrontpanelByte(uint8_t data)
 {
+	/* Lowest-level front-panel command byte writer. */
 	//do not send anything besides sysex data while sysex mode is active!
 	if((frontParser_sysexActive == 0) && !frontParser_isQuietUi())
 	{
@@ -182,6 +190,7 @@ void uart_sendFrontpanelByte(uint8_t data)
 //-----------------------------------------------------------------------------
 void uart_sendFrontpanelPriorityByte(uint8_t data)
 {
+	/* Priority front-panel byte writer used by flow-control and restore paths. */
 	//put data in the output fifo
 	fifo_bufferIn(&fifo_frontTx,data);
 
@@ -191,6 +200,7 @@ void uart_sendFrontpanelPriorityByte(uint8_t data)
 //-----------------------------------------------------------------------------
 void uart_sendFrontpanelPriorityByteWait(uint8_t data)
 {
+	/* Blocking priority front-panel byte writer. */
 	while(!fifo_bufferIn(&fifo_frontTx,data))
 	{
 		USART_ITConfig(USART3, USART_IT_TXE, ENABLE);
@@ -201,6 +211,7 @@ void uart_sendFrontpanelPriorityByteWait(uint8_t data)
 //-----------------------------------------------------------------------------
 void uart_sendFrontpanelSysExByte(uint8_t data)
 {
+	/* Front-panel SysEx byte writer that bypasses the normal quiet-UI gate. */
 	//put data in the output fifo
 	fifo_bufferIn(&fifo_frontTx,data);
 
@@ -210,6 +221,7 @@ void uart_sendFrontpanelSysExByte(uint8_t data)
 //-----------------------------------------------------------------------------
 void initMidiUart()
 {
+	/* Configure the MIDI UART transport and FIFOs. */
 
 	//init the fifo
 	fifo_init(&fifo_midiTx);
@@ -289,6 +301,7 @@ void initMidiUart()
 
 void initFrontpanelUart()
 {
+	/* Configure the front-panel UART transport and FIFOs. */
 	//fifo init
 	fifo_init(&fifo_frontTx);
 	fifoBig_init(&fifo_frontRx);

@@ -6,5 +6,6 @@
 void encode_init(void);
 int8_t encode_stableRead4(void);
 uint8_t encode_readButton(void);
+uint8_t encode_getAccelerationMultiplier(void);
 
 #endif /* ENCODER_H_ */

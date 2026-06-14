@@ -58,23 +58,23 @@ and receive layout.
 The long-term target is:
 
 - `Uart.c` and `Uart.h` for raw transport, FIFO ownership, and IRQ plumbing;
-- `frontPanelReceivingProtocol.c/.h` for receive-side parsing and dispatch;
+- `frontPanelParser.c/.h` for receive-side parsing and dispatch during the
+  split, renamed to `frontPanelReceivingProtocol.c/.h` only when the split is
+  final;
 - `frontPanelSendingProtocol.c/.h` for outbound framing and packet helpers;
-- `FrontPanelProtocol.h` for the opcode namespace;
-- `frontPanelParser.c/.h` only as a compatibility shim if the migration needs
-  one while the tree is being rewired.
+- `FrontPanelProtocol.h` for the opcode namespace.
 
 ### Target file set
 
 - `Uart.c`
 - `Uart.h`
-- `frontPanelReceivingProtocol.c`
-- `frontPanelReceivingProtocol.h`
+- `frontPanelParser.c`
+- `frontPanelParser.h`
 - `frontPanelSendingProtocol.c`
 - `frontPanelSendingProtocol.h`
 
 The important contract here is that `Uart.c` keeps the raw transport and FIFO
-ownership, while the new send/receive protocol files own the packet
+ownership, while the send and receive protocol files own the packet
 composition. After the split, no STM-side file outside
 `frontPanelSendingProtocol.c/.h` should call `uart_sendFrontpanelByte()`,
 `uart_sendFrontpanelPriorityByte()`, `uart_sendFrontpanelPriorityByteWait()`,
@@ -161,8 +161,10 @@ callers can tell whether a packet is:
 
 ### Receive-Side Ownership
 
-The future receive module should own the current parser responsibilities that
-are about reading and interpreting bytes, not emitting them.
+The receive module should own the current parser responsibilities that are
+about reading and interpreting bytes, not emitting them. For now that module is
+`frontPanelParser.c/.h`; when the split is final, those files should be renamed
+to `frontPanelReceivingProtocol.c/.h`.
 
 That includes:
 
@@ -192,7 +194,8 @@ both directions" assumptions once the split is complete.
   stable, because those files are the most likely to reveal missing echo or
   update helpers if the send API is too thin.
 - Only after the send side is stable should the remaining parser-local bridge
-  be reduced into `frontPanelReceivingProtocol.c` or made into a thin wrapper.
+  be reduced into `frontPanelParser.c/.h` in place, with the final rename to
+  `frontPanelReceivingProtocol.c/.h` deferred until the split is complete.
 
 ### Phase 1: Send-Side Scaffolding
 
@@ -321,93 +324,362 @@ both directions" assumptions once the split is complete.
 ### Phase 3: Sequencer and Endpoint Restore Migration
 
 - Move the restore begin/done, restore parameter, restore morph parameter, and
-  global morph send blocks out of `sequencer.c` and `EndpointRestore.c`.
-- Convert the beat LED, current-step LED, pattern-change, run-stop, and SysEx
-  export calls in `sequencer.c` to the send helpers.
-- Keep the restore queueing and the temp/normal boundary decisions in
-  `Preset`; only the packet emission should move.
-- Make sure the new send helpers preserve the existing priority and wait-for-
-  space semantics, because restore traffic currently depends on those blocking
-  rules.
-- Build immediately after this phase and run the temp-boundary and restore
-  smoke tests before changing anything in the MIDI path.
+  global morph send blocks out of `sequencer.c` and `EndpointRestore.c` and
+  into `frontPanelSendingProtocol.c/.h`.
+- Make the send module own the reusable restore packet families:
+  - `PARAM_RESTORE_BEGIN` and `PARAM_RESTORE_DONE` framing;
+  - `PRF_RESTORE_PARAM_CC` / `PRF_RESTORE_PARAM_CC2` raw parameter pushes;
+  - `PRF_RESTORE_MORPH_CC` / `PRF_RESTORE_MORPH_CC2` raw morph pushes;
+  - global morph report packets using `FRONT_SEQ_REPORT_GLOBAL_MORPH_LSB` and
+    `FRONT_SEQ_REPORT_GLOBAL_MORPH_MSB`.
+- Convert the sequencer-visible feedback packets to send helpers:
+  - pattern-change echo;
+  - run-stop echo;
+  - beat LED pulse on/off;
+  - current-step LED indicator;
+  - track-rotation reset/reply packets;
+  - the SysEx step-export helpers that back `seq_sendMainStepInfoToFront()` and
+    `seq_sendStepInfoToFront()`.
+- Keep the restore queueing, endpoint selection, temp/normal boundary
+  decisions, and voice-mask iteration logic in `Sequencer` and `Preset`; only
+  the packet emission should move.
+- Preserve the raw parameter index rules exactly. The restore helpers must send
+  the raw stored parameter number, not the live-CC `+1` translated display form.
+- Keep the existing blocking semantics intact:
+  - restore begin/done packets still use the wait-for-space priority path;
+  - restore parameter pushes still block while the queue is draining;
+  - the visible sequencer feedback packets stay on the ordinary non-blocking
+    send path.
+- Leave the parser-side load/session bridge alone in this phase; the goal is to
+  move visible output packets out of the Sequencer and Preset restore services
+  without changing the receive-side restore handshake.
+- Build immediately after the send-helper move and run the temp-boundary and
+  restore smoke tests before changing anything in the MIDI path.
+
+### Phase 3 Progress Notes
+
+- `frontPanelSendingProtocol.c/.h` now owns the restore begin/done framing,
+  restore parameter/morph parameter packet composers, global morph report
+  packets, pattern-change echoes, run-stop echoes, beat LED pulses, current-step
+  LED pulses, track-rotation helper packets, and the SysEx step-export helpers.
+- `sequencer.c` and `EndpointRestore.c` now call the send module directly
+  instead of hand-building those packet triples inline.
+- The queueing logic, temp-boundary decisions, and restore phase machines stay
+  where they were; only packet emission moved.
+- `seq_sendMainStepInfoToFront()` and `seq_sendStepInfoToFront()` remain the
+  public Sequencer wrappers for the parser, but their packet assembly now lives
+  in the send module.
+- `make -C mainboard/LxrStm32 -j4 stm32` succeeds after this pass; the only
+  remaining warnings are the pre-existing parser and sequencer warnings that
+  were already present before the split.
 
 ### Phase 4: MIDI Echo and Voice Feedback Migration
 
 - Before this phase starts, explicitly notify the user that the work is now
   touching the MIDI-risk seam and ask for MIDI-specific testing after the code
   change.
-- Start with a new `GlobalMidiParser` file that absorbs `midiParser_checkMtc()`
-  and the system-message side of `midiParser_parseMidiMessage()`.
-- Move the front-panel run-stop echo out of `MidiParser.c` at the same time so
-  the new global file owns both the trigger and the visible feedback for the
-  same event.
-- Leave the per-voice CC ladder, note routing, and `midiParser_parseUartData()`
-  in place until the global split compiles and smoke-tests cleanly.
-- After that global pass is green, add the `ChannelMidiParser` split for the
-  per-voice note and CC handling.
-- Move the bank-change, parameter echo, and patch-reset sends out of
-  `MidiParser.c` only once the channel parser helpers are in place, so the send
-  side and the channel split do not get mixed together in one risky pass.
-- Move the voice-activity LED pulse out of `MidiVoiceControl.c` once the send
-  helpers are stable, because that is a small and well-contained follow-up once
-  the send API already exists.
-- Keep the MIDI parsing and voice routing behavior unchanged during the first
-  pass; the only goal in this phase is to stop hand-building front-panel packet
-  bytes in the MIDI files.
-- If a future MIDI packet helper is missing, add it to the send module instead
-  of rebuilding the packet inline in the MIDI file.
-- Verify that MIDI-driven parameter edits still reach the front panel in the
-  same form and order, especially the low-parameter versus high-parameter
+- First pass: add `GlobalMidiParser.c/.h` and move the MIDI-wide system logic
+  there.
+- The global file should absorb `midiParser_checkMtc()` and the
+  system-message branch of `midiParser_parseMidiMessage()`, including the
+  `MIDI_CLOCK`, `MIDI_START`, `MIDI_CONTINUE`, `MIDI_STOP`, and
+  `MIDI_MTC_QFRAME` handling.
+- Move the front-panel run-stop echo out of `MidiParser.c` into the global file
+  so the same module owns the MTC/start-stop trigger and the visible feedback.
+- Keep `midiParser_parseUartData()` in `MidiParser.c` for this pass so the byte
+  stream coordinator stays stable while the global split is introduced.
+- Keep the per-voice note, CC, routing, and bank-change logic in `MidiParser.c`
+  until the global file compiles and smoke-tests cleanly.
+- If the global split needs a new send helper for run-stop or MTC feedback, add
+  it to `frontPanelSendingProtocol.c/.h` rather than opening a new inline
+  packet builder in the MIDI file.
+- Pause after the global split and run MIDI-specific smoke tests for
+  external-sync start/stop, MTC start/stop, and note routing before moving the
+  channel ladder.
+- Second pass: add `ChannelMidiParser.c/.h` and move the per-channel MIDI work
+  there.
+- The channel file should absorb the per-voice note-on/note-off routing, the
+  per-voice CC ladder, and the helper logic currently hidden inside
+  `midiParser_ccHandler()`.
+- Move the bank-change echo, parameter echo, and patch-reset mirroring out of
+  `MidiParser.c` in the same pass so the channel parser owns both the routing
+  decision and the visible front-panel feedback for those events.
+- Keep the low-parameter and high-parameter split exactly the same while moving
+  the packet emission: `PARAM_CC` must still cover `LXRparamNr < 128`, and
+  `PARAM_CC2` must still cover the `>= 128` path with the same `-1` / `-128`
+  offsets.
+- Keep `midiParser_originalCcValues[]`, `midiParser_activeNrpnNumber`, and the
+  existing `preset_storeParameterIngress()` / `modNode_originalValueChanged()`
+  bookkeeping in place so the refactor only changes ownership, not behavior.
+- Leave the routing and filter gates intact during this pass, including the
+  MIDI-to-MIDI, MIDI-to-USB, and USB-to-MIDI forwarding decisions.
+- Move the `PATCH_RESET` mirroring into the channel/global split only after the
+  send helper exists, and keep the raw reset opcode unchanged.
+- Third pass: move the voice-activity LED pulse out of `MidiVoiceControl.c` once
+  the send helpers are stable.
+- Add one dedicated send helper for the voice pulse packet so
+  `voiceControl_noteOn()` can delegate the `NOTE_ON, voice, 0` front-panel echo
+  without building the triple inline.
+- Keep `voiceControl_noteOff()` unchanged in this phase unless a shared helper
+  is needed for symmetry; note-off currently only updates sequencer state and
+  does not emit front-panel feedback.
+- Keep `MidiParser.c` as the broad stream coordinator after these moves; do not
+  start the receive-side `frontPanelParser` split yet.
+- Verify the full MIDI-visible behavior after each pass: note-on/off echo,
+  bank-change echo, parameter echo order, patch reset mirroring, and external
+  sync start/stop.
+- Re-test the low-parameter versus high-parameter parameter echo split, because
+  that is the easiest place to accidentally regress the front-panel numbering.
+- Treat this phase as complete only when the new MIDI ownership files compile
+  cleanly and the visible MIDI feedback packets are still emitted in the same
+  order as before.
+- Implementation checkpoint: `GlobalMidiParser.c/.h` now owns the MTC/start-
+  stop and system-message handling, `ChannelMidiParser.c/.h` now owns the
+  front-panel bank/parameter/patch-reset echo helpers plus the note-on/note-off
+  routing helpers, and `MidiVoiceControl.c` now delegates the voice LED pulse
+  through the channel helper.
+- The low-risk MIDI feedback split is build-verified again after this pass.
+- The remaining deeper per-channel CC ladder still lives in `MidiParser.c` for
+  the next MIDI refactor slice; this pass stopped at the least risky structural
+  seam.
+
+### Phase 5: Channel and Global Case Parsing Transfer
+
+- This is the phase that moves the remaining `if (chanonly == ...)` case ladders
+  out of `MidiParser.c` and into the new ownership files.
+- The current `midiParser_MIDIccHandler()` body is still the umbrella dispatcher
+  for all MIDI CC handling. Phase 5 should turn it into a thin router that hands
+  off to voice/global-specific handler functions while leaving the top-level
+  entry point intact for callers.
+- Move the voice-specific case blocks for voices 0-6 into
+  `ChannelMidiParser.c/.h`, one voice cluster at a time:
+  - the DRUM1 block at `if (chanonly == midiParser_voiceMidiChannel(0))`;
+  - the DRUM2 block at `if (chanonly == midiParser_voiceMidiChannel(1))`;
+  - the DRUM3 block at `if (chanonly == midiParser_voiceMidiChannel(2))`;
+  - the SNARE block at `if (chanonly == midiParser_voiceMidiChannel(3))`;
+  - the CYMBAL block at `if (chanonly == midiParser_voiceMidiChannel(4))`;
+  - the HAT CLOSED block at `if (chanonly == midiParser_voiceMidiChannel(5))`;
+  - the HAT OPEN block at `if (chanonly == midiParser_voiceMidiChannel(6))`.
+- Each voice block should carry over the full switch body unchanged in behavior:
+  - the voice-local CC cases and the `LXRparamNr` assignments;
+  - the voice-local DSP side effects such as oscillator tuning, filter drive,
+    envelope setters, transient generator values, LFO settings, mix routing,
+    mute toggles, and note override / voice-channel dependent logic;
+  - the shared bookkeeping block that records `midiParser_originalCcValues[]`,
+    calls `preset_storeParameterIngress()`, calls
+    `modNode_originalValueChanged()`, and optionally forwards the front-panel
+    parameter echo when `midiParser_txRxFilter` allows it;
+  - the exact low-parameter versus high-parameter echo split via
+    `channelMidiParser_sendParameterEcho()`.
+- Move the global-channel case block into `GlobalMidiParser.c/.h`, including
+  the `chanonly == midiParser_voiceMidiChannel(7)` ladder and any global-only
+  CC handling, pattern selection, roll control, mute control, and related
+  sequencer side effects.
+- Keep `midiParser_parseUartData()` in `MidiParser.c` so the byte-stream
+  coordinator and running-status handling stay stable while the case ladders
+  move.
+- Keep `midiParser_ccHandler()` in place as the shared NRPN/CC entry point for
+  automation and live MIDI input, but extract any helper that becomes truly
+  voice/global specific into the new modules instead of leaving a cross-file
+  switch maze behind.
+- If the extraction reveals repeated per-voice helper patterns, factor them into
+  `static` helpers inside the new module rather than duplicating eight nearly
+  identical bookkeeping blocks.
+- Preserve the existing parameter bookkeeping exactly:
+  `midiParser_originalCcValues[]`, `midiParser_activeNrpnNumber`,
+  `preset_storeParameterIngress()`, and `modNode_originalValueChanged()` must
+  keep the same call order and index math.
+- Preserve the routing/filter gates and the source/destination decisions around
+  `midiParser_txRxFilter`, `seq_recordActive`, `uart_sendMidi()`, and
+  `usb_sendMidi()` so this phase changes ownership only.
+- Keep the `BANK` and `MOD_WHEEL` special handling behavior intact while moving
+  the cases, including the bank-mask construction, the global morph path, and
+  the `preset_morphLoadDisabled` guard.
+- Move the global `TRACK*_SOUND_OFF`, `ALL_SOUND_OFF`, and `RESET_ALL_CONTROLLERS`
+  behaviors together with the global block so the “global channel” logic lives
+  in one place rather than being split across two files.
+- Treat this as an implement-test-feedback phase because the broad CC ladder is
+  the highest-risk MIDI seam left in the tree.
+- Stop after the first voice block has moved if the build or MIDI smoke tests
+  show a regression, then continue the remaining voice blocks only after the
+  first extraction proves the helper boundary is sound.
+- The examples called out by the user, such as the voice-scoped
+  `if (chanonly == midiParser_voiceMidiChannel(4))` block and the global
+  `if (chanonly == midiParser_voiceMidiChannel(7))` block, are part of this
+  phase, not the later receive-side split.
+- Phase 5 should finish with `MidiParser.c` reduced to the stream parser plus a
+  small routing shim, while the per-voice and global case parsing lives in the
+  new ownership files.
+
+### Phase 5 Progress Notes
+
+- `ChannelMidiParser.c/.h` now owns the per-voice CC case ladders for voices
+  0-6, including the shared parameter bookkeeping and low/high parameter echo
   split.
-- Re-test MIDI note-on/off, bank change, and external sync cases after the
-  migration, because these are the easiest places for a send-side helper change
-  to accidentally drop a visible feedback packet.
+- `GlobalMidiParser.c/.h` now owns the global-channel CC case ladder and the
+  global-only sequencer side effects.
+- `MidiParser.c` now routes `midiParser_MIDIccHandler()` into the new channel
+  and global handlers instead of carrying the full case maze itself.
+- `make -C mainboard/LxrStm32 -j4 stm32` completes successfully after the
+  split.
+- Future work that touches the channel/global MIDI CC path should be treated as
+  a high-risk MIDI change and smoke-tested explicitly before the next phase is
+  considered done.
 
-### Phase 5: Receive-Side Split
+### Phase 6: Comment and API Documentation Sweep
 
-- Move the current parser state machine, sysex handling, and front-panel receive
-  dispatch into `frontPanelReceivingProtocol.c/.h`.
-- Keep `frontPanelParser.c` as a thin compatibility wrapper only if that reduces
-  call-site churn; if the wrapper no longer adds value, retire it after the
-  receiver file is wired in.
-- Move the parser-local load/session bridge into the receive module first as a
-  mechanical step, then decide whether the remaining bridge can be simplified or
-  deleted in a later pass.
-- Preserve the current flow-control and quiet-UI behavior during the move.
-- Re-run the load, temp-switch, and callback-ack flows before any cleanup pass
-  removes the temporary compatibility layer.
+- Make the documentation pass a separate phase so behavior and comment work do
+  not get mixed together.
+- Review every exported function and exported/shared variable in
+  `mainboard/LxrStm32/src/uARTFrontSYX/` and `mainboard/LxrStm32/src/MIDI/`.
+- Add a comment block in code next to every exported function declaration and
+  definition that explains ownership, inputs, outputs, and side effects.
+- Add a matching comment near every exported `extern` or shared file-scope
+  variable that explains what owns it and why other modules need access to it.
+- Normalize the public headers first: `Uart.h`, `frontPanelParser.h`,
+  `frontPanelSendingProtocol.h`, `MidiParser.h`, `MidiVoiceControl.h`,
+  `GlobalMidiParser.h`, and `ChannelMidiParser.h`.
+- Then fill in the corresponding source files so the exported functions are not
+  left undocumented at the definition site.
+- Keep this phase limited to comment and declaration cleanup only; do not let it
+  become a behavior pass in disguise.
 
-### Phase 6: Header Tightening and Compatibility Cleanup
+### Phase 6 Coverage Map
 
-- Narrow `Uart.h` so the transport-only surface is obvious and the front-panel
-  protocol helpers are no longer presented as generic UART utilities.
-- Narrow the exposed `uart_sendFrontpanel*` surface so only the send module
-  retains direct access to the raw primitives once all callers have moved.
-- Keep `FrontPanelProtocol.h` as the opcode owner and continue to treat
-  `MidiMessages.h` as a compatibility include only.
-- Remove any remaining direct front-panel send declarations from headers that
-  are not supposed to own protocol framing.
-- Make sure the final include graph reflects the ownership split: transport,
-  receive protocol, send protocol, and opcode namespace should be separate
-  concerns.
-- If any compatibility wrapper is still needed for a phased migration, keep it
-  behind the send or receive module boundary, not in generic shared headers.
-- Finish this phase only after the build is clean and the high-risk feedback
-  checks have already passed.
+- `mainboard/LxrStm32/src/uARTFrontSYX/Uart.h` and `Uart.c` need ownership
+  comments for the raw transport surface: `initMidiUart()`,
+  `uart_sendMidi()`, `uart_sendMidiByte()`, `uart_processMidi()`,
+  `initFrontpanelUart()`, `uart_processFront()`, `uart_sendFrontpanelByte()`,
+  `uart_sendFrontpanelPriorityByte()`, `uart_sendFrontpanelPriorityByteWait()`,
+  `uart_sendFrontpanelSysExByte()`, and `uart_clearFrontFifo()`. The source
+  comments should also make the USART2/USART3 IRQ handlers read as transport
+  plumbing rather than protocol ownership.
+- `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.h` and
+  `frontPanelParser.c` need comments for the shared receive state and parser
+  entry points: `frontParser_activeTrack`, `frontParser_shownPattern`,
+  `frontParser_sysexActive`, `frontParser_activeFrontTrack`,
+  `frontParser_parseUartData()`, `frontParser_isQuietUi()`, and
+  `frontParser_handleMidiMessage()`, plus the deferred-load and PRF cache state
+  blocks that still live in the source file.
+- `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelSendingProtocol.h` and
+  `frontPanelSendingProtocol.c` need comment blocks for the whole outbound
+  surface:
+  - raw packet helpers: `frontPanelSending_sendByte()`,
+    `frontPanelSending_sendPriorityByte()`,
+    `frontPanelSending_sendPriorityByteWait()`,
+    `frontPanelSending_sendSysExByte()`,
+    `frontPanelSending_sendTriplet()`,
+    `frontPanelSending_sendPriorityTriplet()`, and
+    `frontPanelSending_sendPriorityTripletWait()`;
+  - ack and reply helpers: `frontPanelSending_sendCallbackAck()`,
+    `frontPanelSending_sendSampleUploadAck()`,
+    `frontPanelSending_sendSampleCountReply()`,
+    `frontPanelSending_sendTrackLengthReply()`,
+    `frontPanelSending_sendTrackRotationReply()`,
+    `frontPanelSending_sendTrackRotationValue()`,
+    `frontPanelSending_sendPatternParamsReply()`,
+    `frontPanelSending_sendPatternDataReply()`,
+    `frontPanelSending_sendEuklidParamsReply()`,
+    `frontPanelSending_sendActiveTrackReply()`,
+    `frontPanelSending_sendMainStepLedReply()`,
+    `frontPanelSending_sendStepParamsReply()`,
+    `frontPanelSending_sendSysexStartAck()`,
+    `frontPanelSending_sendSysexEndAck()`,
+    `frontPanelSending_sendSysexReceiveAck()`,
+    `frontPanelSending_sendSysexStepAck()`, and
+    `frontPanelSending_sendSysexBeginPatternTransmitAck()`;
+  - restore and runtime helpers: `frontPanelSending_sendRestoreBegin()`,
+    `frontPanelSending_sendRestoreDone()`,
+    `frontPanelSending_sendRestoreParam()`,
+    `frontPanelSending_sendRestoreMorphParam()`,
+    `frontPanelSending_sendGlobalMorphReport()`,
+    `frontPanelSending_sendPatternChange()`,
+    `frontPanelSending_sendRunStop()`,
+    `frontPanelSending_sendBeatLed()`,
+    `frontPanelSending_sendCurrentStepLed()`,
+    `frontPanelSending_sendMainStepInfo()`,
+    `frontPanelSending_sendStepInfo()`,
+    `frontPanelSending_updateTrackLeds()`, and
+    `frontPanelSending_updateSubStepLeds()`;
+  - flow-control helpers: `frontPanelSending_sendFlowGrant()`,
+    `frontPanelSending_sendFlowGrantWait()`,
+    `frontPanelSending_sendFlowAbort()`, and
+    `frontPanelSending_sendPrfCacheStatus()`.
+- `FrontPanelProtocol.h` should carry a short ownership comment that makes it
+  clear the file is the opcode namespace, not the send/receive implementation.
+- `mainboard/LxrStm32/src/MIDI/MidiParser.h` and `MidiParser.c` need comment
+  coverage for the top-level parser entry points and shared state:
+  `midiParser_parseUartData()`, `midiParser_ccHandler()`,
+  `midiParser_parseMidiMessage()`, `midiParser_MIDIccHandler()`,
+  `midiParser_handleStatusByte()`, `midiParser_calcDetune()`,
+  `midiParser_checkMtc()`, `midiDebugSend()`, `midiParser_setRouting()`,
+  `midiParser_setFilter()`, `midiParser_originalCcValues`,
+  `midiParser_selectedLfoVoice`, `midiParser_txRxFilter`, the MIDI cache
+  buffers, and the voice/channel tables.
+- `MidiParser.c` should also document that it is now the stream/router shim,
+  not the owner of the per-voice or global case ladders that moved in Phase 5.
+- `mainboard/LxrStm32/src/MIDI/ChannelMidiParser.h` and
+  `ChannelMidiParser.c` need comments for the split channel-owned helpers:
+  `channelMidiParser_noteOn()`, `channelMidiParser_noteOff()`,
+  `channelMidiParser_MIDIccHandler()`, `channelMidiParser_sendBankChange()`,
+  `channelMidiParser_sendParameterEcho()`,
+  `channelMidiParser_sendPatchReset()`, and
+  `channelMidiParser_sendVoiceActivity()`.
+- `ChannelMidiParser.c` should document the channel-local modulation helpers
+  and the fact that it now owns the per-voice CC ladder and its bookkeeping
+  block.
+- `mainboard/LxrStm32/src/MIDI/GlobalMidiParser.h` and
+  `GlobalMidiParser.c` need comments for `globalMidiParser_handleSystemMessage()`,
+  `globalMidiParser_MIDIccHandler()`, and `midiParser_checkMtc()`, along with
+  the shared MTC state they manage.
+- `GlobalMidiParser.c` should explain that it now owns the global-channel CC
+  ladder plus the global-only sequencer side effects such as bank/morph/reset
+  handling.
+- `mainboard/LxrStm32/src/MIDI/MidiVoiceControl.h` and
+  `MidiVoiceControl.c` need comments for `voiceStatus`,
+  `voiceControl_noteOn()`, `voiceControl_noteOff()`, and
+  `voiceControl_isVoicePlaying()`, because that module is still the owner of the
+  live voice state used by the parser split.
+- Any new exported function or shared variable introduced by the earlier split
+  phases must get the same comment treatment in this pass before the phase can
+  be considered complete.
+
+### Phase 6 Progress Notes
+
+- The public headers now carry ownership comments for the transport, parser,
+  send, and MIDI ownership surfaces that Phase 6 called out.
+- `frontPanelParser.c`, `frontPanelSendingProtocol.c`, `MidiParser.c`,
+  `ChannelMidiParser.c`, `GlobalMidiParser.c`, `MidiVoiceControl.c`, and
+  `Uart.c` now have matching definition-site comments for the documented
+  exported functions and shared state.
+- `make -C mainboard/LxrStm32 -j4 stm32` completes successfully after the
+  comment sweep.
+- The next phase can focus on the receive-side split without first having to
+  clean up undocumented ownership boundaries in the current modules.
+
+- Add a standing rule for later refactor phases: any new exported function or
+  shared variable introduced by a structural change must ship with its comment
+  block in the same phase before the phase can be considered done.
+
+### Phase 7: ???
+
+### Phase 8: Receive-Side Split ???
+
+#### Goal: ???
+
+- Move the current front-panel receive state machine, sysex handling, and
+  parser-local load/session bridge fully into `frontPanelParser.c/.h` so that
+  file becomes the receive module in place.
+- Preserve the option to rename `frontPanelParser.c/.h` to
+  `frontPanelReceivingProtocol.c/.h` only after the send/receive split is
+  completely finished and the last compatibility edge has been removed.
+- Preserve flow-control, quiet-UI, load-ingress, and sysex ack behavior exactly
+  while the code is being relocated.
+
+
+### Phase 9: Header Tightening and Compatibility Cleanup ???
 
 ### Exit Criteria
-
-- The transport and protocol sides are visible as separate files.
-- The parser no longer looks like the only place where send and receive behavior
-  can live.
-- No STM-side file outside `frontPanelSendingProtocol.c/.h` sends front-panel
-  command bytes directly.
-- The duplicated packet-building logic in Sequencer, EndpointRestore, MidiParser,
-  MidiVoiceControl, and the parser-facing front-panel helpers collapses into
-  reusable send helpers.
-- The current parser-local load/session bridge is either clearly transitional or
-  already retired.
 
 ## MIDI Parser Split
 

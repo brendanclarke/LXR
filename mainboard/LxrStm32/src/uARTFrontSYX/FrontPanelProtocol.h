@@ -30,6 +30,9 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_SEQ_CC					      0xb2
 #define FRONT_CODEC_CONTROL				0xb3
 #define VOICE_CC						      0xb4
+#define BANK_CHANGE_CC                  0xad
+#define PARAM_CC                        0xae
+#define PARAM_CC2                       0xaf
 #define FRONT_SET_BPM				   	0xb5
 #define FRONT_CC_2					   	0xb6	//for parameters above 127
 #define FRONT_CC_LFO_TARGET				0xb7

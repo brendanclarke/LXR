@@ -43,17 +43,20 @@
 #include "MidiParser.h"
 #include "sequencer.h"
 #include "uARTFrontSYX/frontPanelParser.h"
+#include "ChannelMidiParser.h"
 #include "TriggerOut.h"
-#include "uARTFrontSYX/Uart.h"
 //#include "LCD_driver.h"
 
+/* Live voice activity state consumed by the parser and LED feedback paths. */
 uint8_t voiceStatus[NUM_VOICES];
 
-static uint8_t active_voices=0;	// which voices are currently playing a note
+/* Tracks which voices are currently active for note-off and LED logic. */
+static uint8_t active_voices=0;
 //----------------------------------------------------------------
 // this fn assumes a valid voice is sent
 void voiceControl_noteOn(uint8_t voice, uint8_t note, uint8_t vel)
 {
+   /* Trigger the voice engine and mirror the LED pulse to the front panel. */
    active_voices |= (1<<voice);
 
    if(voice < 3)
@@ -76,13 +79,12 @@ void voiceControl_noteOn(uint8_t voice, uint8_t note, uint8_t vel)
    }
 
 	// Send to front panel so it can pulse the LED
-   uart_sendFrontpanelByte(NOTE_ON);
-   uart_sendFrontpanelByte(voice);
-   uart_sendFrontpanelByte(0);
+   channelMidiParser_sendVoiceActivity(voice);
 }
 //----------------------------------------------------------------
 void voiceControl_noteOff(uint8_t voice)
 {
+   /* Release one voice, or all voices when passed 0xff. */
    uint8_t midiChan; // which midi channel to send a note on
 
    if(voice==0xff)
@@ -109,5 +111,6 @@ void voiceControl_noteOff(uint8_t voice)
 //----------------------------------------------------------------
 uint8_t voiceControl_isVoicePlaying(uint8_t voice)
 {
+   /* Query the live activity bitmask for a voice. */
    return (active_voices & (1<<voice));
 }

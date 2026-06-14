@@ -25,28 +25,28 @@ The crystal is loaded by C5 and C6 (22 pF each), matching the HC-49V crystal's s
 
 ## 3. Timer Allocation
 
-The ATmega644 has three hardware timers: Timer0 (8-bit), Timer1 (16-bit), and Timer2 (8-bit). The main application currently uses Timer1 for the encoder/button sampler and Timer2 for the coarse system timebase. Timer0 is not used by the final Session 016 encoder implementation.
+The ATmega644 has three hardware timers: Timer0 (8-bit), Timer1 (16-bit), and Timer2 (8-bit). The main application currently uses Timer1 for the encoder/button sampler and Timer2 for the coarse system timebase. Timer0 is not used by the final Session 019 encoder implementation.
 
 ### 3.1 Timer0 — Currently Unused By The Encoder
 
 Session 016 removed the legacy Timer0 encoder/button path. Do not reintroduce `TIMER0_COMPA_vect` for encoder sampling unless there is a fresh hardware decision and the Timer1 rest-phase FSM is explicitly retired.
 
-### 3.2 Timer1 — Encoder/Button Sampling (16 kHz CTC ISR)
+### 3.2 Timer1 — Encoder/Button Sampling (~32.05 kHz CTC ISR)
 
 **Source:** `encoder.c`, `encode_init()`
 
 | Parameter | Value | Calculation |
 |---|---|---|
 | Mode | CTC (Clear Timer on Compare Match A) | `WGM12 = 1` |
-| Prescaler | /64 | `CS11=1, CS10=1` |
-| Timer clock | 312,500 Hz | 20 MHz / 64 |
-| OCR1A value | 18 | `(F_CPU / 64 / 16000) - 1` = 18.53125 truncated to 18 |
-| Actual ISR frequency | **16,447.37 Hz** ≈ 60.8 us period | 312,500 / (18+1) |
+| Prescaler | /8 | `CS11=1` |
+| Timer clock | 2,500,000 Hz | 20 MHz / 8 |
+| OCR1A value | 77 | `(F_CPU / 8 / 32000) - 1` = 77.125 truncated to 77 |
+| Actual ISR frequency | **32,051.28 Hz** ~= 31.2 us period | 2,500,000 / (77+1) |
 | Interrupt | `TIMER1_COMPA_vect` |
 
-**ISR function:** `ISR(TIMER1_COMPA_vect)` — Samples encoder phases PC0/PC1 and the encoder button PC2. The phase path uses a two-sample symmetric filter and a rest-phase anchored quadrature FSM. The physical rest phase is hardware-verified as `AB=11` and fixed in firmware as `ENCODER_REST_STATE = 0x03`. The ISR adds to `enc_delta` only when a legal full sequence leaves rest and returns to rest. Button debouncing uses a 48-sample integrator in the same ISR.
+**ISR function:** `ISR(TIMER1_COMPA_vect)` — Samples encoder phases PC0/PC1 and the encoder button PC2. The phase path uses a six-sample symmetric filter and a rest-phase anchored quadrature FSM. The physical rest phase is hardware-verified as `AB=11` and fixed in firmware as `ENCODER_REST_STATE = 0x03`. The ISR adds to `enc_delta` only when a full same-direction sequence leaves rest and returns to rest. Session 019 added a narrow recovery for filtered rest-to-opposite contact jumps, such as `11 -> 00 -> 10 -> 11`, while all other illegal transitions still reset the FSM. Button debouncing uses a 192-sample integrator in the same ISR.
 
-**Timing note:** The 16 kHz sample rate was selected after hardware testing in Session 016. The ISR must remain small because `TIMER1_COMPA_vect` has higher vector priority than USART0 RX, and the 500 kBaud UART can receive one byte every 20 us.
+**Timing note:** The ~32.05 kHz sample rate with six stable phase samples was selected after Session 019 hardware testing. The six-sample phase acceptance window is about 187 us. The 192-sample button integrator is about 6 ms. The ISR must remain small because `TIMER1_COMPA_vect` has higher vector priority than USART0 RX, and the 500 kBaud UART can receive one byte every 20 us.
 
 ### 3.3 Timer2 — System Timebase (Overflow ISR)
 
@@ -75,7 +75,7 @@ The ATmega644 uses a vectored interrupt controller. The following vectors are ac
 
 | Vector | Source | ISR | Period / Trigger |
 |---|---|---|---|
-| `TIMER1_COMPA_vect` | Timer1 Compare Match A | Encoder/button sampling | ~60.8 us |
+| `TIMER1_COMPA_vect` | Timer1 Compare Match A | Encoder/button sampling | ~31.2 us |
 | `TIMER2_OVF_vect` | Timer2 Overflow | System tick + screensaver tick | ~13.1 ms |
 | `USART0_RX_vect` | UART RX Complete | Store byte in `uart_rxBuffer` FIFO | Per received byte at 500 kBaud |
 | `USART0_UDRE_vect` | UART TX Data Register Empty | Drain `uart_txBuffer` FIFO or disable interrupt | Per transmitted byte |
@@ -202,7 +202,7 @@ The following sequence is executed from `main()`, in order, before the main loop
 4. `uart_init()` — initialises FIFO buffers, configures USART0 at 500 kBaud, enables RX/TX/RX-interrupt.
 5. Display boot message ("Sonic Potions / LXR Drums V0.37").
 6. `adc_init()` — configures ADC, executes one dummy conversion.
-7. `encode_init()` — configures encoder pins (PC0–PC2) as inputs with pull-ups; initialises Timer1 CTC for the 16 kHz fixed-`AB=11` rest-phase encoder/button sampler.
+7. `encode_init()` — configures encoder pins (PC0–PC2) as inputs with pull-ups; initialises Timer1 CTC for the ~32.05 kHz fixed-`AB=11` rest-phase encoder/button sampler.
 8. `din_init()` — configures shift-register pins; executes initial parallel load.
 9. `dout_init()` — configures LED output shift-register pins; clears output data array.
 10. `led_init()` — initialises LED state machine.

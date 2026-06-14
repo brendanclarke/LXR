@@ -9,7 +9,7 @@
 #include "Preset/EndpointRestore.h"
 #include "Preset/TempPlaybackSwitch.h"
 #include "MidiMessages.h"
-#include "uARTFrontSYX/Uart.h"
+#include "uARTFrontSYX/frontPanelSendingProtocol.h"
 #include "Sequencer/sequencer.h"
 
 #define PRESET_ENDPOINT_RESTORE_NONE 0
@@ -44,69 +44,6 @@ static uint16_t preset_endpointRestoreParamCursor = 0;
 static uint8_t preset_endpointRestoreVoiceCursor = 0;
 static uint8_t preset_endpointRestoreVoiceParamCursor = 0;
 static uint16_t preset_endpointRestoreWaitCounter = 0;
-
-/* Writes a single endpoint byte to the AVR front panel, using the restore
-   packet family that matches the raw parameter index. */
-static void preset_pushSingleParameterToFront(uint16_t param, uint8_t value)
-{
-   if(param >= END_OF_SOUND_PARAMETERS)
-      return;
-
-   if(param < 128)
-   {
-      uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_PARAM_CC);
-      uart_sendFrontpanelPriorityByteWait((uint8_t)param);
-   }
-   else
-   {
-      uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_PARAM_CC2);
-      uart_sendFrontpanelPriorityByteWait((uint8_t)(param - 128));
-   }
-
-   uart_sendFrontpanelPriorityByteWait(value);
-}
-
-/* Writes a single morph endpoint byte to the AVR front panel. Morph endpoint
-   pushes are separated from normal endpoint pushes so restore traffic can keep
-   the menu state coherent while leaving the morph image intact. */
-static void preset_pushSingleMorphParameterToFront(uint16_t param, uint8_t value)
-{
-   if(param >= END_OF_SOUND_PARAMETERS)
-      return;
-
-   if(param < 128)
-   {
-      uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_MORPH_CC);
-      uart_sendFrontpanelPriorityByteWait((uint8_t)param);
-   }
-   else
-   {
-      uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_MORPH_CC2);
-      uart_sendFrontpanelPriorityByteWait((uint8_t)(param - 128));
-   }
-
-   uart_sendFrontpanelPriorityByteWait(value);
-}
-
-/* Reports the global morph amount to the AVR so the display can reflect the
-   current kit image when the temp/normal boundary changes. */
-static void preset_pushGlobalMorphToFront(const PresetKitState *kit)
-{
-   uint8_t amount;
-
-   if(!kit)
-      return;
-
-   amount = kit->globalMorphAmount;
-
-   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_CC);
-   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_REPORT_GLOBAL_MORPH_LSB);
-   uart_sendFrontpanelPriorityByteWait((uint8_t)(amount & 0x7f));
-
-   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_CC);
-   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_REPORT_GLOBAL_MORPH_MSB);
-   uart_sendFrontpanelPriorityByteWait((uint8_t)((amount >> 7) & 0x01));
-}
 
 /* Enqueues a restore request. When a request for the same kit/mode is already
    at the tail of the queue, the voice masks are merged so repeated callers do
@@ -230,13 +167,13 @@ static uint8_t preset_endpointRestoreSendNextFull(uint8_t morphEndpoint)
    const uint8_t *values = morphEndpoint ? kit->morphEndpointParams
                                          : kit->kitEndpointParams;
 
-   param = preset_endpointRestoreParamCursor;
-   if(param < END_OF_SOUND_PARAMETERS)
-   {
-      if(morphEndpoint)
-         preset_pushSingleMorphParameterToFront(param, values[param]);
-      else
-         preset_pushSingleParameterToFront(param, values[param]);
+      param = preset_endpointRestoreParamCursor;
+      if(param < END_OF_SOUND_PARAMETERS)
+      {
+         if(morphEndpoint)
+            frontPanelSending_sendRestoreMorphParam(param, values[param]);
+         else
+            frontPanelSending_sendRestoreParam(param, values[param]);
 
       preset_endpointRestoreParamCursor = (uint16_t)(param + 1);
       return 1;
@@ -273,9 +210,9 @@ static uint8_t preset_endpointRestoreSendNextMasked(uint8_t morphEndpoint)
          if(param < END_OF_SOUND_PARAMETERS)
          {
             if(morphEndpoint)
-               preset_pushSingleMorphParameterToFront(param, values[param]);
+               frontPanelSending_sendRestoreMorphParam(param, values[param]);
             else
-               preset_pushSingleParameterToFront(param, values[param]);
+               frontPanelSending_sendRestoreParam(param, values[param]);
 
             return 1;
          }
@@ -315,9 +252,7 @@ void preset_serviceEndpointRestore(void)
 
          preset_tmpKitHandshakeReady = 0;
          preset_tmpKitHandshakeAck = 0;
-         uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_BEGIN);
-         uart_sendFrontpanelPriorityByteWait(0);
-         uart_sendFrontpanelPriorityByteWait(0);
+         frontPanelSending_sendRestoreBegin();
          preset_endpointRestoreWaitCounter = 0;
          preset_endpointRestorePhase = PRESET_ENDPOINT_RESTORE_PHASE_WAIT_READY;
          return;
@@ -333,9 +268,7 @@ void preset_serviceEndpointRestore(void)
          }
          else if(preset_endpointRestoreWaitTimedOut())
          {
-            uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
-            uart_sendFrontpanelPriorityByteWait(0);
-            uart_sendFrontpanelPriorityByteWait(0);
+            frontPanelSending_sendRestoreDone();
             preset_endpointRestoreClearCurrent();
          }
          return;
@@ -356,10 +289,8 @@ void preset_serviceEndpointRestore(void)
 
          preset_tmpKitHandshakeAck = 0;
          if(preset_endpointRestoreCurrent.reportGlobalMorph)
-            preset_pushGlobalMorphToFront(preset_endpointRestoreCurrent.kit);
-         uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
-         uart_sendFrontpanelPriorityByteWait(0);
-         uart_sendFrontpanelPriorityByteWait(0);
+            frontPanelSending_sendGlobalMorphReport(preset_endpointRestoreCurrent.kit->globalMorphAmount);
+         frontPanelSending_sendRestoreDone();
          preset_endpointRestoreWaitCounter = 0;
          preset_endpointRestorePhase = PRESET_ENDPOINT_RESTORE_PHASE_WAIT_ACK;
          return;

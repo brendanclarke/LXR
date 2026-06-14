@@ -37,9 +37,15 @@ make firmware
 
 **Current status after Session 017 closeout (2026-06-14)**: Phase 10/11 Preset cleanup is complete and the remaining Phase 12 review is retrospective only. `KitState`, `EndpointRestore`, `MorphEngine`, `ParameterIngress`, `TempPlaybackSwitch`, `sequencer.c`, and the parser/MIDI call sites were switched to the canonical `Preset*` / `preset_*` names, the last Preset-owned `seq_` aliases were removed, and the UART send-side work is now clearly tracked as protocol refactor work rather than more Preset ownership cleanup. The STM32 build was re-run successfully after the rename sweep, and the user re-tested the firmware and reported nothing obviously broken.
 
-**Current consolidation / protocol planning artifacts**: the durable notes from the Preset cleanup work now live in `knowledge_files/log_archive/017_SESSION_HANDOFF_LOG.md`, `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`, `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`, and `MIDI_UART_SPLIT_AUDIT.md`. `PRESET_CONSOLIDATION_AUDIT.md` was only a temporary scratch plan for the Phase 10/11/12 cleanup and should not be treated as the canonical long-term reference after this handoff.
+**Current status after Session 018 closeout (2026-06-14)**: The front-panel send helpers are now consolidated behind `uARTFrontSYX/frontPanelSendingProtocol`, the MIDI parser is split into `ChannelMidiParser` and `GlobalMidiParser`, and the transitional front-panel load/session bridge now lives in `Preset/PresetLoadCache` instead of `frontPanelParser.c`. The STM32 build was re-run successfully after the split work, and the user re-tested the key front-panel and MIDI paths: menu parameter change, file load, copy-to-temp, temp switch, MIDI clock sync, global CC1, voice CC1, and voice note trigger.
+
+**Current status after Session 019 closeout (2026-06-14)**: The AVR front-panel main encoder was retuned after slow counter-clockwise missed decrements returned. The current hardware-approved implementation still uses only Timer1 compare A and raw `encode_stableRead4()` detents, but now samples at roughly 32.05 kHz with six stable phase samples, fixed `AB=11` rest anchoring, narrow rest-jump recovery for filtered `11 -> 00 -> adjacent -> 11` contact sequences, and 192-sample button debounce. Edit-mode parameter acceleration is config-driven from complete emitted detents only, with `ENC_ACCEL_MIN_REV_PER_SEC = 1`, `ENC_ACCEL_MAX_REV_PER_SEC = 2`, and final hardware-tested `ENC_ACCEL_MAX_MULT = 4`. Acceleration is applied only to menu edit-mode value changes; navigation/load/save/copy-clear selection remain unaccelerated. `make -C front/LxrAvr avr -j4` and `make firmware` are green with the usual AVR warnings, and the user reported the final encoder behavior is good.
+
+**Current consolidation / protocol planning artifacts**: the durable notes from the Preset and comms split work now live in `knowledge_files/log_archive/018_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/017_SESSION_HANDOFF_LOG.md`, `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`, and `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`. Current encoder details live in `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` and supersede the temporary `ENCODER_AUDIT.md`. `PRESET_CONSOLIDATION_AUDIT.md` was only a temporary scratch plan for the Phase 10/11/12 cleanup and should not be treated as the canonical long-term reference after this handoff.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md`
+- `knowledge_files/log_archive/018_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/017_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/016_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/015_SESSION_HANDOFF_LOG.md`
@@ -53,12 +59,11 @@ Canonical current WIP docs:
 - `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/000_SESSION_INDEX.md`
-- `MIDI_UART_SPLIT_AUDIT.md`
 - `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`
 - `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`
 
 Session 005 closeout / remaining follow-up:
-- Encoder follow-up was completed in Session 016. The hardware-approved implementation is the Timer1 16 kHz fixed-`AB=11` rest-phase FSM with `encode_stableRead4()` as the only rotation read path. Keep it unchanged unless new hardware testing reveals a regression.
+- Encoder follow-up was most recently completed in Session 019. The hardware-approved implementation is the Timer1 ~32.05 kHz fixed-`AB=11` rest-phase FSM with six stable phase samples, narrow rest-jump recovery, 192-sample button debounce, raw `encode_stableRead4()` rotation reads, and edit-mode-only acceleration. Keep it unchanged unless new hardware testing reveals a regression.
 - Automate the temp-pattern switch/background-load process if it remains desired.
 - Add global parameter switches for background loading if that work is revived.
 - Keep the temporary SEQ16 pattern keyhole in place until after the future preset/morph refactor.
@@ -311,16 +316,20 @@ Sample flash map:
 
 ## Encoder
 
-- Session 016 supersedes older encoder notes. See `knowledge_files/log_archive/016_SESSION_HANDOFF_LOG.md`.
+- Session 019 supersedes older encoder timing/tuning notes. See `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md`.
 - Final AVR main encoder implementation:
   - Wiring is immutable: phase A = PC0, phase B = PC1, button = PC2.
-  - Timer1 CTC samples at 16 kHz from `TIMER1_COMPA_vect`.
-  - Phase filtering requires two stable samples per phase.
-  - Button debounce uses a 48-sample integrator in the same Timer1 ISR.
+  - Timer1 CTC samples at roughly 32.05 kHz from `TIMER1_COMPA_vect` using prescaler 8 and `OCR1A = 77` at 20 MHz.
+  - Phase filtering requires six stable samples per phase.
+  - Button debounce uses a 192-sample integrator in the same Timer1 ISR.
   - Physical detent rest is fixed as `AB=11` (`ENCODER_REST_STATE = 0x03`).
-  - The rest-phase FSM emits one detent only after a legal full sequence leaves rest and returns to rest.
-  - `encode_stableRead4()` is the only supported rotation read and drains complete detents atomically.
+  - The rest-phase FSM emits one detent only after a same-direction sequence leaves rest and returns to rest.
+  - A narrow rest-jump recovery rescues filtered `11 -> 00 -> adjacent -> 11` contact sequences while all other illegal transitions still reset.
+  - `encode_stableRead4()` is the raw supported rotation read and drains complete detents atomically.
   - `encode_readButton()` is the only button read.
+  - `encode_getAccelerationMultiplier()` exposes a complete-detent speed multiplier for menu edit acceleration.
+  - Acceleration config lives in `front/LxrAvr/config.h`: min 1 rev/s, max 2 rev/s, max multiplier 4.
+  - Acceleration is applied only in menu edit-mode parameter changes, not navigation/load/save/copy-clear selection.
 - Do not reintroduce `encode_stableRead1()`, `encode_read1()`, `encode_read4()`, `encode_stableRead2()`, `ENC_USE_STABLE_DRIVER`, PCINT decoding, Timer0 encoder sampling, or temporary LCD/debug hooks.
 
 ---
@@ -499,6 +508,7 @@ You, the agent, and each delegate assigned to a task must read, understand, and 
 - By default, unless a refactor is explicitly specified, preserve ownership boundaries. Interface changes are allowed but discouraged unless clearly necessary.
 - If refactor is explicitly specified by user, operate in refactor mode for that session. In refactor mode, ownership boundaries and interfaces may change, but the functional expression of the code must not change.
 - If the request is ambiguous or would move outside these bounds, stop and ask for explicit permission before proceeding.
+- All exported functions and variables should be accompanied by a commented-out note adjacent the code describing its function. All frequently-accessed variables in code files that are not function-local should have similar comments describing function.
 
 ### 4. Coding Workflow Practice
 

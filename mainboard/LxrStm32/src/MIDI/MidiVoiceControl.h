@@ -55,11 +55,16 @@
 //-------------- ENUMS ------------------------------
 
 //--------------- VARS ------------------------------
+/* Live voice activity state owned by the voice-control module and consumed by
+   the parser / LED feedback paths. */
 extern uint8_t voiceStatus[NUM_VOICES];
 //---------------------------------------------------
 //------------- Functions ---------------------------
+/* Trigger a voice and update the live voice bookkeeping. */
 void voiceControl_noteOn(uint8_t voice, uint8_t note, uint8_t vel);
+/* Release a voice, or all voices when passed 0xff. */
 void voiceControl_noteOff(uint8_t voice);//0xff == all voices
+/* Query whether a voice is currently marked active. */
 uint8_t voiceControl_isVoicePlaying(uint8_t voice);
 
 #endif /* MIDIVOICECONTROL_H_ */

@@ -42,38 +42,33 @@
 #include "MidiMessages.h"
 #include "MidiVoiceControl.h"
 
+/* Stream parser entry point. This remains the top-level MIDI byte coordinator
+   while channel/global ownership lives in the split helper modules. */
 void midiParser_parseUartData(unsigned char data);
+
+/* Shared CC entry point used by the higher-level parser and the ownership
+   split helpers. */
 void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue);
 void midiParser_parseMidiMessage(MidiMsg msg);
 void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue);
 float midiParser_calcDetune(uint8_t value);
-// check mtc status, might stop the sequencer
+/* Watchdog for the MIDI timecode start/stop path. */
 void midiParser_checkMtc();
 
 #if 0
 void midiDebugSend(uint8_t b1, uint8_t b2);
 #endif
 
-// 0 - Off - nothing to nothing
-// 1 - U2M - usb in to midi out
-// 2 - M2M - midi in to midi out
-// 3 - A2M - usb in and midi in to midi out
-// 4 - M2U - midi in to usb out
-// 5 - M2A - midi in to usb out and midi out
-
+/* Routing selection for the MIDI I/O bridge. */
 void midiParser_setRouting(uint8_t value);
 
-// it's either tx or rx. value is a bitmap value from 0 to 15 where (lsb first):
-// bit 1 - Note on/off
-// bit 2 - Realtime on/off
-// bit 3 - CC on/off (right now only applies to Rx)
-// bit 4 - Prog chg on/off
+/* Per-direction MIDI filter bits. */
 void midiParser_setFilter(uint8_t is_tx, uint8_t value);
 
-// a place to store all the incoming CC values
-//needed to know to which value the automation node should return
+/* Last seen CC values used by automation and live-apply feedback. */
 extern uint8_t midiParser_originalCcValues[0xff];
 
+/* MIDI parser caches shared with the receive and voice-control code. */
 extern MidiMsg midi_midiCache[256];
 extern MidiMsg midi_midiKit[256];
 extern uint8_t midi_midiCacheAvailable[256];
@@ -85,11 +80,11 @@ extern uint8_t midi_kitVeloCache[6];
 extern uint8_t midi_midiVeloCacheAvailable[6];
 
 extern uint8_t midi_envPosition[6];
-
 extern uint8_t midi_unused;
 
 void midi_clearCache();
 
+/* Voice MIDI channel table. Element 7 is the global channel. */
 extern uint8_t midi_MidiChannels[8]; // last element is global channel
 extern uint8_t midi_NoteOverride[7];
 extern uint8_t midi_KitChange[6];
@@ -101,7 +96,8 @@ extern uint8_t midi_KitChange[6];
 //	MIDI_MODE_NOTE,
 //} MidiModes;
 
-// high nibble is TX low nibble is RX. see above (midiParser_setFilter) for bitmap
+/* High nibble is TX, low nibble is RX. See midiParser_setFilter() for the
+   bit layout. */
 extern uint8_t midiParser_txRxFilter;
 
 #endif /* MIDIPARSER_H_ */

@@ -42,6 +42,7 @@
 #include "random.h"
 #include "uARTFrontSYX/FrontPanelProtocol.h"
 #include "uARTFrontSYX/Uart.h"
+#include "uARTFrontSYX/frontPanelSendingProtocol.h"
 #include "MidiMessages.h"
 #include "MidiVoiceControl.h"
 #include "CymbalVoice.h"
@@ -296,83 +297,6 @@ static void seq_updateVoiceSourcesForPatternChange(const uint8_t *oldPatternForT
       preset_pushEndpointUpdateForVoiceSourceChange(changedVoiceMask);
 }
 
-/* RESTORE PUSH-UP PROCESS (STM32 Side)
-   This mechanism synchronizes the STM32's canonical parameter image (current or temporary)
-   back to the AVR front-panel menu.
-
-   Handshake Logic:
-   1. STM sends PARAM_RESTORE_BEGIN.
-   2. STM blocks and calls uart_processFront() while waiting for AVR to send PARAM_RESTORE_READY.
-      - Blocking is necessary to ensure the dump happens atomically relative to UI state.
-      - uart_processFront() must be called because the main loop is blocked, and the 
-        READY response byte arriving in the FIFO is only parsed by the frontPanelParser 
-        when that function is executed.
-   3. Once READY is received (indicating AVR has suppressed outbound traffic to prevent feedback),
-      STM sends kit/front endpoint bytes with PRF_RESTORE_PARAM_CC/CC2.
-   4. STM sends morph parameter endpoint bytes with PRF_RESTORE_MORPH_CC/CC2.
-   5. STM sends PARAM_RESTORE_DONE.
-   6. STM blocks and calls uart_processFront() while waiting for AVR to send PARAM_RESTORE_ACK.
-   7. Normal operation resumes.
-*/
-
-static void seq_pushSingleParameterToFront(uint16_t param, uint8_t value)
-{
-   if(param >= END_OF_SOUND_PARAMETERS)
-      return;
-
-   if(param < 128)
-   {
-      uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_PARAM_CC);
-      uart_sendFrontpanelPriorityByteWait((uint8_t)param);
-   }
-   else
-   {
-      uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_PARAM_CC2);
-      uart_sendFrontpanelPriorityByteWait((uint8_t)(param - 128));
-   }
-
-   uart_sendFrontpanelPriorityByteWait(value);
-}
-
-//------------------------------------------------------------------------------
-static void seq_pushSingleMorphParameterToFront(uint16_t param, uint8_t value)
-{
-   if(param >= END_OF_SOUND_PARAMETERS)
-      return;
-
-   if(param < 128)
-   {
-      uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_MORPH_CC);
-      uart_sendFrontpanelPriorityByteWait((uint8_t)param);
-   }
-   else
-   {
-      uart_sendFrontpanelPriorityByteWait(PRF_RESTORE_MORPH_CC2);
-      uart_sendFrontpanelPriorityByteWait((uint8_t)(param - 128));
-   }
-
-   uart_sendFrontpanelPriorityByteWait(value);
-}
-
-//------------------------------------------------------------------------------
-static void seq_pushGlobalMorphToFront(const PresetKitState *kit)
-{
-   uint8_t amount;
-
-   if(!kit)
-      return;
-
-   amount = kit->globalMorphAmount;
-
-   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_CC);
-   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_REPORT_GLOBAL_MORPH_LSB);
-   uart_sendFrontpanelPriorityByteWait((uint8_t)(amount & 0x7f));
-
-   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_CC);
-   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_REPORT_GLOBAL_MORPH_MSB);
-   uart_sendFrontpanelPriorityByteWait((uint8_t)((amount >> 7) & 0x01));
-}
-
 //------------------------------------------------------------------------------
 static void seq_pushKitEndpointsToFront(const PresetKitState *kit)
 {
@@ -508,9 +432,9 @@ static uint8_t seq_endpointRestoreSendNextFull(uint8_t morphEndpoint)
    if(param < END_OF_SOUND_PARAMETERS)
    {
       if(morphEndpoint)
-         seq_pushSingleMorphParameterToFront(param, values[param]);
+         frontPanelSending_sendRestoreMorphParam(param, values[param]);
       else
-         seq_pushSingleParameterToFront(param, values[param]);
+         frontPanelSending_sendRestoreParam(param, values[param]);
 
       seq_endpointRestoreParamCursor = (uint16_t)(param + 1);
       return 1;
@@ -548,9 +472,9 @@ static uint8_t seq_endpointRestoreSendNextMasked(uint8_t morphEndpoint)
          if(param < END_OF_SOUND_PARAMETERS)
          {
             if(morphEndpoint)
-               seq_pushSingleMorphParameterToFront(param, values[param]);
+               frontPanelSending_sendRestoreMorphParam(param, values[param]);
             else
-               seq_pushSingleParameterToFront(param, values[param]);
+               frontPanelSending_sendRestoreParam(param, values[param]);
 
             return 1;
          }
@@ -593,9 +517,7 @@ void seq_serviceEndpointRestore()
 
          preset_tmpKitHandshakeReady = 0;
          preset_tmpKitHandshakeAck = 0;
-         uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_BEGIN);
-         uart_sendFrontpanelPriorityByteWait(0);
-         uart_sendFrontpanelPriorityByteWait(0);
+         frontPanelSending_sendRestoreBegin();
          seq_endpointRestoreWaitCounter = 0;
          seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_WAIT_READY;
          return;
@@ -613,9 +535,7 @@ void seq_serviceEndpointRestore()
          {
             /* RESTORE: If READY is lost, release AVR restoreActive with DONE so
                front-panel traffic cannot remain suppressed indefinitely. */
-            uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
-            uart_sendFrontpanelPriorityByteWait(0);
-            uart_sendFrontpanelPriorityByteWait(0);
+            frontPanelSending_sendRestoreDone();
             seq_endpointRestoreClearCurrent();
          }
          return;
@@ -636,10 +556,8 @@ void seq_serviceEndpointRestore()
 
          preset_tmpKitHandshakeAck = 0;
          if(seq_endpointRestoreCurrent.reportGlobalMorph)
-            seq_pushGlobalMorphToFront(seq_endpointRestoreCurrent.kit);
-         uart_sendFrontpanelPriorityByteWait(PARAM_RESTORE_DONE);
-         uart_sendFrontpanelPriorityByteWait(0);
-         uart_sendFrontpanelPriorityByteWait(0);
+            frontPanelSending_sendGlobalMorphReport(seq_endpointRestoreCurrent.kit->globalMorphAmount);
+         frontPanelSending_sendRestoreDone();
          seq_endpointRestoreWaitCounter = 0;
          seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_WAIT_ACK;
          return;
@@ -1292,9 +1210,7 @@ static void seq_nextStep()
       	// --AS all notes off here since we are switching patterns
          voiceControl_noteOff(0xFF);
          
-         uart_sendFrontpanelByte(FRONT_SEQ_CC);
-         uart_sendFrontpanelByte(FRONT_SEQ_CHANGE_PAT);
-         uart_sendFrontpanelByte(seq_activePattern);
+         frontPanelSending_sendPatternChange(seq_activePattern);
          
          preset_tempPlaybackSwitchState.loadPendingFlag = 0;
          if(!tmpBoundaryPatternChanged)
@@ -1308,17 +1224,13 @@ static void seq_nextStep()
    	//&32 <=> %32
    	//a quarter beat occured (multiple of 32 steps in the 128 step pattern)
    	//turn on the start/stop led (beat indicator)
-      uart_sendFrontpanelByte(FRONT_STEP_LED_STATUS_BYTE);
-      uart_sendFrontpanelByte(FRONT_LED_PULSE_BEAT);
-      uart_sendFrontpanelByte(1);
+      frontPanelSending_sendBeatLed(1);
    }
    else if ((masterStepPos&31) == 1)
    {
    	//TODO datenmenge zur front reduzieren
    	//turn it of again on the next step
-      uart_sendFrontpanelByte(FRONT_STEP_LED_STATUS_BYTE);
-      uart_sendFrontpanelByte(FRONT_LED_PULSE_BEAT);
-      uart_sendFrontpanelByte(0);
+      frontPanelSending_sendBeatLed(0);
    }
 
    //---------- now check if this is a quantize step ---------------------------------------------------------
@@ -1474,9 +1386,7 @@ static void seq_nextStep()
 
 	//send message to frontpanel
 	//to display the current step
-   uart_sendFrontpanelByte(FRONT_STEP_LED_STATUS_BYTE);
-   uart_sendFrontpanelByte(FRONT_CURRENT_STEP_NUMBER_CC);
-   uart_sendFrontpanelByte(stepAcPtr[frontParser_activeTrack]);
+   frontPanelSending_sendCurrentStepLed(stepAcPtr[frontParser_activeTrack]);
 
 	// --AS check mtc, which might stop the sequencer if we haven't seen one in a while
    midiParser_checkMtc();
@@ -1712,9 +1622,7 @@ void seq_setRunning(uint8_t isRunning)
       for(i=0;i<NUM_TRACKS;i++) {
          seq_getLengthRotatePtr(seq_perTrackActivePattern[i], i)->rotate=0;
       	// let the front know this is happening
-         uart_sendFrontpanelByte(FRONT_SEQ_CC);
-         uart_sendFrontpanelByte(FRONT_SEQ_TRACK_ROTATION);
-         uart_sendFrontpanelByte(seq_getTrackRotation(i));
+         frontPanelSending_sendTrackRotationReply(i);
       }
    
    	//reset song position bar counter
@@ -1741,12 +1649,10 @@ void seq_setRunning(uint8_t isRunning)
       trigger_reset(1);
    }
 
-	// set start points back to default (happens on start and stop. needs to happen on start
+   // set start points back to default (happens on start and stop. needs to happen on start
 	// in case the user has entered a rotate value while stopped)
    seq_setStepIndexToStart();
-   uart_sendFrontpanelByte(FRONT_SEQ_CC);
-   uart_sendFrontpanelByte(FRONT_SEQ_RUN_STOP);
-   uart_sendFrontpanelByte(isRunning);
+   frontPanelSending_sendRunStop(isRunning);
 }
 void seq_setMute(uint8_t trackNr, uint8_t isMuted)
 {
@@ -1801,20 +1707,7 @@ uint8_t seq_isTrackMuted(uint8_t trackNr)
 // to the length of the track
 void seq_sendMainStepInfoToFront(uint16_t stepNr)
 {
-	//the absolute number of patterns
-   const uint8_t currentPattern	= stepNr / 7;
-   const uint8_t currentTrack  	= stepNr - currentPattern*7;
-
-   uint16_t dataToSend = seq_patternSet.seq_mainSteps[currentPattern][currentTrack];
-
-   uart_sendFrontpanelSysExByte(  dataToSend	  & 0x7f); //1st 7 bit
-   uart_sendFrontpanelSysExByte( (dataToSend>>7) & 0x7f); //2nd 7 bit
-   uart_sendFrontpanelSysExByte( (dataToSend>>14)& 0x7f); //last 2 bit
-
-	// send the track length
-   uart_sendFrontpanelSysExByte(seq_patternSet.seq_patternLengthRotate[currentPattern][currentTrack].length);
-   uart_sendFrontpanelSysExByte(seq_patternSet.seq_patternLengthRotate[currentPattern][currentTrack].scale);
-
+   frontPanelSending_sendMainStepInfo(stepNr);
 }
 //--------------------------------------------------------------------
 /** this one is more complicated than the 14 bit upper/lower nibble when transmitting the requested step number via SysEx.
@@ -1836,40 +1729,7 @@ void seq_sendMainStepInfoToFront(uint16_t stepNr)
  */
 void seq_sendStepInfoToFront(uint16_t stepNr)
 {
-
-	//decode the step number
-	//the step number is between 0 and NUMBER_STEPS*NUM_TRACKS*NUM_PATTERN = 128*7*8 = 7168 steps
-	// stepNr / 128 = absolute number of patterns (each track has 8 patterns * 7 tracks)
-	// numPatterns / 8 = the current track
-
-	//the absolute number of patterns
-   const uint8_t absPat 			= stepNr/128;
-   const uint8_t currentTrack 		= absPat / 8;
-   const uint8_t currentPattern 	= absPat - currentTrack*8;
-   const uint8_t currentStep		= stepNr - absPat*128;
-
-	//encode the data and send it back
-   Step *dataToSend = &seq_patternSet.seq_subStepPattern[currentPattern][currentTrack][currentStep];
-
-   uart_sendFrontpanelSysExByte(dataToSend->volume	& 0x7f);
-   uart_sendFrontpanelSysExByte(dataToSend->prob	& 0x7f);
-   uart_sendFrontpanelSysExByte(dataToSend->note	& 0x7f);
-
-   uart_sendFrontpanelSysExByte(dataToSend->param1Nr	& 0x7f);
-   uart_sendFrontpanelSysExByte(dataToSend->param1Val	& 0x7f);
-
-   uart_sendFrontpanelSysExByte(dataToSend->param2Nr	& 0x7f);
-   uart_sendFrontpanelSysExByte(dataToSend->param2Val	& 0x7f);
-
-	//now the MSBs from all 7 values
-   uart_sendFrontpanelSysExByte( 	(((dataToSend->volume 	& 0x80)>>7) |
-      							((dataToSend->prob	 	& 0x80)>>6) |
-      							((dataToSend->note	 	& 0x80)>>5) |
-      							((dataToSend->param1Nr	& 0x80)>>4) |
-      							((dataToSend->param1Val	& 0x80)>>3) |
-      							((dataToSend->param2Nr	& 0x80)>>2) |
-      							((dataToSend->param2Val	& 0x80)>>1))&0x7f
-      							);
+   frontPanelSending_sendStepInfo(stepNr);
 }
 //-------------------------------------------------------------------------------
 uint8_t seq_rollTrig(uint8_t voice) // called by all roll modes to trigger a voice
@@ -2290,13 +2150,13 @@ void seq_addNote(uint8_t trackNr,uint8_t vel, uint8_t note)
       if( (frontParser_shownPattern == targetPattern) && ( frontParser_activeTrack == trackNr) )
       {
       	//update front sub step LED
-         uart_sendFrontpanelByte(FRONT_STEP_LED_STATUS_BYTE);
-         uart_sendFrontpanelByte(FRONT_LED_SEQ_SUB_STEP);
-         uart_sendFrontpanelByte(quantizedStep);
+         frontPanelSending_sendTriplet(FRONT_STEP_LED_STATUS_BYTE,
+                                       FRONT_LED_SEQ_SUB_STEP,
+                                       quantizedStep);
       	//update front main step LED
-         uart_sendFrontpanelByte(FRONT_STEP_LED_STATUS_BYTE);
-         uart_sendFrontpanelByte(FRONT_LED_SEQ_BUTTON);
-         uart_sendFrontpanelByte(quantizedStep);
+         frontPanelSending_sendTriplet(FRONT_STEP_LED_STATUS_BYTE,
+                                       FRONT_LED_SEQ_BUTTON,
+                                       quantizedStep);
       }
    }
 }
@@ -2556,9 +2416,7 @@ void seq_realign()
    }
    
    // make sure the front panel knows that roation has been reset
-   uart_sendFrontpanelByte(FRONT_SEQ_CC);
-   uart_sendFrontpanelByte(FRONT_SEQ_TRACK_ROTATION);
-   uart_sendFrontpanelByte(0);
+   frontPanelSending_sendTrackRotationValue(0);
    
    seq_midiNoteOff(0xff);
 }
