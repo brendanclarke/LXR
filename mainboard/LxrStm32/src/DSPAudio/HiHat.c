@@ -129,6 +129,24 @@ void HiHat_trigger( uint8_t vel, uint8_t isOpen, const uint8_t note)
 	SnapEg_trigger(&hatVoice.snapEg);
 }
 //---------------------------------------------------
+void hihat_setEnvelope(const uint8_t envPos)
+{
+   if(envPos==0)
+   {
+      //DecayEg_trigger(&hatVoice.oscPitchEg);
+	   slopeEg2_trigger(&hatVoice.oscVolEg);
+   }
+	else if(envPos==1)
+   {
+      //DecayEg_trigger(&hatVoice.oscPitchEg);
+      slopeEg2_setEnvPos(&hatVoice.oscVolEg, envPos+1);
+   }
+   else
+   {
+      slopeEg2_setEnvPos(&hatVoice.oscVolEg, envPos);
+   }
+}
+//---------------------------------------------------
 void HiHat_calcAsync( )
 {
 	//calc the osc  vol eg

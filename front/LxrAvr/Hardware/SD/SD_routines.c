@@ -22,6 +22,9 @@
 #include "../../encoder.h"
 #include "../../Preset/PresetManager.h"
 
+volatile unsigned long startBlock, totalBlocks;
+volatile unsigned char SDHC_flag, cardType;
+
 //******************************************************************
 //Function	: to initialize the SD/SDHC card in SPI mode
 //Arguments	: none

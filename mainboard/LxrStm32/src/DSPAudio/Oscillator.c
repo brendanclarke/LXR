@@ -59,7 +59,7 @@ __inline uint8_t freqToTableIndex(const float f)
 	return freqToMidiNote(f)/12;
 }
 //-----------------------------------------------------------
-__inline uint32_t freq2PhaseIncr(const float f) //4096
+uint32_t freq2PhaseIncr(const float f) //4096
 {
 	return (((TABLESIZE*f)/REAL_FS))*1048576 ; // 1048576 <-> (<<20)
 }

@@ -52,9 +52,10 @@ void led_clearSequencerLeds9_16();
 void led_clearSequencerLeds1_8();
 
 void led_clearSelectLeds();
+void led_clearSelectBlinkLeds();
 void led_clearVoiceLeds();
 
-void led_setMode2(uint8_t status);
+void led_clearModeLeds();
 
 
 
@@ -98,7 +99,7 @@ enum LedNumbers
 	LED_VOICE7,
 	LED_COPY,
 	
-	LED_PART_SELECT1 ,
+	LED_PART_SELECT1,
 	LED_PART_SELECT2,
 	LED_PART_SELECT3,
 	LED_PART_SELECT4,
@@ -107,7 +108,7 @@ enum LedNumbers
 	LED_PART_SELECT7,
 	LED_PART_SELECT8,
 		
-	LED_STEP1 ,
+	LED_STEP1,
 	LED_STEP2,
 	LED_STEP3,
 	LED_STEP4,

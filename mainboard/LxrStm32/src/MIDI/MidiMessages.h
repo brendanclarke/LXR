@@ -45,19 +45,19 @@ enum MidiSource {
 };
 
 struct MidiBits {
-	enum MidiSource source:1; // 0 for midi, 1 for usb
-	unsigned sysxbyte:1; // 1 if this message is a sysex payload only
-	unsigned length:2; // how many data bytes have been filled
-	unsigned :4;
+   enum MidiSource source:1; // 0 for midi, 1 for usb
+   unsigned sysxbyte:1; // 1 if this message is a sysex payload only
+   unsigned length:2; // how many data bytes have been filled
+   unsigned :4;
 };
 
 //-----------------------------------------------------------
 /** a struct defining a standard midi message*/
 typedef struct MidiStruct {
-	uint8_t status;
-	uint8_t data1;
-	uint8_t data2;
-	struct MidiBits bits;
+   uint8_t status;
+   uint8_t data1;
+   uint8_t data2;
+   struct MidiBits bits;
 } MidiMsg;
 
 
@@ -72,7 +72,7 @@ typedef struct MidiStruct {
 #define MIDI_PITCH_WHEEL	0xE0	// 2 data bytes
 #define MIDI_AT				0xA0	// 2 data bytes
 #define CHANNEL_PRESSURE	0xD0	// 2 data bytes
-
+#define PATCH_RESET		0xFE // reset patch to last loaded - no data bytes to follow.
 
 //-----------------------------------------------------------
 // CCs (2nd byte controller number)
@@ -86,6 +86,7 @@ typedef struct MidiStruct {
 #define MIDI_CLOCK			0xF8
 #define SYSEX_START			0xF0
 #define SYSEX_END			0xF7
+#define FRONT_CALLBACK_ACK	0xFD
 #define MIDI_START			0xFA
 #define MIDI_STOP			0xFC
 #define MIDI_CONTINUE		0xFB
@@ -96,7 +97,141 @@ typedef struct MidiStruct {
 
 #define NO_AUTOMATION 0xff	//used as a dummy message number for the automation tracks.
 							// paramNr 0xff means no automation
-// Custom CCs
+// GENERAL MIDI SPECCED VOICE PARAMETERS
+enum
+{
+BANK = 0, /*0*/	// -bc- todo- import drum part
+MOD_WHEEL, // assignable? (morph for global)
+BREATH_CONTROLLER,
+UNDEF_4,
+FOOT_CONTROLLER,
+PORT_TIME,
+DATA,
+CHANNEL_VOL, 		// VOL* (1-6)
+BALANCE, 		/*8*/
+UNDEF_9, 		// OSC_WAVE_DRUM* (1-3) OSC_WAVE_SNARE, CYM_WAVE1, WAVE1_HH
+PAN, 			// PAN* (1-6)
+EXP_CONTROLLER,
+EFFECT_1, 		// VOICE_DECIMATION*(1-6), VOICE_DECIMATION_ALL
+EFFECT_2, 		// OSC*_DIST (1-3) SNARE_DISTORTION CYMBAL_DISTORTION HAT_DISTORTION
+UNDEF_14, 		// F_OSC*_COARSE (1-6)
+UNDEF_15, 		
+GEN_CONTROLLER_16, 	/*16*/	// FILTER_FREQ_DRUM* (1-3), SNARE_FILTER_F, CYM_FIL_FREQ, HAT_FILTER_F,
+GEN_CONTROLLER_17, 	// SNARE_RESO, CYM_RESO, HAT_RESO
+GEN_CONTROLLER_18, 	// CC2_FILTER_DRIVE_* (1-6)
+GEN_CONTROLLER_19, 	// CC2_FILTER_TYPE_* (1-6)
+UNDEF_20, 		// SNARE_MIX
+UNDEF_21, 		// SNARE_NOISE_F
+UNDEF_22, 		// CC2_MIX_MOD* (1-3)
+UNDEF_23, 		// CC2_VOLUME_MOD_ON_OFF* (1-6)
+UNDEF_24, 		/*24*/	// CC2_VELO_MOD_AMT_* (1-6)
+UNDEF_25, 		// CC2_VEL_DEST_* (1-6)
+UNDEF_26, 		// CC2_TRANS*_VOL (1-6)
+UNDEF_27,		// CC2_TRANS*_WAVE (1-6)
+UNDEF_28,		// CC2_TRANS*_FREQ (1-6)
+UNDEF_29,
+UNDEF_30,
+UNDEF_31,
+BANK_LSB, 		/*32*/
+MOD_WHEEL_LSB,
+BREATH_CONTROLLER_LSB,
+UNDEF_4_LSB,
+FOOT_CONTROLLER_LSB,
+PORT_TIME_LSB,
+DATA_MSB_LSB,
+CHANNEL_VOL_LSB,
+BALANCE_LSB, /*40*/
+UNDEF_9_LSB,
+PAN_LSB,
+EXP_CONTROLLER_LSB,
+EFFECT_1_LSB,
+EFFECT_2_LSB,
+UNDEF_14_LSB, // F_OSC*_FINE (1-6)
+UNDEF_15_LSB,
+GEN_CONTROLLER_16_LSB, /*48*/
+GEN_CONTROLLER_17_LSB,
+GEN_CONTROLLER_18_LSB,
+GEN_CONTROLLER_19_LSB,
+UNDEF_20_LSB,
+UNDEF_21_LSB,
+UNDEF_22_LSB,
+UNDEF_23_LSB,
+UNDEF_24_LSB, /*56*/
+UNDEF_25_LSB,
+UNDEF_26_LSB,
+UNDEF_27_LSB,
+UNDEF_28_LSB,
+UNDEF_29_LSB,
+UNDEF_30_LSB,
+UNDEF_31_LSB,
+SWITCH_SUSTAIN, /*64*/
+SWITCH_PORT,
+SWITCH_SOST,
+SWITCH_SOFT,
+SWITCH_LEGATO,
+HOLD_2,
+SOUND_VAR, // REPEAT1 (v.4), CYM_REPEAT (v.5)
+SOUND_TIMBRE,
+ENV_RELEASE, /*72*/	// VELOD6_OPEN (voice 6, track 7 only)
+ENV_ATTACK, // VELOA* (1-6)
+SOUND_BRIGHT, // VOL_SLOPE* (1-3), EG_SNARE1_SLOPE, CYM_SLOPE, VOL_SLOPE6
+ENV_DECAY, // VELOD* (1-6)
+SOUND_VIB_RATE, // FREQ_LFO* (1-6)
+SOUND_VIB_DEPTH, // AMOUNT_LFO* (1-6)
+SOUND_VIB_DELAY, // CC2_OFFSET_LFO* (1-6)
+SOUND_UNDEF, // CC2_WAVE_LFO* (1-6)
+GEN_CONTROLLER_80, /*80*/	// CC2_VOICE_LFO* (1-6)
+GEN_CONTROLLER_81, // CC2_TARGET_LFO* (1-6)
+GEN_CONTROLLER_82, // CC2_RETRIGGER_LFO* (1-6)
+GEN_CONTROLLER_83, // CC2_SYNC_LFO* (1-6)
+PORT_CONTROL, // PITCHD* (1-4 for DRUM and SNARE)
+UNDEF_85, // MODAMNT* (1-4 for DRUM and SNARE)
+UNDEF_86, // PITCH_SLOPE* (1-4 for DRUM and SNARE)
+UNDEF_87,
+VELOCITY_PREFIX, /*88*/
+UNDEF_89, // CC2_AUDIO_OUT* (1-6)
+UNDEF_90, // CC2_MIDI_NOTE* (1-6)
+EFFECT_1_DEPTH,
+EFFECT_2_DEPTH,
+EFFECT_3_DEPTH,
+EFFECT_4_DEPTH,
+EFFECT_5_DEPTH,
+DATA_INCR, /*96*/
+DATA_DECR,
+NRPN_LSB,
+NRPN_MSB,
+RPN_LSB,
+RPN_MSB,
+UNDEF_102, // MOD_WAVE_DRUM* (1-3 only)
+UNDEF_103, // FMDTN* (1-3 only)
+UNDEF_104, /*104*/	// FMAMNT* (1-3 only)
+UNDEF_105, // CYM_WAVE2, WAVE2_HH (voice 5,6)
+UNDEF_106, // CYM_MOD_OSC_GAIN1, MOD_OSC_GAIN1 (voice 5,6)
+UNDEF_107, // CYM_MOD_OSC_F1, MOD_OSC_F1 (voice 5,6)
+UNDEF_108, // CYM_WAVE3, WAVE3_HH (voice 5,6)
+UNDEF_109, // CYM_MOD_OSC_GAIN1, MOD_OSC_GAIN2 (voice 5,6)
+UNDEF_110, // CYM_MOD_OSC_F2, MOD_OSC_F2 (voice 5,6)
+UNDEF_111,
+UNDEF_112, /*112*/
+TRACK1_SOUND_OFF, // bc - track mutes, these should apply only to the global channel
+TRACK2_SOUND_OFF,
+TRACK3_SOUND_OFF,
+TRACK4_SOUND_OFF,
+TRACK5_SOUND_OFF,
+TRACK6_SOUND_OFF,
+TRACK7_SOUND_OFF,
+ALL_SOUND_OFF, /*120*/	//CC2_MUTE_* (1-6)
+RESET_ALL_CONTROLLERS,
+SWITCH_LOCAL_CONTROL,
+ALL_NOTES_OFF,
+OMNI_MODE_OFF,
+OMNI_MODE_ON,
+MONO_MODE_ON,
+POLY_MODE_ON, /*127*/
+	};
+
+
+// LXR PARAMETERS
 
 enum
 {
@@ -250,7 +385,7 @@ enum
 
 	RESERVED4,						/*128*/
 
-}ParamEnums;
+};
 
 //for all parameters above 127
 enum
@@ -367,17 +502,35 @@ enum
 	CC2_AUDIO_OUT6,
 
 	// --AS
-	CC2_MIDI_NOTE1,
-	CC2_MIDI_NOTE2,
-	CC2_MIDI_NOTE3,
-	CC2_MIDI_NOTE4,
-	CC2_MIDI_NOTE5,
-	CC2_MIDI_NOTE6,
-	CC2_MIDI_NOTE7, // s/b 111 i think
+	CC2_ENVELOPE_POSITION_1,
+	CC2_ENVELOPE_POSITION_2,
+	CC2_ENVELOPE_POSITION_3,
+	CC2_ENVELOPE_POSITION_4,
+	CC2_ENVELOPE_POSITION_5,
+	CC2_ENVELOPE_POSITION_6,
+	CC2_UNUSED01, // s/b 111 i think
 	
 	//<<insert new parameters here>>
-	
-	
+   
+   CC2_KIT_VERSION, // bc: this does nothing, it's only here to offset future params
+   
+   CC2_MORPH_DRUM1,      // bc: these don't do anything here, just an offset
+   CC2_MORPH_DRUM2,
+   CC2_MORPH_DRUM3,
+   CC2_MORPH_SNARE,
+   CC2_MORPH_CYM,
+   CC2_MORPH_HIHAT,
+   
+   CC2_MAC1_DST1,       // bc: change perf macro destinations
+   CC2_MAC1_DST1_AMT,
+   CC2_MAC1_DST2,
+   CC2_MAC1_DST2_AMT,
+   
+   CC2_MAC2_DST1,
+   CC2_MAC2_DST1_AMT,
+   CC2_MAC2_DST2,
+   CC2_MAC2_DST2_AMT,
+
 	
 
 	//Mute Button NRPN messages
@@ -390,98 +543,13 @@ enum
 	CC2_MUTE_5,
 	CC2_MUTE_6,
 	CC2_MUTE_7,
+   CC2_MUTE_ALL,
 
-}Param2Enums;
+};
 
 
-//Cortex <-> Front messages
-
-//control messages from cortex for leds
-//status
-#define FRONT_STEP_LED_STATUS_BYTE 		0xb1
-#define FRONT_SEQ_CC					0xb2
-#define FRONT_CODEC_CONTROL				0xb3
-#define VOICE_CC						0xb4
-#define FRONT_SET_BPM					0xb5
-#define FRONT_CC_2						0xb6	//for parameters above 127
-#define FRONT_CC_LFO_TARGET				0xb7
-#define FRONT_CC_VELO_TARGET			0xb8
-#define FRONT_STEP_CC					0xb9	// toggle a step in the subStepPattern array
-#define FRONT_SET_P1_DEST				0xba	// SET_P1_DEST, stepNr, destinationNr --> track(voice) via set active track cmd
-#define FRONT_SET_P2_DEST				0xbb
-#define FRONT_SET_P1_VAL				0xbc	// SET_P1_VAL, stepNr, value --> track(voice) via set active track cmd
-#define FRONT_SET_P2_VAL				0xbd
-#define FRONT_MAIN_STEP_CC				0xbe	// toggle main step
-#define FRONT_ARM_AUTOMATION_STEP		0xbf	// status - stepNr - track | OnOff
-
-#define SAMPLE_CC						0xc0
-#define FRONT_SAMPLE_START_UPLOAD 		0x01
-#define FRONT_SAMPLE_COUNT		 		0x02
-
-//message
-#define FRONT_CURRENT_STEP_NUMBER_CC	0x01	/**< send the current active chase light step number to the frontplate*/
-#define FRONT_LED_SEQ_BUTTON			0x02	/**< turn on a step seq. led*/
-#define FRONT_LED_QUERY_SEQ_TRACK		0x03	/**< the frontpanel wants to know whick seq. leds should be lit*/
-#define FRONT_LED_PULSE_BEAT			0x04	/**< pulse the beat indicator LED*/
-#define FRONT_LED_SEQ_SUB_STEP			0x05
-
-//--AS appears unused
-//#define VOICE_MIDI_CHAN					0x02
-
-//Sequencer commands
-#define FRONT_SEQ_RUN_STOP				0x01
-
-#define FRONT_SEQ_MUTE_TRACK			0x09
-#define FRONT_SEQ_UNMUTE_TRACK			0x0a
-#define FRONT_SEQ_CHANGE_PAT			0x0b	/**< the user requested a new pattern. send the same message back to the front as ack that the new pattern is loaded*/
-#define FRONT_SEQ_ROLL_ON				0x0c	/**< start roll for voice data2*/
-#define FRONT_SEQ_ROLL_OFF				0x0d	/**< stop roll for voice data2*/
-#define FRONT_SEQ_REQUEST_STEP_PARAMS 	0x0f
-#define FRONT_SEQ_ROLL_ON_OFF			0x10	/**< turn voice roll/flamm on/off. data 2 parameter is bit 0 to 3 = voice number, bit 4 is on/off flag*/
-#define FRONT_SEQ_ROLL_RATE				0x11
-#define FRONT_SEQ_VOLUME				0x12
-#define FRONT_SEQ_NOTE					0x13
-#define FRONT_SEQ_PROB					0x14
-#define FRONT_SEQ_SET_ACTIVE_TRACK 		0x15	/**< select the active track. all track specific messages (request step params etc) received will refer to the track selected with this command*/
-//#define FRONT_SEQ_RESYNC_LFO			0x16	/**< LFO is no longer running on the front */
-#define FRONT_SEQ_EUKLID_LENGTH 		0x17	/** sets the length of the current track from 0 to 16 steps*/
-#define FRONT_SEQ_EUKLID_STEPS			0x18
-#define FRONT_SEQ_REQUEST_EUKLID_PARAMS 0x19
-#define FRONT_SEQ_SET_SHOWN_PATTERN		0x1A
-
-#define FRONT_SEQ_REC_ON_OFF			0x1B	/**< start(data2=1) or stop(data2=0) recording mode */
-#define FRONT_SEQ_REQUEST_PATTERN_PARAMS 0x1C 	/**< the sequencer sends back the data of the active pattern */
-#define FRONT_SEQ_SET_PAT_BEAT			0x1D	/**< on every Nth bar the pattern will change to the next pattern*/
-#define FRONT_SEQ_SET_PAT_NEXT			0x1E	/**< the next pattern that will be played when the current finishes*/
-#define FRONT_SEQ_CLEAR_TRACK			0x1f
-#define FRONT_SEQ_COPY_TRACK			0x20
-#define FRONT_SEQ_COPY_PATTERN			0x21
-#define FRONT_SEQ_SET_QUANT				0x22
-#define FRONT_SEQ_SET_AUTOM_TRACK		0x23 	// SEQ_CC, SEQ_SET_AUTOM_TRACK, autoTrkNr
-#define FRONT_SEQ_SELECT_ACTIVE_STEP 	0x24
-#define FRONT_SEQ_SHUFFLE				0x25
-#define FRONT_SEQ_TRACK_LENGTH			0x26
-#define FRONT_SEQ_CLEAR_PATTERN			0x27
-#define FRONT_SEQ_CLEAR_AUTOM			0x28 	//voice nr (0xf0) + autom track nr (0x0f)
-
-#define FRONT_SEQ_POSX					0x29
-#define FRONT_SEQ_POSY					0x2a
-#define FRONT_SEQ_FLUX					0x2b
-#define FRONT_SEQ_SOM_FREQ				0x2c
-#define FRONT_SEQ_MIDI_CHAN				0x2d	//voiceNr (0xf0) + channel (0x0f). --AS voice 7=global channel
-#define FRONT_SEQ_MIDI_MODE				0x2e //--AS not used anymore
-#define FRONT_SEQ_MIDI_ROUTING			0x2f	// midi routing
-#define FRONT_SEQ_MIDI_TX_FILTER		0x30    // tx filtering
-#define FRONT_SEQ_MIDI_RX_FILTER		0x31    // rx filtering
-#define FRONT_SEQ_BAR_RESET_MODE		0x32	// --AS reset bar on manual pattern change (0 is default - to not reset)
-#define FRONT_SEQ_ERASE_ON_OFF			0x33    // --AS turn erase mode on/off
-#define FRONT_SEQ_TRACK_ROTATION		0x34	// --AS rotate a track's start position 0 to 15
-#define FRONT_SEQ_EUKLID_ROTATION		0x35
-
-#define FRONT_SEQ_TRIGGER_IN_PPQ		0x36
-#define FRONT_SEQ_TRIGGER_OUT1_PPQ 		0x37
-#define FRONT_SEQ_TRIGGER_OUT2_PPQ 		0x38
-#define FRONT_SEQ_TRIGGER_GATE_MODE 	0x39
+// Front-panel opcodes are owned by uARTFrontSYX/frontPanelReceivingProtocol.h.
+#include "uARTFrontSYX/frontPanelReceivingProtocol.h"
 
 //codec control messages
 #define EQ_ON_OFF						0x01
@@ -498,13 +566,21 @@ enum
 
 //preset messages
 
+
 //SysEx
-#define SYSEX_INACTIVE					0x00	/**< SysEx mode is deactivated*/
+#define SYSEX_INACTIVE					   0x00	/**< SysEx mode is deactivated*/
 #define SYSEX_REQUEST_STEP_DATA		 	0x01
 #define SYSEX_RECEIVE_STEP_DATA			0x02
 #define SYSEX_REQUEST_MAIN_STEP_DATA	0x03
 #define SYSEX_RECEIVE_MAIN_STEP_DATA	0x04
 #define SYSEX_REQUEST_PATTERN_DATA		0x05
 #define SYSEX_RECEIVE_PAT_LEN_DATA		0x06
+#define SYSEX_RECEIVE_PAT_SCALE_DATA	0x07
+#define SYSEX_RECEIVE_PAT_CHAIN_DATA	0x0a
+// bc - added to parse individual track pattern changes
+#define SYSEX_BEGIN_PATTERN_TRANSMIT	0x08
+#define SYSEX_END_PATTERN_TRANSMIT	   0x09
+#define SYSEX_STEP_ACK                 0x10
+
 #define SYSEX_ACTIVE_MODE_NONE			0x7f	/**< a placeholder message indicating that sysex is active but no mode is selected yet*/
 #endif /* MIDIMESSAGES_H_ */

@@ -24,11 +24,15 @@
 #include "ledHandler.h"
 #include "buttonHandler.h"
 #include "Menu/copyClearTools.h"
-#include "frontPanelParser.h"
+#include "frontPanelSendingProtocol.h"
 //-----------------------------------------------
 //defines
 //-----------------------------------------------
+<<<<<<< HEAD
+#define FIRMWARE_VERSION "0.37-bc-"
+=======
 #define FIRMWARE_VERSION "0.37"
+>>>>>>> origin/master
 #define CORTEX_RESET_PIN	PB0
 //-----------------------------------------------
 //code
@@ -75,7 +79,8 @@ int main(void)
 	lcd_string_F(PSTR("Sonic Potions"));
 	//goto 2nd line
 	lcd_setcursor(0,2);
-	lcd_string_F(PSTR("LXR Drums V"));
+   //lcd_string_F(PSTR("LXR Drums V"));
+	lcd_string_F(PSTR("LXR V"));
 	lcd_string(FIRMWARE_VERSION);
 #endif
 
@@ -129,7 +134,6 @@ sei();
 	
 	//init menu
 	menu_init();
-	
 	//init sd card, fat and preset manager
 	//has to be called after sei() because it sends uart data via interrupts
 #if USE_SD_CARD
@@ -145,11 +149,10 @@ sei();
 
 #if USE_SD_CARD		
 	//load init preset
-	if(!preset_loadDrumset(0,0)) {
+	if(preset_loadDrumset(0,0x7f,0)) {
 		lcd_home();
 		lcd_string_F(PSTR("Kit read error"));
 		_delay_ms(2000);
-		preset_sendDrumsetParameters(); // send initial parameters (all 0's)
 	}
 #endif		
 
@@ -159,7 +162,9 @@ sei();
 	//request number of samples
 	frontPanel_sendData(SAMPLE_CC,SAMPLE_COUNT,0x00);
 
-
+   void led_clearSequencerLeds();
+   
+   menu_sendAllGlobals();
 
 	//main loop
 	for(;;) // this usually results in less instructions than while(1)
@@ -170,8 +175,8 @@ sei();
 		dout_updateOutputs();
 		
 		uart_checkAndParse();
-		//get the encoder values
-		const int8_t encoderValue = encode_read4();  
+		// get the encoder values
+		const int8_t encoderValue = encode_stableRead4();
 		const uint8_t button = encode_readButton();
 		
 		//update the menu according to the encoder values
@@ -184,6 +189,10 @@ sei();
 		uart_checkAndParse();
 		uart_checkAndParse();
 		
+      	frontPanel_checkLongOps(); // resolve any long front-panel ops that need to happen
+                              // for now, these include automated bank and pattern
+                              // change, and midi morph
+      
 		//check the poti values
 		adc_checkPots();
 

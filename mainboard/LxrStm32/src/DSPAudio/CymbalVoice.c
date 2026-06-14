@@ -130,6 +130,24 @@ void Cymbal_trigger( const uint8_t vel, const uint8_t note)
 	SnapEg_trigger(&cymbalVoice.snapEg);
 }
 //---------------------------------------------------
+void cymbal_setEnvelope(const uint8_t envPos)
+{
+   if(envPos==0)
+   {
+      //DecayEg_trigger(&cymbalVoice.oscPitchEg);
+	   slopeEg2_trigger(&cymbalVoice.oscVolEg);
+   }
+	else if(envPos==1)
+   {
+      //DecayEg_trigger(&cymbalVoice.oscPitchEg);
+      slopeEg2_setEnvPos(&cymbalVoice.oscVolEg, envPos+1);
+   }
+   else
+   {
+      slopeEg2_setEnvPos(&cymbalVoice.oscVolEg, envPos);
+   }
+}
+//---------------------------------------------------
 void Cymbal_calcAsync()
 {
 	//calc the osc  vol eg

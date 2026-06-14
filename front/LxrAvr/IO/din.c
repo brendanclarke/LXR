@@ -33,9 +33,34 @@ void din_init()
 	//set outputs to high
 	DIN_PORT |= outPins;
 	
-	//clear the input data array
-	memset(din_inputData,0,NUM_INPUTS/8+1);
-	
+	// Warm-up and stabilization: 
+	// This Performs a few full passes over all inputs to synchronize the mirror 
+	// with the stable hardware state before enabling event triggers.
+	uint8_t pass, i;
+	for(pass = 0; pass < 10; pass++)
+	{
+		din_load();
+		for(i = 0; i < NUM_INPUTS; i++)
+		{
+			uint8_t arrayPos = i / 8;
+			uint8_t bitPos     = i & 7;
+
+			// Read the current hardware value (0 = Pressed, 1 = Released)
+			uint8_t value = (DIN_INPUT & DIN_INPUT_PIN) ? 0 : 1;
+
+			// Update the mirror directly. We skip the logic that checks 
+			// for state changes to avoid triggering buttonHandler events.
+			din_inputData[arrayPos] &= (uint8_t)(~(1 << bitPos));
+			din_inputData[arrayPos] |= (uint8_t)(value << bitPos);
+ 
+			din_shift();
+		}
+		 _delay_ms(10); // Short stabilization delay between passes
+	}
+
+	// Ensure the next call to din_readNextInput starts with a fresh din_load()
+	inputPos = NUM_INPUTS;
+
 	din_load();
 };
 //---------------------------------------------------------------------

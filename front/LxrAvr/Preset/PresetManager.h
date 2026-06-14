@@ -10,8 +10,15 @@
 #define PRESETMANAGER_H_
 
 #include <avr/io.h>
+#include "../Menu/menu.h"
+
 
 extern char preset_currentName[8];
+extern char preset_currentSaveMenuName[8];
+
+extern uint8_t parameter_values_fileLoadSnapshot[END_OF_SOUND_PARAMETERS];
+extern uint8_t parameters2_fileLoadSnapshot[END_OF_SOUND_PARAMETERS];
+extern uint8_t preset_workingVoiceArray;
 
 void preset_init();
 
@@ -20,23 +27,29 @@ void preset_init();
 if isMorph==1 the sound will be loaded into the morph buffer
 */
 void preset_saveDrumset(uint8_t presetNr, uint8_t isMorph);
-uint8_t preset_loadDrumset(uint8_t presetNr, uint8_t isMorph);
-
+uint8_t preset_loadDrumset(uint8_t presetNr, uint8_t voiceArray, uint8_t isMorph);
+void preset_loadVoice(uint8_t presetNr, uint8_t voiceArray, uint8_t isMorph);
 
 void preset_saveGlobals();
 void preset_loadGlobals();
 
 void preset_saveAll(uint8_t presetNr, uint8_t isAll);
-void preset_loadAll(uint8_t presetNr, uint8_t isAll);
 
-char* preset_loadName(uint8_t presetNr, uint8_t what);
+uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray);
+uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray);
+
+char* preset_loadName(uint8_t presetNr, uint8_t what, uint8_t loadSave);
 
 /** save a pattern set to the sd card */
 void preset_savePattern(uint8_t presetNr);
-uint8_t preset_loadPattern(uint8_t presetNr);
-/** morph pattern linear to üpattern buffer 2*/
-void preset_morph(uint8_t morph);
+uint8_t preset_loadPattern(uint8_t presetNr, uint8_t voiceArray);
+/** morph pattern linear to ï¿½pattern buffer 2*/
+
+void preset_readDrumVoice(uint8_t track, uint8_t isMorph);
+void preset_readDrumVoice2(uint8_t track, uint8_t isMorph);
+void preset_morph(uint8_t voiceArray, uint8_t morph);
 uint8_t preset_getMorphValue(uint16_t index, uint8_t morph);
-void preset_sendDrumsetParameters();
+
+void preset_dumpNormalEndpointsToStm();
 
 #endif /* PRESETMANAGER_H_ */

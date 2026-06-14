@@ -16,4 +16,8 @@
 #define UART_DEBUG_ECHO_MODE 0
 #define DEBUG_CRASH_MODE 0
 
+#define ENC_ACCEL_MIN_REV_PER_SEC 1
+#define ENC_ACCEL_MAX_REV_PER_SEC 2
+#define ENC_ACCEL_MAX_MULT 4
+
 #endif /* CONFIG_H_ */

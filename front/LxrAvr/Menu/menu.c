@@ -3,13 +3,14 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <limits.h>
 #include "../ledHandler.h"
 #include <avr/pgmspace.h>
 #include "../IO/uart.h"
 
 
 #include "../Preset/PresetManager.h"
-#include "../frontPanelParser.h"
+#include "../frontPanelSendingProtocol.h"
 //#include <util/delay.h>
 #include <util/delay.h>
 
@@ -21,8 +22,17 @@
 #include "CcNr2Text.h"
 #include "copyClearTools.h"
 #include "../buttonHandler.h"
+#include "../encoder.h"
 #include <ctype.h>
 #include "../front.h"
+
+#define MACRO_VMORPH_DRUM1 36
+#define MACRO_VMORPH_DRUM2 71
+#define MACRO_VMORPH_DRUM3 106
+#define MACRO_VMORPH_SNARE 140
+#define MACRO_VMORPH_CYM   175
+#define MACRO_VMORPH_HIHAT 210
+
 
 // uppercase 3 letters in buf
 static void upr_three(char *buf);
@@ -35,6 +45,9 @@ static void setNoteName(uint8_t num, char *buf);
 
 static void menu_moveToMenuItem(int8_t inc);
 static void menu_encoderChangeParameter(int8_t inc);
+static void menu_encoderChangeShiftParameter(int8_t inc);
+static int8_t menu_applyEncoderAcceleration(int8_t inc);
+static void menu_applyEncoderDeltaToByte(uint8_t *paramValue, int8_t inc);
 
 #define ARROW_SIGN '>'
 
@@ -54,8 +67,8 @@ enum saveStateEnum
 };
 
 /** a struct for some save page parameters.*/
-static volatile struct {
-	unsigned what:3;		/**< 0= save kit, 1 = save pattern, 2 = morph sound, etc */
+struct {
+	unsigned what:9;		/**< 0= save kit, 1 = save pattern, 2 = morph sound, etc */
 	unsigned state:4;		/**< 0=edit kit/pat, 1=edit preset nr, 2-9 = edit name, 10=ok*/
 
 } menu_saveOptions;
@@ -146,9 +159,11 @@ const Name valueNames[NUM_NAMES] PROGMEM =
 		{SHORT_STEP,CAT_STEP,LONG_NUMBER},					//TEXT_ACTIVE_STEP
 
 		{SHORT_LENGTH,CAT_PATTERN,LONG_LENGTH},				//TEXT_PAT_LENGTH,
+      {SHORT_SCALE,CAT_PATTERN,LONG_SCALE},				//TEXT_PAT_SCALE,
 		{SHORT_STEP,CAT_EUKLID,LONG_STEPS},					//TEXT_NUM_STEPS,
 		{SHORT_ROTATION, CAT_EUKLID, LONG_ROTATION}, 		//TEXT_ROTATION
-
+      {SHORT_SUBSTEP_ROTATION, CAT_EUKLID, LONG_SUBSTEP_ROTATION}, 		//TEXT_ROTATION
+      
 		{SHORT_BPM,CAT_GLOBAL,LONG_TEMPO},					//TEXT_BPM
 
 		{SHORT_CHANNEL,CAT_VOICE,LONG_MIDI_CHANNEL},		//TEXT_MIDI_CHANNEL
@@ -197,7 +212,35 @@ const Name valueNames[NUM_NAMES] PROGMEM =
 		{SHORT_MODE, CAT_TRIGGER, LONG_TRIGGER_GATE_MODE}, //TEXT_TRIGGER_GATE_MODE
 		{SHORT_BAR_RESET_MODE, CAT_SEQUENCER, LONG_BAR_RESET_MODE}, // TEXT_BAR_RESET_MODE
 		{SHORT_CHANNEL, CAT_MIDI, LONG_MIDI_CHANNEL}, // TEXT_MIDI_CHAN_GLOBAL
-
+      {SHORT_SEQ_PC_TIME, CAT_SEQUENCER, LONG_SEQ_PC_TIME}, // TEXT_SEQ_PC_TIME
+      {SHORT_BUT_SHIFT_MODE, CAT_GLOBAL, LONG_BUT_SHIFT_MODE}, // TEXT_BUT_SHIFT_MODE
+      {SHORT_LOAD_PERF_ON_BANK, CAT_GLOBAL, LONG_LOAD_PERF_ON_BANK}, // TEXT_LOAD_PERF_ON_BANK
+      {SHORT_SKIP_FIRST_ROLL, CAT_SEQUENCER, LONG_SKIP_FIRST_ROLL}, // TEXT_LOAD_PERF_ON_BANK      
+      {SHORT_MORPH_VOICE, CAT_MORPH_VOICE, LONG_MORPH_VOICE}, // text for voice morph automation
+      
+      {SHORT_MAC1, CAT_MACRO1, LONG_MAC1}, // text for macro 1 send amount
+      {SHORT_MAC1, CAT_MACRO2, LONG_MAC1}, // text for macro 2 send amount
+      
+      {SHORT_MAC1_DST1, CAT_MAC1D1, LONG_MAC1_DST1}, // text for macro 1 destination 1 assign
+      {SHORT_MAC1_DST1_AMT, CAT_MACRO1, LONG_MAC1_DST1_AMT}, // text for macro 1 destination 1 mod amount
+      {SHORT_MAC1_DST2, CAT_MAC1D2, LONG_MAC1_DST2}, // text for macro 1 destination 2 assign
+      {SHORT_MAC1_DST2_AMT, CAT_MACRO1, LONG_MAC1_DST2_AMT}, // text for macro 1 destination 2 mod amount
+            
+      {SHORT_MAC2_DST1, CAT_MAC2D1, LONG_MAC2_DST1}, // text for macro 2 destination 1 assign
+      {SHORT_MAC2_DST1_AMT, CAT_MACRO2, LONG_MAC2_DST1_AMT}, // text for macro 2 destination 1 mod amount
+      {SHORT_MAC2_DST2, CAT_MAC2D2, LONG_MAC2_DST2}, // text for macro 2 destination 2 assign
+      {SHORT_MAC2_DST2_AMT, CAT_MACRO2, LONG_MAC2_DST2_AMT},  // text for macro 2 destination 2 mod amount
+      
+      {SHORT_ROLL_NOTE, CAT_PATTERN, LONG_ROLL_NOTE},  
+      {SHORT_ROLL_VELOCITY, CAT_PATTERN, LONG_ROLL_VELOCITY},  
+      {SHORT_ROLL_MODE, CAT_SEQUENCER, LONG_ROLL_MODE}, 
+      
+      {SHORT_TRANSPOSE, CAT_TRANSPOSE, LONG_TRANSPOSE},
+      {SHORT_TRANSPOSE_ON_OFF, CAT_TRANSPOSE, LONG_TRANSPOSE_ON_OFF},
+      
+      {SHORT_FILE_LOAD_FAST, CAT_FILE, LONG_FILE_LOAD_FAST},
+      
+      {SHORT_ENVELOPE_POSITION, CAT_VELO_EG, LONG_ENVELOPE_POSITION},
 };
 
 //---------------------------------------------------------------
@@ -425,13 +468,32 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	    /*PAR_AUDIO_OUT5*/ 		DTYPE_MENU | (MENU_AUDIO_OUT<<4),
 	    /*PAR_AUDIO_OUT6*/ 		DTYPE_MENU | (MENU_AUDIO_OUT<<4),		//220
 	    //--AS these 7
-	    /*PAR_MIDI_NOTE1*/		DTYPE_NOTE_NAME,
-	    /*PAR_MIDI_NOTE2*/		DTYPE_NOTE_NAME,
-	    /*PAR_MIDI_NOTE3*/		DTYPE_NOTE_NAME,
-	    /*PAR_MIDI_NOTE4*/		DTYPE_NOTE_NAME,
-	    /*PAR_MIDI_NOTE5*/		DTYPE_NOTE_NAME,
-	    /*PAR_MIDI_NOTE6*/		DTYPE_NOTE_NAME,
-	    /*PAR_MIDI_NOTE7*/		DTYPE_NOTE_NAME,
+	    /*PAR_ENVELOPE_POSITION_1*/		DTYPE_0B127,
+	    /*PAR_ENVELOPE_POSITION_2*/		DTYPE_0B127,
+	    /*PAR_ENVELOPE_POSITION_3*/		DTYPE_0B127,
+	    /*PAR_ENVELOPE_POSITION_4*/		DTYPE_0B127,
+	    /*PAR_ENVELOPE_POSITION_5*/		DTYPE_0B127,
+	    /*PAR_ENVELOPE_POSITION_6*/		DTYPE_0B127,
+	    /*PARAM_UNUSED_01*/		DTYPE_0B127,
+       /*PAR_KIT_VERSION*/    DTYPE_0B255,
+       
+       /*PAR_MORPH_DRUM1*/		DTYPE_0B127,
+	    /*PAR_MORPH_DRUM2*/		DTYPE_0B127,
+	    /*PAR_MORPH_DRUM3*/		DTYPE_0B127,
+	    /*PAR_MORPH_SNARE*/		DTYPE_0B127,
+	    /*PAR_MORPH_CYM*/		DTYPE_0B127,
+	    /*PAR_MORPH_HIHAT*/		DTYPE_0B127,
+       
+       /*PAR_MAC1_DST1*/      DTYPE_AUTOM_TARGET,
+       /*PAR_MAC1_DST1_AMT*/  DTYPE_PM63, 
+       /*PAR_MAC1_DST2*/      DTYPE_AUTOM_TARGET,
+       /*PAR_MAC1_DST2_AMT*/  DTYPE_PM63,
+   
+       /*PAR_MAC2_DST1*/      DTYPE_AUTOM_TARGET,
+       /*PAR_MAC2_DST1_AMT*/  DTYPE_PM63,
+       /*PAR_MAC2_DST2*/      DTYPE_AUTOM_TARGET,
+       /*PAR_MAC2_DST2_AMT*/  DTYPE_PM63,
+
 	    /*PAR_ROLL*/ 			DTYPE_MENU | (MENU_ROLL_RATES<<4),
 	    /*PAR_MORPH*/ 			DTYPE_0B255,
 	    /*PAR_ACTIVE_STEP */ 	DTYPE_0B127,							//230
@@ -441,6 +503,7 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	    /*PAR_EUKLID_LENGTH*/ 	DTYPE_1B16,
 	    /*PAR_EUKLID_STEPS*/ 	DTYPE_1B16,
 	    /*PAR_EUKLID_ROTATION*/	DTYPE_0B15,
+       /*PAR_EUKLID_SUBSTEP_ROTATION*/  DTYPE_0B15,
 	    /*PAR_AUTOM_TRACK*/ 	DTYPE_0b1,
 	    /*PAR_P1_DEST*/ 		DTYPE_AUTOM_TARGET,
 	    /*PAR_P2_DEST*/ 		DTYPE_AUTOM_TARGET,
@@ -450,24 +513,37 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	    /*PAR_PATTERN_BEAT*/ 	DTYPE_0B127,
 	    /*PAR_PATTERN_NEXT*/ 	DTYPE_MENU | (MENU_NEXT_PATTERN<<4),
 	    /*PAR_TRACK_LENGTH*/ 	DTYPE_1B16,
+       /*PAR_TRACK_SCALE*/ 	DTYPE_MENU | (MENU_TRACK_SCALE<<4),
 	    /*PAR_POS_X*/ 			DTYPE_0B127,
 	    /*PAR_POS_Y*/ 			DTYPE_0B127,
 	    /*PAR_FLUX*/ 			DTYPE_0B127,
 	    /*PAR_SOM_FREQ*/ 		DTYPE_0B127,
 	    /*PAR_TRACK_ROTATION*/  DTYPE_1B16,  //**PATROT this is not shown in menu, but if it were it would really be 0 to 15
+
+
+       /*PAR_MAC1*/        DTYPE_0B127,
+       /*PAR_MAC2*/        DTYPE_0B127,
+     
+      /*PAR_ROLL_NOTE*/ DTYPE_NOTE_NAME,
+      /*PAR_ROLL_VELOCITY*/ DTYPE_0B127,
+      /*PAR_ROLL_MODE*/  DTYPE_MENU | (MENU_MIDI<<4),
+      
+      /*PAR_TRANSPOSE,*/      DTYPE_PM63,
+      /*PAR_TRANSPOSE_ON_OFF,*/DTYPE_ON_OFF,
+
 	    /*PAR_BPM*/ 			DTYPE_0B255,							//251
-	    /*PAR_MIDI_CHAN_1*/ 	DTYPE_1B16,
-	    /*PAR_MIDI_CHAN_2*/ 	DTYPE_1B16,
-	    /*PAR_MIDI_CHAN_3*/ 	DTYPE_1B16,
-	    /*PAR_MIDI_CHAN_4*/ 	DTYPE_1B16,
-	    /*PAR_MIDI_CHAN_5*/ 	DTYPE_1B16,
-	    /*PAR_MIDI_CHAN_6*/ 	DTYPE_1B16,
+	    /*PAR_MIDI_CHAN_1*/ 	DTYPE_0B16,
+	    /*PAR_MIDI_CHAN_2*/ 	DTYPE_0B16,
+	    /*PAR_MIDI_CHAN_3*/ 	DTYPE_0B16,
+	    /*PAR_MIDI_CHAN_4*/ 	DTYPE_0B16,
+	    /*PAR_MIDI_CHAN_5*/ 	DTYPE_0B16,
+	    /*PAR_MIDI_CHAN_6*/ 	DTYPE_0B16,
 	    /*PAR_FETCH*/ 			DTYPE_ON_OFF,
 	    /*PAR_FOLLOW*/ 			DTYPE_ON_OFF,
 	    /*PAR_QUANTISATION*/ 	DTYPE_MENU | (MENU_SEQ_QUANT<<4),
 	    /*PAR_SCREENSAVER_ON_OFF*/ DTYPE_ON_OFF,						//261
 	    /*PAR_MIDI_MODE*/ 		DTYPE_MENU | (MENU_MIDI<<4),			  //--AS This is now unused.
-	    /*PAR_MIDI_CHAN_7*/ 	DTYPE_1B16,
+	    /*PAR_MIDI_CHAN_7*/ 	DTYPE_0B16,
 	    /*PAR_MIDI_ROUTING*/	DTYPE_MENU | (MENU_MIDI_ROUTING<<4),
 	    /*PAR_MIDI_FILT_TX*/    DTYPE_MENU | (MENU_MIDI_FILTERING<<4),
 	    /*PAR_MIDI_FILT_RX*/    DTYPE_MENU | (MENU_MIDI_FILTERING<<4),
@@ -476,7 +552,24 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 		/*PAR_PRESCALER_CLOCK_OUT2*/	DTYPE_MENU | (MENU_PPQ<<4),
 		/*PAR_TRIGGER_GATE_MODE*/	DTYPE_ON_OFF,
 	    /*PAR_BAR_RESET_MODE*/  DTYPE_ON_OFF,
-	    /*PAR_MIDI_CHAN_GLOBAL*/DTYPE_1B16,		//--AS global midi channel
+	    /*PAR_MIDI_CHAN_GLOBAL*/DTYPE_0B16,		//--AS global midi channel
+	   /*PAR_SEQ_PC_TIME*/  DTYPE_ON_OFF, // -bc- change patterns on sub-step instead of bar
+	   /*PAR_BUT_SHIFT_MODE*/ DTYPE_ON_OFF, // -bc- make shift a toggle
+      /*PAR_LOAD_PERF_ON_BANK*/  DTYPE_ON_OFF, // -bc- load perfs instead of kits on bank change cc
+      /*PAR_SKIP_FIRST_ROLL*/  DTYPE_ON_OFF,
+      /*PAR_FILE_LOAD_FAST*/  DTYPE_ON_OFF,
+      
+      /*PAR_GLOBAL_SETTINGS_VERSION*/  DTYPE_0B127,
+      
+      /*PAR_MIDI_NOTE1*/		DTYPE_NOTE_NAME,
+	    /*PAR_MIDI_NOTE2*/		DTYPE_NOTE_NAME,
+	    /*PAR_MIDI_NOTE3*/		DTYPE_NOTE_NAME,
+	    /*PAR_MIDI_NOTE4*/		DTYPE_NOTE_NAME,
+	    /*PAR_MIDI_NOTE5*/		DTYPE_NOTE_NAME,
+	    /*PAR_MIDI_NOTE6*/     DTYPE_NOTE_NAME,
+       /*PAR_MIDI_NOTE7*/     DTYPE_NOTE_NAME,
+         
+
 };
 
 
@@ -494,10 +587,21 @@ static uint8_t menu_TargetVoiceGapIndex = 0xFF;
 uint8_t menu_numSamples = 0;
 
 //preset vars
+<<<<<<< HEAD
+#define NUM_PRESET_LOCATIONS 11 
+//kit, drum1, drum2, drum3, snare, cym, hh, morph sound, pattern, performance, all
+
+=======
+>>>>>>> origin/master
 uint8_t menu_currentPresetNr[NUM_PRESET_LOCATIONS];
 
 uint8_t menu_shownPattern = 0;
 uint8_t menu_muteModeActive = 0;
+uint8_t morphValue=0;
+uint8_t menu_sequencerRunning = 0;
+uint8_t menu_instPerfLock = 0;
+uint8_t menu_instPerfLockPreset = 0;
+uint8_t menu_voiceArray = 0x7f;
 
 /** buffer to minimize the display configuration.
 It holds a representation of the display content so only the changed cells have to be updated*/
@@ -509,41 +613,26 @@ uint8_t visibleCursor=0;	/* cursor position and whether it's visible rightmost=v
 uint8_t menu_activePage = 0;				/**< indicates which menu page is currently shown*/
 uint8_t menu_activeVoice = 0;
 uint8_t menu_playedPattern = 0;
-static uint8_t editModeActive = 0;			/**< when edit mode is active, only the currently active parameter is shown with full name*/
+uint8_t editModeActive = 0;			/**< when edit mode is active, only the currently active parameter is shown with full name*/
 static uint8_t lastEncoderButton = 0;		/**< stores the state of the encoder button so the edit mode is only switched once when the button is pressed*/
 
 static uint8_t parameterFetch = 0b00011111;	/**< the lower 4 bits define a lock for each pot, the 5 bit turns he lock on and off*/
 
 /** array holding all the available parameter values*/
 uint8_t parameter_values[NUM_PARAMS];
+
 uint8_t parameters2[END_OF_SOUND_PARAMETERS];/**< a second array for sound x-fade to another preset*/
-//-----------------------------------------------------------------
 
-void menu_setShownPattern(uint8_t patternNr)
-{
-	menu_shownPattern = patternNr;
-	frontPanel_sendData(SEQ_CC,SEQ_SET_SHOWN_PATTERN,menu_shownPattern);
-}
+uint8_t menu_lastVoiceIndex=0;
+uint8_t menu_lastPerfIndex=0;
 
-uint8_t menu_getViewedPattern()
-{
-	return menu_shownPattern;
-}
-
-
-//lock all 4 potentiometer values
-void lockPotentiometerFetch()
-{
-	if(parameterFetch & PARAMETER_LOCK_ACTIVE)
-	{
-		//all 4 parameters locked
-		parameterFetch |= 0x0F;
-	}	
-}
+uint8_t menu_lastStepSubPage=0;
+uint8_t menu_selectedStepLed=LED_STEP1;
 
 //-----------------------------------------------------------------
 void menu_init()
 {
+
 	lcd_clear();
 
 	paramToModTargetInit();
@@ -552,12 +641,25 @@ void menu_init()
 
 	memset(parameter_values, 0, sizeof(uint8_t) * NUM_PARAMS);
 
+
+
 	parameter_values[PAR_EUKLID_LENGTH] = 16;
 	parameter_values[PAR_EUKLID_STEPS] = 16;
 	parameter_values[PAR_EUKLID_ROTATION] = 0;
+   
+   parameter_values[PAR_MAC1] = 0;
+   parameter_values[PAR_MAC2] = 0;
 
 	//initialize the roll value
-	parameter_values[PAR_ROLL] = 8;
+	parameter_values[PAR_ROLL] = 10;
+   parameter_values[PAR_ROLL_NOTE] = 63;
+   parameter_values[PAR_ROLL_VELOCITY] = 100;
+   parameter_values[PAR_ROLL_MODE] = 4; //0=trig, 1=nte, 2=vel, 3=bth, 4=all
+   parameter_values[PAR_TRANSPOSE] = 63;
+   parameter_values[PAR_TRANSPOSE_ON_OFF] = 0;
+   parameter_values[PAR_ACTIVE_STEP] = 0;
+   parameter_values[PAR_SKIP_FIRST_ROLL] = 0;
+   
 	//frontPanel_sendData(SEQ_CC,SEQ_ROLL_RATE,8); //value is initialized in cortex firmware
 
 	parameter_values[PAR_BPM] = 120;
@@ -567,14 +669,17 @@ void menu_init()
 	// but then the global data loaded from glo.cfg seemed like it was not being sent to the back.
 	// need to figure out why as it's likely to crop up again at some point.
 
-	//set voice 1 active
-	menu_switchPage(0);
 	frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,0);
 	//the currently active button is lit
 	led_setActiveVoice(0);
 
-	//display start menu page
-	menu_repaintAll();
+   //set voice 1 active
+	menu_switchPage(0);
+   menu_switchSubPage(0);
+   led_setActiveSelectButton(0);
+   menu_enterVoiceMode();
+   
+   
 }
 //-----------------------------------------------------------------
 /** compare the currentDisplayBuffer with the editDisplayBuffer and send all differences to the display*/
@@ -614,6 +719,291 @@ void sendDisplayBuffer()
 
 }
 //-----------------------------------------------------------------
+void menu_debug(char* displayText, size_t length, uint8_t value1, uint8_t value2, int delayTime)
+{
+   if (length>16)
+      return;
+   uint8_t i;
+   
+   lcd_clear();
+   memset(editDisplayBuffer,' ',2*17);	
+   for(i=0;i<length;i++)
+   {
+      editDisplayBuffer[0][i]=displayText[i];
+   }
+
+   numtostru(&editDisplayBuffer[1][0],(uint8_t)(value1));
+   numtostru(&editDisplayBuffer[1][7],(uint8_t)(value2));
+
+   sendDisplayBuffer();
+   if(delayTime>=5000)
+      _delay_ms(5000);
+   else if(delayTime>=4000)
+      _delay_ms(4000);
+   else if(delayTime>=3000)
+      _delay_ms(3000);
+   else if(delayTime>=2000)
+      _delay_ms(2000);
+   else if(delayTime>=1000)
+      _delay_ms(1000);
+   else if(delayTime>=500)
+      _delay_ms(500);
+   else if(delayTime>=200)
+      _delay_ms(500);
+   else if (delayTime>=100)
+      _delay_ms(100);
+   else if (delayTime>=50)
+      _delay_ms(50);
+   else if (delayTime>=10)
+      _delay_ms(10);
+   else if (delayTime>=5)
+      _delay_ms(5);
+   else if (delayTime>=1)
+      _delay_ms(1);
+}
+//-----------------------------------------------------------------
+void menu_enterVoiceMode()
+{
+   //set menu to voice page mode
+   //uint8_t pageNr=menu_getActiveVoice();
+	//uint8_t paramNr=menu_lastVoiceParameter;
+   //menu_switchSubPage(menu_lastVoiceSubPage);
+   led_clearAllBlinkLeds();
+   menuIndex = menu_lastVoiceIndex;
+   menu_switchPage(menu_getActiveVoice());
+	led_setActiveSelectButton(menu_getSubPage());
+	//menu_resetActiveParameter();
+   if(shiftState)
+      menu_shiftVoice(1);
+}
+//-----------------------------------------------------------------
+void menu_enterActiveStepMode()
+{
+	led_clearSequencerLeds();
+	led_clearSelectLeds();
+   led_clearVoiceLeds();
+  
+   menu_switchPage(ACTIVESTEP_PAGE);
+   frontPanel_updateActiveStepLeds();
+	menu_repaintAll();
+   led_setBlinkLed(LED_MODE3,1);
+}
+//-----------------------------------------------------------------
+void menu_enterPerfMode()
+{
+	led_clearSequencerLeds();
+	led_clearSelectLeds();
+	led_initPerformanceLeds();
+   led_clearAllBlinkLeds();
+   led_clearModeLeds();
+   //menu_repaint();
+
+	//set menu to perf page
+   menuIndex=menu_lastPerfIndex;   
+   menu_switchPage(PERFORMANCE_PAGE);
+	menu_repaintAll();
+   led_setValue(1,LED_MODE2); 
+}
+//-----------------------------------------------------------------
+void menu_enterStepMode()
+{
+   menuIndex=menu_lastStepSubPage;
+	menu_switchPage(SEQ_PAGE);   
+	frontPanel_updatePatternLeds();
+	// set mainstep blinking
+   led_setBlinkLed(menu_selectedStepLed, 1);
+   // set selected substep blinking
+   led_setBlinkLed((uint8_t)(LED_PART_SELECT1+(parameter_values[PAR_ACTIVE_STEP]%8)), 1);
+   menu_repaint();
+   if(shiftState)
+      menu_shiftStep(1);
+   led_setValue(1,LED_MODE3);
+}
+//-----------------------------------------------------------------
+void menu_enterPatgenMode()
+{
+   frontPanel_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS,
+   				menu_getActiveVoice());
+   menu_switchPage(EUKLID_PAGE);
+   led_clearAllBlinkLeds();
+   led_setBlinkLed(LED_MODE2,1);
+   led_clearSequencerLeds();
+	led_clearSelectLeds();
+   frontPanel_updatePatternLeds();
+}
+//-----------------------------------------------------------------
+void menu_shiftVoice(uint8_t shift)
+{
+   if(shift)
+   {
+      
+      menu_switchPage(SEQ_PAGE);
+      menu_resetSubPage(0);
+      
+      frontPanel_updatePatternLeds();
+   
+      // set mainstep blinking
+	   led_setBlinkLed(menu_selectedStepLed, 1);
+      // set selected substep blinking
+      led_setBlinkLed((uint8_t)(LED_PART_SELECT1+(parameter_values[PAR_ACTIVE_STEP]%8)), 1);
+      
+      menu_repaint();
+   }
+   else
+   {
+      menu_enterVoiceMode();
+   }
+}
+//-----------------------------------------------------------------
+void menu_shiftPerf(uint8_t shift)
+{
+   if(shift)
+   {
+      //blink selected pattern LED
+      menu_switchPage(PATTERN_SETTINGS_PAGE);
+      led_clearSelectLeds();
+      led_clearAllBlinkLeds();
+      //**PATROT The step led's are repurposed here to have the current track rotation
+      // represented by a blinking led. The leftmost LED blinking means rotation is off (0)
+      // and each one represents a different rotation
+      led_setBlinkLed((uint8_t) (LED_STEP1 + parameter_values[PAR_TRACK_ROTATION]), 1);
+      {
+         uint8_t viewedPattern = menu_getViewedPattern();
+         led_setBlinkLed((uint8_t)((viewedPattern == SEQ_TMP_PATTERN) ? LED_STEP16 : (LED_PART_SELECT1 + viewedPattern)), 1);
+      }
+      led_setBlinkLed((uint8_t)(LED_VOICE1 + menu_getActiveVoice()) ,1);
+      
+      // show the active voice pattern
+      menu_updateMainStepDisplay();
+   }
+   else
+   {
+      led_clearAllBlinkLeds();
+      led_clearSelectLeds();
+      menuIndex=menu_lastPerfIndex;
+      menu_switchPage(PERFORMANCE_PAGE);
+      led_initPerformanceLeds();
+   }
+}
+//-----------------------------------------------------------------
+void menu_shiftStep(uint8_t shift)
+{
+   if(shift)
+   {
+      led_setBlinkLed(menu_selectedStepLed, 0);
+      led_setValue(0, menu_selectedStepLed);
+      
+      led_clearAllBlinkLeds();
+      frontPanel_updatePatternLeds();
+   }
+   else
+   {
+   
+      //menu_switchSubPage(0);
+	   menu_switchPage(SEQ_PAGE);
+
+	   frontPanel_updatePatternLeds();
+      
+      // set mainstep blinking
+	   led_setBlinkLed(menu_selectedStepLed, 1);
+      // set selected substep blinking
+      led_setBlinkLed((uint8_t)(LED_PART_SELECT1+(parameter_values[PAR_ACTIVE_STEP]%8)), 1);
+   
+   }
+   
+}
+//-----------------------------------------------------------------
+void menu_shiftActiveStep(uint8_t shift)
+{
+   if(shift)
+   {  
+   }
+   else
+   {
+   }
+}
+//-----------------------------------------------------------------
+void menu_shiftPatgen(uint8_t shift)
+{
+   if(shift)
+   {
+      menu_switchPage(SEQ_PAGE);
+      menu_resetSubPage(0);
+      
+      frontPanel_updatePatternLeds();
+      
+      // set mainstep blinking
+	   led_setBlinkLed(menu_selectedStepLed, 1);
+      // set selected substep blinking
+      led_setBlinkLed((uint8_t)(LED_PART_SELECT1+(parameter_values[PAR_ACTIVE_STEP]%8)), 1);
+
+      menu_repaint();
+   }
+   else
+   {
+      //led_clearSelectLeds();
+      menu_switchPage(EUKLID_PAGE);
+      led_clearAllBlinkLeds();
+      led_setBlinkLed(LED_MODE2,1);
+      //led_initPerformanceLeds();
+      //led_setValue(1,	(uint8_t) (menu_getViewedPattern() + LED_PART_SELECT1));
+   }
+}
+//-----------------------------------------------------------------
+void menu_resetBlinkLeds()
+{
+   led_clearAllBlinkLeds();
+   switch(menu_activePage)
+   {
+      case SHIFTVOICE_PAGE:
+      led_setBlinkLed(LED_MODE1,1);
+      break;
+      case EUKLID_PAGE:
+      led_setBlinkLed(LED_MODE2,1);
+      break;
+      case ACTIVESTEP_PAGE:
+      led_setBlinkLed(LED_MODE3,1);
+      break;
+      case MENU_MIDI_PAGE:
+      led_setBlinkLed(LED_MODE4,1);
+      break;
+      default:
+      break;
+   }   
+
+}
+//-----------------------------------------------------------------
+void menu_updateMainStepDisplay()
+{
+   led_clearSequencerLeds();
+   uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
+	uint8_t patternNr = menu_shownPattern; //max 7 => 0x07 = 0b111
+	uint8_t value = (uint8_t)((trackNr<<4) | (patternNr&0x0f));
+	frontPanel_sendData(LED_CC,LED_QUERY_SEQ_TRACK,value);
+}
+//-----------------------------------------------------------------
+void menu_setShownPattern(uint8_t patternNr)
+{
+	menu_shownPattern = patternNr;
+	frontPanel_sendData(SEQ_CC,SEQ_SET_SHOWN_PATTERN,menu_shownPattern);
+}
+//-----------------------------------------------------------------
+uint8_t menu_getViewedPattern()
+{
+	return menu_shownPattern;
+}
+//-----------------------------------------------------------------
+
+//lock all 4 potentiometer values
+void lockPotentiometerFetch()
+{
+	if(parameterFetch & PARAMETER_LOCK_ACTIVE)
+	{
+		//all 4 parameters locked
+		parameterFetch |= 0x0F;
+	}	
+}
+//-----------------------------------------------------------------
 void menu_repaintAll()
 {
 
@@ -627,100 +1017,243 @@ void menu_repaintAll()
 }
 
 //-----------------------------------------------------------------
-static void menu_repaintLoadSavePage()
+static void menu_repaintLoadPage()
 {
-	const char *toptxt=0;
-	//Top row
-	strcpy_P(&editDisplayBuffer[0][0],
-			menu_activePage == SAVE_PAGE ?
-					PSTR("Save:") :
-					PSTR("Load:"));
+// deals with encoder actions for load menu
+// NB, the KNOB (shortcut actions) get dealt with in
+// another function
+   const char *toptxt=0;
+   
+//skip items that don't appear in load menu
+//(there aren't any yet)
+   switch(menu_saveOptions.what) {
+      default:
+         break;
+   }
+   
+//Top row
+   strcpy_P(&editDisplayBuffer[0][0],PSTR("Load:"));
+//add menu option text to top line
+   switch(menu_saveOptions.what) {
+      case SAVE_TYPE_KIT: 
+         toptxt=PSTR("Kit ");
+         break;
+      case SAVE_TYPE_DRUM1:		
+         toptxt=PSTR("Drum 1  "); 
+         break;
+      case SAVE_TYPE_DRUM2:		
+         toptxt=PSTR("Drum 2  "); 
+         break;
+      case SAVE_TYPE_DRUM3:		
+         toptxt=PSTR("Drum 3  "); 
+         break;
+      case SAVE_TYPE_SNARE:		
+         toptxt=PSTR("Snare   "); 
+         break;
+      case SAVE_TYPE_CYM:		   
+         toptxt=PSTR("Clap/Cym"); 
+         break;
+      case SAVE_TYPE_HIHAT:		
+         toptxt=PSTR("HiHat   ");
+         break;
+      case SAVE_TYPE_PATTERN: 
+         toptxt=PSTR("Pattern "); 
+         break;
+      case SAVE_TYPE_MORPH: 
+         toptxt=PSTR("MorphKit"); 
+         break;
+      case SAVE_TYPE_GLO: 
+         toptxt=PSTR("Settings"); 
+         break;
+      case SAVE_TYPE_PERFORMANCE: 
+         toptxt=PSTR("Perform "); 
+         break;
+      case SAVE_TYPE_ALL: 
+         toptxt=PSTR("All "); 
+         break;
+      case SAVE_TYPE_SAMPLES: 
+         toptxt=PSTR("Samples "); 
+         break;
+   }
+   // send concatenated top text to display
+   strcpy_P(&editDisplayBuffer[0][6],toptxt);
+   
+   // if a save option has been selected, put it
+   // in brackets, otherwise put an '>' next to 
+   // the selected menu item
+   if(menu_saveOptions.state == SAVE_STATE_EDIT_TYPE) {
+      if(editModeActive) {
+         editDisplayBuffer[0][5]='[';
+         editDisplayBuffer[0][14]=']';
+      } 
+      // 
+      else {
+      //arrow before parameter
+         editDisplayBuffer[0][5]= ARROW_SIGN;
+      }
+   }
 
-	switch(menu_saveOptions.what) {
-	case SAVE_TYPE_KIT:			toptxt=PSTR("Kit     "); break;
-	case SAVE_TYPE_PATTERN:		toptxt=PSTR("Pattern "); break;
-	case SAVE_TYPE_MORPH:		toptxt=PSTR("MorphKit"); break;
-	case SAVE_TYPE_GLO:			toptxt=PSTR("Settings"); break;
-	case SAVE_TYPE_PERFORMANCE:	toptxt=PSTR("Perform "); break;
-	case SAVE_TYPE_ALL:			toptxt=PSTR("All     "); break;
-	case SAVE_TYPE_SAMPLES:     toptxt=PSTR("Samples "); break;
-	}
-
-	strcpy_P(&editDisplayBuffer[0][6],toptxt);
-	if(menu_saveOptions.state == SAVE_STATE_EDIT_TYPE) {
-		if(editModeActive) {
-			editDisplayBuffer[0][5]='[';
-			editDisplayBuffer[0][14]=']';
-		} else {
-			//arrow before parameter
-			editDisplayBuffer[0][5]= ARROW_SIGN;
-		}
-	}
-
-	//Bottom row - name and number if applicable
-	if( menu_saveOptions.what < SAVE_TYPE_GLO) { //no name and number for global settings or samples
-		//the preset number
-		numtostrpu(&editDisplayBuffer[1][1], menu_currentPresetNr[menu_saveOptions.what],' ');
-
-		if(menu_saveOptions.state == SAVE_STATE_EDIT_PRESET_NR)
-		{
-			if(editModeActive) {
-				editDisplayBuffer[1][0]='[';
-				editDisplayBuffer[1][4]=']';
-			} else {
-				//arrow before parameter
-				editDisplayBuffer[1][0]= ARROW_SIGN;
-				//visibleCursor = VIS_CURS(1,1,1);
-			}
-		}
-		// write the full preset name
-		memcpy(&editDisplayBuffer[1][5],(const void*)preset_currentName,8);
-	}
-
-	// bottom row - for save page, we show editing box or underline cursor as applicable
-	if(menu_activePage == SAVE_PAGE){
-		//the preset number
-		if( menu_saveOptions.what < SAVE_TYPE_GLO) //not saving global settings, so print name and number
-		{
-			// if we are editing the name
-			if( (menu_saveOptions.state >= SAVE_STATE_EDIT_NAME1) && (menu_saveOptions.state <= SAVE_STATE_EDIT_NAME8) )
-			{			
-				if(editModeActive) { // draw a box around active character (encoder changes value)
-					editDisplayBuffer[1][4+menu_saveOptions.state-SAVE_STATE_EDIT_NAME1]='[';
-					editDisplayBuffer[1][6+menu_saveOptions.state-SAVE_STATE_EDIT_NAME1]=']';	
-				} else { // using encoder to move left and right, using knob to change letter
-					//underline under current char
-					visibleCursor =(uint8_t)( VIS_CURS(1,5+menu_saveOptions.state-SAVE_STATE_EDIT_NAME1,1));
-				}
-			}
-		} // not saving global settings
-
-		//ok button - shown in all cases
-		memcpy_P(&editDisplayBuffer[1][14],menuText_ok,2);
-		if((menu_saveOptions.state==SAVE_STATE_OK) ||
-				(menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE))
-		{	
-			//arrow before parameter
-			editDisplayBuffer[1][13]= ARROW_SIGN;
-			//visibleCursor = VIS_CURS(1,14,1);
-		}	
-	} else { // bottom row - Load page is active
-		//ok button shown for loading everything except kit and morph - which are loaded instantaneously
-		if(menu_saveOptions.what != SAVE_TYPE_KIT && menu_saveOptions.what != SAVE_TYPE_MORPH) {
-			memcpy_P(&editDisplayBuffer[1][14],menuText_ok,2);
-
-			if((menu_saveOptions.state==SAVE_STATE_OK) ||
-					(menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE)) {
-				//arrow before parameter
-				editDisplayBuffer[1][13]= ARROW_SIGN;
-				//visibleCursor = VIS_CURS(1,14,1);
-			}	
-		} else { //clear ok text
-			editDisplayBuffer[1][14] = 0;
-			editDisplayBuffer[1][15] = 0;
-		}			
-	}	
+//Display Bottom row for load page - name and number if applicable
+   if( menu_saveOptions.what < SAVE_TYPE_GLO) { 
+   //no name and number for global settings or samples
+   
+      numtostrpu(&editDisplayBuffer[1][1], menu_currentPresetNr[menu_saveOptions.what],' ');
+      if(menu_saveOptions.state == SAVE_STATE_EDIT_PRESET_NR)
+      // user has selected a load type that has a preset number
+      // and is on the preset number selection item
+      {
+         if(editModeActive) {
+         // user has clicked into the preset number, bracket it
+            editDisplayBuffer[1][0]='[';
+            editDisplayBuffer[1][4]=']';
+         } 
+         else {
+         //arrow before parameter
+            editDisplayBuffer[1][0]= ARROW_SIGN;
+         //visibleCursor = VIS_CURS(1,1,1);
+         }
+      }
+   // write the full preset name
+      //strcpy_P(&preset_currentName,preset_loadName(menu_currentPresetNr[menu_saveOptions.what],menu_saveOptions.what));
+      DISABLE_CONV_WARNING
+      memcpy(&editDisplayBuffer[1][5],(const void*)preset_loadName(menu_currentPresetNr[menu_saveOptions.what],menu_saveOptions.what,0),8);
+      END_DISABLE_CONV_WARNING
+   }
+   
+   // bottom row - Load page is active
+   //ok button shown for loading everything except kit and morph - which are loaded instantaneously
+   
+   if(menu_saveOptions.what<SAVE_TYPE_PATTERN) 
+   { //clear ok text
+      editDisplayBuffer[1][14] = 0;
+      editDisplayBuffer[1][15] = 0;
+   }
+   
+   else
+   {
+      memcpy_P(&editDisplayBuffer[1][14],menuText_ok,2);
+      if((menu_saveOptions.state==SAVE_STATE_OK) ||
+         (menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE)) {
+         //arrow before parameter
+         editDisplayBuffer[1][13]= ARROW_SIGN;
+         //visibleCursor = VIS_CURS(1,14,1);
+      }
+   } 
+   
 }
+
+
+//-----------------------------------------------------------------
+
+
+static void menu_repaintSavePage()
+{
+// deals with encoder actions for 
+   const char *toptxt=0;
+   
+//Top row
+   strcpy_P(&editDisplayBuffer[0][0],
+      menu_activePage == SAVE_PAGE ?
+      PSTR("Save:") :
+      PSTR("Load:"));
+   switch(menu_saveOptions.what) {
+      case SAVE_TYPE_KIT: toptxt=PSTR("Kit "); 
+         break;
+      case SAVE_TYPE_MORPH: toptxt=PSTR("MorphMix "); 
+         break;
+      case SAVE_TYPE_PATTERN: toptxt=PSTR("Pattern "); 
+         break;
+      case SAVE_TYPE_GLO: toptxt=PSTR("Settings"); 
+         break;
+      case SAVE_TYPE_PERFORMANCE: toptxt=PSTR("Perform "); 
+         break;
+      case SAVE_TYPE_ALL: toptxt=PSTR("All "); 
+         break;
+     default: // we are on a page that the save screen doesn't
+              // recognise, return to 'kit' page
+         toptxt=PSTR("Kit ");
+         menu_saveOptions.what=SAVE_TYPE_KIT;
+         break;
+   }
+   strcpy_P(&editDisplayBuffer[0][6],toptxt);
+   
+   
+   if(menu_saveOptions.state == SAVE_STATE_EDIT_TYPE) {
+      if(editModeActive) {
+         editDisplayBuffer[0][5]='[';
+         editDisplayBuffer[0][14]=']';
+      } 
+      else {
+      //arrow before parameter
+         editDisplayBuffer[0][5]= ARROW_SIGN;
+      }
+   }
+//Bottom row - name and number if applicable
+   if( menu_saveOptions.what < SAVE_TYPE_GLO) { //no name and number for global settings or samples
+   //the preset number
+      numtostrpu(&editDisplayBuffer[1][1], menu_currentPresetNr[menu_saveOptions.what],' ');
+      if(menu_saveOptions.state == SAVE_STATE_EDIT_PRESET_NR)
+      {
+         if(editModeActive) {
+            editDisplayBuffer[1][0]='[';
+            editDisplayBuffer[1][4]=']';
+         } 
+         else {
+         //arrow before parameter
+            editDisplayBuffer[1][0]= ARROW_SIGN;
+         //visibleCursor = VIS_CURS(1,1,1);
+         }
+      }
+   // write the full preset name
+      //strcpy_P(&preset_currentName,preset_loadName(menu_currentPresetNr[menu_saveOptions.what],menu_saveOptions.what));
+      memcpy(&editDisplayBuffer[1][5],(const void*)preset_currentSaveMenuName,8);
+   }
+// bottom row - for save page, we show editing box or underline cursor as applicable
+   if(menu_activePage == SAVE_PAGE){
+   //the preset number
+      if( menu_saveOptions.what < SAVE_TYPE_GLO) //not saving global settings, so print name and number
+      {
+      // if we are editing the name
+         if( (menu_saveOptions.state >= SAVE_STATE_EDIT_NAME1) && (menu_saveOptions.state <= SAVE_STATE_EDIT_NAME8) )
+         {
+            if(editModeActive) { // draw a box around active character (encoder changes value)
+               editDisplayBuffer[1][4+menu_saveOptions.state-SAVE_STATE_EDIT_NAME1]='[';
+               editDisplayBuffer[1][6+menu_saveOptions.state-SAVE_STATE_EDIT_NAME1]=']';
+            } 
+            else { // using encoder to move left and right, using knob to change letter
+            //underline under current char
+               visibleCursor =(uint8_t)( VIS_CURS(1,5+menu_saveOptions.state-SAVE_STATE_EDIT_NAME1,1));
+            }
+         }
+      } // not saving global settings
+   //ok button - shown in all cases
+      memcpy_P(&editDisplayBuffer[1][14],menuText_ok,2);
+      if((menu_saveOptions.state==SAVE_STATE_OK) ||
+      (menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE))
+      {
+      //arrow before parameter
+         editDisplayBuffer[1][13]= ARROW_SIGN;
+      //visibleCursor = VIS_CURS(1,14,1);
+      }
+   } 
+   else { // bottom row 
+   //ok button shown for loading everything except kit and morph - which are loaded instantaneously
+      if(menu_saveOptions.what != SAVE_TYPE_KIT && menu_saveOptions.what != SAVE_TYPE_MORPH) {
+         memcpy_P(&editDisplayBuffer[1][14],menuText_ok,2);
+         if((menu_saveOptions.state==SAVE_STATE_OK) ||
+         (menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE)) {
+         //arrow before parameter
+            editDisplayBuffer[1][13]= ARROW_SIGN;
+         //visibleCursor = VIS_CURS(1,14,1);
+         }
+      } 
+      else { //clear ok text
+         editDisplayBuffer[1][14] = 0;
+         editDisplayBuffer[1][15] = 0;
+      }
+   }
+}
+
 //-----------------------------------------------------------------
 static uint8_t has2ndPage(uint8_t menuPage)
 {
@@ -739,14 +1272,15 @@ static uint8_t checkScrollSign(uint8_t activePage, uint8_t activeParameter)
 
 	//**GMENU show '*' when both left and right movement are possible in the global settings menu
 	// show > or < as appropriate
-	if(menu_activePage==MENU_MIDI_PAGE) {
+	if(menu_activePage==MENU_MIDI_PAGE||menu_activePage==PERFORMANCE_PAGE) {
 		if(is2ndPage) {
 			//if we are on 2nd screen, and there are more sub-pages after this show "*" to signify both ways are available
-			if((activePage < NUM_SUB_PAGES-1) && (pgm_read_byte(&menuPages[MENU_MIDI_PAGE][activePage+1].top1) != TEXT_EMPTY))
+			if((activePage < NUM_SUB_PAGES-1) && (pgm_read_byte(&menuPages[menu_activePage][activePage+1].top1) != TEXT_EMPTY))
 				return '*';
 			else // on 2nd screen, no sub-pages after this
 				return '<';
-		} else { // on 1st screen
+		}
+      else { // on 1st screen
 			if(has2ndPage(activePage)) { // have a second screen
 				if(activePage > 0)  // on first screen and there are sub-pages before this and a second screen after
 					return '*';
@@ -836,7 +1370,10 @@ void menu_repaintGeneric()
 		//get address from top1-4 from activeParameter (base adress top1 + offset)
 		uint8_t parName = pgm_read_byte(&ap->top1 + activeParameter);
 		uint16_t parNr = pgm_read_word(&ap->bot1 + activeParameter);
-		curParmVal = parameter_values[parNr];
+      if (shiftState && parNr < END_OF_SOUND_PARAMETERS)
+         curParmVal = parameters2[parNr];
+      else    
+		   curParmVal = parameter_values[parNr];
 
 		// just clear the whole thing
 		memset(&editDisplayBuffer[0][0],' ',16);
@@ -846,9 +1383,16 @@ void menu_repaintGeneric()
 		{
 			//**AUTOM --AS this is an index into modTargets now
 			//Top row (which destination (1 or 2) and which voice it's targeting)
-			memcpy_P(&editDisplayBuffer[0][0],PSTR("AutDst"),6);
-			numtostru(&editDisplayBuffer[0][7],(uint8_t)( parNr - PAR_P1_DEST + 1));
+			if(menu_activePage==PERFORMANCE_PAGE){
+            //Top row left -> category
+			   strcpy_P(&editDisplayBuffer[0][0],
+				(const char PROGMEM *)(&catNames[pgm_read_byte(&valueNames[parName].category)]));
 
+         }
+         else {
+            memcpy_P(&editDisplayBuffer[0][0],PSTR("AutDst"),6);
+			   numtostru(&editDisplayBuffer[0][7],(uint8_t)( parNr - PAR_P1_DEST + 1));
+         }
 			// bottom row is the category and long name for the parameter being targeted
 			if( pgm_read_word(&modTargets[curParmVal].param)==PAR_NONE ) {
 				//  OFF
@@ -926,6 +1470,7 @@ void menu_repaintGeneric()
 			case DTYPE_0B127:
 			case DTYPE_0B255:
 			case DTYPE_1B16:
+         case DTYPE_0B16:
 			case DTYPE_0B15:
 			case DTYPE_VOICE_LFO:
 				numtostrpu(&editDisplayBuffer[1][13],(uint8_t)(curParmVal),' ');
@@ -935,6 +1480,11 @@ void menu_repaintGeneric()
 		} // parameter type is not automation target
 
 	} // if editmode active
+   
+   
+   
+   
+   
 	else
 	{ // editmode not active - show regular menu parameters
 
@@ -1026,6 +1576,7 @@ void menu_repaintGeneric()
 				case DTYPE_0B127:
 				case DTYPE_0B255:
 				case DTYPE_1B16:
+            case DTYPE_0B16:
 				case DTYPE_0B15:
 				case DTYPE_VOICE_LFO:
 					// fallthrough for the rest of the unsigned values
@@ -1047,12 +1598,19 @@ void menu_repaint()
 {
 
 	visibleCursor = 0;
-	if(menu_activePage >= LOAD_PAGE && menu_activePage<=SAVE_PAGE)
+	if(menu_activePage == LOAD_PAGE)
 	{
 		//this is a special case because the load/save page differs from all the other pages
-		menu_repaintLoadSavePage();
+		menu_repaintLoadPage();
 
-	} else {
+	} 
+   else if(menu_activePage == SAVE_PAGE)
+   {
+   
+      menu_repaintSavePage();
+   }
+   
+   else {
 		menu_repaintGeneric();
 	}
 
@@ -1060,296 +1618,745 @@ void menu_repaint()
 	sendDisplayBuffer();
 };
 //-----------------------------------------------------------------
+//save screen knob shortcuts
+
+
+
 void menu_handleSaveScreenKnobValue(uint8_t potNr, uint8_t value)
 {
-	uint8_t x;
+   uint8_t x=value;
+   switch(potNr)
+   {       
+      case 0: // knob 1 actions // selects menu_saveOptions.what
+            // kit, pattern, perform, all, settings
+         x = value/(256/NUM_SAVE_TYPES);
+         switch(x){
+            case SAVE_TYPE_DRUM1:
+            case SAVE_TYPE_DRUM2:
+            case SAVE_TYPE_DRUM3:
+            case SAVE_TYPE_SNARE:
+            case SAVE_TYPE_CYM:
+            case SAVE_TYPE_HIHAT:
+            case SAVE_TYPE_KIT:
+               menu_saveOptions.what=SAVE_TYPE_KIT;
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+               break;
+            case SAVE_TYPE_MORPH:
+               menu_saveOptions.what=SAVE_TYPE_MORPH;
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+               break;
+            case SAVE_TYPE_PATTERN:
+               menu_saveOptions.what=SAVE_TYPE_PATTERN;
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+               break;
+            case SAVE_TYPE_SAMPLES:
+            case SAVE_TYPE_GLO:
+               menu_saveOptions.what=SAVE_TYPE_GLO;
+               break;
+            case SAVE_TYPE_PERFORMANCE:
+               menu_saveOptions.what=SAVE_TYPE_PERFORMANCE;
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+               break;
+            case SAVE_TYPE_ALL:
+               menu_saveOptions.what=SAVE_TYPE_ALL;
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+               break;
+            default:
+               break;
+         }
+         break;
+         
+            
+      case 1: // knob 2 actions // selects menu_saveOptions.state
+                    // choose to edit type, preset number, alphanums
+         switch(menu_saveOptions.what) {
+                  case SAVE_TYPE_KIT:
+                  case SAVE_TYPE_MORPH:
+                  case SAVE_TYPE_PERFORMANCE:
+                  case SAVE_TYPE_ALL:
+                  case SAVE_TYPE_PATTERN:
+               x=value/(256/SAVE_STATE_OK);
+               break;
+            case SAVE_TYPE_GLO: // global doesn't have a name
+               if(value<127)
+               {
+                  x=SAVE_STATE_EDIT_TYPE;
+               }
+               else
+               {
+                  x=SAVE_STATE_OK;
+               }
+               break;
+            default:
+               break;
+                     
+         }
+         DISABLE_CONV_WARNING
+         menu_saveOptions.state=x;
+         END_DISABLE_CONV_WARNING
+         break;
+               
+         
+      case 2: // knob 3 actions  // edit the .state
+         switch(menu_saveOptions.state) {
+            case SAVE_STATE_EDIT_TYPE:
+                  // type is kit, pattern, perf, all, settings
+               editModeActive=1;
+               x=value/(256/6); // there are 6 options for save type
+               switch(x){
+                  case 0:
+                     menu_saveOptions.what=SAVE_TYPE_KIT;
+                     DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+                     break;
+                  case 1:
+                     menu_saveOptions.what=SAVE_TYPE_MORPH;
+                     DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+                     break;
+                  case 2:
+                     menu_saveOptions.what=SAVE_TYPE_PATTERN;
+                     DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+                     break;
+                  case 3:
+                     menu_saveOptions.what=SAVE_TYPE_PERFORMANCE;
+                     DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+                     break;
+                  case 4:
+                     menu_saveOptions.what=SAVE_TYPE_ALL;
+                     DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+                     break;
+                  case 5:
+                     menu_saveOptions.what=SAVE_TYPE_GLO;
+                     break;
+               }
+               break;
+            case SAVE_STATE_EDIT_PRESET_NR:
+                     // global has no preset number
+               if(menu_saveOptions.what!=SAVE_TYPE_GLO)
+               {
+                  x=value/2;
+                  editModeActive=1;
+                  menu_currentPresetNr[menu_saveOptions.what]=x;
+                  DISABLE_CONV_WARNING
+                  preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+                  END_DISABLE_CONV_WARNING
+               }
+               else // if it is global, how did we get here?
+                          // put the cursor back on type, please
+               {
+                  editModeActive=0;
+                  menu_saveOptions.state=SAVE_STATE_EDIT_TYPE;
+               }
+               break;
+                  case SAVE_STATE_EDIT_NAME1:
+                  case SAVE_STATE_EDIT_NAME2:
+                  case SAVE_STATE_EDIT_NAME3:
+                  case SAVE_STATE_EDIT_NAME4:
+                  case SAVE_STATE_EDIT_NAME5:
+                  case SAVE_STATE_EDIT_NAME6:
+                  case SAVE_STATE_EDIT_NAME7:
+                  case SAVE_STATE_EDIT_NAME8:
+               editModeActive=1;
+               //x=(uint8_t)((value/(256/128))+128);
+               
+               x=(uint8_t)(value/(256/128));
+               if(x<32) // put upper case letters at the front of the list
+               x=(uint8_t)(x+65);
+               else if(x<65) // put common characters, then numbers next
+               x=(uint8_t)(x-32+32);
+               else if(x<95)
+               x=(uint8_t)(x-64);// the weird characters from the start of the list
+               else
+               x=(uint8_t)(x-95+224);
+               
+               DISABLE_CONV_WARNING
+               preset_currentSaveMenuName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] = x;
+               END_DISABLE_CONV_WARNING
+               break;
+            default:
+               break; // does nothing on 'ok' - you have to click the encoder
+                     
+         }
+         break;
+               
+      case 3: // knob 4 actions  // for alphanums only - second bank 
+         switch(menu_saveOptions.state) {
+                  case SAVE_STATE_EDIT_NAME1:
+                  case SAVE_STATE_EDIT_NAME2:
+                  case SAVE_STATE_EDIT_NAME3:
+                  case SAVE_STATE_EDIT_NAME4:
+                  case SAVE_STATE_EDIT_NAME5:
+                  case SAVE_STATE_EDIT_NAME6:
+                  case SAVE_STATE_EDIT_NAME7:
+                  case SAVE_STATE_EDIT_NAME8:
+               editModeActive=1;
+               //x=(uint8_t)(value/(256/128));
+               
+               x=(uint8_t)(value/(256/128));
+               if (x<127)//(x<26) // put lower case letters at the front of the list
+               x=(uint8_t)(x+97);
+               else
+               x=x;
+               
+               
+               DISABLE_CONV_WARNING
+               preset_currentSaveMenuName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] = x;
+               END_DISABLE_CONV_WARNING
+               break;
+            default:
+                     
+               break; // does nothing otherwise
+                     
+         }
+         break;
+   }	
+   
+}
 
-	if(menu_saveOptions.state >=SAVE_STATE_EDIT_TYPE && menu_saveOptions.state <=SAVE_STATE_EDIT_PRESET_NR)
-	{
-		if(potNr==0) {
-			// change type  to be loaded/saved
-			x = value/(255/NUM_SAVE_TYPES);
-			if(menu_activePage == SAVE_PAGE) {
-				// can't save samples
-				if(x>SAVE_TYPE_GLO) x=SAVE_TYPE_GLO;
-			} else {
-				if(x>SAVE_TYPE_SAMPLES) x=SAVE_TYPE_SAMPLES;
-			}
 
-			menu_saveOptions.what = (uint8_t)(x & 0x07); // avoid compiler warning
+   
+//-----------------------------------------------------------------  
 
-			// load preset name for applicable types
-			if(menu_saveOptions.what < SAVE_TYPE_GLO) {
-				preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what);
-			}
+// load screen knob shortcuts
 
-			//force complete repaint
-			menu_repaintAll();
-		}			
-	}
-	else if(menu_saveOptions.state >=SAVE_STATE_EDIT_NAME1 && menu_saveOptions.state <=SAVE_STATE_EDIT_NAME8)
-	{
-		switch(potNr) {
-		// move cursor
-		case 0: //switch(potNr)
-			x = value/(256/7); //0-7
-			menu_saveOptions.state = (uint8_t)((2 + x) & 0x0F);
-			//force complete repaint
-			menu_repaintAll();
-			break;
 
-			// select lower,upper,number
-		case 1://switch(potNr)
-			x = value/(256/2); //0-2
-			switch(x)
-			{
-			case 0: //Upper Case
-				preset_currentName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] =
-					(char)toupper(preset_currentName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1]);
-				break;
-
-			case 1: //lower case
-				preset_currentName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] =
-					(char)tolower(preset_currentName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1]);
-				break;
-
-			case 2: //numbers
-				//don't know how to do this without loosing selected character
-				break;
-
-			}
-			break;
-
-			// scroll through letters
-		case 2: //switch(potNr)
-			    //32 to 127 => default ascii range numbers/letters
-				x = (uint8_t)(value/(256/(127-32.f)) + 32); //32 - 127
-				preset_currentName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] = x;
-				break;
-
-				//nothing
-		case 3: //switch(potNr)
-		default://switch(potNr)
-			break;
-		} //switch(potNr)
-	}		
+void menu_handleLoadScreenKnobValue(uint8_t potNr, uint8_t value)
+{
+   uint8_t x=value;
+   switch(potNr)
+   {
+      case 0: // selects menu_saveOptions.what
+           // kit, pattern, perform, all, settings
+         x = value/(256/NUM_SAVE_TYPES);
+         switch(x){
+            case SAVE_TYPE_KIT:
+               menu_saveOptions.what=SAVE_TYPE_KIT;
+               break;
+            case SAVE_TYPE_MORPH:
+               menu_saveOptions.what=SAVE_TYPE_MORPH;
+               break;
+            case SAVE_TYPE_DRUM1:
+               menu_saveOptions.what=SAVE_TYPE_DRUM1;
+               break;
+            case SAVE_TYPE_DRUM2:
+               menu_saveOptions.what=SAVE_TYPE_DRUM2;
+               break;
+            case SAVE_TYPE_DRUM3:
+               menu_saveOptions.what=SAVE_TYPE_DRUM3;
+               break;
+            case SAVE_TYPE_SNARE:
+               menu_saveOptions.what=SAVE_TYPE_SNARE;
+               break;
+            case SAVE_TYPE_CYM:
+               menu_saveOptions.what=SAVE_TYPE_CYM;
+               break;
+            case SAVE_TYPE_HIHAT:
+               menu_saveOptions.what=SAVE_TYPE_HIHAT;
+               break;
+            case SAVE_TYPE_PATTERN:
+               menu_saveOptions.what=SAVE_TYPE_PATTERN;
+               break;
+            case SAVE_TYPE_GLO:
+               menu_saveOptions.what=SAVE_TYPE_GLO;
+               break;
+            case SAVE_TYPE_PERFORMANCE:
+               menu_saveOptions.what=SAVE_TYPE_PERFORMANCE;
+               break;
+            case SAVE_TYPE_ALL:
+               menu_saveOptions.what=SAVE_TYPE_ALL;
+               break;
+            case SAVE_TYPE_SAMPLES:
+               menu_saveOptions.what=SAVE_TYPE_SAMPLES;
+               break;
+            default:
+               break;
+         }
+         break;
+      case 1: // on load screen, always selects preset number
+              // if this is an option, auto-load if a voice thing
+              // and the preset number is bracketed
+         x=value/2;
+         switch(menu_saveOptions.what) {
+            case SAVE_TYPE_KIT:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x7f, 0);
+                  menu_TargetVoiceGapIndex = getModTargetGapIndex(parameter_values[PAR_TARGET_LFO1 + menu_activeVoice]);
+               }
+               break;
+            case SAVE_TYPE_DRUM1:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x01,0);
+               }
+               break;
+            case SAVE_TYPE_DRUM2:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x02,0);
+               }
+               break;
+            case SAVE_TYPE_DRUM3:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x04,0);
+               }
+               break;
+            case SAVE_TYPE_SNARE:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x08,0);
+               }
+               break;
+            case SAVE_TYPE_CYM:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x10,0);
+               }
+               break;
+            case SAVE_TYPE_HIHAT:
+                     // special case - instead of a bank we send literal bits to change both
+                     // closed and open hi-hat voices
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x60,0);
+               }
+               break;
+            case SAVE_TYPE_MORPH:
+                     //load to morph buffer
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               if(editModeActive){
+                  preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x7f,1);
+               }
+               break;
+            case SAVE_TYPE_PERFORMANCE:
+            case SAVE_TYPE_ALL:
+            case SAVE_TYPE_PATTERN:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+         }
+               
+         switch(menu_saveOptions.what){
+            case SAVE_TYPE_KIT:
+            case SAVE_TYPE_DRUM1:
+            case SAVE_TYPE_DRUM2:
+            case SAVE_TYPE_DRUM3:
+            case SAVE_TYPE_SNARE:
+            case SAVE_TYPE_CYM:
+            case SAVE_TYPE_HIHAT:
+            case SAVE_TYPE_PERFORMANCE:
+            case SAVE_TYPE_ALL:
+            case SAVE_TYPE_PATTERN:
+               menu_currentPresetNr[menu_saveOptions.what]=x;
+               break;
+            default:
+               break;
+         }
+         break;
+      case 2: // this does nothing but disable quickload on the load screen
+         editModeActive=0;
+         break;
+      case 3: // this jumps between .what and 'ok' if it exists
+         editModeActive=0;
+         x=value/127;
+         switch(menu_saveOptions.what) {
+            case SAVE_TYPE_PATTERN:
+            case SAVE_TYPE_PERFORMANCE:
+            case SAVE_TYPE_ALL:
+            case SAVE_TYPE_GLO:
+            case SAVE_TYPE_SAMPLES:
+               if (x){
+                  menu_saveOptions.state=SAVE_STATE_OK;
+               }
+               else{
+                  menu_saveOptions.state=SAVE_STATE_EDIT_TYPE;
+               }
+               break;
+            default:
+               menu_saveOptions.state=SAVE_STATE_EDIT_TYPE;
+               break;   
+         }
+         break;
+   }	
 
 }
+
+
+
+
 //-----------------------------------------------------------------
-void menu_handleLoadSaveMenu(int8_t inc, uint8_t btnClicked)
+void menu_handleLoadMenu(int8_t inc, uint8_t btnClicked)
 {
 	//this is a special case because the load/save page differs from all the other pages
 	// when this is called, edit mode will have already been set or cleared. this is only
 	// called when something has changed
 
 	//---- handle the button ----
-	if(btnClicked) {
-		//if the ok button is active or we are in global save and ok is active, save/load the preset on click
-		if( (editModeActive && menu_saveOptions.state == SAVE_STATE_OK) ||
-			(menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE) ) {
-
-			if(menu_activePage == SAVE_PAGE) {
-
-				switch(menu_saveOptions.what) {
-				case SAVE_TYPE_PATTERN:
-					preset_savePattern(menu_currentPresetNr[SAVE_TYPE_PATTERN]);
-					break;
-
-				case SAVE_TYPE_KIT:
-					preset_saveDrumset(menu_currentPresetNr[SAVE_TYPE_KIT],0);
-					break;
-
-				case SAVE_TYPE_MORPH:
-					preset_saveDrumset(menu_currentPresetNr[SAVE_TYPE_MORPH],1);
-					break;
-
-				case SAVE_TYPE_GLO:
-					preset_saveGlobals();
-					break;
-
-				case SAVE_TYPE_PERFORMANCE:
-					preset_saveAll(menu_currentPresetNr[SAVE_TYPE_PERFORMANCE],0);
-					break;
-
-				case SAVE_TYPE_ALL:
-					preset_saveAll(menu_currentPresetNr[SAVE_TYPE_ALL],1);
-					break;
-				}
-				menu_resetSaveParameters();						
-
-			} else { //menu_activePage != SAVE_PAGE
-
-				//load page 
-				switch(menu_saveOptions.what) {
-				case SAVE_TYPE_PATTERN:
-					if(preset_loadPattern(menu_currentPresetNr[SAVE_TYPE_PATTERN]))
-						menu_resetSaveParameters();
-					break;
-
-				case SAVE_TYPE_PERFORMANCE:
-					preset_loadAll(menu_currentPresetNr[SAVE_TYPE_PERFORMANCE],0);
-					menu_resetSaveParameters();
-					break;
-
-				case SAVE_TYPE_ALL:
-					preset_loadAll(menu_currentPresetNr[SAVE_TYPE_ALL],1);
-					menu_resetSaveParameters();
-					break;
-
-				case SAVE_TYPE_GLO:
-					preset_loadGlobals();
-					menu_resetSaveParameters();						
-					break;
-
-				case SAVE_TYPE_SAMPLES:
-					spi_deInit();
-					//send load sample command to mainboard
-					frontPanel_sendData(SAMPLE_CC,SAMPLE_START_UPLOAD,0x00);
-
-					//Display load message
-					lcd_clear();
-					lcd_home();
-					lcd_string_F(PSTR("Sample upload"));
-					lcd_setcursor(0,2);
-					lcd_string_F(PSTR("Started"));
-					//wait for ack
-					{
-						uint8_t ret = uart_waitAck();
-						if(ret == ACK)
-						{
-
-						}
-						else
-						{
-
-						}
-					}
-					//re-initialize SD-Card
-					preset_init();
-					//redraw screen
-					// menu_repaintAll(); --AS screen will be repainted later, relax!
-
-					frontPanel_sendData(SAMPLE_CC,SAMPLE_COUNT,0x00);
-					break;
-
-
-				default:
-					break;
-				}
-			} // menu_activePage == or != SAVE_PAGE
-		} // if ok button active
-	} // btnClicked
+   if(btnClicked) {
+   	//if the ok button is active or we are in global save and ok is active, 
+      // save/load the preset on click
+      if( (editModeActive && menu_saveOptions.state == SAVE_STATE_OK) ||
+      	(menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE) ) {
+      	//load page 
+         switch(menu_saveOptions.what) {
+            
+            
+            case SAVE_TYPE_PATTERN:
+               preset_loadPattern(menu_currentPresetNr[SAVE_TYPE_PATTERN],menu_voiceArray);
+               menu_resetSaveParameters();
+               break;
+            
+            case SAVE_TYPE_PERFORMANCE:
+               //preset_loadAll(menu_currentPresetNr[SAVE_TYPE_ALL],0,0,menu_voiceArray);//last 0 is don't release kit lock
+               preset_loadPerf(menu_currentPresetNr[SAVE_TYPE_PERFORMANCE],menu_voiceArray);//last 0 is don't release kit lock
+               menu_resetSaveParameters();
+            buttonHandler_handleModeButtons(SELECT_MODE_PERF);
+               break;
+            
+            case SAVE_TYPE_ALL:
+               preset_loadAll(menu_currentPresetNr[SAVE_TYPE_ALL],menu_voiceArray);
+               //preset_loadAll(menu_currentPresetNr[SAVE_TYPE_ALL],1,0,menu_voiceArray);//last 0 is don't release kit lock
+               menu_resetSaveParameters();
+               break;
+            
+            case SAVE_TYPE_GLO:
+               preset_loadGlobals();
+               menu_resetSaveParameters();						
+               break;
+            
+            case SAVE_TYPE_SAMPLES:
+               spi_deInit();
+               
+               //Display load message
+               lcd_clear();
+               lcd_home();
+               lcd_string_F(PSTR("Sample upload"));
+               lcd_setcursor(0,2);
+               lcd_string_F(PSTR("Started"));
+               //send load sample command to mainboard
+               frontPanel_sendData(SAMPLE_CC,SAMPLE_START_UPLOAD,0x00);
+               //wait for ack
+               {
+                  uint8_t ret = uart_waitAck();
+                  if(ret == ACK)
+                  {
+                     
+                  }
+                  else
+                  {
+                     
+                  }
+               }
+               //re-initialize SD-Card
+               preset_init();
+               //redraw screen
+               // menu_repaintAll(); --AS screen will be repainted later, relax!
+               
+               frontPanel_sendData(SAMPLE_CC,SAMPLE_COUNT,0x00);
+               break;
+            
+            
+            default:
+               break;
+         }
+      
+      } // if ok button active
+   } // btnClicked
 
 	//---- handle the encoder ----
-	if(editModeActive) {
-		//encoder changes value
-		///**< 0=edit kit/pat, 1=edit preset nr, 2 = edit name*/
-		switch(menu_saveOptions.state) {
-		case 0: //switch(menu_saveOptions.state) - edit kit/Pat
-			if(inc<0) {
-				if(menu_saveOptions.what!=0) {
-					menu_saveOptions.what--;
-				}
-			} else if(inc>0) {
-				if(menu_saveOptions.what < SAVE_TYPE_SAMPLES) {
-					menu_saveOptions.what++;
-				}
-			}
+   if(editModeActive) {
+   	//encoder changes value
+   	///**< 0=edit kit/pat, 1=edit preset nr, 2 = edit name*/
+      switch(menu_saveOptions.state) {
+      
+         case 0: //switch(menu_saveOptions.state) - edit kit/Pat
+          // all the items are active on the load menu, don't have to exclude any
+            if(inc<0) {
+               if(menu_saveOptions.what!=0) {
+                  menu_saveOptions.what--;
+               }
+            } 
+            else if(inc>0) {
+               if(menu_saveOptions.what < SAVE_TYPE_SAMPLES) {
+                  menu_saveOptions.what++;
+               }
+            }
+            DISABLE_CONV_WARNING
+            preset_loadName(menu_currentPresetNr[menu_saveOptions.what],menu_saveOptions.what,0);
+            END_DISABLE_CONV_WARNING
+            break;
+      
+         case 1: //switch(menu_saveOptions.state) - edit preset nr
+            if(inc<0) {
+               if(menu_currentPresetNr[menu_saveOptions.what]+inc>=0)	{
+               DISABLE_CONV_WARNING
+                  menu_currentPresetNr[menu_saveOptions.what] += inc;
+               END_DISABLE_CONV_WARNING
+               }
+            } 
+            else if(inc>0) {
+               if(menu_currentPresetNr[menu_saveOptions.what]<=125) {
+               DISABLE_CONV_WARNING
+                  menu_currentPresetNr[menu_saveOptions.what] += inc;
+               END_DISABLE_CONV_WARNING
+               }
+            }
+         //if on load page, load the new preset when the preset number is changed
+            if((inc!=0)) {
+            
+            // always load the name regardless of what else
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,0);
+               END_DISABLE_CONV_WARNING
+            
+          
+               // if loading and type is kit and morph do an insta-load
+                  switch(menu_saveOptions.what) {
+                     case SAVE_TYPE_KIT:
+                        preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x7f, 0);
+                        menu_TargetVoiceGapIndex = getModTargetGapIndex(parameter_values[PAR_TARGET_LFO1 + menu_activeVoice]);
+                        break;
+                     case SAVE_TYPE_DRUM1:
+                        preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x01,0);
+                        break;
+                     case SAVE_TYPE_DRUM2:
+                        preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x02,0);
+                        break;
+                     case SAVE_TYPE_DRUM3:
+                        preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x04,0);
+                        break;
+                     case SAVE_TYPE_SNARE:
+                        preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x08,0);
+                        break;
+                     case SAVE_TYPE_CYM:
+                        preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x10,0);
+                        break;
+                     case SAVE_TYPE_HIHAT:
+                     // special case - instead of a bank we send literal bits to change both
+                     // closed and open hi-hat voices
+                        preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x60,0);
+                        break;
+                     case SAVE_TYPE_MORPH:
+                     //load to morph buffer
+                        preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0x7f, 1);
+                        break;
+                  }
+               
+            }
+            break; //switch(menu_saveOptions.state) - edit preset nr
+    
+      
+         default: //switch(menu_saveOptions.state)
+            break;
+      } //switch(menu_saveOptions.state)
+   } 
+   else { //editModeActive is false
+   	//encoder selects value to change
+      if(inc<0) {
+         if(menu_saveOptions.state != SAVE_STATE_EDIT_TYPE) {
+            menu_saveOptions.state --;
+         	//no name edit on load page
+            if(menu_saveOptions.state >= SAVE_STATE_EDIT_NAME1) {
+               menu_saveOptions.state = SAVE_STATE_EDIT_PRESET_NR;
+            }
+         }
+      } 
+      else if(inc>0) {
+         if(menu_saveOptions.state < SAVE_STATE_OK) {
+            menu_saveOptions.state ++;
+            	//no name edit on load page
+            if(menu_saveOptions.state >= SAVE_STATE_EDIT_NAME1 ) {
+               menu_saveOptions.state = SAVE_STATE_OK;
+            }
+            
+            	// ok button doesnt exist on kit and morph
+            if(menu_saveOptions.state == SAVE_STATE_OK ) {
+               if(menu_saveOptions.what == SAVE_TYPE_KIT ||
+                  	menu_saveOptions.what == SAVE_TYPE_DRUM1||
+                  	menu_saveOptions.what == SAVE_TYPE_DRUM2||
+                  	menu_saveOptions.what == SAVE_TYPE_DRUM3||
+                  	menu_saveOptions.what == SAVE_TYPE_SNARE||
+                  	menu_saveOptions.what == SAVE_TYPE_CYM||
+                  	menu_saveOptions.what == SAVE_TYPE_HIHAT||
+                  	menu_saveOptions.what == SAVE_TYPE_MORPH)
+                  menu_saveOptions.state = SAVE_STATE_EDIT_PRESET_NR;
+            }
+            
+            	//ok button only for load pattern
+            	//if( (menu_saveOptions.what != SAVE_TYPE_PATTERN) &&
+            	//	(menu_saveOptions.what >= SAVE_TYPE_GLO)  && menu_saveOptions.state == SAVE_STATE_OK ) {
+            	//	menu_saveOptions.state = SAVE_STATE_EDIT_PRESET_NR;
+            	//}
+            
+         }
+      } // inc<0
+   } //editModeActive
+}
 
-			preset_loadName(menu_currentPresetNr[menu_saveOptions.what],menu_saveOptions.what);
-			break;
 
-		case 1: //switch(menu_saveOptions.state) - edit preset nr
-			if(inc<0) {
-				if(menu_currentPresetNr[menu_saveOptions.what]+inc>=0)	{
-					DISABLE_CONV_WARNING
-					menu_currentPresetNr[menu_saveOptions.what] += inc;
-					END_DISABLE_CONV_WARNING
-				}
-			} else if(inc>0) {
-				if(menu_currentPresetNr[menu_saveOptions.what]<=125) {
-					DISABLE_CONV_WARNING
-					menu_currentPresetNr[menu_saveOptions.what] += inc;
-					END_DISABLE_CONV_WARNING
-				}
-			}
-			//if on load page, load the new preset when the preset number is changed
-			if((inc!=0)) {
+void menu_handleSaveMenu(int8_t inc, uint8_t btnClicked)
+{
+	//this is a special case because the load/save page differs from all the other pages
+	// when this is called, edit mode will have already been set or cleared. this is only
+	// called when something has changed
 
-				// always load the name regardless of what else
-				preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what);
+	//---- handle the button ----
+   if(btnClicked) {
+   	//if the ok button is active or we are in global save and ok is active, save/load the preset on click
+      if( (editModeActive && menu_saveOptions.state == SAVE_STATE_OK) ||
+      	(menu_saveOptions.what >= SAVE_TYPE_GLO && menu_saveOptions.state > SAVE_STATE_EDIT_TYPE) ) {
+      
+         
+         switch(menu_saveOptions.what) {
+            case SAVE_TYPE_PATTERN:
+               preset_savePattern(menu_currentPresetNr[SAVE_TYPE_PATTERN]);
+               break;
+            
+            case SAVE_TYPE_KIT:
+               preset_saveDrumset(menu_currentPresetNr[SAVE_TYPE_KIT],0);
+               break;
+               
+            case SAVE_TYPE_MORPH:
+               preset_saveDrumset(menu_currentPresetNr[SAVE_TYPE_MORPH],1);
+               break;
+            
+            case SAVE_TYPE_GLO:
+               preset_saveGlobals();
+               break;
+            
+            case SAVE_TYPE_PERFORMANCE:
+               preset_saveAll(menu_currentPresetNr[SAVE_TYPE_PERFORMANCE],0);
+               break;
+            
+            case SAVE_TYPE_ALL:
+               preset_saveAll(menu_currentPresetNr[SAVE_TYPE_ALL],1);
+               break;
+         }
+         menu_resetSaveParameters();						
+      } // if ok button active
+      
+   } // btnClicked
 
-				if(menu_activePage == LOAD_PAGE) {
-					// if loading and type is kit and morph do an insta-load
-					switch(menu_saveOptions.what) {
-					case SAVE_TYPE_KIT:
-						preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],0);
-						// **LFOTARGFIX - save the gap index
-						menu_TargetVoiceGapIndex = getModTargetGapIndex(parameter_values[PAR_TARGET_LFO1 + menu_activeVoice]);
-						break;
-					case SAVE_TYPE_MORPH:
-						//load to morph buffer
-						preset_loadDrumset(menu_currentPresetNr[menu_saveOptions.what],1);
-						break;
-					}
-				}
-			}
-			break; //switch(menu_saveOptions.state) - edit preset nr
+	//---- handle the encoder ----
+   if(editModeActive) {
+   	//encoder changes value
+   	///**< 0=edit kit/pat, 1=edit preset nr, 2 = edit name*/
+      switch(menu_saveOptions.state) {
+         case 0: //switch(menu_saveOptions.state) - edit kit/Pat
+            if(inc<0) {
+               if(menu_saveOptions.what!=0) {
+                  switch (menu_saveOptions.what){
+                     case SAVE_TYPE_MORPH:
+                        
+                        /*menu_saveOptions.what=SAVE_TYPE_MORPH;*/
+                        // skip instruments- can't save, go straight to kit
+                        menu_saveOptions.what=SAVE_TYPE_KIT;
+                        break;
+                     default:
+                        menu_saveOptions.what--;
+                        break;
+                  }
+               }
+            } 
+            else if(inc>0) {
+               if(menu_saveOptions.what < SAVE_TYPE_SAMPLES) {
+                  switch (menu_saveOptions.what){
+                     case SAVE_TYPE_KIT:
+                        // -bc- save for later
+                        /*menu_saveOptions.what=SAVE_TYPE_MORPH;*/
+                        // skip instruments- can't save, go straight to pat
+                        menu_saveOptions.what=SAVE_TYPE_MORPH;
+                        break;
+                     case SAVE_TYPE_GLO:
+                        // can't save samples, don't go above global settings
+                        break;
+                     default:
+                        menu_saveOptions.what++;
+                        break;
+                  }
+               }
+            }
+         
+            preset_loadName(menu_currentPresetNr[menu_saveOptions.what],(uint8_t)menu_saveOptions.what,1);
+            break;
+      
+         case 1:
+         //user is on the preset (number) item 
+         //switch(menu_saveOptions.state) - edit preset nr
+            if(inc<0) {
+               if(menu_currentPresetNr[menu_saveOptions.what]+inc>=0)	{
+               DISABLE_CONV_WARNING
+                  menu_currentPresetNr[menu_saveOptions.what] += inc;
+               END_DISABLE_CONV_WARNING
+               }
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+            } 
+            else if(inc>0) {
+               if(menu_currentPresetNr[menu_saveOptions.what]<=125) {
+               DISABLE_CONV_WARNING
+                  menu_currentPresetNr[menu_saveOptions.what] += inc;
+               END_DISABLE_CONV_WARNING
+               }
+               DISABLE_CONV_WARNING
+               preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,1);
+               END_DISABLE_CONV_WARNING
+            }
 
-		//edit name
-		case 2: // switch(menu_saveOptions.state) char 1
-		case 3: // switch(menu_saveOptions.state) char 2
-		case 4: // switch(menu_saveOptions.state) char 3
-		case 5: // switch(menu_saveOptions.state) char 4
-		case 6: // switch(menu_saveOptions.state) char 5
-		case 7: // switch(menu_saveOptions.state) char 6
-		case 8: // switch(menu_saveOptions.state) char 7
-		case 9: // switch(menu_saveOptions.state) char 8
-			DISABLE_CONV_WARNING
-			preset_currentName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] += inc;
-			END_DISABLE_CONV_WARNING
-			break;
-
-		default: //switch(menu_saveOptions.state)
-			break;
-		} //switch(menu_saveOptions.state)
-	} else { //editModeActive is false
-		//encoder selects value to change
-		if(inc<0) {
-			if(menu_saveOptions.state != SAVE_STATE_EDIT_TYPE) {
-				menu_saveOptions.state --;
-				//no name edit on load page
-				if(menu_activePage == LOAD_PAGE && menu_saveOptions.state >= SAVE_STATE_EDIT_NAME1) {
-					menu_saveOptions.state = SAVE_STATE_EDIT_PRESET_NR;
-				}
-			}
-		} else if(inc>0) {
-			if(menu_saveOptions.state < SAVE_STATE_OK) {
-				menu_saveOptions.state ++;
-
-				if(menu_activePage == LOAD_PAGE)
-				{
-					//no name edit on load page
-					if(menu_saveOptions.state >= SAVE_STATE_EDIT_NAME1 ) {
-						menu_saveOptions.state = SAVE_STATE_OK;
-					}
-
-					// ok button doesnt exist on kit and morph
-					if(menu_saveOptions.state == SAVE_STATE_OK ) {
-						if(menu_saveOptions.what == SAVE_TYPE_KIT ||
-							menu_saveOptions.what == SAVE_TYPE_MORPH)
-							menu_saveOptions.state = SAVE_STATE_EDIT_PRESET_NR;
-					}
-
-					//ok button only for load pattern
-					//if( (menu_saveOptions.what != SAVE_TYPE_PATTERN) &&
-					//	(menu_saveOptions.what >= SAVE_TYPE_GLO)  && menu_saveOptions.state == SAVE_STATE_OK ) {
-					//	menu_saveOptions.state = SAVE_STATE_EDIT_PRESET_NR;
-					//}
-				}
-			}
-		} // inc<0
-	} //editModeActive
+            break; //switch(menu_saveOptions.state) - edit preset nr
+      
+      //edit name
+         case 2: // switch(menu_saveOptions.state) char 1
+         case 3: // switch(menu_saveOptions.state) char 2
+         case 4: // switch(menu_saveOptions.state) char 3
+         case 5: // switch(menu_saveOptions.state) char 4
+         case 6: // switch(menu_saveOptions.state) char 5
+         case 7: // switch(menu_saveOptions.state) char 6
+         case 8: // switch(menu_saveOptions.state) char 7
+         case 9: // switch(menu_saveOptions.state) char 8
+         DISABLE_CONV_WARNING
+            preset_currentSaveMenuName[menu_saveOptions.state - SAVE_STATE_EDIT_NAME1] += inc;
+         END_DISABLE_CONV_WARNING
+            break;
+      
+         default: //switch(menu_saveOptions.state)
+            break;
+      } //switch(menu_saveOptions.state)
+   } 
+   else { //editModeActive is false
+   	//encoder selects value to change
+      if(inc<0) {
+         if(menu_saveOptions.state != SAVE_STATE_EDIT_TYPE) {
+            menu_saveOptions.state --;
+         }
+      } 
+      else if(inc>0) {
+         if (menu_saveOptions.state < SAVE_STATE_OK)
+         {
+         menu_saveOptions.state ++;
+         }
+         
+      } // inc<0
+   } //editModeActive
 }
 
 // given a menu id returns the number of entries
@@ -1371,8 +2378,8 @@ static uint8_t getMaxEntriesForMenu(uint8_t menuId)
 		return retriggerNames[0][0];
 	case MENU_SEQ_QUANT:
 		return quantisationNames[0][0];
-	case MENU_MIDI:
-		return midiModes[0][0];
+	/*case MENU_MIDI:
+		return 2;//midiModes[0][0]; - is overridden for adding roll menu*/
 	case MENU_NEXT_PATTERN:
 		return nextPatternNames[0][0];
 	case MENU_WAVEFORM:
@@ -1385,6 +2392,10 @@ static uint8_t getMaxEntriesForMenu(uint8_t menuId)
 		return midiFilterNames[0][0];
 	case MENU_PPQ:
 		return ppqNames[0][0];
+   case MENU_TRACK_SCALE:
+      return trackScaleNames[0][0];
+   case MENU_MIDI:
+      return midiModes[0][0];
 	default:
 		return 0;
 	}
@@ -1429,9 +2440,12 @@ static void getMenuItemNameForValue(const uint8_t menuId, const uint8_t curParmV
 	case MENU_SEQ_QUANT:
 		p=quantisationNames[curParmVal+1];
 		break;
-	case MENU_MIDI:
+	/*case MENU_MIDI:
 		p=midiModes[curParmVal+1];
-		break;
+		break;*/
+   case MENU_MIDI:
+		p=midiModes[curParmVal+1];
+      break;
 	case MENU_NEXT_PATTERN:
 		p=nextPatternNames[curParmVal+1];
 		break;
@@ -1447,6 +2461,9 @@ static void getMenuItemNameForValue(const uint8_t menuId, const uint8_t curParmV
 	case MENU_PPQ:
 		p=ppqNames[curParmVal+1];
 		break;
+   case MENU_TRACK_SCALE:
+      p=trackScaleNames[curParmVal+1];
+      break;
 	default:
 		p=menuText_dash;
 		break;
@@ -1465,19 +2482,30 @@ void menu_parseEncoder(int8_t inc, uint8_t button)
 	// handle the button being clicked or released
 	if(button != lastEncoderButton) { // was the button clicked?
 		btnClicked=button;
+      screensaver_touch();
 		if(btnClicked) // toggle edit mode
 			editModeActive = (uint8_t)(1-editModeActive);
 		lastEncoderButton = button;
 	} else if(inc==0)
 		return; // nothing has changed. do nothing
 
-	screensaver_touch();
+	
 
 	inc = (int8_t)(inc * -1);
+   if (inc != 0)
+   {
+      screensaver_touch();
+   }
 
-	if(menu_activePage == LOAD_PAGE || menu_activePage == SAVE_PAGE) {
-		menu_handleLoadSaveMenu(inc, btnClicked);
-	} else if(inc!=0) {
+	if(menu_activePage == LOAD_PAGE)
+   {
+		menu_handleLoadMenu(inc, btnClicked);
+   }
+   else if (menu_activePage == SAVE_PAGE)
+   {
+      menu_handleSaveMenu(inc, btnClicked);
+   }
+	else if(inc!=0) {
 		//============================= handle encoder change ==============================
 		if(copyClear_isClearModeActive()) {
 			//encoder selects clear target
@@ -1496,7 +2524,11 @@ void menu_parseEncoder(int8_t inc, uint8_t button)
 
 		} else if(editModeActive) {
 			// edit mode is active so change the value of the current parameter
-			menu_encoderChangeParameter(inc);
+         inc = menu_applyEncoderAcceleration(inc);
+         if (buttonHandler_getShift())
+            menu_encoderChangeShiftParameter(inc);
+         else
+			   menu_encoderChangeParameter(inc);
 		} else {
 			//edit mode not active so encoder selects active parameter
 			menu_moveToMenuItem(inc);
@@ -1506,34 +2538,61 @@ void menu_parseEncoder(int8_t inc, uint8_t button)
 	menu_repaintAll();
 }
 
+
+static int8_t menu_applyEncoderAcceleration(int8_t inc)
+{
+   const uint8_t multiplier = encode_getAccelerationMultiplier();
+   int16_t accelerated;
+
+   if(multiplier <= 1 || inc == 0)
+      return inc;
+
+   accelerated = (int16_t)inc * multiplier;
+
+   if(accelerated > INT8_MAX)
+      return INT8_MAX;
+   if(accelerated < INT8_MIN)
+      return INT8_MIN;
+
+   return (int8_t)accelerated;
+}
+
+
+static void menu_applyEncoderDeltaToByte(uint8_t *paramValue, int8_t inc)
+{
+   int16_t value = *paramValue;
+
+   value += inc;
+
+   if(value < 0)
+      value = 0;
+   else if(value > 255)
+      value = 255;
+
+   *paramValue = (uint8_t)value;
+}
+
 //-----------------------------------------------------------------
 // called when edit mode is active
 // encoder controls parameter value
 // given a delta, will apply that to the current parameter
 static void menu_encoderChangeParameter(int8_t inc)
 {
+   screensaver_touch();
 	const uint8_t activeParameter	= menuIndex & MASK_PARAMETER;
 	const uint8_t activePage		= (menuIndex&MASK_PAGE)>>PAGE_SHIFT;
 
 	//get address from top1-8 from activeParameter (base adress top1 + offset)
 	uint16_t paramNr		= pgm_read_word(&menuPages[menu_activePage][activePage].bot1 + activeParameter);
 	uint8_t *paramValue = &parameter_values[paramNr];
+   uint8_t isMorphParam = (paramNr<END_OF_SOUND_PARAMETERS&&buttonHandler_getShift());
+   
+   if (isMorphParam&&(menu_activePage<=VOICE7_PAGE))
+   {
+      paramValue = &parameters2[paramNr];
+   }
 
-	//increase parameter value
-	if(inc>0) //positive increase
-	{
-		if(*paramValue != 255) //omit wrap for 0B255 dtypes
-			*paramValue = (uint8_t)(*paramValue + inc);
-	}
-	else if (inc<0) //neg increase
-	{
-		if(*paramValue >= abs(inc)) //omit negative wrap. inc can also be -2 or -3 depending on turn speed!
-		{
-			DISABLE_CONV_WARNING
-			*paramValue += inc;
-			END_DISABLE_CONV_WARNING
-		}
-	}
+		menu_applyEncoderDeltaToByte(paramValue, inc);
 
 	switch(pgm_read_byte(&parameter_dtypes[paramNr]) & 0x0F)
 	{
@@ -1561,6 +2620,7 @@ static void menu_encoderChangeParameter(int8_t inc)
 		 */
 		upper = (uint8_t)( (uint8_t)((value&0x80)>>7) | ((voiceNr&0x3f)<<1) );
 		lower = value&0x7f;
+      if (!isMorphParam)
 		frontPanel_sendData(CC_VELO_TARGET,upper,lower);
 		//return;
 	}
@@ -1590,6 +2650,7 @@ static void menu_encoderChangeParameter(int8_t inc)
 		uint8_t upper,lower;
 		upper = (uint8_t)(((value&0x80)>>7) | ((((uint8_t)(paramNr - PAR_VOICE_LFO1))&0x3f)<<1));
 		lower = value&0x7f;
+      if (!isMorphParam)
 		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
 		//return;
 	}
@@ -1615,25 +2676,44 @@ static void menu_encoderChangeParameter(int8_t inc)
 		uint8_t upper,lower;
 		upper = (uint8_t)((uint8_t)((value&0x80)>>7) | (((paramNr - PAR_TARGET_LFO1)&0x3f)<<1));
 		lower = value&0x7f;
+      if (!isMorphParam)
 		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
 		//--AS fall thru to update display
 	}
 		break;
 
 	case DTYPE_AUTOM_TARGET: {//parameter_dtypes[paramNr] & 0x0F
-		const uint8_t nmt=getNumModTargets();
-		//**AUTOM - limit to valid range for encoder
-		if(*paramValue >= nmt)
-			*paramValue = (uint8_t)(nmt-1);
-		break;
+   
+    	const uint8_t nmt=getNumModTargets();
+   	//**AUTOM - limit to valid range for encoder
+   	if(*paramValue >= nmt)
+   		*paramValue = (uint8_t)(nmt-1);
+      if (menu_activePage == PERFORMANCE_PAGE)
+      { // the only time you get a dtype autom target on the PERF page is when assigning macros
+   		uint8_t value =  (uint8_t)pgm_read_word(&modTargets[*paramValue].param); // the value of the mod target
+         uint8_t lower = value&0x7f;
+         uint8_t upper = (uint8_t)
+                         ( ( ( (paramNr - PAR_MAC1_DST1) //  MAC1_DST1=0, M1D2=2, M2D1=4, M2D2=6
+                              >>1 )                      //  MAC1_DST1=0, M1D2=1, M2D1=2, M2D2=3
+                              <<2 )                      //  shift over 2 to make room for upper mod target bit
+                              |(value>>7) );
+                              
+         
+         frontPanel_sendData(MACRO_CC,upper,lower);
+      }      
 	}
+   break;
 
 	case DTYPE_0B255:
 		//if(*paramValue > 255)
 		//	*paramValue = 255;
 		break;
 
-
+   case DTYPE_0B16://parameter_dtypes[paramNr] & 0x0F
+	   if(*paramValue > 16)
+			*paramValue = 16;
+		break;
+   
 	case DTYPE_1B16://parameter_dtypes[paramNr] & 0x0F
 		if(*paramValue < 1)
 			*paramValue = 1;
@@ -1676,21 +2756,246 @@ static void menu_encoderChangeParameter(int8_t inc)
 	// --AS TODO this will also send MIDI_CC or CC_2 for the above items that have already been sent. is this desired?
 	//send parameter change to uart tx
 	if(paramNr < 128) // => Sound Parameter
-		frontPanel_sendData(MIDI_CC,(uint8_t)paramNr,*paramValue);
+   {
+      if (!isMorphParam)
+      {
+		   frontPanel_sendData(MIDI_CC,(uint8_t)paramNr,*paramValue);
+      }
+   }
 	else if(paramNr > 127 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
+   {
+      if (!isMorphParam)
+      {
+		   frontPanel_sendData(CC_2,(uint8_t)(paramNr-128),*paramValue);
+      }
+   }
+	else // non sound parameters (ie current step data, etc)
+		menu_parseGlobalParam(paramNr,parameter_values[paramNr]);
+	//frontPanel_sendData(0xb0,paramNr,*paramValue);
+}
+
+
+//-----------------------------------------------------------------
+static void menu_sendMorphParameterEndpoint(uint16_t paramNr, uint8_t value)
+{
+   /* Morph endpoint edits send raw endpoint bytes to STM storage. They do not
+      request AVR-side live morph computation. */
+   if(paramNr < 128)
+      frontPanel_sendData(PRF_RESTORE_MORPH_CC, (uint8_t)paramNr, value);
+   else if(paramNr < END_OF_SOUND_PARAMETERS)
+      frontPanel_sendData(PRF_RESTORE_MORPH_CC2, (uint8_t)(paramNr - 128), value);
+}
+
+//-----------------------------------------------------------------
+// -bc- called when edit mode is active
+// and shift is pressed - we can add some
+// special functions here, primarily
+// add shift+encoder changes morph parameters
+
+static void menu_encoderChangeShiftParameter(int8_t inc)
+{
+   screensaver_touch();
+	const uint8_t activeParameter	= menuIndex & MASK_PARAMETER;
+	const uint8_t activePage		= (menuIndex&MASK_PAGE)>>PAGE_SHIFT;
+
+	//get address from top1-8 from activeParameter (base adress top1 + offset)
+	uint16_t paramNr		= pgm_read_word(&menuPages[menu_activePage][activePage].bot1 + activeParameter);
+   uint8_t *paramValue;
+   uint8_t isMorphParam = (paramNr < END_OF_SOUND_PARAMETERS);
+      
+   if (isMorphParam)
+   {
+      paramValue = &parameters2[paramNr];
+   }
+   else
+   {
+      paramValue = &parameter_values[paramNr];
+   }
+   
+		menu_applyEncoderDeltaToByte(paramValue, inc);
+
+	switch(pgm_read_byte(&parameter_dtypes[paramNr]) & 0x0F)
+	{
+	case DTYPE_TARGET_SELECTION_VELO: //parameter_dtypes[paramNr] & 0x0F
+	{
+		//**VELO encoder value limit to start and end of range for this voice
+		// get voice, and figure valid range, translate to param number before sending
+		uint8_t voiceNr=(uint8_t)(paramNr - PAR_VEL_DEST_1);
+		if(*paramValue < pgm_read_byte(&modTargetVoiceOffsets[voiceNr].start)) {
+			if(inc < 0) // going down, allow 0
+				*paramValue=0;
+			else // going up fix to start
+				*paramValue = pgm_read_byte(&modTargetVoiceOffsets[voiceNr].start);
+		} else if (*paramValue > pgm_read_byte(&modTargetVoiceOffsets[voiceNr].end)) {
+			*paramValue = pgm_read_byte(&modTargetVoiceOffsets[voiceNr].end);
+		}
+
+		// determine the parameter id to send across
+		uint8_t value = (uint8_t)pgm_read_word(&modTargets[*paramValue].param);
+		uint8_t upper,lower;
+		/*
+		 *  upper: rightmost bit is 1 if the parameter we are targeting is in the "above 127" range
+		 *         next 6 bits are the voice number (0 to 5) of which voice is being dealt with here
+		 *  lower: the (0-127) value representing which parameter is being modulated
+		 */
+		upper = (uint8_t)( (uint8_t)((value&0x80)>>7) | ((voiceNr&0x3f)<<1) );
+		lower = value&0x7f;
+      if (!isMorphParam)
+		   frontPanel_sendData(CC_VELO_TARGET,upper,lower);
+		//return;
+	}
+		break;
+
+	case DTYPE_VOICE_LFO://parameter_dtypes[paramNr] & 0x0F
+	{
+		//**LFO - limit voice number to 1-6 range. determine target selection so we can send it with voice #
+		if(*paramValue < 1)
+			*paramValue = 1;
+		else if(*paramValue > 6)
+			*paramValue = 6;
+
+		// **LFOTARGFIX - ensure that the lfo mod target is pointing to the same type of modulation
+		// on the new voice
+		const uint8_t newTargVal=getModTargetIdxFromGapIdx((uint8_t)(*paramValue-1),menu_TargetVoiceGapIndex);
+		// update the lfo mod target in the same endpoint image being edited
+      if(isMorphParam)
+      {
+         parameters2[PAR_TARGET_LFO1 + (paramNr - PAR_VOICE_LFO1)] = newTargVal;
+         menu_sendMorphParameterEndpoint((uint16_t)(PAR_TARGET_LFO1 + (paramNr - PAR_VOICE_LFO1)),
+                                         newTargVal);
+      }
+      else
+		   parameter_values[PAR_TARGET_LFO1 + (paramNr - PAR_VOICE_LFO1)] = newTargVal;
+
+		// determine the real param value given the index into modTargets
+		uint8_t value =  (uint8_t)pgm_read_word(&modTargets[newTargVal].param);
+
+		/*  upper: rightmost bit is 1 if the parameter we are targeting is in the "above 127" range
+		 *         next 6 bits are the voice number (0 to 5) of which voice is being dealt with here
+		 *  lower: the (0-127) value representing which parameter is being modulated
+		 */
+		uint8_t upper,lower;
+		upper = (uint8_t)(((value&0x80)>>7) | ((((uint8_t)(paramNr - PAR_VOICE_LFO1))&0x3f)<<1));
+		lower = value&0x7f;
+      if (!isMorphParam)
+		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
+		//return;
+	}
+		break;
+	case DTYPE_TARGET_SELECTION_LFO://parameter_dtypes[paramNr] & 0x0F
+	{
+		//**LFO - limit encoder start and end to range for the target voice (not the lfo number)
+		// this is a value from 1 to 6, so we adjust to be 0 based
+		uint8_t voiceNr = isMorphParam
+         ? (uint8_t)(parameters2[PAR_VOICE_LFO1+(paramNr - PAR_TARGET_LFO1)]-1)
+         : (uint8_t)(parameter_values[PAR_VOICE_LFO1+(paramNr - PAR_TARGET_LFO1)]-1);
+		if(*paramValue < pgm_read_byte(&modTargetVoiceOffsets[voiceNr].start)) {
+			if(inc < 0) // going down, allow 0
+				*paramValue=0;
+			else // going up fix to start
+				*paramValue = pgm_read_byte(&modTargetVoiceOffsets[voiceNr].start);
+		} else if (*paramValue > pgm_read_byte(&modTargetVoiceOffsets[voiceNr].end)) {
+			*paramValue = pgm_read_byte(&modTargetVoiceOffsets[voiceNr].end);
+		}
+
+		// **LFOTARGFIX - save the gap index
+		menu_TargetVoiceGapIndex = getModTargetGapIndex(*paramValue);
+
+		uint8_t value =  (uint8_t)pgm_read_word(&modTargets[*paramValue].param);
+		uint8_t upper,lower;
+		upper = (uint8_t)((uint8_t)((value&0x80)>>7) | (((paramNr - PAR_TARGET_LFO1)&0x3f)<<1));
+		lower = value&0x7f;
+      if (!isMorphParam)
+		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
+		//--AS fall thru to update display
+	}
+		break;
+
+	case DTYPE_AUTOM_TARGET: {//parameter_dtypes[paramNr] & 0x0F
+		const uint8_t nmt=getNumModTargets();
+		//**AUTOM - limit to valid range for encoder
+		if(*paramValue >= nmt)
+			*paramValue = (uint8_t)(nmt-1);
+	}
+   break;
+	case DTYPE_0B255:
+		//if(*paramValue > 255)
+		//	*paramValue = 255;
+		break;
+
+   case DTYPE_0B16://parameter_dtypes[paramNr] & 0x0F
+	   if(*paramValue > 16)
+			*paramValue = 16;
+		break;
+   
+	case DTYPE_1B16://parameter_dtypes[paramNr] & 0x0F
+		if(*paramValue < 1)
+			*paramValue = 1;
+		else if(*paramValue > 16)
+			*paramValue = 16;
+		break;
+	case DTYPE_0B15:
+		if(*paramValue>15)
+			*paramValue = 15;
+		break;
+	case DTYPE_MIX_FM://parameter_dtypes[paramNr] & 0x0F
+	case DTYPE_ON_OFF:
+	case DTYPE_0b1:
+		if(*paramValue > 1)
+			*paramValue = 1;
+		break;
+
+
+
+	case DTYPE_MENU://parameter_dtypes[paramNr] & 0x0F
+	{
+		//get the used menu (upper 4 bit)
+		const uint8_t menuId = pgm_read_byte(&parameter_dtypes[paramNr]) >> 4;
+		//get the number of entries
+		uint8_t numEntries = getMaxEntriesForMenu(menuId);
+		if(*paramValue >= numEntries)
+			*paramValue = (uint8_t)(numEntries-1);
+
+	} // parameter_dtypes[paramNr] & 0x0F case DTYPE_MENU
+		break;
+
+	default://parameter_dtypes[paramNr] & 0x0F
+	case DTYPE_0B127:
+		if(*paramValue > 127)
+			*paramValue = 127;
+		break;
+	} //parameter_dtypes[paramNr] & 0x0F
+
+
+	// --AS TODO this will also send MIDI_CC or CC_2 for the above items that have already been sent. is this desired?
+	//send parameter change to uart tx
+	if(paramNr < 128) // => Sound Parameter
+   {
+      if (!isMorphParam)
+		frontPanel_sendData(MIDI_CC,(uint8_t)paramNr,*paramValue);
+      else
+         menu_sendMorphParameterEndpoint(paramNr, *paramValue);
+   }
+	else if(paramNr > 127 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
+   {
+      if (!isMorphParam)
 		frontPanel_sendData(CC_2,(uint8_t)(paramNr-128),*paramValue);
+      else
+         menu_sendMorphParameterEndpoint(paramNr, *paramValue);
+   }
 	else // non sound parameters (ie current step data, etc)
 		menu_parseGlobalParam(paramNr,parameter_values[paramNr]);
 
 	//frontPanel_sendData(0xb0,paramNr,*paramValue);
 }
 
+
 //-----------------------------------------------------------------
 // given an encoder wheel change, will set the menu item to the correct new one
 // or not change it if boundaries are reached
 static void menu_moveToMenuItem(int8_t inc)
 {
-
+   screensaver_touch();
 	int8_t activeParameter	= menuIndex & MASK_PARAMETER; // will be 0 to 7
 	int8_t activePage		= (int8_t)(menuIndex >> PAGE_SHIFT); // will be 0 to 31
 	uint8_t needLock=0;
@@ -1714,8 +3019,17 @@ checkvalid:
 				activePage++; // and change page
 				if(activePage >=NUM_SUB_PAGES)
 					activePage=0; // wrap around to 1st (would only happen if we fill all 8. unlikely)
-			} else
+         }
+         else if(menu_activePage==PERFORMANCE_PAGE) { // in perf menu, we can move to next sub-page
+				needLock=1;
+				activeParameter=0; // set to par 0 of next sub page
+				activePage++; // and change page
+				if(activePage >=NUM_SUB_PAGES)
+					activePage=0; // wrap around to 1st (would only happen if we fill all 8. unlikely)
+			} 
+         else{
 				return; // moved past last param on section 2. not allowed in most modes
+         }
 		}
 	} else { // inc == -1
 		if(activeParameter == 3) { // move to first section of sub-page
@@ -1727,8 +3041,19 @@ checkvalid:
 				activePage--; // and change page
 				if(activePage < 0)
 					activePage=NUM_SUB_PAGES-1; //wrap around to last page (would only happen if we fill all 8. unlikely)
-			} else
+         
+			} 
+         else if(menu_activePage==PERFORMANCE_PAGE) { // in global menu, we can move to previous sub-page
+				needLock=1;
+				activeParameter=7; // put us on the last param of the previous sub-page
+				activePage--; // and change page
+				if(activePage < 0)
+					activePage=NUM_SUB_PAGES-1; //wrap around to last page (would only happen if we fill all 8. unlikely)
+         
+			}
+         else{
 				return; // move past first param on section 1. not allowed in most modes
+         }
 		}
 	}
 
@@ -1748,6 +3073,12 @@ checkvalid:
 	menuIndex = (uint8_t)( (activePage << PAGE_SHIFT) | activeParameter);
 	if(needLock)
 		lockPotentiometerFetch();
+      
+   if(menu_activePage<=VOICE7_PAGE)
+      menu_lastVoiceIndex=menuIndex;
+   else if(menu_activePage==PERFORMANCE_PAGE)
+      menu_lastPerfIndex=menuIndex;
+  
 }
 
 //-----------------------------------------------------------------
@@ -1771,7 +3102,19 @@ void menu_resetSaveParameters()
 	}		
 
 	menu_repaintAll();
-
+   menu_voiceArray = 0x7f;
+}
+//-----------------------------------------------------------------
+void menu_resetSubPage() // forces menu to first sub-page, disregarding toggle
+{
+   menuIndex = 0;
+}
+//-----------------------------------------------------------------
+void menu_gotoSubPage(uint8_t subPage) // forces menu to first sub-page, disregarding toggle
+{
+   uint8_t activeParameter	= menuIndex & MASK_PARAMETER;
+	uint8_t activePage = subPage;
+   menuIndex = (uint8_t)( (activePage << PAGE_SHIFT) | activeParameter);
 }
 //-----------------------------------------------------------------
 // switches us to a different menu sub page. If that page is already active
@@ -1788,40 +3131,94 @@ void menu_switchSubPage(uint8_t subPageNr)
 	//get current position
 	uint8_t activeParameter	= menuIndex & MASK_PARAMETER;
 	uint8_t activePage		= (menuIndex&MASK_PAGE)>>PAGE_SHIFT;
+   
+   if (menu_activePage<=VOICE7_PAGE) // on a voice menu page
+   {
+      if(subPageNr == activePage)
+      {
+         if(activeParameter < 4) 
+         {
+   			// toggle to next if possible
+   			if(has2ndPage(activePage))
+   				activeParameter=4;
+         }
+         else
+            activeParameter=0;
+      }
+      else
+      {
+         activePage=subPageNr;
+         activeParameter=0;
+      }  
 
-	if(subPageNr == activePage) { // toggle only
-		// we are toggling to next screen, or back to first
-		if(activeParameter < 4) {
-			// toggle to next if possible
-			if(has2ndPage(activePage))
-				activeParameter=4;
-			else if(menu_activePage==MENU_MIDI_PAGE) { // special case for global - wrap around to first
-				activePage=0;
-				activeParameter=0;
-			}
-		} else { // we are on 2nd screen
+      menuIndex = (uint8_t)( (activePage << PAGE_SHIFT) | activeParameter);
+      menu_lastVoiceIndex=menuIndex;
+   }
+   else if (menu_activePage==MENU_MIDI_PAGE)
+   {
+      if(subPageNr == activePage) 
+      { // in global mode, we move to next page if possible (or wrap to first)
+         if(activeParameter<4)
+         {
+            if(pgm_read_byte(&menuPages[menu_activePage][activePage].top5) != TEXT_EMPTY) 
+               activeParameter=4;
+            else
+               activePage=0;   
+         }   
+         else
+         {  
+   		   if(pgm_read_byte(&menuPages[menu_activePage][activePage].top1) != TEXT_EMPTY) 
+            {
+   				activePage=(uint8_t)((activePage+1)%8);
+   			} 
+            else 
+            {
+   				activePage=0;
+   			}
+            activeParameter=0;
+         }
+      }
+      menuIndex = (uint8_t)( (activePage << PAGE_SHIFT) | activeParameter);
+   }
+   else if (menu_activePage==PERFORMANCE_PAGE)
+   {
+      if(subPageNr == activePage)
+      {
+         if(activeParameter < 4)
+            activeParameter=4;
+         else
+            activeParameter=0;
+      }
+      else
+      {
+         activePage=subPageNr;
+         activeParameter=0;
+      }   
+         
+      menuIndex = (uint8_t)( (activePage << PAGE_SHIFT) | activeParameter);
+      menu_lastPerfIndex=menuIndex;
+   }
+   else if (menu_activePage==SEQ_PAGE)
+   {
+      if(subPageNr == activePage)
+      {
+         if(activeParameter < 4)
+            activeParameter=4;
+         else
+            activeParameter=0;
+      }
+      else
+      {
+         activePage=subPageNr;
+         activeParameter=0;
+      }   
+         
+      menuIndex = (uint8_t)( (activePage << PAGE_SHIFT) | activeParameter);
+      menu_lastStepSubPage=menuIndex;
+   }
+   
+   
 
-			if(menu_activePage==MENU_MIDI_PAGE){
-				// in global mode, we move to next page if possible (or wrap to first)
-				if(activePage < NUM_SUB_PAGES-1 &&
-				   pgm_read_byte(&menuPages[menu_activePage][activePage+1].top1) != TEXT_EMPTY) {
-					activePage++;
-				} else {
-					activePage=0;
-				}
-			}
-			activeParameter=0;
-		}
-	} else { // move to different sub page
-		// we are moving to a different (specific) subpage
-		activePage=subPageNr;
-		if(activeParameter > 3 && has2ndPage(activePage))
-			activeParameter = 4;
-		else
-			activeParameter = 0;
-	}
-
-	menuIndex = (uint8_t)( (activePage << PAGE_SHIFT) | activeParameter);
 }
 
 //-----------------------------------------------------------------
@@ -1834,6 +3231,11 @@ void menu_resetActiveParameter()
 		menuIndex &= ~MASK_PARAMETER;
 		END_DISABLE_CONV_WARNING
 	}		
+};
+//-----------------------------------------------------------------
+int menu_getWhat()
+{
+	return menu_saveOptions.what;
 };
 //-----------------------------------------------------------------
 uint8_t menu_getSubPage()
@@ -1874,51 +3276,43 @@ void menu_switchPage(uint8_t pageNr)
 		break;
 
 	case LOAD_PAGE:
+   case SAVE_PAGE:
 	{
 		//re-init the save page variables
 		menu_resetSaveParameters();
-
-		if((menu_activePage != LOAD_PAGE) && (menu_activePage != SAVE_PAGE))
-		{
-			//when coming from another page, do a complete reset and show the sound select page
-			menu_resetSaveParameters();
-			//menu_saveOptions.what	= SAVE_TYPE_SOUND;
-		}
-
-		//if we are already on the load page, toggle to save page
-		// otherwise go to load page (because we were somewhere else or we were on the save page)
-		if(menu_activePage == LOAD_PAGE)
-			menu_activePage = SAVE_PAGE;
-		else
-			menu_activePage = LOAD_PAGE;
+		menu_activePage = pageNr;
 
 		//leave edit mode if active
 		//editModeActive = 0;
 
 		// load the name of the current preset from disk
-		preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what);
+      DISABLE_CONV_WARNING
+		preset_loadName(menu_currentPresetNr[menu_saveOptions.what], menu_saveOptions.what,0);
+      END_DISABLE_CONV_WARNING
 	}
 		break;
 
 	default: //voice pages etc
-	{
-		menu_activePage = pageNr;
-		if(pageNr<7) {
-			menu_setActiveVoice(pageNr);
-		}
-		//leave edit mode if active
-		editModeActive = 0;
-
-		//activate the parameter lock
-		lockPotentiometerFetch();
-		//query current sequencer step states and light up the corresponding leds
-
-		uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
-		uint8_t patternNr = menu_shownPattern; //max 7 => 0x07 = 0b111
-		uint8_t value = (uint8_t)((trackNr<<4) | (patternNr&0x7));
-		frontPanel_sendData(LED_CC,LED_QUERY_SEQ_TRACK,value);
-		}
-		break;
+      {
+   		menu_activePage = pageNr;
+   		if(pageNr<7) 
+         {
+   		   menu_setActiveVoice(pageNr);
+   	   }
+   		//leave edit mode if active
+   		editModeActive = 0;
+   
+   		//activate the parameter lock
+   		lockPotentiometerFetch();
+   		//query current sequencer step states and light up the corresponding leds
+   
+   		uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
+   		uint8_t patternNr = menu_shownPattern; //max 7 => 0x07 = 0b111
+         uint8_t value = (uint8_t)((trackNr<<4) | (patternNr&0x0f));
+   		frontPanel_sendData(LED_CC,LED_QUERY_SEQ_TRACK,value);
+      
+   	}
+   	break;
 	}		
 
 
@@ -1943,10 +3337,18 @@ void menu_switchPage(uint8_t pageNr)
 void menu_sendAllGlobals()
 {
 	uint16_t i;
+   if(!frontPanel_flowBegin(FLOW_CH_GLOBALS))
+      return;
+
 	for(i=PAR_BEGINNING_OF_GLOBALS;(i<NUM_PARAMS);i++)
 	{
 		menu_parseGlobalParam(i,parameter_values[i]);
+      if(frontPanel_flowFailed())
+         break;
 	}
+
+   if(!frontPanel_flowFailed())
+      (void)frontPanel_flowEnd(FLOW_CH_GLOBALS);
 };
 //-----------------------------------------------------------------
 // This is used to send a global (non voice specific) parameter to the back.
@@ -1961,26 +3363,54 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 	//	frontPanel_sendData(SEQ_CC,SEQ_MIDI_MODE,parameter_values[PAR_MIDI_MODE]);
 	//	break;
 
-	case PAR_MIDI_CHAN_7:
-		paramNr -= 5; //because they are not after one another in the param list
 	case PAR_MIDI_CHAN_1:
+      if(value==0)
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x00);
+      else
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x00<<4) | ((value-1)&0x0f) ));
+      break;
 	case PAR_MIDI_CHAN_2:
+      if(value==0)
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x01);
+      else
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x01<<4) | ((value-1)&0x0f) ));
+      break;
 	case PAR_MIDI_CHAN_3:
+      if(value==0)
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x02);
+      else
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x02<<4) | ((value-1)&0x0f) ));
+      break;
 	case PAR_MIDI_CHAN_4:
+      if(value==0)
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x03);
+      else
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x03<<4) | ((value-1)&0x0f) ));
+      break;
 	case PAR_MIDI_CHAN_5:
+      if(value==0)
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x04);
+      else
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x04<<4) | ((value-1)&0x0f) ));
+      break;
 	case PAR_MIDI_CHAN_6:
+      if(value==0)
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x05);
+      else
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x05<<4) | ((value-1)&0x0f) ));
+      break;
+   case PAR_MIDI_CHAN_7:
+      if(value==0)
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x06);
+      else
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x06<<4) | ((value-1)&0x0f) ));
+      break;
 	case PAR_MIDI_CHAN_GLOBAL:
-	{
-		uint8_t voice;
-		uint8_t channel = (uint8_t)(value-1);
-		if(paramNr==PAR_MIDI_CHAN_GLOBAL)
-			voice= 7; // will be 7 for global channel
-		else
-			voice=(uint8_t)(paramNr - PAR_MIDI_CHAN_1); // will be 0-6 for voice channels
-		frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((voice<<4) | channel ));
-	}
-	break;
-
+      if(value==0)
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x07);
+      else
+         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x07<<4) | ((value-1)&0x0f) ));
+      break;
 
 	case PAR_POS_X:
 		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
@@ -2006,7 +3436,12 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
 		frontPanel_sendData(SEQ_CC,SEQ_TRACK_LENGTH,value);
 		break;
-
+      
+   case PAR_TRACK_SCALE:
+      frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
+		frontPanel_sendData(SEQ_CC,SEQ_TRACK_SCALE,value);
+		break;
+      
 	case PAR_SHUFFLE:
 		frontPanel_sendData(SEQ_CC,SEQ_SHUFFLE,value);
 		break;
@@ -2048,7 +3483,13 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 	case PAR_MORPH:
 	{
 		//value += (value==127)*1;
-		preset_morph(value);
+      morphValue = value;
+      /* Global morph is a control value now. STM caches it and copies it to all
+         six per-voice morph amounts; STM performs the interpolation work.
+         Send as two 7-bit-safe messages because raw values >= 128 look like
+         status bytes to the STM MIDI-style parser. */
+		frontPanel_sendData(SEQ_CC, SEQ_SET_GLOBAL_MORPH_LSB, (uint8_t)(value & 0x7f));
+		frontPanel_sendData(SEQ_CC, SEQ_SET_GLOBAL_MORPH_MSB, (uint8_t)((value >> 7) & 0x01));
 	}
 	break;
 
@@ -2084,42 +3525,37 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 		frontPanel_sendData(VOICE_CC,VOICE_DECIMATION,value);
 		break;
 
-		/*
-		case PAR_AUDIO_OUT1:
-		case PAR_AUDIO_OUT2:
-		case PAR_AUDIO_OUT3:
-		case PAR_AUDIO_OUT4:
-		case PAR_AUDIO_OUT5:
-		case PAR_AUDIO_OUT6:
-		//select the track nr
-		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,paramNr-PAR_AUDIO_OUT1);
-		//send the new output channel
-		frontPanel_sendData(VOICE_CC,VOICE_AUDIO_OUT,value);
-		break;
-		 */
-
 	case PAR_ROLL:
 	{
-		/*roll rates
-			0 - one shot immediate trigger
-			1 - 1/1
-			2 - 1/2
-			3 - 1/3
-			4 - 1/4
-			5 - 1/6
-			6 - 1/8
-			7 - 1/12
-			8 - 1/16
-			9 - 1/24
-			10 - 1/32
-			11 - 1/48
-			12 - 1/64
-			13 - 1/96
-			14 - 1/128
-		 */
 		frontPanel_sendData(SEQ_CC,SEQ_ROLL_RATE,value);
 	}
+   break;
+   case PAR_ROLL_NOTE:
+	{
+		frontPanel_sendData(SEQ_CC,SEQ_ROLL_NOTE,value);
+	}
+   break;
+   case PAR_ROLL_VELOCITY:
+	{
+		frontPanel_sendData(SEQ_CC,SEQ_ROLL_VELOCITY,value);
+	}
+   break;
+   case PAR_ROLL_MODE:
+	{
+      // record notes if the sequencer note lock is 0
+		frontPanel_sendData(SEQ_CC,SEQ_ROLL_MODE,(uint8_t)(value));
+	}
 	break;
+   case PAR_TRANSPOSE:
+   {
+      frontPanel_sendData(SEQ_CC,SEQ_TRANSPOSE,value);
+   }
+   break;
+   case PAR_TRANSPOSE_ON_OFF:
+   {
+      frontPanel_sendData(SEQ_CC,SEQ_TRANSPOSE_ON_OFF,value);
+   }
+   break;
 
 
 
@@ -2132,12 +3568,7 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 		//select the track nr
 		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
 		frontPanel_sendData(SEQ_CC,SEQ_EUKLID_LENGTH,msg);
-
-
-		uint8_t steps = (uint8_t)(parameter_values[PAR_EUKLID_STEPS] - 1); // max 16
-		//uint8_t pattern = menu_shownPattern; //max 7
-		msg = (uint8_t)((pattern&0x7) | (steps<<3));
-		frontPanel_sendData(SEQ_CC,SEQ_EUKLID_STEPS,msg);
+      
 	}
 	break;
 
@@ -2163,6 +3594,18 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
 
 		frontPanel_sendData(SEQ_CC,SEQ_EUKLID_ROTATION,msg);
+	}
+   break;
+   
+   case PAR_EUKLID_SUBSTEP_ROTATION:	{
+		uint8_t rotation =(uint8_t)(value); // max 15
+		uint8_t pattern = menu_shownPattern; //max 7
+		uint8_t msg =(uint8_t)( (pattern&0x7) | (rotation<<3));
+
+		//select the track nr
+		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
+
+		frontPanel_sendData(SEQ_CC,SEQ_EUKLID_SUBSTEP_ROTATION,msg);
 	}
 	break;
 
@@ -2215,13 +3658,59 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 	case PAR_BAR_RESET_MODE:
 		frontPanel_sendData(SEQ_CC, SEQ_BAR_RESET_MODE, value);
 		break;
-
+	case PAR_SEQ_PC_TIME:
+		frontPanel_sendData(SEQ_CC, SEQ_PC_TIME, value);
+		break;
+	case PAR_BUT_SHIFT_MODE:
+		shiftMode=value;
+		break;
+   case PAR_LOAD_PERF_ON_BANK:
+      parameter_values[PAR_LOAD_PERF_ON_BANK]=value;
+      break;
+   case PAR_SKIP_FIRST_ROLL:
+      parameter_values[PAR_SKIP_FIRST_ROLL]=value; 
+      frontPanel_sendData(SEQ_CC, SEQ_ROLL_MODE, (uint8_t)(value+5) );
+      break;
+   case PAR_FILE_LOAD_FAST:
+      parameter_values[PAR_FILE_LOAD_FAST]=value; 
+      frontPanel_sendData(SEQ_CC, SEQ_LOAD_FAST,value);
+      break;
+   case PAR_MIDI_NOTE1:
+   case PAR_MIDI_NOTE2:
+   case PAR_MIDI_NOTE3:
+   case PAR_MIDI_NOTE4:
+   case PAR_MIDI_NOTE5:
+   case PAR_MIDI_NOTE6:
+   case PAR_MIDI_NOTE7:
+      frontPanel_sendData(SEQ_CC, (uint8_t)(SEQ_TRACK_NOTE1+(paramNr-PAR_MIDI_NOTE1)), (uint8_t)(value) );
+   
+      break;
 	}
+}
+//-----------------------------------------------------------------
+void menu_vMorph(uint8_t dest, uint8_t val, uint8_t amt)
+{
+   (void)dest;
+   (void)val;
+   (void)amt;
 }
 //-----------------------------------------------------------------
 static void menu_processSpecialCaseValues(uint16_t paramNr/*, const uint8_t *value*/)
 {
-	if(paramNr == PAR_BPM)
+   if(paramNr == PAR_MAC1)
+   {
+      
+      menu_vMorph(parameter_values[PAR_MAC1_DST1],parameter_values[PAR_MAC1],parameter_values[PAR_MAC1_DST1_AMT]);
+      menu_vMorph(parameter_values[PAR_MAC1_DST2],parameter_values[PAR_MAC1],parameter_values[PAR_MAC1_DST2_AMT]);
+      frontPanel_sendMacro(1,parameter_values[PAR_MAC1]);
+   }
+   else if (paramNr == PAR_MAC2)
+   {
+      menu_vMorph(parameter_values[PAR_MAC2_DST1],parameter_values[PAR_MAC2],parameter_values[PAR_MAC2_DST1_AMT]);
+      menu_vMorph(parameter_values[PAR_MAC2_DST2],parameter_values[PAR_MAC2],parameter_values[PAR_MAC2_DST2_AMT]);
+      frontPanel_sendMacro(2,parameter_values[PAR_MAC2]);
+   }
+	else if(paramNr == PAR_BPM)
 	{
 		//*value *= 2;
 		//*value+=1;
@@ -2278,6 +3767,9 @@ static uint8_t getDtypeValue(uint8_t value, uint16_t paramNr)
 		// the LFO target voice number is stored and displayed as 1 based
 		return (uint8_t)(1 + 5*frac);
 		break;
+   case DTYPE_0B16:
+		return (uint8_t)(16*frac);
+		break;
 	case DTYPE_1B16:
 		return (uint8_t)(1 + 15*frac);
 		break;
@@ -2317,13 +3809,21 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
 	screensaver_touch();
 
 	//leave edit mode if active
-	editModeActive = 0;
+	
 
-	if( (menu_activePage == SAVE_PAGE) || (menu_activePage == LOAD_PAGE)) {
+	if(menu_activePage == SAVE_PAGE) 
+      {
+      editModeActive = 0;
 		menu_handleSaveScreenKnobValue(potNr, potValue);
 		return;
-	}
-
+	   }
+   else if (menu_activePage == LOAD_PAGE)
+      {
+      menu_handleLoadScreenKnobValue(potNr, potValue);
+      return;
+      }
+   editModeActive = 0;
+   
 	const uint8_t activePage		= (menuIndex&MASK_PAGE)>>PAGE_SHIFT;
 	const uint8_t activeParameter	= menuIndex & MASK_PARAMETER;
 	const uint8_t isOn2ndPage		= ( activeParameter > 3) * 4;
@@ -2410,6 +3910,33 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
 		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
 	}
 		break;
+   case DTYPE_AUTOM_TARGET:
+   {
+      if (menu_activePage == PERFORMANCE_PAGE)
+      {
+         // bc: these are only used in perf for macro automation targets
+   
+   		const uint8_t value = (uint8_t)pgm_read_word(&modTargets[dtypeValue].param); // the value of the mod target
+         uint8_t lower = value&0x7f;
+         uint8_t upper = (uint8_t)
+                         ( ( ( (paramNr - PAR_MAC1_DST1) //  MAC1_DST1=0, M1D2=2, M2D1=4, M2D2=6
+                              >>1 )                      //  MAC1_DST1=0, M1D2=1, M2D1=2, M2D2=3
+                              <<2 )                      //  shift over 2 to make room for upper mod target bit
+                              |(value>>7) );
+                              
+         frontPanel_sendData(MACRO_CC,upper,lower);
+      }
+      else
+      {
+         if(paramNr<128) // => Sound Parameter below 128
+   			frontPanel_sendData(MIDI_CC,(uint8_t)paramNr,dtypeValue);
+   		else if(paramNr>=128 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
+   			frontPanel_sendData(CC_2,(uint8_t)(paramNr-128),dtypeValue);
+   		else
+   			menu_parseGlobalParam(paramNr,dtypeValue);
+      }
+   }
+   break;
 
 	default: // all other sound parameters are send as CC or CC2. anything else is handled specially
 		if(paramNr<128) // => Sound Parameter below 128
@@ -2422,50 +3949,34 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
 	}
 
 }
-
-//-----------------------------------------------------------------
-// --AS TODO this looks to be unused. should it be removed?
-void menu_sendAllParameters()
+//----------------------------------------------------------------
+void menu_reloadKit()
 {
-	uint16_t i;
-	for(i=0;i<END_OF_SOUND_PARAMETERS;i++)
-		//for(i=PAR_PAN5;i<PAR_MOD_OSC_GAIN1_CYM;i++)
-
-	{
-		//send parameter change to uart tx
-		//since we are sending a big amount of data here we have to be sure 
-		//that the uart tx buffer doesn't overflow
-		//so we check the return value
-		if(i<128) {
-			frontPanel_sendData(MIDI_CC,(uint8_t)i,parameter_values[i]);
-		} else {
-			frontPanel_sendData(CC_2,(uint8_t)(i-128),parameter_values[i]);
-		}	
-		//frontPanel_sendData(MIDI_CC,i,parameters[i].value);
-
-		//delay to not overflow the rx buffer on the cortex
-		//TODO ACK scheme for speedup testen
-		if((i&0x1f) == 0x1f) //every 32 steps
-			_delay_ms(1);
-	}		
+   uint8_t i;
+   frontPanel_sendByte(PATCH_RESET);
+   for(i=0;i<END_OF_MORPH_PARAMETERS;i++)
+   {
+      parameter_values[i]=parameter_values_fileLoadSnapshot[i];
+   }  
 }
 //----------------------------------------------------------------
 uint8_t menu_getActivePage()
 {
 	return menu_activePage;
-};
+}
 //----------------------------------------------------------------
 uint8_t menu_getActiveVoice()
 {
 	return menu_activeVoice;
-};
+}
 //----------------------------------------------------------------
 void menu_setActiveVoice(uint8_t voiceNr)
 {
 	// **LFOTARGFIX - save the gap index
 	menu_TargetVoiceGapIndex = getModTargetGapIndex(parameter_values[PAR_TARGET_LFO1+voiceNr]);
 	menu_activeVoice = voiceNr;
-};
+   frontPanel_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS, voiceNr);
+}
 //----------------------------------------------------------------
 uint8_t menu_areMuteLedsShown()
 {

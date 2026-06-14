@@ -7,7 +7,7 @@
 
 #include "uart.h"
 #include <avr/io.h>
-#include "../frontPanelParser.h"
+#include "../frontPanelReceivingProtocol.h"
 #include "../config.h"
 #if UART_DEBUG_ECHO_MODE
 #include <stdlib.h>
@@ -57,8 +57,8 @@ aus Taktrate und gew�nschter Baudrate
 //----------------------------------------------------
 //working vars
 //----------------------------------------------------
- FifoBuffer uart_txBuffer;
- FifoBuffer uart_rxBuffer;
+FifoBuffer uart_txBuffer;
+FifoBuffer uart_rxBuffer;
 
 //----------------------------------------------------
 //interrupt service routines
@@ -73,7 +73,7 @@ ISR(USART0_RX_vect)
 	
 	//put the received data in the rx fifo
 	//fifo_bufferIn(&uart_rxBuffer,UDR);
-	fifo_bufferIn(&uart_rxBuffer,UDR0);
+   fifo_bufferIn(&uart_rxBuffer,UDR0);
 	
 }
 
@@ -85,28 +85,28 @@ ISR(USART0_RX_vect)
 ISR(USART0_UDRE_vect ) 
 {
     /* Interrupt Code */
-	uint8_t data;
-	if(fifo_BufferOut(&uart_txBuffer,&data))
-	{
-		//if there is still data in the tx buffer
-		//UDR = data; // send the byte
-		UDR0 = data; // send the byte
-	}
-	else
-	{
-		//no data left -> disable the data register empty interrupt
-		//UCSRB &= ~(1<<UDRIE);	
-		UCSR0B &= (uint8_t)(~(1<<UDRIE0));
-	}
+   uint8_t data;
+   if(fifo_BufferOut(&uart_txBuffer,&data))
+   {
+   	//if there is still data in the tx buffer
+   	//UDR = data; // send the byte
+      UDR0 = data; // send the byte
+   }
+   else
+   {
+   	//no data left -> disable the data register empty interrupt
+   	//UCSRB &= ~(1<<UDRIE);	
+      UCSR0B &= (uint8_t)(~(1<<UDRIE0));
+   }
 }
 //----------------------------------------------------
 void uart_init()
 {
-	fifo_init(&uart_txBuffer);
-	fifo_init(&uart_rxBuffer);
+   fifo_init(&uart_txBuffer);
+   fifo_init(&uart_rxBuffer);
 	
-	UBRR0H = UBRRH_VALUE;
-	UBRR0L = UBRRL_VALUE;
+   UBRR0H = UBRRH_VALUE;
+   UBRR0L = UBRRL_VALUE;
    
 #if USE_2X
    /* U2X-Modus erforderlich */
@@ -117,34 +117,54 @@ void uart_init()
 #endif
 
 //	UCSRB |= (1<<RXEN)|(1<<TXEN)|(1<<RXCIE);  // enable UART RX, TX and RX Interrupt 
-	UCSR0B |= (1<<RXEN0)|(1<<TXEN0)|(1<<RXCIE0);  // enable UART RX, TX and RX Interrupt 
+   UCSR0B |= (1<<RXEN0)|(1<<TXEN0)|(1<<RXCIE0);  // enable UART RX, TX and RX Interrupt 
 	//UCSRC = (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0);	// Asynchron 8N1 
-	UCSR0C = (1<<UCSZ00)|(1<<UCSZ01);	// Asynchron 8N1 
+   UCSR0C = (1<<UCSZ00)|(1<<UCSZ01);	// Asynchron 8N1 
 };
+//----------------------------------------------------
+void uart_clearFifo()
+{
+   fifo_clear(&uart_txBuffer);
+   fifo_clear(&uart_rxBuffer);
 
-
+};
+//----------------------------------------------------
+void uart_clearRxFifo()
+{
+   fifo_clear(&uart_rxBuffer);
+}
+//----------------------------------------------------
+uint8_t uart_txFree()
+{
+   return fifo_free(&uart_txBuffer);
+}
+//----------------------------------------------------
+uint8_t uart_txEmpty()
+{
+   return fifo_isEmpty(&uart_txBuffer);
+}
 //----------------------------------------------------
 //output one byte on the uart
 uint8_t uart_putc(unsigned char c)
 {
-	uint8_t ret = fifo_bufferIn(&uart_txBuffer,c);
+   uint8_t ret = fifo_bufferIn(&uart_txBuffer,c);
     	
 	//we've put new data into the tx fifo, so we need to enable the tx interrupt to send it out
 	//UCSRB |= (1<<UDRIE);	
-	UCSR0B |= (1<<UDRIE0);	
+   UCSR0B |= (1<<UDRIE0);	
 	
-	return ret;
+   return ret;
 }
 
 //----------------------------------------------------
 //output a string (zero terminated!) on the uart
 void uart_puts (char *s)
 {
-    while (*s)
-    {   /* so lange *s != '\0' also ungleich dem "String-Endezeichen(Terminator)" */
-        uart_putc(*s);
-        s++;
-    }
+   while (*s)
+   {   /* so lange *s != '\0' also ungleich dem "String-Endezeichen(Terminator)" */
+      uart_putc(*s);
+      s++;
+   }
 }
 
 //----------------------------------------------------
@@ -152,13 +172,13 @@ void uart_puts (char *s)
 //returns 1 if there is data to be read, else 0 if there is no data
 uint8_t uart_getc(uint8_t *data)
 {
-	if(fifo_BufferOut(&uart_rxBuffer,data))
-	{
-		//there is valid data present
-		return 1;
-	}
+   if(fifo_BufferOut(&uart_rxBuffer,data))
+   {
+   	//there is valid data present
+      return 1;
+   }
 	//no data to be read
-	return 0;
+   return 0;
 }
 //----------------------------------------------------
 uint8_t uart_waitAck()
@@ -166,19 +186,19 @@ uint8_t uart_waitAck()
 	//TODO: timeout
 	//UCSR0B &= ~(1<<RXCIE0);  // disable RX Interrupt
 
-	while(1)
-	{
-		uint8_t data;
-		uint8_t ret = uart_getc(&data);
-		if(ret)
-		{
-			//if(data == ACK || data == NACK)
-			{
-				//UCSR0B |= (1<<RXCIE0);  // enable RX Interrupt
-				return data;
-			}
-		}
-	}
+   while(1)
+   {
+      uint8_t data;
+      uint8_t ret = uart_getc(&data);
+      if(ret)
+      {
+      	//if(data == ACK || data == NACK)
+         {
+         	//UCSR0B |= (1<<RXCIE0);  // enable RX Interrupt
+            return data;
+         }
+      }
+   }
 
 
 
@@ -201,14 +221,16 @@ void uart_checkAndParse()
 	}
 
 #else
-	uint8_t data;
-	if(uart_getc(&data))
-	{
-		//there is new data available
-		frontPanel_parseData(data);
-	}
+   uint8_t data;
+   uint8_t budget = 16;
+   while(budget && uart_getc(&data))
+   {
+   	//there is new data available
+      frontPanel_parseData(data);
+      budget--;
+   }
 #endif
-};
+}
 //----------------------------------------------------
 
 #endif

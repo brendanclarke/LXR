@@ -121,6 +121,24 @@ void Snare_trigger(const uint8_t vel, const uint8_t note)
 	SnapEg_trigger(&snareVoice.snapEg);
 }
 //---------------------------------------------------
+void snare_setEnvelope(const uint8_t envPos)
+{
+   if(envPos==0)
+   {
+      DecayEg_trigger(&snareVoice.oscPitchEg);
+	   slopeEg2_trigger(&snareVoice.oscVolEg);
+   }
+	else if(envPos==1)
+   {
+      DecayEg_trigger(&snareVoice.oscPitchEg);
+      slopeEg2_setEnvPos(&snareVoice.oscVolEg, envPos);
+   }
+   else
+   {
+      slopeEg2_setEnvPos(&snareVoice.oscVolEg, envPos);
+   }
+}
+//---------------------------------------------------
 void Snare_calcAsync()
 {
 	//add modulation eg to osc freq (1 = no change. a+eg = original freq + modulation

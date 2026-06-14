@@ -15,6 +15,9 @@ extern uint8_t buttonHandler_selectedStep;
 extern uint16_t buttonHandler_originalParameter;	//saves parameter number for step automation reset (stgep assign)
 extern uint8_t buttonHandler_originalValue; 
 extern uint8_t buttonHandler_resetLock;
+extern uint8_t shiftMode;
+extern uint8_t shiftState;
+extern uint8_t buttonHandler_loadingFunction;
 
 #define BUTTON_TIMEOUT (38) //~500[ms]
 #define NO_STEP_SELECTED -1
@@ -39,10 +42,11 @@ sequencer buttons display the 16 main steps and can be used to access step speci
 #define SELECT_MODE_STEP		0x02
 #define SELECT_MODE_LOAD_SAVE	0x03
 
-//#define SELECT_MODE_VOICE_STEP	0x04
+// shift-mode button function
+#define SELECT_MODE_VOICE2    	0x04
 #define SELECT_MODE_PAT_GEN		0x05
-#define SELECT_MODE_SOM_GEN		0x06
-#define SELECT_MODE_MENU		0x07
+#define SELECT_MODE_STEP2  		0x06
+#define SELECT_MODE_MENU		   0x07
 		
 
 enum ButtonNumbers
@@ -101,6 +105,8 @@ void buttonHandler_tick();
 //--------------------------------------------------------
 void buttonHandler_buttonPressed(uint8_t buttonNr);
 //--------------------------------------------------------
+void buttonHandler_handleModeButtons(uint8_t mode);
+//--------------------------------------------------------
 //uint8_t buttonHandler_getMutedVoices();
 //--------------------------------------------------------
 void buttonHandler_buttonReleased(uint8_t buttonNr);
@@ -119,4 +125,9 @@ void buttonHandler_muteVoice(uint8_t voice, uint8_t isMuted);
 void buttonHandler_showMuteLEDs();
 //--------------------------------------------------------
 void buttonHandler_setRunStopState(uint8_t running);
+//--------------------------------------------------------
+void buttonHandler_leaveSeqMode();
+//--------------------------------------------------------
+void buttonHandler_enterSeqMode();
+//--------------------------------------------------------
 #endif /* BUTTONHANDLER_H_ */

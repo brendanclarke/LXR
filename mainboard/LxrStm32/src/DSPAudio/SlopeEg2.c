@@ -70,6 +70,34 @@ void slopeEg2_trigger(SlopeEg2* eg)
 	eg->repeatCnt = eg->repeat;
 }
 //--------------------------------------------------
+void slopeEg2_setEnvPos(SlopeEg2* eg, uint8_t envPos)
+{
+   if(envPos==1)
+   {
+      eg->state = EG_D;
+      eg->value = 1.f;
+      
+   }
+   else if(envPos<64)
+   {
+      if(eg->repeat>=envPos)
+      {
+         eg->state = EG_REPEAT;
+         eg->repeatCnt = eg->repeat-envPos;
+      }
+      else
+   	{
+   		eg->state = EG_A;
+         eg->value = (envPos)/64.f;
+   	}
+   }
+   else
+   {
+      eg->state = EG_D;
+      eg->value = 1.f - ((envPos-64)/64.f);
+   }
+}
+//--------------------------------------------------
 float slopeEg2_calcSlopeValue(float val, float slope)
 {
 	return (1+slope)*val/(1+slope*fabsf(val));

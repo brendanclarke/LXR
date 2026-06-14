@@ -48,14 +48,15 @@
 #include "sequencer.h"
 
 #include "mixer.h"
-#include "Uart.h"
+#include "uARTFrontSYX/Uart.h"
 #include "FIFO.h"
 #include "DrumVoice.h"
 #include "CymbalVoice.h"
 #include "HiHat.h"
 #include "Snare.h"
 #include "EuklidGenerator.h"
-#include "ParameterArray.h"
+#include "Preset/ParameterArray.h"
+#include "Preset/EndpointRestore.h"
 #include "modulationNode.h"
 #include "SomGenerator.h"
 
@@ -221,6 +222,11 @@ int main(void)
 	{
 		modNode_init(&velocityModulators[i]);
 	}
+   for(i=0;i<4;i++)
+	{
+		modNode_init(&macroModulators[i]);
+	}
+
 
 	initMidiUart();
 
@@ -297,8 +303,12 @@ int main(void)
 
 		//handle trigger outs
 		trigger_tick();
-    }
+
+		// Service STM-owned morph interpolation independently of menu restore traffic.
+		preset_serviceMorphInterpolation();
+
+		// Advance any queued AVR endpoint/menu restore outside the sequencer boundary path.
+		preset_serviceEndpointRestore();
+	    }
 #endif
 }
-
-

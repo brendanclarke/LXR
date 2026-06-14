@@ -103,4 +103,8 @@
 // Helper to declare variable in CCM memory that is zeroed at startup
 #define INCCMZ __attribute__ ((section(".ccmz")))
 
+<<<<<<< HEAD
+
+=======
+>>>>>>> origin/master
 #endif /* CONFIG_H_ */

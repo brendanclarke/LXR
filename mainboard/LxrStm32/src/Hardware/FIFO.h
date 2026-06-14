@@ -38,7 +38,7 @@
 
 #include "globals.h"
 
-#define BUFFER_SIZE 64 // muss 2^n betragen (8, 16, 32, 64 ...)
+#define BUFFER_SIZE 256 // muss 2^n betragen (8, 16, 32, 64 ...)
 #define BUFFER_MASK (BUFFER_SIZE-1) // Klammern auf keinen Fall vergessen
 
 typedef struct FifoStruct
@@ -59,7 +59,7 @@ void fifo_clear(Fifo* fifo);
 
 
 //--
-#define BUFFER_SIZE_BIG 64 // muss 2^n betragen (8, 16, 32, 64 ...)
+#define BUFFER_SIZE_BIG 256 // muss 2^n betragen (8, 16, 32, 64 ...)
 #define BUFFER_MASK_BIG (BUFFER_SIZE_BIG-1) // Klammern auf keinen Fall vergessen
 
 typedef struct FifoStructBig

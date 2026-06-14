@@ -85,7 +85,7 @@ typedef struct OscStruct
 
 void initOsc();
 //-----------------------------------------------------------
-__inline uint32_t freq2PhaseIncr(float f);
+uint32_t freq2PhaseIncr(float f);
 //-----------------------------------------------------------
 void calcSineBlock(OscInfo* osc, int16_t* buf, const uint8_t size ,const float gain);
 //-----------------------------------------------------------

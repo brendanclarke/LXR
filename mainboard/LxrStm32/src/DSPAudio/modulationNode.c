@@ -44,9 +44,26 @@
 
 INCCMZ ModulationNode velocityModulators[6];
 
- //-----------------------------------------------------------------------
-void modNode_init(ModulationNode* vm)
+//INCCMZ ModulationNode macroModulators[4];
+ModulationNode macroModulators[4];
+
+//-----------------------------------------------------------------------
+/* LFO-to-voice-morph is serviced by the sequencer morph drain from lastVal.
+   Letting LFO ticks call the generic VMORPH path recalculates too much audio
+   state inside the LFO update. */
+static uint8_t modNode_isLfoModTarget(ModulationNode* vm)
 {
+   return vm == &voiceArray[0].lfo.modTarget
+       || vm == &voiceArray[1].lfo.modTarget
+       || vm == &voiceArray[2].lfo.modTarget
+       || vm == &snareVoice.lfo.modTarget
+       || vm == &cymbalVoice.lfo.modTarget
+       || vm == &hatVoice.lfo.modTarget;
+}
+
+	 //-----------------------------------------------------------------------
+	void modNode_init(ModulationNode* vm)
+	{
 	vm->lastVal = 0;
 	vm->amount = 0.f;
 	modNode_setDestination(vm,0);
@@ -96,7 +113,10 @@ void modNode_originalValueChanged(uint16_t idx)
 	{
 		modNode_setOriginalValueChanged(&velocityModulators[i],idx);
 	}
-
+   for(i=0;i<4;i++)
+	{
+		modNode_setOriginalValueChanged(&macroModulators[i],idx);
+	}
 	modNode_setOriginalValueChanged(&voiceArray[0].lfo.modTarget,idx);
 	modNode_setOriginalValueChanged(&voiceArray[1].lfo.modTarget,idx);
 	modNode_setOriginalValueChanged(&voiceArray[2].lfo.modTarget,idx);
@@ -112,7 +132,7 @@ void modNode_resetTargets()
 	{
 		paramArray_setParameter(velocityModulators[i].destination,velocityModulators[i].originalValue);
 	}
-
+   
 	paramArray_setParameter(voiceArray[0].lfo.modTarget.destination,voiceArray[0].lfo.modTarget.originalValue);
 	paramArray_setParameter(voiceArray[1].lfo.modTarget.destination,voiceArray[1].lfo.modTarget.originalValue);
 	paramArray_setParameter(voiceArray[2].lfo.modTarget.destination,voiceArray[2].lfo.modTarget.originalValue);
@@ -131,12 +151,19 @@ void modNode_reassignVeloMod()
 		modNode_updateValue(&velocityModulators[i], velocityModulators[i].lastVal);
 	}
 }
+
 //-----------------------------------------------------------------------
 // set a modulation destination to one of the sound parameters.
 // This is called when the mod target changes or is initialized.
 // The target's actual value needs to be preserved because it will be modulated.
 void modNode_setDestination(ModulationNode* vm, uint16_t dest)
 {
+   if(vm->destination < END_OF_SOUND_PARAMETERS
+      && parameterArray[vm->destination].type == TYPE_UINT8_VMORPH)
+   {
+      modNode_vMorph(vm, 0.f);
+   }
+
 	//TODO check if this interrupts other modulations too much
 	//is needed to really get the original value
 	modNode_resetTargets();
@@ -176,42 +203,182 @@ void modNode_setDestination(ModulationNode* vm, uint16_t dest)
 		default:
 			break;
 	}
+
+   if(p->type == TYPE_UINT8_VMORPH)
+      modNode_vMorph(vm, vm->lastVal);
 }
 //-----------------------------------------------------------------------
 // This is called to actually modulate the value for a modulation node
 void modNode_updateValue(ModulationNode* vm, float val)
 {
 	Parameter const *p = &parameterArray[vm->destination];
-
+   
 	vm->lastVal = val;
 
 	// --AS **PATROT avoid setting this if it's not set to something good
 	if(!p->ptr)
 		return;
+      
+  if ( (p->type)==TYPE_UINT8_VMORPH)
+  {
+    modNode_vMorph(vm, val);
+  }
+  else if (vm->amount<0)
+  {
+      switch(p->type)
+   	{
+   	case TYPE_UINT8:
+   		(*((uint8_t*)p->ptr)) = (*((uint8_t*)p->ptr)) * vm->amount * val + (*((uint8_t*)p->ptr));
+   		break;
+   	case TYPE_UINT32:
+   		(*((uint32_t*)p->ptr)) = (*((uint32_t*)p->ptr)) * vm->amount * val + (*((uint32_t*)p->ptr));
+   		break;
+   
+   	case TYPE_FLT:
+   		(*((float*)p->ptr)) = (*((float*)p->ptr)) * vm->amount * val + (*((float*)p->ptr));
+   		break;
+   
+   	case TYPE_SPECIAL_F:
+   		(*((float*)p->ptr)) = (*((float*)p->ptr)) * vm->amount * val + (*((float*)p->ptr));
+   		break;
+   
+   	case TYPE_SPECIAL_P:
+   	case TYPE_SPECIAL_FILTER_F:
+   	default:
+   		break;
+   
+   	}
+  }
+  else
+  {
 
-	switch(p->type)
+   	switch(p->type)
+   	{
+   	case TYPE_UINT8:
+   		(*((uint8_t*)p->ptr)) = (*((uint8_t*)p->ptr)) * vm->amount * val + (1.f-vm->amount) * (*((uint8_t*)p->ptr));
+   		break;
+   	case TYPE_UINT32:
+   		(*((uint32_t*)p->ptr)) = (*((uint32_t*)p->ptr)) * vm->amount * val + (1.f-vm->amount) * (*((uint32_t*)p->ptr));
+   		break;
+   
+   	case TYPE_FLT:
+   		(*((float*)p->ptr)) = (*((float*)p->ptr)) * vm->amount * val + (1.f-vm->amount) * (*((float*)p->ptr));
+   		break;
+   
+   	case TYPE_SPECIAL_F:
+   		(*((float*)p->ptr)) = (*((float*)p->ptr)) * vm->amount * val + (1.f-vm->amount) * (*((float*)p->ptr));
+   		break;
+   
+   	case TYPE_SPECIAL_P:
+   	case TYPE_SPECIAL_FILTER_F:
+   	default:
+   		break;
+   
+   	}
+   }
+   
+   if(vm->destination==PAR_ENVELOPE_POSITION_1&&midi_envPosition[0])
+      drumVoice_setEnvelope(0,midi_envPosition[0]); 
+   else if(vm->destination==PAR_ENVELOPE_POSITION_2&&midi_envPosition[1])
+      drumVoice_setEnvelope(1,midi_envPosition[1]);
+   else if(vm->destination==PAR_ENVELOPE_POSITION_3&&midi_envPosition[2])
+      drumVoice_setEnvelope(2,midi_envPosition[2]);
+   else if(vm->destination==PAR_ENVELOPE_POSITION_4&&midi_envPosition[3])
+      snare_setEnvelope(midi_envPosition[3]);
+   else if(vm->destination==PAR_ENVELOPE_POSITION_5&&midi_envPosition[4])
+      cymbal_setEnvelope(midi_envPosition[4]);
+   else if(vm->destination==PAR_ENVELOPE_POSITION_6&&midi_envPosition[5])
+      hihat_setEnvelope(midi_envPosition[5]);
+   
+}
+//-----------------------------------------------------------------------
+void modNode_vMorph(ModulationNode* vm, float val)
+{
+   if(preset_morphLoadDisabled)
+      return;
+
+   if(modNode_isLfoModTarget(vm))
+      return;
+
+   /* Voice morph destinations are control inputs into the STM morph engine.
+      The modulation node does not write parameter storage; it asks sequencer.c
+      to apply a live overlay between interpolated baseline and morph endpoint. */
+   switch(vm->destination)
+   {
+      case PAR_MORPH_DRUM1:
+         seq_modulateVoiceMorphAmount(0, vm->amount, val);
+         break;
+      case PAR_MORPH_DRUM2:
+         seq_modulateVoiceMorphAmount(1, vm->amount, val);
+         break;
+      case PAR_MORPH_DRUM3:
+         seq_modulateVoiceMorphAmount(2, vm->amount, val);
+         break;
+      case PAR_MORPH_SNARE:
+         seq_modulateVoiceMorphAmount(3, vm->amount, val);
+         break;
+      case PAR_MORPH_CYM:
+         seq_modulateVoiceMorphAmount(4, vm->amount, val);
+         break;
+      case PAR_MORPH_HIHAT:
+         seq_modulateVoiceMorphAmount(5, vm->amount, val);
+         break;
+      default:
+         break;               
+   }   
+}
+//-----------------------------------------------------------------------
+void modNode_resetMacros()
+{
+	uint8_t i;
+	for(i=0;i<4;i++)
+	{
+      paramArray_setParameter(macroModulators[i].destination,macroModulators[i].originalValue);
+   }
+}
+//-----------------------------------------------------------------------
+void modNode_reassignMacroMod()
+{
+	uint8_t i;
+	for(i=0;i<4;i++)
+	{
+		modNode_updateValue(&macroModulators[i], macroModulators[i].lastVal);
+	}
+}
+//-----------------------------------------------------------------------
+/*void modNode_updateMacro(ModulationNode* macroNode, float value)
+{      
+   Parameter const *paramAssign = &parameterArray[macroNode->destination];
+   
+   macroNode->lastVal = value;
+   
+	switch(paramAssign->type) // p=paramAssign value; n=node amount; v=received value
 	{
 	case TYPE_UINT8:
-		(*((uint8_t*)p->ptr)) = (*((uint8_t*)p->ptr)) * vm->amount * val + (1.f-vm->amount) * (*((uint8_t*)p->ptr));
+      //(*((uint8_t*)paramAssign->ptr)) = macroNode->originalValue.itg;
+		(*((uint8_t*)paramAssign->ptr)) = (*((uint32_t*)paramAssign->ptr)) - ( (*((uint32_t*)paramAssign->ptr)) * (1-value) * macroNode->amount);// + (*((uint8_t*)paramAssign->ptr));
 		break;
 
 	case TYPE_UINT32:
-		(*((uint32_t*)p->ptr)) = (*((uint32_t*)p->ptr)) * vm->amount * val + (1.f-vm->amount) * (*((uint32_t*)p->ptr));
+      //(*((uint32_t*)paramAssign->ptr)) = macroNode->originalValue.itg;
+		(*((uint32_t*)paramAssign->ptr)) = (*((uint32_t*)paramAssign->ptr)) - ( (*((uint32_t*)paramAssign->ptr)) * (1-value) * macroNode->amount);// + (*((uint32_t*)paramAssign->ptr));
 		break;
 
 	case TYPE_FLT:
-		(*((float*)p->ptr)) = (*((float*)p->ptr)) * vm->amount * val + (1.f-vm->amount) * (*((float*)p->ptr));
+      //(*((float*)paramAssign->ptr)) = macroNode->originalValue.flt;
+		(*((float*)paramAssign->ptr)) = (*((float*)paramAssign->ptr)) - ( (*((float*)paramAssign->ptr)) * (1-value) * macroNode->amount);//(*((float*)paramAssign->ptr)) * macroNode->amount * value;// + (*((float*)paramAssign->ptr));
 		break;
 
 	case TYPE_SPECIAL_F:
-		(*((float*)p->ptr)) = (*((float*)p->ptr)) * vm->amount * val + (1.f-vm->amount) * (*((float*)p->ptr));
+      //(*((float*)paramAssign->ptr)) = macroNode->originalValue.flt; 
+		(*((float*)paramAssign->ptr)) = (*((float*)paramAssign->ptr)) - ( (*((float*)paramAssign->ptr)) * (1-value) * macroNode->amount);// + (*((float*)paramAssign->ptr));
 		break;
 
 	case TYPE_SPECIAL_P:
 	case TYPE_SPECIAL_FILTER_F:
 	default:
 		break;
+   }
 
-	}
 }
-
+*/
