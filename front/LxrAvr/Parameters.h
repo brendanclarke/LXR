@@ -12,14 +12,13 @@
 
 enum ParamEnums
 {
-	
 	PAR_NONE,	//TODO this is modwheel	- stupid offset +/- 1   /*0*/
-	PAR_MOD_WHEEL ,												/*1*/
+	PAR_MOD_WHEEL,				/*1*/
 	
 	//waveform parameters need to be grouped 
 	//makes the special case to show their names instead of 0-127 values easier
 	
-	PAR_OSC_WAVE_DRUM1 = PAR_MOD_WHEEL,							/*1*/
+	PAR_OSC_WAVE_DRUM1 = PAR_MOD_WHEEL,	/*1*/
 	PAR_OSC_WAVE_DRUM2,
 	PAR_OSC_WAVE_DRUM3,
 	PAR_OSC_WAVE_SNARE,
@@ -29,7 +28,7 @@ enum ParamEnums
 	
 	PAR_COARSE1,
 	PAR_FINE1,
-	PAR_COARSE2,		/*10*/
+	PAR_COARSE2,				/*10*/
 	PAR_FINE2,
 	PAR_COARSE3,
 	PAR_FINE3,
@@ -40,7 +39,7 @@ enum ParamEnums
 	PAR_COARSE6,
 	PAR_FINE6,	
 	
-	PAR_MOD_WAVE_DRUM1,	/*20*/
+	PAR_MOD_WAVE_DRUM1,			/*20*/
 	PAR_MOD_WAVE_DRUM2,
 	PAR_MOD_WAVE_DRUM3,
 	PAR_WAVE2_CYM,
@@ -52,7 +51,7 @@ enum ParamEnums
 	PAR_MIX1,
 	
 	PAR_MOD_OSC_F1_CYM,
-	PAR_MOD_OSC_F2_CYM,		//70		/*30*/
+	PAR_MOD_OSC_F2_CYM,			/*30*/
 	PAR_MOD_OSC_GAIN1_CYM,	
 	PAR_MOD_OSC_GAIN2_CYM,
 	PAR_MOD_OSC_F1,
@@ -63,7 +62,7 @@ enum ParamEnums
 	PAR_FILTER_FREQ_1,
 	PAR_FILTER_FREQ_2,
 	PAR_FILTER_FREQ_3,
-	PAR_FILTER_FREQ_4,					/*40*/
+	PAR_FILTER_FREQ_4,			/*40*/
 	PAR_FILTER_FREQ_5,	
 	PAR_FILTER_FREQ_6,	
 
@@ -75,7 +74,7 @@ enum ParamEnums
 	PAR_RESO_6,	
 	
 	PAR_VELOA1,		
-	PAR_VELOD1,							/*50*/
+	PAR_VELOD1,				/*50*/
 	PAR_VELOA2,
 	PAR_VELOD2,	
 	PAR_VELOA3,		
@@ -85,7 +84,7 @@ enum ParamEnums
 	PAR_VELOA5,
 	PAR_VELOD5,	
 	PAR_VELOA6,
-	PAR_VELOD6_CLOSED,					/*60*/
+	PAR_VELOD6_CLOSED,			/*60*/
 	PAR_VELOD6_OPEN,
 	
 	PAR_VOL_SLOPE1,
@@ -98,7 +97,7 @@ enum ParamEnums
 	PAR_REPEAT4,	
 	PAR_REPEAT5,
 	
-	PAR_MOD_EG1,						/*70*/
+	PAR_MOD_EG1,				/*70*/
 	PAR_MOD_EG2,
 	PAR_MOD_EG3,
 	PAR_MOD_EG4,
@@ -110,7 +109,7 @@ enum ParamEnums
 	
 	PAR_PITCH_SLOPE1,
 	PAR_PITCH_SLOPE2,
-	PAR_PITCH_SLOPE3,					/*80*/
+	PAR_PITCH_SLOPE3,			/*80*/
 	PAR_PITCH_SLOPE4,
 	
 	PAR_FMAMNT1,	
@@ -120,20 +119,20 @@ enum ParamEnums
 	PAR_FMAMNT3,
 	PAR_FM_FREQ3,	
 	
-	PAR_VOL1,	
-	PAR_VOL2,	
-	PAR_VOL3,							/*90*/
-	PAR_VOL4,		
-	PAR_VOL5,
-	PAR_VOL6,	
+	PAR_VOL1,				/*88*/
+	PAR_VOL2,				/*89*/
+	PAR_VOL3,				/*90*/
+	PAR_VOL4,				/*91*/
+	PAR_VOL5,				/*92*/
+	PAR_VOL6,				/*93*/
 	
 	PAR_PAN1,	
 	PAR_PAN2,	
 	PAR_PAN3,
-		NRPN_FINE,
-		NRPN_COARSE,	
+	NRPN_FINE,
+	NRPN_COARSE,	
 	PAR_PAN4,
-	PAR_PAN5,							/*100*/
+	PAR_PAN5,				/*100*/
 	PAR_PAN6,	
 	
 	PAR_DRIVE1,	
@@ -145,18 +144,18 @@ enum ParamEnums
 	
 	PAR_VOICE_DECIMATION1,
 	PAR_VOICE_DECIMATION2,
-	PAR_VOICE_DECIMATION3,				/*110*/
+	PAR_VOICE_DECIMATION3,			/*110*/
 	PAR_VOICE_DECIMATION4,
 	PAR_VOICE_DECIMATION5,
 	PAR_VOICE_DECIMATION6,
 	PAR_VOICE_DECIMATION_ALL, 	
 	
-	PAR_FREQ_LFO1 ,
+	PAR_FREQ_LFO1,
 	PAR_FREQ_LFO2,
 	PAR_FREQ_LFO3,	
 	PAR_FREQ_LFO4,
 	PAR_FREQ_LFO5,
-	PAR_FREQ_LFO6,						/*120*/
+	PAR_FREQ_LFO6,				/*120*/
 	
 	PAR_AMOUNT_LFO1,
 	PAR_AMOUNT_LFO2,
@@ -165,15 +164,19 @@ enum ParamEnums
 	PAR_AMOUNT_LFO5,		
 	PAR_AMOUNT_LFO6,	
 	
+<<<<<<< HEAD
+   	PAR_RESERVED4, //todo stupid offset -> param 0 /*127*/
+=======
 			PAR_BANK_CHANGE, //todo stupid offset -> param 0 /*127*/
+>>>>>>> origin/master
 	//######################################
 	//######## END OF MIDI DATASIZE ########
 	//######## PARAM NR 127 REACHED ########
 	//######################################
 
-	PAR_FILTER_DRIVE_1,					/*128*/
+	PAR_FILTER_DRIVE_1,			/*128*/
 	PAR_FILTER_DRIVE_2,
-	PAR_FILTER_DRIVE_3,					/*130*/
+	PAR_FILTER_DRIVE_3,			/*130*/
 	PAR_FILTER_DRIVE_4,
 	PAR_FILTER_DRIVE_5,
 	PAR_FILTER_DRIVE_6,
@@ -185,7 +188,7 @@ enum ParamEnums
 	PAR_VOLUME_MOD_ON_OFF1,
 	PAR_VOLUME_MOD_ON_OFF2,
 	PAR_VOLUME_MOD_ON_OFF3,
-	PAR_VOLUME_MOD_ON_OFF4,				/*140*/
+	PAR_VOLUME_MOD_ON_OFF4,			/*140*/
 	PAR_VOLUME_MOD_ON_OFF5,
 	PAR_VOLUME_MOD_ON_OFF6,
 	
@@ -199,7 +202,7 @@ enum ParamEnums
 	// modulation destination for the velocity value in the sequencer
 	// --AS these are now indices into modTargets
 	PAR_VEL_DEST_1,
-	PAR_VEL_DEST_2,						/*150*/
+	PAR_VEL_DEST_2,				/*150*/
 	PAR_VEL_DEST_3,
 	PAR_VEL_DEST_4,
 	PAR_VEL_DEST_5,
@@ -210,7 +213,7 @@ enum ParamEnums
 	PAR_WAVE_LFO3,
 	PAR_WAVE_LFO4, 
 	PAR_WAVE_LFO5,
-	PAR_WAVE_LFO6,						/*160*/
+	PAR_WAVE_LFO6,				/*160*/
 	
 	//the target and voice parameters must be after one another!
 	// these represent the voice number that the lfo is targeting
@@ -226,7 +229,7 @@ enum ParamEnums
 	PAR_TARGET_LFO1,	
 	PAR_TARGET_LFO2,
 	PAR_TARGET_LFO3,
-	PAR_TARGET_LFO4,					/*170*/
+	PAR_TARGET_LFO4,			/*170*/
 	PAR_TARGET_LFO5,
 	PAR_TARGET_LFO6,
 	
@@ -238,7 +241,7 @@ enum ParamEnums
 	PAR_RETRIGGER_LFO6,
 	
 	PAR_SYNC_LFO1,
-	PAR_SYNC_LFO2,						/*180*/
+	PAR_SYNC_LFO2,				/*180*/
 	PAR_SYNC_LFO3,		
 	PAR_SYNC_LFO4,
 	PAR_SYNC_LFO5,
@@ -249,7 +252,7 @@ enum ParamEnums
 	PAR_OFFSET_LFO3,
 	PAR_OFFSET_LFO4,
 	PAR_OFFSET_LFO5,
-	PAR_OFFSET_LFO6,					/*190*/
+	PAR_OFFSET_LFO6,			/*190*/
 
 	PAR_FILTER_TYPE_1,
 	PAR_FILTER_TYPE_2,
@@ -261,7 +264,7 @@ enum ParamEnums
 	PAR_TRANS1_VOL,
 	PAR_TRANS2_VOL,
 	PAR_TRANS3_VOL,
-	PAR_TRANS4_VOL,						/*200*/
+	PAR_TRANS4_VOL,				/*200*/
 	PAR_TRANS5_VOL,
 	PAR_TRANS6_VOL,
 
@@ -273,22 +276,151 @@ enum ParamEnums
 	PAR_TRANS6_WAVE,	
 	
 	PAR_TRANS1_FREQ,
-	PAR_TRANS2_FREQ,					/*210*/
+	PAR_TRANS2_FREQ,			/*210*/
 	PAR_TRANS3_FREQ,
 	PAR_TRANS4_FREQ,
 	PAR_TRANS5_FREQ,
 	PAR_TRANS6_FREQ,
-	
-	PAR_AUDIO_OUT1,
+   
+	END_OF_MORPH_PARAMETERS,
+   
+	PAR_AUDIO_OUT1=END_OF_MORPH_PARAMETERS,
 	PAR_AUDIO_OUT2,
 	PAR_AUDIO_OUT3,
 	PAR_AUDIO_OUT4,
 	PAR_AUDIO_OUT5,
-	PAR_AUDIO_OUT6,						/*220*/
+	PAR_AUDIO_OUT6,				/*220*/
 	
-	//--AS midi note - This is a note value that is sent when the track triggers, if it's 0 it means that
-	// it will trigger the note that is specified on the step (PAR_STEP_NOTE). If it is non-zero then
-	// PAR_STEP_NOTE is ignored and this note is sent instead
+	END_OF_INDIVIDUAL_VOICE_PARAMS,	
+
+
+	PAR_ENVELOPE_POSITION_1=END_OF_INDIVIDUAL_VOICE_PARAMS,
+	PAR_ENVELOPE_POSITION_2,
+	PAR_ENVELOPE_POSITION_3,
+	PAR_ENVELOPE_POSITION_4,
+	PAR_ENVELOPE_POSITION_5,
+	PAR_ENVELOPE_POSITION_6,
+
+	PARAM_UNUSED_01,
+
+	PAR_KIT_VERSION,
+
+	/*bc: individ. morph per voice params*/
+	PAR_MORPH_DRUM1,
+	PAR_MORPH_DRUM2,			/*230*/
+	PAR_MORPH_DRUM3,
+	PAR_MORPH_SNARE,
+	PAR_MORPH_CYM,
+	PAR_MORPH_HIHAT,
+
+	PAR_MAC1_DST1,
+	PAR_MAC1_DST1_AMT,
+	PAR_MAC1_DST2,
+	PAR_MAC1_DST2_AMT,
+
+	PAR_MAC2_DST1,
+	PAR_MAC2_DST1_AMT,			/*240*/
+	PAR_MAC2_DST2,
+	PAR_MAC2_DST2_AMT,
+
+	//#########################################
+	//######## End of sound Parameters ########
+	//#########################################
+
+	//all parameters in this section are only there to be referenced from the menu
+	//they are not saved anywhere
+	END_OF_SOUND_PARAMETERS,
+	PAR_ROLL= END_OF_SOUND_PARAMETERS,
+	PAR_MORPH,
+
+	PAR_ACTIVE_STEP, 					
+	PAR_STEP_VOLUME,
+	PAR_STEP_PROB,
+	PAR_STEP_NOTE,
+
+	PAR_EUKLID_LENGTH,
+	PAR_EUKLID_STEPS,
+	PAR_EUKLID_ROTATION,             	/*250*/
+	PAR_EUKLID_SUBSTEP_ROTATION,
+
+	PAR_AUTOM_TRACK,
+
+	// --AS these are now indices into modTargets --BC: todo: this causes pitch fine autom. to adjust coarse instead
+	PAR_P1_DEST,
+	PAR_P2_DEST,
+
+	PAR_P1_VAL,				/*256*/
+	PAR_P2_VAL,
+
+	PAR_SHUFFLE,
+
+	PAR_PATTERN_BEAT,
+	PAR_PATTERN_NEXT,			/*260*/
+
+	PAR_TRACK_LENGTH,
+	PAR_TRACK_SCALE,
+
+	PAR_POS_X,
+	PAR_POS_Y,
+	PAR_FLUX,
+	PAR_SOM_FREQ,
+	PAR_TRACK_ROTATION,			// --AS **PATROT
+
+	/*bc: start of performance macro parameters*/
+	PAR_MAC1,
+	PAR_MAC2,
+
+	PAR_ROLL_NOTE,                   	/*270*/
+	PAR_ROLL_VELOCITY,
+	PAR_ROLL_MODE,
+	PAR_TRANSPOSE,
+	PAR_TRANSPOSE_ON_OFF,
+
+
+	//#########################################
+	//######## Global Parameters ##############
+	//#########################################
+	PAR_BEGINNING_OF_GLOBALS,
+	
+	PAR_BPM = PAR_BEGINNING_OF_GLOBALS,
+	
+	PAR_MIDI_CHAN_1,
+	PAR_MIDI_CHAN_2,
+	PAR_MIDI_CHAN_3,
+	PAR_MIDI_CHAN_4,
+	PAR_MIDI_CHAN_5,                 	/*280*/
+	PAR_MIDI_CHAN_6,
+
+	PAR_FETCH,				// bool
+	PAR_FOLLOW,				// bool
+
+
+	PAR_QUANTISATION,
+
+	PAR_SCREENSAVER_ON_OFF,			// bool
+	PAR_MIDI_MODE,				//--AS unused now
+	PAR_MIDI_CHAN_7,
+	PAR_MIDI_ROUTING,
+	PAR_MIDI_FILT_TX,
+	PAR_MIDI_FILT_RX,                	/*290*/
+
+	/*prescaler control and settings for trigger IO extension*/
+	PAR_PRESCALER_CLOCK_IN,
+	PAR_PRESCALER_CLOCK_OUT1,
+	PAR_PRESCALER_CLOCK_OUT2,
+	PAR_TRIG_GATE_MODE,
+
+	PAR_BAR_RESET_MODE,			// bool -- AS 0 or 1   /*278*/
+	PAR_MIDI_CHAN_GLOBAL,			// --AS global midi channel
+	PAR_SEQ_PC_TIME,			// bool, 0 for bar sequence change, 1 for step change
+	PAR_BUT_SHIFT_MODE,			// 0 normal shift operation, 1 shift button is a toggle
+	PAR_LOAD_PERF_ON_BANK,			// 0, incoming bank changes select kit, 1 bank changes select perf
+	PAR_SKIP_FIRST_ROLL,			/*300*/
+
+	PAR_FILE_LOAD_FAST,			// bool, apply 'kit' load immediately
+
+	PAR_GLOBAL_SETTINGS_VERSION,
+
 	PAR_MIDI_NOTE1,
 	PAR_MIDI_NOTE2,
 	PAR_MIDI_NOTE3,
@@ -297,85 +429,10 @@ enum ParamEnums
 	PAR_MIDI_NOTE6,
 	PAR_MIDI_NOTE7,
 
-	//#########################################
-	//######## End of sound Parameters ########
-	//#########################################
-	
-	//all parameters in this section are only there to be referenced from the menu
-	//they are not saved anywhere
-	END_OF_SOUND_PARAMETERS,
-	PAR_ROLL= END_OF_SOUND_PARAMETERS, //228
-	PAR_MORPH,
+	// PAR_CACHE_FOR_PERF, // bool, 0=perf load while playing works exactly like 'all', 
+						// 1=kit, pattern, settings cached until pattern change
 
-	PAR_ACTIVE_STEP, 					/*230*/
-	PAR_STEP_VOLUME,
-	PAR_STEP_PROB,
-	PAR_STEP_NOTE,
-	
-	PAR_EUKLID_LENGTH,
-	PAR_EUKLID_STEPS,
-	PAR_EUKLID_ROTATION,
-	
-	PAR_AUTOM_TRACK,
-	
-	// --AS these are now indices into modTargets
-	PAR_P1_DEST,
-	PAR_P2_DEST,
-	
-	PAR_P1_VAL,							/*240*/
-	PAR_P2_VAL,
-	
-	PAR_SHUFFLE,
-
-	PAR_PATTERN_BEAT,
-	PAR_PATTERN_NEXT,
-	
-	PAR_TRACK_LENGTH,
-	
-	PAR_POS_X,
-	PAR_POS_Y,
-	PAR_FLUX,
-	PAR_SOM_FREQ,
-	PAR_TRACK_ROTATION,				// --AS **PATROT
-
-	
-	//#########################################
-	//######## Global Parameters ##############
-	//#########################################
-	PAR_BEGINNING_OF_GLOBALS, //a placeholder to mark the beginning of the global var space not present in morph and not needed in the seq
-	//global params
-	PAR_BPM = PAR_BEGINNING_OF_GLOBALS,	/*250*/
-	
-
-	
-	PAR_MIDI_CHAN_1,
-	PAR_MIDI_CHAN_2,
-	PAR_MIDI_CHAN_3,
-	PAR_MIDI_CHAN_4,
-	PAR_MIDI_CHAN_5,
-	PAR_MIDI_CHAN_6,
-
-	PAR_FETCH,							// bool
-	PAR_FOLLOW,							// bool
-	
-	
-	PAR_QUANTISATION,
-	
-	PAR_SCREENSAVER_ON_OFF,				// bool /*260*/
-	PAR_MIDI_MODE,						//--AS unused now
-	PAR_MIDI_CHAN_7,
-	PAR_MIDI_ROUTING,
-	PAR_MIDI_FILT_TX,
-	PAR_MIDI_FILT_RX,
-	//prescaler control for trigger IO extension
-	PAR_PRESCALER_CLOCK_IN,
-	PAR_PRESCALER_CLOCK_OUT1,
-	PAR_PRESCALER_CLOCK_OUT2,
-	PAR_TRIG_GATE_MODE,
-
-	PAR_BAR_RESET_MODE,					// bool --AS 0 or 1   /*270*/
-	PAR_MIDI_CHAN_GLOBAL,				// --AS global midi channel
-	NUM_PARAMS	
+	NUM_PARAMS                      	 /*310*/
 };
 
 

@@ -46,7 +46,7 @@ void initRng()
 	RNG_Cmd(ENABLE);
 }
 //-------------------------------------------------------------
-__inline uint32_t GetRngValue()
+uint32_t GetRngValue(void)
 {
 	return RNG_GetRandomNumber();
 }

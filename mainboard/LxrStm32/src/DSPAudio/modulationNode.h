@@ -38,7 +38,7 @@
 #define VELOCITYMODULATION_H_
 
 #include "stm32f4xx.h"
-#include "ParameterArray.h"
+#include "Preset/ParameterArray.h"
 
 typedef struct ModulatorStruct
 {
@@ -54,9 +54,16 @@ typedef struct ModulatorStruct
 //TODO move into corresponding voice
 extern ModulationNode velocityModulators[6];
 
+extern ModulationNode macroModulators[4];
+
+//void modNode_updateMacro(ModulationNode* macroNode, float amount);
+void modNode_resetMacros();
+void modNode_reassignMacroMod();
 void modNode_init(ModulationNode* vm);
+
 void modNode_resetTargets();
 void modNode_reassignVeloMod();
+void modNode_vMorph(ModulationNode* vm, float val);
 
 /** if multiple nodes address the same target we need to update the other modNodes if one of them changes the destionation*/
 //void modNode_originalValueModulated(uint16_t idx, ModulationNode* modSource);

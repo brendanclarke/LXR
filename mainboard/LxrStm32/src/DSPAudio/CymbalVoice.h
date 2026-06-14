@@ -91,7 +91,7 @@ extern CymbalVoice cymbalVoice;
 void Cymbal_init();
 
 void Cymbal_trigger( const uint8_t vel, const uint8_t note);
-
+void cymbal_setEnvelope(uint8_t envPos);
 void Cymbal_calcSyncBlock(int16_t* buf, const uint8_t size);
 
 /** calculate envelopes etc (all 16 samples */

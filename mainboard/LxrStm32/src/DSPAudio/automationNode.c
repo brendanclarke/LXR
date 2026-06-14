@@ -55,8 +55,8 @@ void autoNode_setDestination(AutomationNode* node, uint16_t dest)
 			msg.status = MIDI_CC;
 			msg.data1 = node->destination;
 		}
-		msg.data2 = midiParser_originalCcValues[node->destination];
-		midiParser_ccHandler(msg,0);
+		msg.data2 = frontParser_originalCcValues[node->destination];
+		frontParser_applyParameterCommand(msg,0);
 	}
 
 	//set new destination
@@ -76,7 +76,7 @@ void autoNode_updateValue(AutomationNode* node, uint8_t val)
 			msg.data1 = node->destination;
 		}
 		msg.data2 = val;
-		midiParser_ccHandler(msg,0);
+		frontParser_applyParameterCommand(msg,0);
 	}
 }
 //-------------------------------------------------------------

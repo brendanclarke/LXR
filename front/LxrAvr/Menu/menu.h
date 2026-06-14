@@ -22,6 +22,7 @@
 
 #define MASK_PAGE 0xf8
 #define PAGE_SHIFT 3
+#define NUM_TRACKS 7
 //-----------------------------------------------------------------
 
 //#define PATTERN_END_MARKER 127
@@ -31,11 +32,35 @@ extern uint8_t menu_activeVoice;
 extern uint8_t menu_playedPattern;
 extern uint8_t menu_shownPattern;
 extern uint8_t menu_muteModeActive;
+extern uint8_t editModeActive;
+extern uint8_t morphValue;
+extern uint8_t menu_sequencerRunning;
+extern uint8_t menu_instPerfLock;
+extern uint8_t menu_instPerfLockPreset;
+extern uint8_t menu_voiceArray;
+extern uint8_t menu_kitLockVoiceArray;
 
+<<<<<<< HEAD
+
+enum KitType
+{
+   KITLOCK_PERF,
+   KITLOCK_ALL,
+   KITLOCK_DRUMKIT,
+};   
+
+#define NUM_PRESET_LOCATIONS 11 
+//kit, drum1, drum2, drum3, snare, cym, hh, morph sound, pattern, performance, all
+extern uint8_t menu_currentPresetNr[NUM_PRESET_LOCATIONS];
+=======
 #define NUM_PRESET_LOCATIONS 5 //kit, pattern, morph sound, performance, all
 extern uint8_t menu_currentPresetNr[NUM_PRESET_LOCATIONS];
 
+>>>>>>> origin/master
 void menu_setShownPattern(uint8_t patternNr);
+void menu_resetSubPage();
+void menu_updateMainStepDisplay();
+void menu_gotoSubPage(uint8_t subPage);
 uint8_t menu_getViewedPattern();
 
 
@@ -52,7 +77,11 @@ enum PageNames
 	LOAD_PAGE,
 	SAVE_PAGE,
 	/*
+<<<<<<< HEAD
+	LFO1_PAGE, //TODO load und savepage verschwenken speicher... nicht gefüllt. ans ende und aus dem array nehmen?
+=======
 	LFO1_PAGE, //TODO load und savepage verschwenken speicher... nicht gef�llt. ans ende und aus dem array nehmen?
+>>>>>>> origin/master
 	LFO2_PAGE,
 	LFO3_PAGE,
 	LFO4_PAGE,
@@ -66,6 +95,8 @@ enum PageNames
 	PATTERN_SETTINGS_PAGE,
 	RECORDING_PAGE,
 	SOM_PAGE,
+   ACTIVESTEP_PAGE,
+   SHIFTVOICE_PAGE,
 	
 	//The Voice settings -> Midi Channel, Audio Out...
 	/*
@@ -146,8 +177,10 @@ enum NamesEnum
 	TEXT_PROBABILITY,
 	TEXT_ACTIVE_STEP,
 	TEXT_PAT_LENGTH,
+   TEXT_PAT_SCALE,
 	TEXT_NUM_STEPS,
 	TEXT_ROTATION,
+   TEXT_SUBSTEP_ROTATION,
 	
 	//Global Parameters
 	TEXT_BPM,
@@ -191,6 +224,28 @@ enum NamesEnum
 	TEXT_TRIGGER_GATE_MODE,
 	TEXT_BAR_RESET_MODE,
 	TEXT_MIDI_CHAN_GLOBAL,
+	TEXT_SEQ_PC_TIME,
+	TEXT_BUT_SHIFT_MODE,
+   TEXT_LOAD_PERF_ON_BANK,
+   TEXT_SKIP_FIRST_ROLL,
+   TEXT_MORPH_VOICE,
+   TEXT_MAC1,
+   TEXT_MAC2,
+   TEXT_MAC1_DST1,
+   TEXT_MAC1_DST1_AMT,
+   TEXT_MAC1_DST2,
+   TEXT_MAC1_DST2_AMT,
+   TEXT_MAC2_DST1,
+   TEXT_MAC2_DST1_AMT,
+   TEXT_MAC2_DST2,
+   TEXT_MAC2_DST2_AMT,
+   TEXT_ROLL_NOTE,
+   TEXT_ROLL_VELOCITY,
+   TEXT_ROLL_MODE,
+   TEXT_TRANSPOSE,
+   TEXT_TRANSPOSE_ON_OFF,
+   TEXT_FILE_LOAD_FAST,
+   TEXT_ENVELOPE_POSITION,
 	NUM_NAMES
 };
 //-----------------------------------------------------------------
@@ -251,7 +306,9 @@ enum shortNamesEnum
 	SHORT_PROBABILITY,
 	SHORT_STEP,
 	SHORT_LENGTH,
+   SHORT_SCALE,
 	SHORT_ROTATION,
+   SHORT_SUBSTEP_ROTATION,
 	
 	SHORT_BPM,
 	SHORT_CHANNEL,
@@ -279,8 +336,32 @@ enum shortNamesEnum
 	SHORT_TRIGGER_IN,
 	SHORT_TRIGGER_OUT1,
 	SHORT_TRIGGER_OUT2,
-	SHORT_BAR_RESET_MODE
-
+	SHORT_BAR_RESET_MODE,
+   SHORT_SEQ_PC_TIME,
+   SHORT_BUT_SHIFT_MODE,
+   SHORT_LOAD_PERF_ON_BANK,
+   SHORT_SKIP_FIRST_ROLL,
+   SHORT_MORPH_VOICE,
+   SHORT_MAC1,
+   SHORT_MAC2,
+   SHORT_MAC1_DST1,
+   SHORT_MAC1_DST1_AMT,
+   SHORT_MAC1_DST2,
+   SHORT_MAC1_DST2_AMT,
+   SHORT_MAC2_DST1,
+   SHORT_MAC2_DST1_AMT,
+   SHORT_MAC2_DST2,
+   SHORT_MAC2_DST2_AMT,
+   SHORT_ROLL_NOTE,
+   SHORT_ROLL_VELOCITY,
+   SHORT_ROLL_MODE,
+   
+   SHORT_TRANSPOSE,
+   SHORT_TRANSPOSE_ON_OFF,
+   
+   SHORT_FILE_LOAD_FAST,
+   
+   SHORT_ENVELOPE_POSITION,
 
 	
 };
@@ -315,7 +396,17 @@ enum catNamesEnum
 	CAT_SEQUENCER,
 	CAT_GENERATOR,
 	CAT_MIDI,
-	CAT_TRIGGER
+	CAT_TRIGGER,
+   
+   CAT_MACRO1,
+   CAT_MACRO2,
+   CAT_MAC1D1,
+   CAT_MAC1D2,
+   CAT_MAC2D1,
+   CAT_MAC2D2,
+   CAT_TRANSPOSE,
+   CAT_MORPH_VOICE,
+   CAT_FILE,
 };
 //-----------------------------------------------------------------
 // these must correspond with longNames in MenuText.h
@@ -357,8 +448,10 @@ enum longNamesEnum
 	LONG_PROBABILITY,
 	LONG_NUMBER,
 	LONG_LENGTH,
+   LONG_SCALE,
 	LONG_STEPS,
 	LONG_ROTATION,
+   LONG_SUBSTEP_ROTATION,
 	LONG_TEMPO,
 	LONG_AUDIO_OUT,
 	LONG_MIDI_CHANNEL,
@@ -391,6 +484,28 @@ enum longNamesEnum
 	LONG_TRIGGER_OUT2,
 	LONG_TRIGGER_GATE_MODE,
 	LONG_BAR_RESET_MODE,
+   LONG_SEQ_PC_TIME,
+   LONG_BUT_SHIFT_MODE,
+   LONG_LOAD_PERF_ON_BANK,
+   LONG_SKIP_FIRST_ROLL,
+   LONG_MORPH_VOICE,
+   LONG_MAC1,
+   LONG_MAC2,
+   LONG_MAC1_DST1,
+   LONG_MAC1_DST1_AMT,
+   LONG_MAC1_DST2,
+   LONG_MAC1_DST2_AMT,
+   LONG_MAC2_DST1,
+   LONG_MAC2_DST1_AMT,
+   LONG_MAC2_DST2,
+   LONG_MAC2_DST2_AMT,
+   LONG_ROLL_NOTE,
+   LONG_ROLL_VELOCITY,
+   LONG_ROLL_MODE,
+   LONG_TRANSPOSE,
+   LONG_TRANSPOSE_ON_OFF,
+   LONG_FILE_LOAD_FAST,
+   LONG_ENVELOPE_POSITION,
 	
 };
 
@@ -398,8 +513,16 @@ enum longNamesEnum
 enum loadSaveEnum
 {
 	SAVE_TYPE_KIT = 0,
+   
+   SAVE_TYPE_DRUM1,
+   SAVE_TYPE_DRUM2,
+   SAVE_TYPE_DRUM3,
+   SAVE_TYPE_SNARE,
+   SAVE_TYPE_CYM,
+   SAVE_TYPE_HIHAT,
+   
+   SAVE_TYPE_MORPH,
 	SAVE_TYPE_PATTERN,
-	SAVE_TYPE_MORPH,
 	SAVE_TYPE_PERFORMANCE,	// kit data, pattern data and BPM
 	SAVE_TYPE_ALL,			// all global settings, kit data and pattern data
 	SAVE_TYPE_GLO,
@@ -478,11 +601,12 @@ enum Datatypes
 	DTYPE_TARGET_SELECTION_LFO,
 	DTYPE_TARGET_SELECTION_VELO,	
 	DTYPE_VOICE_LFO,
-	DTYPE_AUTOM_TARGET,
+	DTYPE_AUTOM_TARGET, // bc: these only get used for macroMod targets now, there is some
+                       // special code parsing their change in menu if new params get this dtype
 	DTYPE_0b1,
 	DTYPE_NOTE_NAME, // --AS eg C#0, D 1 for note name
 	DTYPE_0B15,		//0-15
-	/*15*/
+	DTYPE_0B16,    //0-16 for MIDI channel off /*15*/
 	/*16*/
 	// --AS warning, we can only have 16 on this list the way things are laid out
 };
@@ -490,6 +614,7 @@ enum Datatypes
 //-----------------------------------------------------------------
 extern const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS];
 extern uint8_t parameter_values[NUM_PARAMS];
+extern uint8_t parameter_values_kitReset[END_OF_SOUND_PARAMETERS];
 extern uint8_t parameters2[END_OF_SOUND_PARAMETERS];
 
 extern const Page PROGMEM menuPages[NUM_PAGES][NUM_SUB_PAGES];
@@ -511,6 +636,9 @@ extern const ModTargetVoiceOffset PROGMEM modTargetVoiceOffsets[6];
 // It is calculated at runtime TODO move this to progmem sometime
 extern uint8_t paramToModTarget[END_OF_SOUND_PARAMETERS];
 
+extern uint8_t menu_selectedStepLed;
+
+void menu_debug(char* displayText, size_t length, uint8_t value1, uint8_t value2, int delayTime);
 //-----------------------------------------------------------------
 /** forces a complete repaint of the display*/
 void menu_repaintAll();
@@ -520,6 +648,28 @@ void menu_repaint();
 //-----------------------------------------------------------------
 //number of user samples in flash
 void menu_setNumSamples(uint8_t num);
+//-----------------------------------------------------------------
+void menu_enterVoiceMode();
+//-----------------------------------------------------------------
+void menu_enterPerfMode();
+//-----------------------------------------------------------------
+void menu_enterStepMode();
+//-----------------------------------------------------------------
+void menu_enterActiveStepMode();
+//-----------------------------------------------------------------
+void menu_enterPatgenMode();
+//-----------------------------------------------------------------
+void menu_shiftVoice(uint8_t shift);
+//-----------------------------------------------------------------
+void menu_shiftPerf(uint8_t shift);
+//-----------------------------------------------------------------
+void menu_shiftStep(uint8_t shift);
+//-----------------------------------------------------------------
+void menu_shiftActiveStep(uint8_t shift);
+//-----------------------------------------------------------------
+void menu_shiftPatgen(uint8_t shift);
+//-----------------------------------------------------------------
+void menu_resetBlinkLeds();
 //-----------------------------------------------------------------
 /**set all save state parameters to 0*/
 void menu_resetSaveParameters();
@@ -537,12 +687,16 @@ void menu_resetActiveParameter();
 //-----------------------------------------------------------------
 uint8_t menu_getSubPage();
 //-----------------------------------------------------------------
+int menu_getWhat();
+//-----------------------------------------------------------------
 void menu_parseKnobValue(uint8_t potNr, uint8_t potValue);
 //-----------------------------------------------------------------
 void menu_parseGlobalParam(uint16_t paramNr, uint8_t value);
 //-----------------------------------------------------------------
 /** all parameters are send to the cortex soundchip. called after loading a preset into the avr ram*/
 void menu_sendAllParameters();
+//-----------------------------------------------------------------
+void menu_reloadKit();
 //-----------------------------------------------------------------
 /** get the currently active page nr*/
 uint8_t menu_getActivePage();
@@ -553,6 +707,8 @@ uint8_t menu_areMuteLedsShown();
 uint8_t menu_getActiveVoice();
 //-----------------------------------------------------------------
 void menu_setActiveVoice(uint8_t voiceNr);
+//-----------------------------------------------------------------
+void menu_vMorph(uint8_t dest, uint8_t val, uint8_t amt);
 //-----------------------------------------------------------------
 /** used to upodate all global parameters that need processing after a preset is loaded*/
 void menu_sendAllGlobals();

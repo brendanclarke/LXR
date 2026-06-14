@@ -99,7 +99,7 @@ extern SnareVoice snareVoice;
 void Snare_init();
 
 void Snare_trigger(const uint8_t vel, const uint8_t note);
-
+void snare_setEnvelope(uint8_t envPos);
 /** claculate the oscillators and sample based stuff*/
 void Snare_calcSyncBlock(int16_t* buf, const uint8_t size);
 

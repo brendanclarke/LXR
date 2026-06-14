@@ -54,6 +54,7 @@ void lfo_init(Lfo *lfo)
 	lfo->sync			= 0;
 	lfo->freq			= 1;
 	lfo->modNodeValue	= 1;
+   lfo->delay        = 0;
 
 	modNode_init(&lfo->modTarget);
 }
@@ -66,18 +67,70 @@ float lfo_calc(Lfo *lfo)
 	lfo->phase 			   += incInt;//lfo->phaseInc*lfo->modNodeValue;
 	const uint8_t overflow 	= oldPhase>lfo->phase;
 
+   if(lfo->waveform>=LFO_SINE_ONE) // sort cases where one shots are pre or post activity
+   {
+      if(overflow) // either we just hit the end of the delay phase, or one shot is past
+      {
+         if(lfo->delay) // we just hit the end of the delay phase
+         {
+            lfo->delay = 0;
+            if (lfo->waveform==LFO_NOISE_ONE) // if there was delay, we generate a random now
+            {
+               lfo->rnd = GetRngValue();
+			      lfo->rnd = lfo->rnd  / (float)0xffffffff ;
+            }
+         }
+         else // the one-shot ended
+         {
+            lfo->phase=oldPhase;
+            switch(lfo->waveform)
+            {
+            case LFO_EXP_UP_ONE: // these run up to 1 and hold
+            case LFO_SAW_UP_ONE:
+               return 1;
+               break;
+            case LFO_NOISE_ONE: // hold the random value until next retrigger
+               return lfo->rnd;
+               break;
+            default:             // all other waveforms hold at 0
+               return 0;
+               break;
+            }
+          }
+       }
+       else if (lfo->delay) // one shot is in delay phase. hold at pre value 
+       {
+         switch(lfo->waveform)
+         {
+         case LFO_EXP_DOWN_ONE: // these start at 1 and run down while playing
+         case LFO_SAW_DOWN_ONE:
+            return 1;
+            break;
+         case LFO_NOISE_ONE:     // hold the random lfo at previous value
+            return lfo->rnd;
+            break;
+         default:             // everything else starts at 0 during the delay phase
+            return 0;
+            break;
+         }
+       }
+   }
+
 	switch(lfo->waveform)
 	{
 	//---
 		case LFO_SINE:
+      case LFO_SINE_ONE:
 			return ((sine_table[(lfo->phase>>20)]/32767.f) + 1)/2.f;
 		break;
 	//---
 		case LFO_TRI:
+      case LFO_TRI_ONE:
 			return (1.f-fabsf( (lfo->phase/(float)0xffffffff)*2-1 ) );
 			break;
 	//---
 		case LFO_SAW_UP:
+      case LFO_SAW_UP_ONE:
 		return lfo->phase/(float)0xffffffff ;
 		break;
 	//---
@@ -91,22 +144,35 @@ float lfo_calc(Lfo *lfo)
 			return 0.f;
 		}
 		break;
+   //---   
+      case LFO_REC_ONE: // one shot rec gets reversed to start high
+		if(lfo->phase > 0x7fffffff)
+		{
+			return 0.f;
+		}
+		else
+		{
+			return 1.f;
+		}
+		break;
 	//---
 		case LFO_NOISE:
+      case LFO_NOISE_ONE:
 		if(overflow)
 		{
 			lfo->rnd = GetRngValue();
 			lfo->rnd = lfo->rnd  / (float)0xffffffff ;
 		}
-
 			return lfo->rnd;
 		break;
 	//---
 		case LFO_SAW_DOWN:
+      case LFO_SAW_DOWN_ONE:
 		return (0xffffffff-(lfo->phase)) / (float)0xffffffff;
 		break;
 	//---
 		case LFO_EXP_UP:
+      case LFO_EXP_UP_ONE:
 			{
 				float x = lfo->phase/(float)0xffffffff;
 				return x*x*x;
@@ -114,19 +180,27 @@ float lfo_calc(Lfo *lfo)
 			break;
 	//---
 		case LFO_EXP_DOWN:
+      case LFO_EXP_DOWN_ONE:
 			{
 				float x = (0xffffffff-(lfo->phase)) / (float)0xffffffff;
 				return x*x*x;//valueShaperF2F(x,-0.9f);
 			}
 			break;
 	//---
+      case LFO_EXP_TRI:
+      case LFO_EXP_TRI_ONE:
+         {
+			   float x = (1.f-fabsf( (lfo->phase/(float)0xffffffff)*2-1 ) );
+            return x*x*x;
+         }
+			break;
+   //---
 		default:
 		return 0;
 		break;
 	}
 	return 0;
-}
-//-------------------------------------------------------------
+}//-------------------------------------------------------------
 void lfo_dispatchNextValue(Lfo* lfo)
 {
 	float val = lfo_calc(lfo);
@@ -242,29 +316,101 @@ void lfo_recalcSync()
 //-------------------------------------------------------------
 void lfo_retrigger(uint8_t voice)
 {
+   uint8_t isOneShot;
+   /* -bc- for one shots, offset acts as a delay. for these, 'phase' is loaded with
+      negative phase offset and runs up to 0, at which point the envelope will play.
+      for the 'noise' signal, we generate one random value after the delay and hold 
+      until the next retrigger. if there is no lfo delay, we need to generate it here.
+   */
 	if(voiceArray[0].lfo.retrigger == voice+1)
 	{
-		voiceArray[0].lfo.phase = voiceArray[0].lfo.phaseOffset;
+      isOneShot = (voiceArray[0].lfo.waveform>=LFO_SINE_ONE);
+      voiceArray[0].lfo.delay = isOneShot&&(voiceArray[0].lfo.phaseOffset);
+      
+      if (isOneShot)
+         voiceArray[0].lfo.phase = -voiceArray[0].lfo.phaseOffset;
+      else
+         voiceArray[0].lfo.phase = voiceArray[0].lfo.phaseOffset;
+      if (voiceArray[0].lfo.waveform==LFO_NOISE_ONE&&!voiceArray[0].lfo.phaseOffset)
+      {
+         voiceArray[0].lfo.rnd = GetRngValue();
+			voiceArray[0].lfo.rnd = voiceArray[0].lfo.rnd  / (float)0xffffffff ;
+      }
 	}
 	if(voiceArray[1].lfo.retrigger == voice+1)
 	{
-		voiceArray[1].lfo.phase = voiceArray[1].lfo.phaseOffset;
+      isOneShot = (voiceArray[1].lfo.waveform>=LFO_SINE_ONE);
+      voiceArray[1].lfo.delay = isOneShot&&(voiceArray[1].lfo.phaseOffset);
+      
+		if (isOneShot)
+         voiceArray[1].lfo.phase = -voiceArray[1].lfo.phaseOffset;
+      else
+         voiceArray[1].lfo.phase = voiceArray[1].lfo.phaseOffset;
+      if (voiceArray[1].lfo.waveform==LFO_NOISE_ONE&&!voiceArray[1].lfo.phaseOffset)
+      {
+         voiceArray[1].lfo.rnd = GetRngValue();
+			voiceArray[1].lfo.rnd = voiceArray[1].lfo.rnd  / (float)0xffffffff ;
+      }
 	}
 	if(voiceArray[2].lfo.retrigger == voice+1)
 	{
-		voiceArray[2].lfo.phase = voiceArray[2].lfo.phaseOffset;
+      isOneShot = (voiceArray[2].lfo.waveform>=LFO_SINE_ONE);
+      voiceArray[2].lfo.delay = isOneShot&&(voiceArray[2].lfo.phaseOffset);
+      
+		if (isOneShot)
+         voiceArray[2].lfo.phase = -voiceArray[2].lfo.phaseOffset;
+      else
+         voiceArray[2].lfo.phase = voiceArray[2].lfo.phaseOffset;
+      if (voiceArray[2].lfo.waveform==LFO_NOISE_ONE&&!voiceArray[2].lfo.phaseOffset)
+      {
+         voiceArray[2].lfo.rnd = GetRngValue();
+			voiceArray[2].lfo.rnd = voiceArray[2].lfo.rnd  / (float)0xffffffff ;
+      }
 	}
 	if(snareVoice.lfo.retrigger == voice+1)
 	{
-		snareVoice.lfo.phase = snareVoice.lfo.phaseOffset;
+      isOneShot = (snareVoice.lfo.waveform>=LFO_SINE_ONE);
+      snareVoice.lfo.delay = isOneShot&&(snareVoice.lfo.phaseOffset);
+      
+		if (isOneShot)
+         snareVoice.lfo.phase = -snareVoice.lfo.phaseOffset;
+      else
+         snareVoice.lfo.phase = snareVoice.lfo.phaseOffset;
+      if (snareVoice.lfo.waveform==LFO_NOISE_ONE&&!snareVoice.lfo.phaseOffset)
+      {
+         snareVoice.lfo.rnd = GetRngValue();
+			snareVoice.lfo.rnd = snareVoice.lfo.rnd  / (float)0xffffffff ;
+      }
 	}
 	if(cymbalVoice.lfo.retrigger == voice+1)
 	{
-		cymbalVoice.lfo.phase = cymbalVoice.lfo.phaseOffset;
+      isOneShot = (cymbalVoice.lfo.waveform>=LFO_SINE_ONE);
+      cymbalVoice.lfo.delay = isOneShot&&(cymbalVoice.lfo.phaseOffset);
+      
+		if (isOneShot)
+         cymbalVoice.lfo.phase = -cymbalVoice.lfo.phaseOffset;
+      else
+         cymbalVoice.lfo.phase = cymbalVoice.lfo.phaseOffset;
+      if (cymbalVoice.lfo.waveform==LFO_NOISE_ONE&&!cymbalVoice.lfo.phaseOffset)
+      {
+         cymbalVoice.lfo.rnd = GetRngValue();
+			cymbalVoice.lfo.rnd = cymbalVoice.lfo.rnd  / (float)0xffffffff ;
+      }
 	}
 	if(hatVoice.lfo.retrigger == voice+1)
 	{
-		hatVoice.lfo.phase = hatVoice.lfo.phaseOffset;
+      isOneShot = (hatVoice.lfo.waveform>=LFO_SINE_ONE);
+      hatVoice.lfo.delay = isOneShot&&(hatVoice.lfo.phaseOffset);
+      
+		if (isOneShot)
+         hatVoice.lfo.phase = -hatVoice.lfo.phaseOffset;
+      else
+         hatVoice.lfo.phase = hatVoice.lfo.phaseOffset;
+      if (hatVoice.lfo.waveform==LFO_NOISE_ONE&&!hatVoice.lfo.phaseOffset)
+      {
+         hatVoice.lfo.rnd = GetRngValue();
+			hatVoice.lfo.rnd = hatVoice.lfo.rnd  / (float)0xffffffff ;
+      }
 	}
-}
-//-------------------------------------------------------------
+   
+}//-------------------------------------------------------------

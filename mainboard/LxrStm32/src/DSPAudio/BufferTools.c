@@ -37,7 +37,7 @@
 #include "BufferTools.h"
 
 //---------------------------------------------------
-inline void bufferTool_addBuffers(int16_t* buf1, int16_t* buf2, const uint8_t size)
+void bufferTool_addBuffers(int16_t* buf1, int16_t* buf2, const uint8_t size)
 {
 	uint8_t i;
 	for(i=0;i<size;i++)
@@ -46,7 +46,7 @@ inline void bufferTool_addBuffers(int16_t* buf1, int16_t* buf2, const uint8_t si
 	}
 }
 //---------------------------------------------------
-inline void bufferTool_addBuffersSaturating(int16_t* buf1, int16_t* buf2, const uint8_t size)
+void bufferTool_addBuffersSaturating(int16_t* buf1, int16_t* buf2, const uint8_t size)
 {
 	uint8_t i;
 	for(i=0;i<size;i++)
@@ -55,7 +55,7 @@ inline void bufferTool_addBuffersSaturating(int16_t* buf1, int16_t* buf2, const 
 	}
 }
 //---------------------------------------------------
-inline void bufferTool_addBuffersSaturatingWithGain(int16_t* buf1, int16_t* buf2, const float gain, const uint8_t size)
+void bufferTool_addBuffersSaturatingWithGain(int16_t* buf1, int16_t* buf2, const float gain, const uint8_t size)
 {
 	uint8_t i;
 	for(i=0;i<size;i++)
@@ -64,7 +64,7 @@ inline void bufferTool_addBuffersSaturatingWithGain(int16_t* buf1, int16_t* buf2
 	}
 }
 //---------------------------------------------------
-inline void bufferTool_subBuffersSaturating(int16_t* buf1, int16_t* buf2, const uint8_t size)
+void bufferTool_subBuffersSaturating(int16_t* buf1, int16_t* buf2, const uint8_t size)
 {
 	uint8_t i;
 	for(i=0;i<size;i++)
@@ -73,7 +73,7 @@ inline void bufferTool_subBuffersSaturating(int16_t* buf1, int16_t* buf2, const 
 	}
 }
 //---------------------------------------------------
-inline void bufferTool_copyWithGain(int16_t* buf1, int16_t* buf2, float gain, const uint8_t size)
+void bufferTool_copyWithGain(int16_t* buf1, int16_t* buf2, float gain, const uint8_t size)
 {
 	uint8_t i;
 	for(i=0;i<size;i++)
@@ -82,7 +82,7 @@ inline void bufferTool_copyWithGain(int16_t* buf1, int16_t* buf2, float gain, co
 	}
 }
 //---------------------------------------------------
-inline void bufferTool_clearBuffer(int16_t* buf, const uint8_t size)
+void bufferTool_clearBuffer(int16_t* buf, const uint8_t size)
 {
 	uint8_t i;
 	for(i=0;i<size;i++)
@@ -91,7 +91,7 @@ inline void bufferTool_clearBuffer(int16_t* buf, const uint8_t size)
 	}
 }
 //---------------------------------------------------
-inline void bufferTool_addGain(int16_t* buf, const float gain, const uint8_t size)
+void bufferTool_addGain(int16_t* buf, const float gain, const uint8_t size)
 {
 	uint8_t i;
 	for(i=0;i<size;i++)
@@ -100,7 +100,7 @@ inline void bufferTool_addGain(int16_t* buf, const float gain, const uint8_t siz
 	}
 }
 //---------------------------------------------------
-inline void bufferTool_addGainDithered(Dither* dither, int16_t* buf, const float gain, const uint8_t size)
+void bufferTool_addGainDithered(Dither* dither, int16_t* buf, const float gain, const uint8_t size)
 {
 	uint8_t i;
 	for(i=0;i<size;i++)
@@ -109,7 +109,7 @@ inline void bufferTool_addGainDithered(Dither* dither, int16_t* buf, const float
 	}
 }
 //---------------------------------------------------
-inline void bufferTool_addGainInterpolated(int16_t* buf, const float gain, const float lastGain, const uint8_t size)
+void bufferTool_addGainInterpolated(int16_t* buf, const float gain, const float lastGain, const uint8_t size)
 {
 	uint8_t i;
 	for(i=0;i<size;i++)
@@ -120,7 +120,7 @@ inline void bufferTool_addGainInterpolated(int16_t* buf, const float gain, const
 	}
 }
 //---------------------------------------------------
-inline void bufferTool_mulInt(int16_t* buf, const int16_t gain, const uint8_t size)
+void bufferTool_mulInt(int16_t* buf, const int16_t gain, const uint8_t size)
 {
 	uint8_t i;
 	for(i=0;i<size;i++)
@@ -129,7 +129,7 @@ inline void bufferTool_mulInt(int16_t* buf, const int16_t gain, const uint8_t si
 	}
 }
 //---------------------------------------------------
-inline void bufferTool_multiplyWithFloatBuffer(int16_t* buf, float* fltBuf, const uint8_t size)
+void bufferTool_multiplyWithFloatBuffer(int16_t* buf, float* fltBuf, const uint8_t size)
 {
 	uint8_t i;
 	for(i=0;i<size;i++)
@@ -138,7 +138,7 @@ inline void bufferTool_multiplyWithFloatBuffer(int16_t* buf, float* fltBuf, cons
 	}
 }
 //---------------------------------------------------
-inline void bufferTool_multiplyWithFloatBufferDithered(Dither* dither, int16_t* buf, float* fltBuf, const uint8_t size)
+void bufferTool_multiplyWithFloatBufferDithered(Dither* dither, int16_t* buf, float* fltBuf, const uint8_t size)
 {
 	uint8_t i;
 	for(i=0;i<size;i++)
@@ -148,7 +148,7 @@ inline void bufferTool_multiplyWithFloatBufferDithered(Dither* dither, int16_t* 
 	}
 }
 //---------------------------------------------------
-inline void bufferTool_moveBuffer(int16_t* dst, int16_t* src, const uint8_t size)
+void bufferTool_moveBuffer(int16_t* dst, int16_t* src, const uint8_t size)
 {
 	uint8_t i;
 	for(i=0;i<size;i++)

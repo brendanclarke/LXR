@@ -96,7 +96,7 @@ extern HiHatVoice hatVoice;
 void HiHat_init();
 
 void HiHat_trigger(uint8_t vel, uint8_t isOpen, const uint8_t note);
-
+void hihat_setEnvelope(uint8_t envPos);
 void HiHat_calcSyncBlock(int16_t* buf, const uint8_t size);
 
 /** calculate envelopes etc (all 16 samples */

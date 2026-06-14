@@ -18,6 +18,9 @@ enum
 	MODE_CLEAR,
 	MODE_COPY_PATTERN,
 	MODE_COPY_TRACK,
+   MODE_COPY_TRACK_PATTERN,
+   MODE_COPY_STEP,
+   MODE_COPY_SUB_STEP
 };
 
 //clear targets
@@ -30,17 +33,25 @@ enum
 };
 extern uint8_t copyClear_Mode;
 
+// get substep leds for step copy
+void copyClear_setSubStepLeds(uint8_t mainStep);
+
+uint8_t copyClear_getCopyMode();
 void copyClear_executeClear();
 void copyClear_clearCurrentTrack();
 void copyClear_clearCurrentPattern();
 void copyClear_copyTrack();
 void copyClear_copyPattern();
+void copyClear_copyTrackPattern();
+void copyClear_copyStep();
+void copyClear_copySubStep();
 uint8_t copyClear_getClearTarget();
 uint8_t copyClear_isClearModeActive();
 void copyClear_setClearTarget(uint8_t mode);
 void copyClear_armClearMenu(uint8_t isShown);
 
 uint8_t copyClear_srcSet();
+int8_t copyClear_getSrc();
 void copyClear_setSrc(int8_t src, uint8_t type);
 void copyClear_setDst(int8_t dst, uint8_t type);
 

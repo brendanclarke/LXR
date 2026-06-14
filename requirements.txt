@@ -1,0 +1,57 @@
+# LXR firmware — build requirements
+# This repo builds:
+#   - STM32 firmware (arm-none-eabi-gcc)
+#   - AVR firmware (avr-gcc + avr-libc)
+#   - FirmwareImageBuilder host tool (C++ compiler)
+#
+# To verify your environment:
+#   make --version
+#   arm-none-eabi-gcc --version
+#   avr-gcc --version
+#   c++ --version
+#
+# Required toolchain (install separately; not managed by pip):
+#
+# 1) ARM toolchain: arm-none-eabi-gcc
+#    Website:
+#      https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads
+#    macOS:
+#      brew install arm-none-eabi-gcc
+#      sudo port install arm-none-eabi-gcc
+#    Ubuntu/Debian:
+#      sudo apt install gcc-arm-none-eabi binutils-arm-none-eabi
+#      (alt) download from Arm website above
+#    Windows 11:
+#      WSL Ubuntu: sudo apt install gcc-arm-none-eabi binutils-arm-none-eabi
+#      MSYS2: pacman -S mingw-w64-ucrt-x86_64-arm-none-eabi-gcc
+#
+# 2) AVR toolchain: avr-gcc + avr-libc
+#    Website:
+#      https://www.microchip.com/en-us/tools-resources/develop/microchip-studio/gcc-compilers
+#    macOS:
+#      brew tap osx-cross/avr && brew install avr-gcc
+#      sudo port install avr-gcc avr-libc
+#    Ubuntu/Debian:
+#      sudo apt install gcc-avr binutils-avr avr-libc
+#      (alt) install Microchip AVR GNU Toolchain from website above
+#    Windows 11:
+#      WSL Ubuntu: sudo apt install gcc-avr binutils-avr avr-libc
+#      MSYS2: pacman -S mingw-w64-ucrt-x86_64-avr-gcc
+#
+# 3) Make + host C++ compiler (for FirmwareImageBuilder)
+#    macOS:
+#      xcode-select --install
+#      (alt) brew install make
+#    Ubuntu/Debian:
+#      sudo apt install make build-essential
+#      (alt) sudo apt install make g++
+#    Windows 11:
+#      WSL Ubuntu: sudo apt install make g++
+#      MSYS2: pacman -S mingw-w64-ucrt-x86_64-make mingw-w64-ucrt-x86_64-gcc
+#
+# Optional Makefile overrides if toolchains are not in PATH:
+#   make ARM_TOOLKIT_ROOT=/path/to/arm-toolchain AVR_TOOLKIT_ROOT=/path/to/avr-toolchain firmware
+#
+# Quick start:
+#   make clean      # clean artifacts
+#   make firmware   # build STM32 + AVR + combined firmware image

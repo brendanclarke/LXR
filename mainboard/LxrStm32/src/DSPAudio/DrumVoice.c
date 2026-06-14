@@ -40,7 +40,7 @@
 #include "math.h"
 #include "squareRootLut.h"
 #include "BufferTools.h"
-#include "ParameterArray.h"
+#include "Preset/ParameterArray.h"
 #include "modulationNode.h"
 #include "TriggerOut.h"
 
@@ -53,6 +53,25 @@ void setPan(const uint8_t voiceNr, const uint8_t pan)
 {
 	voiceArray[voiceNr].pan = pan;
 }
+//---------------------------------------------------
+void drumVoice_setEnvelope(const uint8_t voiceNr, const uint8_t envPos)
+{
+   if(envPos==0)
+   {
+      DecayEg_trigger(&voiceArray[voiceNr].oscPitchEg);
+	   slopeEg2_trigger(&voiceArray[voiceNr].oscVolEg);
+   }
+	else if(envPos==1)
+   {
+      DecayEg_trigger(&voiceArray[voiceNr].oscPitchEg);
+      slopeEg2_setEnvPos(&voiceArray[voiceNr].oscVolEg, envPos);
+   }
+   else
+   {
+      slopeEg2_setEnvPos(&voiceArray[voiceNr].oscVolEg, envPos);
+   }
+}
+
 //---------------------------------------------------
 void drum_setPhase(const uint8_t phase, const uint8_t voiceNr)
 {
@@ -148,6 +167,9 @@ void Drum_trigger(const uint8_t voiceNr, const uint8_t vol, const uint8_t note)
 			voiceArray[voiceNr].osc.phase = (0xff<<20)*offset;
 		else
 			voiceArray[voiceNr].osc.phase = 0;
+        
+        if(voiceArray[voiceNr].modOsc.waveform >  REC)
+            voiceArray[voiceNr].modOsc.phase = 0;
 
 	}
 
@@ -272,5 +294,4 @@ void calcDrumVoiceSyncBlock(const uint8_t voiceNr, int16_t* buf, const uint8_t s
 	bufferTool_addGain(buf,voiceArray[voiceNr].vol,size);
 }
 //---------------------------------------------------
-
 

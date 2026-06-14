@@ -10,6 +10,7 @@
 #define MENUTEXT_H_
 
 //-----------------------------------------------------------------
+// -bc- these get bitshifted by 4 - not sure if more than 15 will cause problems
 #define MENU_FILTER			1
 #define MENU_WAVEFORM		2
 #define MENU_AUDIO_OUT		3
@@ -20,10 +21,12 @@
 #define MENU_NEXT_PATTERN	8
 #define MENU_SEQ_QUANT		9
 #define MENU_TRANS			10
-#define MENU_MIDI			11
+#define MENU_MIDI			11 // -bc- this is possibly unused?
 #define MENU_MIDI_ROUTING	12
 #define MENU_MIDI_FILTERING 13
 #define MENU_PPQ		 	14
+#define MENU_TRACK_SCALE 15
+
 
 //-----------------------------------------------------------------
 // Shared texts. Reduce mem usage by pooling common text
@@ -36,6 +39,8 @@ const char menuText_fm[] PROGMEM = 	"fm ";
 const char menuText_dash[] PROGMEM ="---";
 const char menuText_blank[] PROGMEM="   ";
 const char menuText_any[] PROGMEM = "any";
+const char menuText_step[] PROGMEM = "stp";
+const char menuText_bar[] PROGMEM = "bar";
 //-----------------------------------------------------------------
 const char ppqNames[][4] PROGMEM  =
 {
@@ -48,11 +53,15 @@ const char ppqNames[][4] PROGMEM  =
 
 };
 //-----------------------------------------------------------------
+// -bc- I don't think this menu gets used any more... possible to retcon for something else?
 const char midiModes[][4] PROGMEM  =
 {
-	{2},		//number of entries
+	{5},		//number of entries
 	{"trg"},
 	{"nte"},
+   {"vel"},
+   {"bth"},
+   {"all"},
 };
 //-----------------------------------------------------------------
 const char quantisationNames[][4] PROGMEM  = 
@@ -121,7 +130,7 @@ const char retriggerNames[][4] PROGMEM  =
 //-----------------------------------------------------------------
 const char lfoWaveNames[][4] PROGMEM  = 
 {
-	{8},		//number of entries
+	{18},		//number of entries
 	{"sin"},
 	{"tri"},
 	{"sup"},
@@ -130,23 +139,35 @@ const char lfoWaveNames[][4] PROGMEM  =
 	{"rnd"},
 	{"xup"},
 	{"xdn"},
+   {"xtr"},
+   {"si1"},
+	{"tr1"},
+	{"su1"},
+	{"sd1"},
+	{"sq1"},
+	{"rn1"},
+	{"xu1"},
+	{"xd1"},
+   {"xt1"},
 };
 //-----------------------------------------------------------------
 const char rollRateNames[][4] PROGMEM  = 
 {
-	{14},		//number of entries
+	{16},		//number of entries
 	{"One"},		
-	{"1/1"},		
-	{"1/2"},		
-	{"1/3"},		
+	{" 1d"},
+   {"1/1"},
+   {" 2d"},
+	{"1/2"},
+   {" 4d"},		
 	{"1/4"},		
-	{"1/6"},		
+   {" 8d"},		
 	{"1/8"},		
-	{"12"},		
+	{"16d"},		
 	{"16"},		
-	{"24"},		
+	{"32d"},		
 	{"32"},		
-	{"48"},		
+	{"64d"},		
 	{"64"},		
 	{"128"},
 };
@@ -238,6 +259,19 @@ const char midiFilterNames[][16] PROGMEM =
 	{"all"},
 };
 //-----------------------------------------------------------------
+const char trackScaleNames[][4] PROGMEM =
+{
+	{8},	// number of entries
+	{"off"},
+	{" x2"},
+	{" x4"},
+	{" x8"},
+	{"x16"},
+	{"x32"},
+	{"x64"},
+	{"128"},
+};
+//-----------------------------------------------------------------
 // these must correspond with shortNamesEnum
 const char shortNames[][4] PROGMEM  = 
 {
@@ -286,7 +320,9 @@ const char shortNames[][4] PROGMEM  =
 	{"prb"},
 	{"stp"},
 	{"len"},
+   {"sca"},
 	{"rot"},
+   {"ssr"},
 	{"bpm"},
 	{"ch"},
 	{"out"},
@@ -312,6 +348,31 @@ const char shortNames[][4] PROGMEM  =
 	{"co1"},  // trigger clock out1 ppq
 	{"co2"},  // trigger clock out2 ppq
 	{"pcr"}, // pattern change resets bar counter
+   {"pci"}, // pattern change time is bar or step
+   {"stg"}, // shift is toggle instead of momentary
+   {"b2p"}, // bank changes change perfs
+   {"sfr"}, // skip first roll
+   {"mrv"}, // morph individual voice
+
+   {"mac"}, // TEXT_MAC1,
+   {"mac"}, // TEXT_MAC2,
+   
+   {"1d1"}, // TEXT_MAC1_DST1,
+   {"1a1"}, // TEXT_MAC1_DST1_AMT,
+   {"1d2"}, // TEXT_MAC1_DST2,
+   {"1a2"}, // TEXT_MAC1_DST2_AMT,
+   
+   {"2d1"}, // TEXT_MAC2_DST1,
+   {"2a1"}, // TEXT_MAC2_DST1_AMT,
+   {"2d2"}, // TEXT_MAC2_DST2,
+   {"2a2"}, // TEXT_MAC2_DST2_AMT,
+   {"rln"}, // TEXT_ROLL_NOTE,
+   {"rlv"}, // TEXT_ROLL_VELOCITY
+   {"rol"}, // TEXT_ROLL_MODE
+   {"xps"}, // TEXT_TRANSPOSE,
+   {"xps"}, // TEXT_TRANSPOSE_ON_OFF,
+   {"flf"}, // TEXT_FILE_LOAD_FAST,
+   {"egp"}, // TEXT_ENVELOPE_POSITION
 };
 //-----------------------------------------------------------------
 // These correspond with the catNamesEnum in menu.h
@@ -346,6 +407,15 @@ const char catNames[][16] PROGMEM =
 	{"Generatr"},
 	{"MIDI"},
 	{"Trigger"},
+   {"Macro 1"},
+   {"Macro 2"},
+   {"Mac1Dst1"},
+   {"Mac1Dst2"},
+   {"Mac2Dst1"},
+   {"Mac2Dst2"},
+   {"Trnspos"},
+   {"Individ"},
+   {"File"},
 };
 //-----------------------------------------------------------------
 // these must correspond to longNamesEnum
@@ -388,8 +458,10 @@ const char longNames[][16] PROGMEM =
 	{"Prbablty"},
 	{"Number"},
 	{"Length"},
+   {"Scale"},
 	{"Steps"},
 	{"Rotation"},
+   {"SubStpRt"},
 	{"Tempo"},
 	{"AudioOut"},
 	{"Channel"},
@@ -422,6 +494,31 @@ const char longNames[][16] PROGMEM =
 	{"Out2 PPQ"},
 	{"Gate Mode"},
 	{"PCReset" }, // reset bar counter on manual pattern change
+   {"PCInstnt" }, // pattern change occurs on bar or step
+   {"ShiftTog" }, // shift is toggle instead of momentary
+   {"BnkToPrf" }, // Bank changes change perfs
+   {"Skp1Roll"}, // skip first roll
+   {"MrphVoice" }, // individual voice morph
+   {"Amount"  }, // TEXT_MAC1,
+   {"Amount"  }, // TEXT_MAC2,
+   
+   {"Dest 1" }, // TEXT_MAC1_DST1,
+   {"Mod Amt 1" }, // TEXT_MAC1_DST1_AMT,
+   {"Dest 2" }, // TEXT_MAC1_DST2,
+   {"Mod Amt 2" }, // TEXT_MAC1_DST2_AMT,
+   
+   {"Dest 1" }, // TEXT_MAC2_DST1,
+   {"Mod Amt 2" }, // TEXT_MAC2_DST1_AMT,
+   {"Dest 2" }, // TEXT_MAC2_DST2,
+   {"Mod Amt 2" },  // TEXT_MAC2_DST2_AMT,  
+      
+   {"RollNote" },  // TEXT_ROLL_NOTE,
+   {"RollVelo" },  // TEXT_ROLL_VELOCITY,
+   {"RollMode" },  // TEXT_ROLL_MODE
+   {"NoteAmt"},   // TEXT_TRANSPOSE
+   {"Sequence"}, // TEXT_TRANSPOSE_ON_OFF,
+   {"LoadFast"}, // TEXT_FILE_LOAD_FAST,
+   {"Position"}, // TEXT_ENVELOPE_POSITION
 };
 
 

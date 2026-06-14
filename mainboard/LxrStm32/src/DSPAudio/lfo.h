@@ -54,6 +54,18 @@
 #define LFO_NOISE		0x05
 #define LFO_EXP_UP		0x06
 #define LFO_EXP_DOWN	0x07
+#define LFO_EXP_TRI	0x08
+
+#define LFO_SINE_ONE 		0x09
+#define LFO_TRI_ONE			0x0a
+#define LFO_SAW_UP_ONE		0x0b
+#define LFO_SAW_DOWN_ONE	0x0c
+#define LFO_REC_ONE			0x0d
+#define LFO_NOISE_ONE		0x0e
+#define LFO_EXP_UP_ONE		0x0f
+#define LFO_EXP_DOWN_ONE	0x10
+#define LFO_EXP_TRI_ONE    0x11
+
 
 
 #define LFO_MAX_F 		200 //[Hz]
@@ -63,14 +75,15 @@ typedef struct LfoStruct
 {
 	uint32_t 	phase;		// the current phase of the LFO (upper bits cnt 0-255)
 	uint32_t 	phaseInc;	// the phase increment controls the LFO frequency
-	uint8_t 	waveform;	// selects the waveform
-	uint8_t 	retrigger;	// defines the voice nr that retriggers the LFO (0=no retrigger)
+	uint8_t 	   waveform;	// selects the waveform
+	uint8_t 	   retrigger;	// defines the voice nr that retriggers the LFO (0=no retrigger)
 	uint32_t 	phaseOffset;// the phase value to which the LFO is retriggered
 	float 		rnd;
-	uint8_t 	sync;
+	uint8_t 	   sync;
 	float 		freq;
 	ModulationNode modTarget;
 	float		modNodeValue;
+   float    delay;
 } Lfo;
 //-------------------------------------------------------------
 void lfo_init(Lfo *lfo);

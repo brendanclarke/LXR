@@ -129,4 +129,6 @@ void setPan(const uint8_t voiceNr, const uint8_t pan);
 /** set the oscillator start phase for all OSCs*/
 void drum_setPhase(const uint8_t phase, const uint8_t voiceNr);
 
+void drumVoice_setEnvelope(const uint8_t voiceNr, const uint8_t envPos);
+
 #endif /* DRUMVOICE_H_ */

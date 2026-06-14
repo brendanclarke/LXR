@@ -63,6 +63,7 @@ typedef struct SLOPE_EG2_Struct
 
 void slopeEg2_init(SlopeEg2* eg);
 void slopeEg2_trigger(SlopeEg2* eg);
+void slopeEg2_setEnvPos(SlopeEg2* eg, uint8_t envPos);
 float slopeEg2_calc(SlopeEg2* eg);
 void slopeEg2_setAttack(SlopeEg2* eg, uint8_t data2, uint8_t isSync);
 void slopeEg2_setDecay(SlopeEg2* eg, uint8_t data2, uint8_t isSync);

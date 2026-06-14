@@ -1,0 +1,140 @@
+/*
+ * MidiOutputControl.c
+ *
+ *  Created on: 03.04.2012
+ * ------------------------------------------------------------------------------------------------------------------------
+ *  Copyright 2013 Julian Schmidt
+ *  Julian@sonic-potions.com
+ * ------------------------------------------------------------------------------------------------------------------------
+ *  This file is part of the Sonic Potions LXR drumsynth firmware.
+ * ------------------------------------------------------------------------------------------------------------------------
+ *  Redistribution and use of the LXR code or any derivative works are permitted
+ *  provided that the following conditions are met:
+ *
+ *       - The code may not be sold, nor may it be used in a commercial product or activity.
+ *
+ *       - Redistributions that are modified from the original source must include the complete
+ *         source code, including the source code for all components used by a binary built
+ *         from the modified sources. However, as a special exception, the source code distributed
+ *         need not include anything that is normally distributed (in either source or binary form)
+ *         with the major components (compiler, kernel, and so on) of the operating system on which
+ *         the executable runs, unless that component itself accompanies the executable.
+ *
+ *       - Redistributions must reproduce the above copyright notice, this list of conditions and the
+ *         following disclaimer in the documentation and/or other materials provided with the distribution.
+ * ------------------------------------------------------------------------------------------------------------------------
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ *   INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *   DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ *   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ *   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+ *   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * ------------------------------------------------------------------------------------------------------------------------
+ */
+
+
+#include "MidiOutputControl.h"
+#include "DrumVoice.h"
+#include "Snare.h"
+#include "HiHat.h"
+#include "MidiMessages.h"
+#include "CymbalVoice.h"
+#include "MidiParser.h"
+#include "sequencer.h"
+#include "uARTFrontSYX/frontPanelReceivingProtocol.h"
+#include "uARTFrontSYX/Uart.h"
+#include "ChannelMidiParser.h"
+#include "TriggerOut.h"
+#include "usb_manager.h"
+//#include "LCD_driver.h"
+
+/* Live voice activity state consumed by the parser and LED feedback paths. */
+uint8_t voiceStatus[NUM_VOICES];
+
+/* Tracks which voices are currently active for note-off and LED logic. */
+static uint8_t active_voices=0;
+//----------------------------------------------------------------
+void outputControl_sendMidi(MidiMsg msg)
+{
+   /* Sequencer-originated MIDI output is mirrored to USB and DIN MIDI. */
+   usb_sendMidi(msg);
+   uart_sendMidi(msg);
+}
+
+//----------------------------------------------------------------
+void outputControl_sendRealtime(uint8_t status)
+{
+   MidiMsg msg;
+
+   msg.status = status;
+   msg.data1 = 0;
+   msg.data2 = 0;
+   msg.bits.length = 0;
+   msg.bits.sysxbyte = 0;
+
+   outputControl_sendMidi(msg);
+}
+
+//----------------------------------------------------------------
+// this fn assumes a valid voice is sent
+void voiceControl_noteOn(uint8_t voice, uint8_t note, uint8_t vel)
+{
+   /* Trigger the voice engine and mirror the LED pulse to the front panel. */
+   active_voices |= (1<<voice);
+
+   if(voice < 3)
+      Drum_trigger(voice, vel, note);
+   else if(voice < 4)
+      Snare_trigger(vel, note);
+   else if(voice < 5)
+      Cymbal_trigger(vel, note);
+   else
+      HiHat_trigger(vel,voice-5,note);
+	
+	//Send trigger out signal	
+   if(trigger_isGateModeOn())
+   {
+      if(vel)
+         trigger_triggerVoice(voice, TRIGGER_ON);
+   } 
+   else {
+      trigger_triggerVoice(voice, TRIGGER_PULSE);
+   }
+
+	// Send to front panel so it can pulse the LED
+   channelMidiParser_sendVoiceActivity(voice);
+}
+//----------------------------------------------------------------
+void voiceControl_noteOff(uint8_t voice)
+{
+   /* Release one voice, or all voices when passed 0xff. */
+   uint8_t midiChan; // which midi channel to send a note on
+
+   if(voice==0xff)
+   {
+      active_voices = 0;
+      seq_midiNoteOff(0xff);
+      return;
+   }
+
+	//only set voice inactive and send MIDI off when voice is currently playing
+   if(active_voices & (1<<voice))
+   {
+      active_voices &= (~(1<<voice));
+   
+   	//send midi note off
+      uint8_t midiChannel = midi_MidiChannels[voice];
+      if(midiChannel)
+      {
+         midiChan = midiChannel-1;
+         seq_midiNoteOff(midiChan);
+      }
+   }
+}
+//----------------------------------------------------------------
+uint8_t voiceControl_isVoicePlaying(uint8_t voice)
+{
+   /* Query the live activity bitmask for a voice. */
+   return (active_voices & (1<<voice));
+}
