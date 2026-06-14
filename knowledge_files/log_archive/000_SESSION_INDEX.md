@@ -28,6 +28,7 @@
 | 017 | 2026-06-14 | local repo, Preset rename completion + UART send split mapping | Phase 10/11 Preset cleanup was finalized, Phase 12 was confirmed as retrospective only, and the outbound front-panel send split was mapped into the comms reference |
 | 018 | 2026-06-14 | local repo, UART send/receive split implementation | Front-panel send helpers were consolidated, the MIDI parser was split into channel/global ownership files, and the transitional front-panel load/session bridge moved into `PresetLoadCache` |
 | 019 | 2026-06-14 | local repo, AVR encoder retune + acceleration | Main encoder tuning moved to ~32 kHz Timer1 sampling with six-sample phase filtering, narrow rest-jump recovery, stronger button debounce, and edit-mode acceleration |
+| 020 | 2026-06-14 | local repo, refactor finalization and protocol split closeout | Removed obsolete `PresetLoadCache`, finalized STM/AVR receive/send protocol filenames, removed legacy shims, and superseded the stale preset/MIDI UART audits |
 
 ---
 
@@ -109,6 +110,10 @@ Session 018 implemented the current comms split pass: the front-panel send helpe
 Session 019 re-examined the AVR main encoder after slow counter-clockwise clicks again missed decrements. The audit found no post-Session-016 AVR source regression, then tuned the Timer1 sampler to about 32.05 kHz with six stable phase samples, kept fixed `AB=11` rest anchoring, added a narrow recovery for filtered rest-to-opposite contact jumps, doubled button debounce enough to stop encoder-switch double clicks, and added config-driven edit-mode acceleration based on complete emitted detents. The final hardware test was reported good, with `ENC_ACCEL_MAX_MULT` set to 4 and endpoint clamp handling fixed so accelerated downward edits land cleanly on zero.
 - **Find here**: current AVR encoder timing, six-sample phase filter, `AB=11` rest-FSM preservation, rest-jump recovery, 192-sample button debounce, edit-mode-only acceleration, acceleration config defines, endpoint clamp fix, hardware archive refresh
 
+### 020 — Refactor Finalization: Cache Removal and Protocol Split Closeout (2026-06-14)
+Session 020 reconciled the stale preset and MIDI/UART audits with the actual code, then finished the remaining architecture objectives. The recreated `PresetLoadCache.c/.h` from Session 018 was removed as obsolete rather than rehomed, active `presetLoad_*` cache APIs were removed, file-load receive paths now write directly to normal Preset/Pattern storage, and normal/temp Preset/Pattern switching remains the only staging model. STM receive code was renamed to `uARTFrontSYX/frontPanelReceivingProtocol.c/.h`, AVR protocol code was split into `frontPanelReceivingProtocol.c/.h` and `frontPanelSendingProtocol.c/.h`, and the old parser/protocol shim headers were removed after include/project redirection. STM, AVR, and aggregate firmware builds were verified, and the user hardware-tested Steps 1-3 successfully.
+- **Find here**: `PresetLoadCache` removal, direct normal-storage file loads, STM `frontPanelReceivingProtocol` rename, AVR receive/send protocol split, legacy shim removal, deprecated PRF/cache traffic status, superseded audit references, build and hardware verification
+
 
 ---
 
@@ -144,6 +149,8 @@ Session 019 re-examined the AVR main encoder after slow counter-clockwise clicks
 | AVR front-panel encoder uses raw `encode_stableRead4()` detents backed by Timer1 ~32.05 kHz sampling, six-sample phase filtering, fixed `AB=11` rest anchoring, narrow rest-jump recovery, and edit-mode-only acceleration; do not reintroduce legacy read modes, PCINT decoding, or Timer0 encoder sampling | 019 |
 | Preset-owned exports/types now use `preset_` / `Preset*`, and the remaining AVR front-panel transmit calls are protocol work for `frontPanelSendingProtocol.c/.h` | 017 |
 | Front-panel send helpers are now consolidated under `frontPanelSendingProtocol`, the MIDI parser is split across `ChannelMidiParser` and `GlobalMidiParser`, and the transitional receive load/session cache lives in `PresetLoadCache` | 018 |
+| `PresetLoadCache.c/.h` and the active `presetLoad_*` cache API are obsolete and removed; file loads route directly to normal storage, while normal/temp Preset and Pattern switching remains the only staging model | 020 |
+| STM and AVR front-panel protocol code now use matching receive/send boundaries: STM `uARTFrontSYX/frontPanelReceivingProtocol.c/.h` plus `frontPanelSendingProtocol.c/.h`, AVR `frontPanelReceivingProtocol.c/.h` plus `frontPanelSendingProtocol.c/.h`; old parser/protocol shim headers were removed after redirection | 020 |
 
 
 ---

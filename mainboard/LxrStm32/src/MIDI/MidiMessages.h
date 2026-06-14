@@ -548,9 +548,8 @@ enum
 };
 
 
-// Compatibility include for front-panel opcodes; canonical owner is
-// uARTFrontSYX/frontPanelReceivingProtocol.h.
-#include "uARTFrontSYX/FrontPanelProtocol.h"
+// Front-panel opcodes are owned by uARTFrontSYX/frontPanelReceivingProtocol.h.
+#include "uARTFrontSYX/frontPanelReceivingProtocol.h"
 
 //codec control messages
 #define EQ_ON_OFF						0x01

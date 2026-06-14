@@ -41,9 +41,12 @@ make firmware
 
 **Current status after Session 019 closeout (2026-06-14)**: The AVR front-panel main encoder was retuned after slow counter-clockwise missed decrements returned. The current hardware-approved implementation still uses only Timer1 compare A and raw `encode_stableRead4()` detents, but now samples at roughly 32.05 kHz with six stable phase samples, fixed `AB=11` rest anchoring, narrow rest-jump recovery for filtered `11 -> 00 -> adjacent -> 11` contact sequences, and 192-sample button debounce. Edit-mode parameter acceleration is config-driven from complete emitted detents only, with `ENC_ACCEL_MIN_REV_PER_SEC = 1`, `ENC_ACCEL_MAX_REV_PER_SEC = 2`, and final hardware-tested `ENC_ACCEL_MAX_MULT = 4`. Acceleration is applied only to menu edit-mode value changes; navigation/load/save/copy-clear selection remain unaccelerated. `make -C front/LxrAvr avr -j4` and `make firmware` are green with the usual AVR warnings, and the user reported the final encoder behavior is good.
 
-**Current consolidation / protocol planning artifacts**: the durable notes from the Preset and comms split work now live in `knowledge_files/log_archive/018_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/017_SESSION_HANDOFF_LOG.md`, `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`, and `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`. Current encoder details live in `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` and supersede the temporary `ENCODER_AUDIT.md`. `PRESET_CONSOLIDATION_AUDIT.md` was only a temporary scratch plan for the Phase 10/11/12 cleanup and should not be treated as the canonical long-term reference after this handoff.
+**Current status after Session 020 closeout (2026-06-14)**: The refactor finalization pass corrected the Session 018 planning regression and completed the cache/protocol split objectives. `mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h` are gone again, no active `presetLoad_*` cache API remains, file loads route directly to normal Preset/Pattern storage, and the existing normal/temp Preset and Pattern switching remains the only supported staging model. STM front-panel receive is now `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c/.h`, STM front-panel send is `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelSendingProtocol.c/.h`, and the old STM `FrontPanelProtocol.h` / `frontPanelParser.h` shim headers were removed after include redirection. AVR front-panel code is split into `front/LxrAvr/frontPanelReceivingProtocol.c/.h` and `front/LxrAvr/frontPanelSendingProtocol.c/.h`, and the old AVR `frontPanelParser.h` shim was removed after include/project redirection. `make -C mainboard/LxrStm32 -j4 stm32`, `make -C front/LxrAvr avr -j4`, and `make firmware` were verified, and the user hardware-tested Steps 1, 2, and 3 successfully.
+
+**Current consolidation / protocol planning artifacts**: the durable finalization notes now live in `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`, and `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`. Current encoder details live in `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` and supersede the temporary `ENCODER_AUDIT.md`. `REFACTOR_FINALIZATION.md`, `PRESET_CONSOLIDATION_AUDIT.md`, and `MIDI_UART_SPLIT_AUDIT_EDIT.md` were temporary working docs and may be deleted after Session 020.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/018_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/017_SESSION_HANDOFF_LOG.md`
@@ -212,8 +215,8 @@ User-referenced checkpoints:
 | Session 004 temp/background loading closeout | `knowledge_files/log_archive/004_SESSION_HANDOFF_LOG.md` |
 | Session 006 refactor planning details | `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md` |
 | Session 007 refactor Phase 1 details | `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md` |
-| Current preset/morph refactor knowledge | `knowledge_files/log_archive/017_SESSION_HANDOFF_LOG.md`, `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`, `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`, `MIDI_UART_SPLIT_AUDIT.md` |
-| Current comms/protocol knowledge | `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`, `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
+| Current preset/morph refactor knowledge | `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/session_in_flight/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`, `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md` |
+| Current comms/protocol knowledge | `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/session_in_flight/COMMS_FLOW_SPEC.md`, `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
 
 ---
 

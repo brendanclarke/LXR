@@ -98,9 +98,6 @@
     <Compile Include="frontPanelSendingProtocol.h">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="frontPanelParser.h">
-      <SubType>compile</SubType>
-    </Compile>
     <Compile Include="Hardware\lcd.c">
       <SubType>compile</SubType>
     </Compile>

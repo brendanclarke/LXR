@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
 Date: 2026-06-14
-Status: current AVR<->STM comms reference; Session 014 moved the Sequencer/MIDI runtime callers off the load cache, Session 017 expanded the outbound send inventory, and the remaining work is the actual send/receive protocol split.
+Status: current AVR<->STM comms reference after Session 020 finalization. STM and AVR now both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed in the Session 020 wrap-up, and the obsolete `PresetLoadCache` model is gone.
 
 ## Purpose
 
@@ -27,15 +27,26 @@ It should not know about normal/temp storage, background-load policy, or preset 
 
 ### Protocol
 
-`mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c/.h` currently parses both directions of front-panel traffic.
+STM protocol ownership is split explicitly:
 
-The future shape should split that responsibility into:
+- `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c/.h`
+  owns AVR UART receive parsing, SysEx ingress, load-session receive state, and
+  the STM front-panel opcode namespace.
+- `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelSendingProtocol.c/.h`
+  owns STM-to-AVR packet construction.
 
-- `frontPanelReceivingProtocol.c/.h`
-- `frontPanelSendingProtocol.c/.h`
+AVR protocol ownership mirrors this:
 
-`FrontPanelProtocol.h` owns the opcode namespace.
-`MidiMessages.h` should remain a compatibility include only.
+- `front/LxrAvr/frontPanelReceivingProtocol.c/.h` owns STM response parsing,
+  SysEx receive state, restore handling, long-operation receive state, and the
+  AVR-side opcode namespace.
+- `front/LxrAvr/frontPanelSendingProtocol.c/.h` owns AVR-to-STM packet
+  construction, send-side flow-control state, LED/query sends, macro sends,
+  and deprecated PRF cache control compatibility sends.
+
+The old STM `FrontPanelProtocol.h`, STM `frontPanelParser.h`, and AVR
+`frontPanelParser.h` shim headers were removed in the Session 020 wrap-up.
+Callers should include the receive or sending protocol header directly.
 
 ### Storage and Session Semantics
 
@@ -44,8 +55,7 @@ The future shape should split that responsibility into:
 - endpoint storage images;
 - temp versus normal selection;
 - endpoint restore policy;
-- background-load finalization;
-- any session state that describes where bytes should land.
+- normal/temp image selection and routing.
 
 `Pattern` owns pattern storage and pattern-specific temp behavior.
 
@@ -53,10 +63,9 @@ The comms layer should route bytes into those owners, not duplicate their state.
 
 ### Outbound Send Contract
 
-The future send-side split should land in `frontPanelSendingProtocol.c/.h`.
-That module should own outbound AVR command framing so the rest of the STM code
-can reuse the same packet helpers instead of rebuilding the same byte triples
-everywhere.
+The STM send-side split has landed in `frontPanelSendingProtocol.c/.h`.
+That module owns outbound AVR command framing so the rest of the STM code can
+reuse packet helpers instead of rebuilding byte triples inline.
 
 The reusable helper surface should cover:
 
@@ -78,34 +87,10 @@ callers can tell whether a packet is:
 - SysEx-safe or ordinary command traffic;
 - allowed to bypass the quiet UI gate or not.
 
-The files that currently emit front-panel bytes directly and should migrate to
-the future send module are:
-
-- `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c`
-  - flow grant/abort replies;
-  - cache status replies;
-  - restore-ready/ack responses;
-  - LED updates;
-  - SysEx framing and query replies;
-  - step/pattern/sample response packets.
-- `mainboard/LxrStm32/src/Sequencer/sequencer.c`
-  - restore begin/done packets;
-  - global morph reports during temp/normal boundary transitions;
-  - pattern-change and run-stop notifications;
-  - LED updates;
-  - SysEx pattern/step export packets.
-- `mainboard/LxrStm32/src/Preset/EndpointRestore.c`
-  - restore parameter packets;
-  - restore morph parameter packets;
-  - restore begin/done sequencing;
-  - global morph report packets.
-- `mainboard/LxrStm32/src/MIDI/MidiParser.c`
-  - front-panel run-stop echoes;
-  - bank-change echoes;
-  - parameter-echo packets for MIDI-driven edits;
-  - patch reset and other mirrored global messages.
-- `mainboard/LxrStm32/src/MIDI/MidiVoiceControl.c`
-  - voice activity feedback packets.
+Direct front-panel UART byte emission for AVR command traffic is confined to
+`Uart.c/.h` and `frontPanelSendingProtocol.c`. Callers such as Sequencer,
+EndpointRestore, MIDI parser helpers, voice control, and receive protocol code
+use the sending protocol helpers.
 
 `Uart.c/.h` should remain transport-only. The MIDI transport helpers
 `uart_sendMidi()` and `uart_sendMidiByte()` stay outside this split because
@@ -187,13 +172,19 @@ These messages tell STM that the incoming traffic belongs to a file load or back
 - `SEQ_LOAD_VOICE`
 - `SEQ_LOAD_FAST`
 
-The remaining parser/session bridge now lives inside `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c`; the shared `PresetLoadCache` files were removed in Session 014. The Sequencer/MIDI runtime callers have already moved to direct owner reads, and the remaining cleanup is to make the temp/normal storage model carry the load semantics directly without a separate cache module.
+The old `PresetLoadCache` and `presetLoad_*` cache API were removed in Session
+020. File-load receive paths now route bytes directly to normal Preset/Pattern
+storage. `frontPanelReceivingProtocol.c` only keeps a tiny file-load ingress
+bracket to ensure file bytes land in normal-kit endpoint mode during the old
+AVR file-transfer envelope; it is not a cache or staging owner.
 
 File-load traffic should follow this broad rule:
 
-- `.prf` / `.all` style loads refresh the normal storage images while temp playback can keep running.
-- background loads must not create a second sound-authority cache.
-- newer background loads may replace older in-flight ones.
+- `.prf` / `.all` style loads refresh normal storage images while temp
+  playback can keep running.
+- file loads must not create a second sound-authority cache.
+- future file-load-while-temp-active behavior should use the existing
+  normal/temp copy/playback model, not a revived load cache.
 
 ### 5. Callback and Hold Primitives
 
@@ -211,7 +202,7 @@ The AVR side does not own the canonical session state, but it does initiate the 
 
 ### Front-panel protocol initiators
 
-In `front/LxrAvr/frontPanelParser.c`:
+In `front/LxrAvr/frontPanelSendingProtocol.c`:
 
 - `frontPanel_prfCacheBegin()`
 - `frontPanel_prfCacheControl()`
@@ -220,7 +211,9 @@ In `front/LxrAvr/frontPanelParser.c`:
 - `frontPanel_flowAbortSession()`
 - `PRF_CACHE_STATUS` handling
 
-These are the AVR-facing entry points that need to be reconnected once the remaining parser-local bridge no longer needs to emulate the old cache behavior.
+These are compatibility entry points for the existing file-transfer envelope.
+STM rejects/no-ops the obsolete cache behavior; do not treat these commands as
+a live background-load cache regime.
 
 ### AVR preset/file-load flows
 
@@ -241,35 +234,17 @@ These are the file-load and menu-preservation flows that start the transport/ses
 They are the right place to keep the user-facing initiation logic.
 They are not the right place to own the in-flight load-session state.
 
-## Send-Side Inventory
+## Send-Side Completion State
 
-This is the concrete map of the remaining direct front-panel transmit callers.
-It mirrors the send-contract section above so the eventual
-`frontPanelSendingProtocol.c/.h` split has an explicit migration target.
+The send-side migration is complete for the current audit scope:
 
-- `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c`
-  - flow grant and abort helpers;
-  - cache status replies;
-  - restore-ready/ack responses;
-  - LED and sample-count replies;
-  - query response packets and SysEx framing.
-- `mainboard/LxrStm32/src/Sequencer/sequencer.c`
-  - restore begin/done traffic;
-  - global morph reporting;
-  - pattern-change/run-stop notifications;
-  - LED updates;
-  - SysEx step and pattern exports.
-- `mainboard/LxrStm32/src/Preset/EndpointRestore.c`
-  - restore begin/done traffic;
-  - restore param and restore morph packets;
-  - global morph reporting.
-- `mainboard/LxrStm32/src/MIDI/MidiParser.c`
-  - front-panel run-stop echoes;
-  - bank-change echoes;
-  - parameter-echo packets for incoming edits;
-  - patch reset mirroring.
-- `mainboard/LxrStm32/src/MIDI/MidiVoiceControl.c`
-  - note-on/voice activity feedback.
+- STM front-panel output goes through
+  `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelSendingProtocol.c/.h`.
+- AVR front-panel output goes through
+  `front/LxrAvr/frontPanelSendingProtocol.c/.h`.
+- Raw UART files remain byte transport only.
+- MIDI echo paths use the STM sending protocol layer for display-facing
+  feedback and do not parse AVR command semantics.
 
 ## The `.pat` Rule
 
@@ -289,20 +264,21 @@ That is exactly why the future interface needs to keep the ownership boundaries 
 
 ## Future Shape After The Audit
 
-The comms layer should end up with a very clear split:
+The comms layer now has this split:
 
 - `Uart.c/.h` for byte transport only
 - `frontPanelReceivingProtocol.c/.h` for parsing and receive-side dispatch
 - `frontPanelSendingProtocol.c/.h` for outbound framing and status messages
-- `FrontPanelProtocol.h` for the opcode namespace
+- receive protocol headers for the opcode namespaces
 - `Preset` for storage and session semantics
 - `Pattern` for pattern storage and pattern temp behavior
 
-The parser should not keep a second background-load model after the remaining parser-local bridge is retired.
-It should route semantics into `Preset` and `Pattern`, then get out of the way.
+The parser must not keep a second background-load model. It should route
+semantics into `Preset` and `Pattern`, then get out of the way.
 
-The background-load initiators can stay thin or stubbed while the replacement path is being connected.
-That is acceptable as long as they do not reintroduce a second cache-as-authority model.
+Deprecated PRF/cache initiators can stay thin or stubbed while old AVR
+file-transfer code still emits compatibility traffic. That is acceptable only
+as long as they do not reintroduce a cache-as-authority model.
 
 ## Guardrails
 
@@ -311,4 +287,5 @@ That is acceptable as long as they do not reintroduce a second cache-as-authorit
 - Do not let transport code inspect `SeqKitState` directly.
 - Do not create a second load/session model beside the temp/normal storage model.
 - Do not merge pattern-only background loading with parameter storage switching.
-- Do not let the future send/receive split blur the ownership boundary between parsing bytes and deciding what they mean.
+- Do not let send/receive protocol work blur the ownership boundary between
+  parsing bytes and deciding what they mean.

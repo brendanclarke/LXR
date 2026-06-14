@@ -1,7 +1,7 @@
 # TEMPORARY / PATTERN / PARAMETER LOAD SPEC
 
 Date: 2026-06-14
-Status: current storage and switching spec; Session 014 moved the Sequencer/MIDI runtime callers off `PresetLoadCache`, Session 017 finished the Preset rename sweep, and the remaining parser/session bridge still lives inside `frontPanelParser.c`.
+Status: current storage and switching spec after Session 020 finalization. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model.
 
 ## Purpose
 
@@ -60,17 +60,22 @@ The important state is:
 That module answers the question, "which image is active?"
 It does not own a second copy of the storage model itself.
 
-### Transitional load/session bridge
+### File-load ingress
 
-`mainboard/LxrStm32/src/uARTFrontSYX/frontPanelParser.c` currently carries the remaining in-flight parser/session bookkeeping.
+`mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c`
+receives the old AVR file-transfer envelope and routes file bytes to the real
+storage owners.
 
-The shared `mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h` files were removed in Session 014.
+Session 020 removed the recreated
+`mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h` files and the active
+`presetLoad_*` cache API. The receive protocol now keeps only a tiny
+file-load ingress bracket that forces parameter ingress to normal-kit endpoint
+mode while the file envelope is active. That bracket is not a cache and must not
+grow into one.
 
-Session 014 already moved the live Sequencer/MIDI caller paths to direct owner reads, and Session 017 completed the Preset rename sweep, so the parser-local bridge is now transitional only for the remaining load/session compatibility path.
-
-Phase 8 is expected to absorb or eliminate that last parser-local bridge.
-
-The long-term plan is for the temp/parameter structures and their associated functions to absorb the real behavior so there is no separate load-cache authority left over.
+The long-term plan is still for file-load-while-temp-active behavior to use the
+existing temp parameter/pattern copy and playback mechanisms, not a separate
+load-cache authority.
 
 ## Core Rules
 
@@ -106,8 +111,10 @@ The current target rule is:
 - load normal pattern storage;
 - keep temp playback isolated unless the user explicitly requests a temp switch or copy-to-temp;
 - never create a second sound-authority cache just because a file is being loaded.
+- never stage through `PresetLoadCache` or a replacement cache.
 
-If a newer background load starts before the old one finishes, the newer one may replace the older one.
+Future file-load-while-temp-active behavior should use the existing
+normal/temp copy/playback model, not a revived cache.
 
 Implementation reminder:
 
@@ -186,9 +193,9 @@ The intended background-load flow for `.pat` is narrower:
 
 This flow is why the future load API may need an explicit file-kind or load-kind discriminator.
 
-## Transitional Current Functions
+## Current Functions
 
-These functions still matter during the transition, even though the long-term goal is to make the load/session bridge redundant:
+These functions matter for the current normal/temp model:
 
 - `preset_captureTmpKitState()`
 - `preset_setTmpKitActive()`
@@ -201,24 +208,25 @@ These functions still matter during the transition, even though the long-term go
 - `preset_storeMacroDestinationIngress()`
 - `seq_setTmpKitActive()`
 - `seq_updateVoiceSourcesForPatternChange()`
-- `presetLoad_beginFileLoadIngress()`
-- `presetLoad_endFileLoadIngress()`
-- `presetLoad_finalizeTempBackgroundLoad()`
 
-The first group is the long-term ownership surface.
-The `presetLoad_*` functions are the transitional bridge that Session 014 moved into `frontPanelParser.c`, and Phase 8 should eliminate or absorb.
+`presetLoad_*` is not a current ownership surface. Do not add new callers or
+recreate those APIs.
 
-## Design Note: Why The Temp Switch And Load Cache Were Separate
+## Design Note: Why The Temp Switch Survived And The Load Cache Did Not
 
-The reason these mechanisms felt split is simple:
+The reason these mechanisms felt split was simple:
 
 - `TempPlaybackSwitch` answers "which image is active?";
-- the parser-local bridge in `frontPanelParser.c` answers "what in-flight file/session work still needs to be finalized?"
+- the old load cache answered "what in-flight file/session work still needs to
+  be staged or finalized?"
 
-That distinction made sense while the background-load flow still had its own special session machinery.
+That distinction made sense while background-load flow still had special
+session machinery.
 
-Phase 7 removes the need for a separate load cache by making the temp/parameter ownership rules carry the real state directly.
-Once that happens, the load bridge should shrink to either a thin compatibility shim or disappear entirely.
+Session 020 removed the need for a separate load cache by making the
+temp/parameter ownership rules carry the real state directly. The receive
+protocol may bracket the old file-transfer envelope, but it must not become a
+second staging owner.
 
 ## Do-Not-Do List
 
@@ -227,4 +235,5 @@ Once that happens, the load bridge should shrink to either a thin compatibility 
 - Do not let `.pat` loading switch parameter read/write away from normal storage.
 - Do not merge pattern staging and parameter staging into one ambiguous flag.
 - Do not let temp switching recopy storage when a simple source selection change is enough.
-- Do not allow the transitional load bridge to become a permanent second owner.
+- Do not allow file-transfer compatibility code to become a permanent second
+  owner.
