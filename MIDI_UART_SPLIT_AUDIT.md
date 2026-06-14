@@ -196,33 +196,127 @@ both directions" assumptions once the split is complete.
 
 ### Phase 1: Send-Side Scaffolding
 
-- Add `frontPanelSendingProtocol.c/.h` under `src/uARTFrontSYX`.
-- Move the small parser-local packet helpers there first: flow grant, flow
-  grant-wait, flow abort, PRF cache status, and any small status-triplet helper
-  that simply assembles a reusable packet family.
-- Introduce explicit transmit mode documentation in the new header so callers
-  can see which packets are priority, wait-blocking, sysex-safe, or quiet-ui
-  gated.
-- Keep `frontPanelParser.c` compiling during this step by leaving the existing
-  receive logic untouched except for the helper calls that now route through the
-  new send module.
-- Keep `Uart.c` behavior stable in this step; do not refactor the IRQ or FIFO
-  ownership at the same time.
-- Verify the build after the helper move and smoke-test the current flow-control
-  handshake paths before touching any of the higher-volume send sites.
+- Add `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelSendingProtocol.c` and
+  `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelSendingProtocol.h`.
+- Put the packet-composition code for `frontParser_sendFlowGrant()`,
+  `frontParser_sendFlowGrantWait()`, `frontParser_sendFlowAbort()`, and
+  `frontParser_sendPrfCacheStatus()` into the new send module, with the parser
+  file keeping only the high-level decision of when those packets should be
+  emitted.
+- Move `frontParser_flowGrantByte()` into the send module as the local helper
+  that builds the channel/credit nibble pair used by the grant packet.
+- Keep `frontParser_isFlowMessage()`, `frontParser_suspendCreditFlowForSysex()`,
+  `frontParser_flowMessageApplied()`, the `comm_*` state, and the parser-local
+  load/session bridge in `frontPanelParser.c` for now; Phase 1 is only about
+  separating packet assembly from parser state.
+- Make `frontPanelParser.c` include `frontPanelSendingProtocol.h` and remove the
+  moved helper bodies from the file so the parser can compile against the new
+  send API instead of owning the packet formatting inline.
+- Keep the send-module implementation thin: it should still call the existing
+  `uart_sendFrontpanelPriorityByte()` and `uart_sendFrontpanelPriorityByteWait()`
+  primitives in this first pass rather than changing transport behavior.
+- Leave `Uart.c` and `Uart.h` unchanged in this phase; do not refactor the IRQ,
+  FIFO ownership, or raw transport primitives yet.
+- Do not touch `Sequencer`, `EndpointRestore`, `MidiParser`, or
+  `MidiVoiceControl` in this phase; the first pass should only move the parser's
+  small packet helpers into the new send file and leave every caller shape the
+  same.
+- Keep the new header focused on helper declarations and packet-mode
+  documentation so callers can tell which helpers are priority, wait-blocking,
+  sysex-safe, or quiet-UI gated.
+- Make the new header depend on `stdint.h` and `FrontPanelProtocol.h`; keep the
+  raw transport dependency in the `.c` file through `Uart.h` so the header
+  stays protocol-focused.
+- Verify the build after the helper move, then smoke-test `FRONT_SEQ_FLOW_BEGIN`,
+  `FRONT_SEQ_FLOW_END`, `FRONT_SEQ_FLOW_ABORT`, `FRONT_SEQ_PRF_CACHE_BEGIN`,
+  and the `CALLBACK_ACK` path before touching any higher-volume send sites.
+- Do not add Makefile wiring if the existing `find`-based source discovery and
+  `src/uARTFrontSYX` include path already pick up the new files cleanly.
+
+### Phase 1 Progress Notes
+
+- The new send module now exists in `src/uARTFrontSYX` as
+  `frontPanelSendingProtocol.c/.h`.
+- The parser-local packet families for flow grant, flow grant-wait, flow abort,
+  and PRF cache status now route through the new send module.
+- The parser still owns the sysex/flow decision state and the load/session
+  bridge, so Phase 1 remains a narrow packet-assembly extraction rather than a
+  behavior rewrite.
+- `make -C mainboard/LxrStm32 -j4 stm32` now builds successfully with the new
+  send module in place; the remaining warnings are the existing parser warnings
+  that were already present before this split.
+- The next pass should smoke-test the flow-control and callback-ack paths
+  before any higher-volume send callers move.
 
 ### Phase 2: Parser-Local Send Cleanup
 
-- Remove the remaining inline parser send sequences from the main receive file
-  and route them through the send helpers.
-- Convert the parser's direct LED, sample count, query, and sysex response
-  packets to the new reusable send surface.
-- Keep the receive dispatch and the parser-local load/session bridge in place so
-  behavior stays constant while the send helper abstraction proves itself.
+- Remove every remaining `uart_sendFrontpanelByte()` and
+  `uart_sendFrontpanelSysExByte()` packet build sequence from
+  `frontPanelParser.c` and replace them with dedicated send helpers.
+- Move the parser-owned LED emitters into the send module:
+  - `frontParser_updateTrackLeds()`
+  - `frontParser_updateSubStepLeds()`
+  - the direct `FRONT_LED_QUERY_SEQ_TRACK` reply path
+  - the `FRONT_LED_ALL_SUBSTEP` reply path
+  - the `FRONT_SEQ_SET_ACTIVE_TRACK` rotation / transpose reply pair
+  - the `FRONT_MAIN_STEP_CC` step-light reply
+  - the `FRONT_SAMPLE_COUNT` / `ACK` reply path
+- Add send helpers for the parser's ordinary reply families rather than leaving
+  them as open-coded byte triples:
+  - sample-count replies;
+  - track-length and track-rotation replies;
+  - pattern `changeBar` / `nextPattern` replies;
+  - Euklid length, step count, rotation, and substep-rotation replies;
+  - current-step volume, note, and probability replies;
+  - step destination/value replies for `FRONT_SET_P1_*` and `FRONT_SET_P2_*`.
+- Add send helpers for the sysex request/response families that currently live
+  in `frontParser_handleSysexData()`:
+  - `SYSEX_START` and `SYSEX_END` acknowledge bytes;
+  - `SYSEX_REQUEST_PATTERN_DATA` responses;
+  - `SYSEX_REQUEST_MAIN_STEP_DATA` responses;
+  - `SYSEX_REQUEST_STEP_DATA` responses;
+  - `SYSEX_RECEIVE_MAIN_STEP_DATA` / `SYSEX_RECEIVE_PAT_CHAIN_DATA` /
+    `SYSEX_RECEIVE_PAT_LEN_DATA` / `SYSEX_RECEIVE_PAT_SCALE_DATA` /
+    `SYSEX_RECEIVE_STEP_DATA` chunk acknowledgements;
+  - `SYSEX_STEP_ACK` and `SYSEX_BEGIN_PATTERN_TRANSMIT` end-of-chunk replies;
+  - the `FRONT_CALLBACK_ACK` echo path if it remains a pure response packet.
+- Move the dormant `presetLoad_sendPrfRestoreParam()` packet composer out of
+  the parser file as part of this phase, or delete it if the load-session bridge
+  no longer needs it by the time this phase is implemented.
+- Keep the receive dispatch, the parser-local load/session bridge, the
+  `comm_*` flow state, and the sysex receive state machine in place so behavior
+  stays constant while the send helper abstraction proves itself.
+- Preserve the current packet contents and ordering exactly. Phase 2 should
+  change where the packet bytes are assembled, not what the receiver sees.
 - Check that `frontPanelParser.c` is no longer the place where packet assembly
-  rules are duplicated, even if it still owns the receive state machine.
+  rules are duplicated, even if it still owns the receive state machine and the
+  load/session compatibility layer.
 - Rebuild and re-run the parser-facing hardware flows that rely on sysex
-  request/response behavior before moving to the sequencer and restore callers.
+  request/response behavior, LED query replies, and sample upload replies before
+  moving to the sequencer and restore callers.
+- Treat this as a parser-only cleanup pass; do not touch the MIDI parser files
+  yet, and do not start the MIDI-risk phase until Phase 4.
+- The user has already confirmed menu change, file load, copy-to-temp, and tmp
+  switch behavior after Phase 1, so Phase 2 should only be validated against the
+  parser reply paths that this pass actually moves.
+
+### Phase 2 Progress Notes
+
+- `frontPanelSendingProtocol.c/.h` now owns the parser-facing reply helpers for
+  sample upload ack, sample count, pattern-data sysex replies, track length,
+  track rotation, pattern params, Euklid params, active-track replies,
+  main-step LED replies, step param replies, callback ack, and the parser's
+  sysex ack bytes.
+- `frontPanelParser.c` now dispatches those replies through semantic helpers
+  instead of open-coding front-panel byte triples, and the dormant
+  `presetLoad_sendPrfLiveRestore()` stub was removed with its branch reduced to
+  a flow-wait grant.
+- The remaining parser send logic is now decision-oriented only; the parser no
+  longer owns the packet byte layout for the reply families this phase targeted.
+- `make -C mainboard/LxrStm32 -j4 stm32` succeeds after the Phase 2 cleanup.
+- The parser still relies on the existing `seq_sendMainStepInfoToFront()` and
+  `seq_sendStepInfoToFront()` sysex response helpers in Sequencer for the
+  request-data paths that already live outside the parser file.
 
 ### Phase 3: Sequencer and Endpoint Restore Migration
 
@@ -240,6 +334,9 @@ both directions" assumptions once the split is complete.
 
 ### Phase 4: MIDI Echo and Voice Feedback Migration
 
+- Before this phase starts, explicitly notify the user that the work is now
+  touching the MIDI-risk seam and ask for MIDI-specific testing after the code
+  change.
 - Start with a new `GlobalMidiParser` file that absorbs `midiParser_checkMtc()`
   and the system-message side of `midiParser_parseMidiMessage()`.
 - Move the front-panel run-stop echo out of `MidiParser.c` at the same time so
@@ -258,6 +355,8 @@ both directions" assumptions once the split is complete.
 - Keep the MIDI parsing and voice routing behavior unchanged during the first
   pass; the only goal in this phase is to stop hand-building front-panel packet
   bytes in the MIDI files.
+- If a future MIDI packet helper is missing, add it to the send module instead
+  of rebuilding the packet inline in the MIDI file.
 - Verify that MIDI-driven parameter edits still reach the front panel in the
   same form and order, especially the low-parameter versus high-parameter
   split.

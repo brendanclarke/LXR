@@ -38,6 +38,7 @@
 #include "frontPanelParser.h"
 #include "MidiMessages.h"
 #include "FrontPanelProtocol.h"
+#include "frontPanelSendingProtocol.h"
 #include "MidiParser.h"
 #include "Preset/EndpointRestore.h"
 #include "Preset/MorphEngine.h"
@@ -77,11 +78,6 @@ static uint8_t comm_flowBudgetRemaining = 0;
 extern MidiMsg frontParser_midiMsg;
 extern uint8_t frontParser_sysexActive;
 
-static uint8_t frontParser_flowGrantByte(uint8_t channel, uint8_t credits)
-{
-   return (uint8_t)(((channel & 0x07) << 4) | (credits & 0x0f));
-}
-
 static uint8_t frontParser_isFlowMessage(uint8_t status, uint8_t data1)
 {
    return (status == FRONT_SEQ_CC)
@@ -98,30 +94,22 @@ static void frontParser_sendFlowGrant(uint8_t channel, uint8_t credits)
       return;
    }
 
-   uart_sendFrontpanelPriorityByte(FRONT_SEQ_CC);
-   uart_sendFrontpanelPriorityByte(FRONT_SEQ_FLOW_GRANT);
-   uart_sendFrontpanelPriorityByte(frontParser_flowGrantByte(channel, credits));
+   frontPanelSending_sendFlowGrant(channel, credits);
 }
 
 static void frontParser_sendFlowGrantWait(uint8_t channel, uint8_t credits)
 {
-   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_CC);
-   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_FLOW_GRANT);
-   uart_sendFrontpanelPriorityByteWait(frontParser_flowGrantByte(channel, credits));
+   frontPanelSending_sendFlowGrantWait(channel, credits);
 }
 
 static void frontParser_sendFlowAbort(uint8_t channel)
 {
-   uart_sendFrontpanelPriorityByte(FRONT_SEQ_CC);
-   uart_sendFrontpanelPriorityByte(FRONT_SEQ_FLOW_ABORT);
-   uart_sendFrontpanelPriorityByte(channel);
+   frontPanelSending_sendFlowAbort(channel);
 }
 
 static void frontParser_sendPrfCacheStatus(uint8_t command, uint8_t status)
 {
-   uart_sendFrontpanelPriorityByte(PRF_CACHE_STATUS);
-   uart_sendFrontpanelPriorityByte(command);
-   uart_sendFrontpanelPriorityByte(status);
+   frontPanelSending_sendPrfCacheStatus(command, status);
 }
 
 static void frontParser_suspendCreditFlowForSysex()
@@ -484,41 +472,6 @@ uint8_t presetLoad_prfCacheLiveVMorphAmountValue(uint8_t voice)
       return presetLoad_prfCacheLiveVMorphAmount[voice];
 
    return preset_vMorphAmount[voice];
-}
-
-static void presetLoad_sendPrfRestoreParam(uint16_t paramNr, uint8_t value, uint8_t isMorph)
-{
-   uint8_t status;
-   uint8_t data1;
-
-   if(paramNr < 128)
-   {
-      status = isMorph ? PRF_RESTORE_MORPH_CC : PRF_RESTORE_PARAM_CC;
-      data1 = (uint8_t)paramNr;
-   }
-   else
-   {
-      status = isMorph ? PRF_RESTORE_MORPH_CC2 : PRF_RESTORE_PARAM_CC2;
-      data1 = (uint8_t)(paramNr - 128);
-   }
-
-   uart_sendFrontpanelPriorityByteWait(status);
-   uart_sendFrontpanelPriorityByteWait(data1);
-   uart_sendFrontpanelPriorityByteWait(value);
-}
-
-static void presetLoad_sendPrfLiveRestore()
-{
-   uint16_t i;
-
-   if(!presetLoad_prfCacheAvrLiveValid)
-      return;
-
-   /* for(i=0;i<PRF_CACHE_LIVE_PARAM_COUNT;i++)
-      presetLoad_sendPrfRestoreParam(i, presetLoad_prfCacheLiveParams[i], 0);
-
-   for(i=0;i<END_OF_SOUND_PARAMETERS;i++)
-      presetLoad_sendPrfRestoreParam(i, presetLoad_prfCacheLiveMorph[i], 1); */
 }
 
 static uint8_t presetLoad_cachePrfLiveSnapshotMessage()
@@ -931,71 +884,6 @@ uint8_t frontParser_stepCopySource=0;
 
 //------------------------------------------------------
 /**send all active step numbers to frontpanel to light up corresponding LEDs*/
-void frontParser_updateTrackLeds(const uint8_t trackNr, uint8_t patternNr)
-{
-   if(trackNr<=6)
-   {
-   
-      frontParser_activeFrontTrack = trackNr;
-      
-      uint8_t ledByte = 0x00;
-      uint8_t i;
-      uint8_t k;
-      
-      for(k=0;k<4;k++)
-      {
-         for(i=0;i<4;i++)
-         {
-            if(seq_isMainStepActive(trackNr,(uint8_t)( (k<<2) + i),patternNr))
-            {
-               ledByte |= (0x01<<i);
-            }
-         }
-         
-         uart_sendFrontpanelByte(FRONT_STEP_LED_STATUS_BYTE);
-         uart_sendFrontpanelByte((uint8_t)(FRONT_LED_SEQ_MAIN_ONE+k));
-         uart_sendFrontpanelByte(ledByte);
-         
-         ledByte = 0x00;
-      }
-   
-      
-      frontParser_updateSubStepLeds(trackNr, patternNr);
-   }
-}
-
-void frontParser_updateSubStepLeds(const uint8_t trackNr, uint8_t patternNr)
-{
-   uint8_t start = frontParser_activeStep&0x78; // truncate to main step
-   uint8_t ledByte = 0x00;
-   uint8_t i;
-      
-   for(i=0;i<4;i++)
-   {
-      if(seq_isStepActive(trackNr,(start+i),patternNr))
-      {
-         ledByte |= (0x01<<i);
-      }
-   }
-      
-   uart_sendFrontpanelByte(FRONT_STEP_LED_STATUS_BYTE);
-   uart_sendFrontpanelByte(FRONT_LED_SEQ_SUB_STEP_LOWER);
-   uart_sendFrontpanelByte(ledByte);
-      
-   ledByte = 0x00;
-      
-   for(i=0;i<4;i++)
-   {
-      if(seq_isStepActive(trackNr,(start+4+i),patternNr))
-      {
-         ledByte |= (0x01<<i);
-      }
-   }
-   uart_sendFrontpanelByte(FRONT_STEP_LED_STATUS_BYTE);
-   uart_sendFrontpanelByte(FRONT_LED_SEQ_SUB_STEP_UPPER);
-   uart_sendFrontpanelByte(ledByte);
-}
-
 //------------------------------------------------------
 void frontParser_parseUartData(unsigned char data)
 {
@@ -1016,11 +904,11 @@ void frontParser_parseUartData(unsigned char data)
          uart_clearFrontFifo();
          
       	//send SYSEX_START as ACK
-         uart_sendFrontpanelSysExByte(SYSEX_START);
+         frontPanelSending_sendSysexStartAck();
       }
       else if(data==SYSEX_END)
       {
-         uart_sendFrontpanelSysExByte(SYSEX_END);
+         frontPanelSending_sendSysexEndAck();
          frontParser_sysexActive = SYSEX_INACTIVE;
       }
       else if(data==PATCH_RESET)
@@ -1029,7 +917,7 @@ void frontParser_parseUartData(unsigned char data)
       }
       else if(data==FRONT_CALLBACK_ACK)
       {
-         uart_sendFrontpanelPriorityByte(FRONT_CALLBACK_ACK);
+         frontPanelSending_sendCallbackAck();
       }
       else
       {
@@ -1078,8 +966,7 @@ static void frontParser_handleSysexData(unsigned char data)
       case SYSEX_REQUEST_PATTERN_DATA:
       //1 byte = pattern nr
       //send back next and repeat
-         uart_sendFrontpanelSysExByte(seq_patternSet.seq_patternSettings[data].nextPattern);
-         uart_sendFrontpanelSysExByte(seq_patternSet.seq_patternSettings[data].changeBar);
+         frontPanelSending_sendPatternDataReply(data);
          break;
    
       case SYSEX_REQUEST_MAIN_STEP_DATA:
@@ -1177,7 +1064,7 @@ static void frontParser_handleSysexData(unsigned char data)
          
             
             frontParser_rxCnt = 0;
-            uart_sendFrontpanelSysExByte(SYSEX_RECEIVE_MAIN_STEP_DATA);
+            frontPanelSending_sendSysexReceiveAck(SYSEX_RECEIVE_MAIN_STEP_DATA);
          }
          break;
       case SYSEX_RECEIVE_PAT_CHAIN_DATA:
@@ -1215,7 +1102,7 @@ static void frontParser_handleSysexData(unsigned char data)
             frontParser_rxCnt = 0;
          
          }
-         uart_sendFrontpanelSysExByte(SYSEX_RECEIVE_PAT_CHAIN_DATA);
+         frontPanelSending_sendSysexReceiveAck(SYSEX_RECEIVE_PAT_CHAIN_DATA);
          break;
       case SYSEX_RECEIVE_PAT_LEN_DATA:
       // --AS same as above but we are receiving length data for each pattern
@@ -1251,7 +1138,7 @@ static void frontParser_handleSysexData(unsigned char data)
             }
             
             frontParser_rxCnt = 0;
-            uart_sendFrontpanelSysExByte(SYSEX_RECEIVE_PAT_LEN_DATA);
+            frontPanelSending_sendSysexReceiveAck(SYSEX_RECEIVE_PAT_LEN_DATA);
          }
          break;
          
@@ -1304,7 +1191,7 @@ static void frontParser_handleSysexData(unsigned char data)
                preset_tempPlaybackSwitchState.newPatternAvailable = 1;
             }
             */
-            uart_sendFrontpanelSysExByte(SYSEX_RECEIVE_PAT_SCALE_DATA);
+            frontPanelSending_sendSysexReceiveAck(SYSEX_RECEIVE_PAT_SCALE_DATA);
          }
          
          break;
@@ -1440,7 +1327,7 @@ static void frontParser_handleSysexData(unsigned char data)
             if(frontParser_sysexSeqStepNr<127)
             {
                frontParser_sysexSeqStepNr++;
-               uart_sendFrontpanelSysExByte(SYSEX_STEP_ACK);
+               frontPanelSending_sendSysexStepAck();
             }
             else
             {
@@ -1457,7 +1344,7 @@ static void frontParser_handleSysexData(unsigned char data)
                {
                   preset_tempPlaybackSwitchState.newPatternAvailable=1;
                }
-               uart_sendFrontpanelSysExByte(SYSEX_BEGIN_PATTERN_TRANSMIT);
+               frontPanelSending_sendSysexBeginPatternTransmitAck();
             }
          }
          break;  
@@ -1610,13 +1497,11 @@ void frontParser_handleMidiMessage(void)
                sampleMemory_loadSamples();
                FLASH_Lock();
             
-               uart_sendFrontpanelByte(ACK);
+               frontPanelSending_sendSampleUploadAck();
                break;
          
             case FRONT_SAMPLE_COUNT:
-               uart_sendFrontpanelByte(SAMPLE_CC);
-               uart_sendFrontpanelByte(FRONT_SAMPLE_COUNT);
-               uart_sendFrontpanelByte(sampleMemory_getNumSamples());
+               frontPanelSending_sendSampleCountReply();
                break;
          
             default:
@@ -1803,12 +1688,7 @@ void frontParser_handleMidiMessage(void)
             }   
          
          //if step active send led on message to front
-            if(seq_isMainStepActive(voiceNr, stepNr, patternNr))
-            {
-               uart_sendFrontpanelByte(FRONT_STEP_LED_STATUS_BYTE);
-               uart_sendFrontpanelByte(FRONT_LED_SEQ_BUTTON);
-               uart_sendFrontpanelByte(stepNr*8);
-            }
+            frontPanelSending_sendMainStepLedReply(voiceNr, stepNr, patternNr);
          }
          break;
    
@@ -1883,30 +1763,27 @@ void frontParser_handleMidiMessage(void)
          {
          //send all active step numbers to frontpanel to light up corresponding LEDs
             case FRONT_LED_QUERY_SEQ_TRACK:
-               {
+            {
                   uint8_t trackNr = frontParser_midiMsg.data2 >> 4;
                   uint8_t patternNr = seq_normalizePatternNumber(frontParser_midiMsg.data2 & 0x0f);
                
-                  frontParser_updateTrackLeds(trackNr, patternNr);
+                  frontParser_activeFrontTrack = trackNr;
+                  frontPanelSending_updateTrackLeds(trackNr, patternNr, frontParser_activeStep);
                
                //send track length back
-                  uart_sendFrontpanelByte(FRONT_SEQ_CC);
-                  uart_sendFrontpanelByte(FRONT_SEQ_TRACK_LENGTH);
-                  uart_sendFrontpanelByte(seq_getTrackLength(trackNr));
+                  frontPanelSending_sendTrackLengthReply(trackNr);
                
                // **PATROT send track rotation value back
-                  uart_sendFrontpanelByte(FRONT_SEQ_CC);
-                  uart_sendFrontpanelByte(FRONT_SEQ_TRACK_ROTATION);
-                  uart_sendFrontpanelByte(seq_getTrackRotation(trackNr));
+                  frontPanelSending_sendTrackRotationReply(trackNr);
                
-               }
+            }
                break;
             case FRONT_LED_ALL_SUBSTEP:
                {
                   uint8_t trackNr = frontParser_midiMsg.data2 >> 4;
                   uint8_t patternNr = seq_normalizePatternNumber(frontParser_midiMsg.data2 & 0x0f);
                
-                  frontParser_updateSubStepLeds(trackNr, patternNr);               
+                  frontPanelSending_updateSubStepLeds(trackNr, patternNr, frontParser_activeStep);               
                }
                break;
          
@@ -2058,7 +1935,6 @@ static void frontParser_handleSeqCC()
          break;
 
       case FRONT_SEQ_PRF_RESTORE_AVR_LIVE:
-         presetLoad_sendPrfLiveRestore();
          frontParser_sendFlowGrantWait(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
          break;
 
@@ -2139,14 +2015,7 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_REQUEST_PATTERN_PARAMS:
 
       /* send back bar change and next pattern params from requested pattern*/
-         uart_sendFrontpanelByte(FRONT_SEQ_CC);
-         uart_sendFrontpanelByte(FRONT_SEQ_SET_PAT_BEAT);
-         uart_sendFrontpanelByte(seq_getPatternSettingPtr(frontParser_shownPattern)->changeBar);
-      
-         uart_sendFrontpanelByte(FRONT_SEQ_CC);
-         uart_sendFrontpanelByte(FRONT_SEQ_SET_PAT_NEXT);
-         uart_sendFrontpanelByte(seq_getPatternSettingPtr(frontParser_shownPattern)->nextPattern);
-      
+         frontPanelSending_sendPatternParamsReply(frontParser_shownPattern);
       
          break;
       case FRONT_SEQ_SET_PAT_BEAT:
@@ -2190,7 +2059,8 @@ static void frontParser_handleSeqCC()
             uint8_t length 	= frontParser_midiMsg.data2 >> 3;
             length += 1;
             euklid_setLength(frontParser_activeTrack, pattern, length);
-            frontParser_updateTrackLeds(frontParser_activeTrack, pattern);
+            frontParser_activeFrontTrack = frontParser_activeTrack;
+            frontPanelSending_updateTrackLeds(frontParser_activeTrack, pattern, frontParser_activeStep);
          }
          break;
    
@@ -2201,7 +2071,8 @@ static void frontParser_handleSeqCC()
             uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_midiMsg.data2 & 0x7);
          
             euklid_setSteps(frontParser_activeTrack,steps,pattern);
-            frontParser_updateTrackLeds(frontParser_activeTrack, pattern);
+            frontParser_activeFrontTrack = frontParser_activeTrack;
+            frontPanelSending_updateTrackLeds(frontParser_activeTrack, pattern, frontParser_activeStep);
          }
          break;
    
@@ -2212,7 +2083,8 @@ static void frontParser_handleSeqCC()
             uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_midiMsg.data2 & 0x7);
          
             euklid_setRotation(frontParser_activeTrack,rotation,pattern);
-            frontParser_updateTrackLeds(frontParser_activeTrack, pattern);
+            frontParser_activeFrontTrack = frontParser_activeTrack;
+            frontPanelSending_updateTrackLeds(frontParser_activeTrack, pattern, frontParser_activeStep);
          }
          break;
          
@@ -2223,7 +2095,8 @@ static void frontParser_handleSeqCC()
             uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_midiMsg.data2 & 0x7);
          
             euklid_setSubStepRotation(frontParser_activeTrack,rotation,pattern);
-            frontParser_updateTrackLeds(frontParser_activeTrack, pattern);
+            frontParser_activeFrontTrack = frontParser_activeTrack;
+            frontPanelSending_updateTrackLeds(frontParser_activeTrack, pattern, frontParser_activeStep);
          }
          break;   
    
@@ -2353,25 +2226,7 @@ static void frontParser_handleSeqCC()
          break;
    
       case FRONT_SEQ_REQUEST_EUKLID_PARAMS:
-         uart_sendFrontpanelByte(FRONT_SEQ_CC);
-         uart_sendFrontpanelByte(FRONT_SEQ_EUKLID_LENGTH);
-         uart_sendFrontpanelByte(euklid_getLength(frontParser_midiMsg.data2));
-      
-         uart_sendFrontpanelByte(FRONT_SEQ_CC);
-         uart_sendFrontpanelByte(FRONT_SEQ_EUKLID_STEPS);
-         uart_sendFrontpanelByte(euklid_getSteps(frontParser_midiMsg.data2));
-      
-         uart_sendFrontpanelByte(FRONT_SEQ_CC);
-         uart_sendFrontpanelByte(FRONT_SEQ_EUKLID_ROTATION);
-         uart_sendFrontpanelByte(euklid_getRotation(frontParser_midiMsg.data2));
-         
-         uart_sendFrontpanelByte(FRONT_SEQ_CC);
-         uart_sendFrontpanelByte(FRONT_SEQ_EUKLID_SUBSTEP_ROTATION);
-         uart_sendFrontpanelByte(euklid_getSubStepRotation(frontParser_midiMsg.data2));
-         
-         uart_sendFrontpanelByte(FRONT_SEQ_CC);
-         uart_sendFrontpanelByte(FRONT_SEQ_TRACK_SCALE);
-         uart_sendFrontpanelByte(seq_getTrackScale(frontParser_midiMsg.data2));
+         frontPanelSending_sendEuklidParamsReply(frontParser_midiMsg.data2);
          break;
    
       case FRONT_SEQ_SET_SHOWN_PATTERN:
@@ -2391,68 +2246,16 @@ static void frontParser_handleSeqCC()
             seq_triggerVoice(frontParser_activeTrack, seq_rollVelocity, seq_rollNote);
             
          frontParser_activeTrack = frontParser_midiMsg.data2;
-         uart_sendFrontpanelByte(FRONT_SEQ_CC);
-         uart_sendFrontpanelByte(FRONT_SEQ_TRACK_ROTATION);
-         uart_sendFrontpanelByte(seq_getTrackRotation(frontParser_activeTrack));
-         
-         uart_sendFrontpanelByte(FRONT_SEQ_CC);
-         uart_sendFrontpanelByte(FRONT_SEQ_TRANSPOSE);
-         uart_sendFrontpanelByte(seq_transpose_voiceAmount[frontParser_activeTrack]);
+         frontPanelSending_sendActiveTrackReply(frontParser_activeTrack);
          
          break;
    
       case FRONT_SEQ_REQUEST_STEP_PARAMS:
          {
-            Step *step = seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_midiMsg.data2);
-         
-         
          /* send back probability, volume and note nr*/
-            uart_sendFrontpanelByte(FRONT_SEQ_CC);
-            uart_sendFrontpanelByte(FRONT_SEQ_VOLUME);
-            uart_sendFrontpanelByte(step->volume&STEP_VOLUME_MASK);
-         
-            uart_sendFrontpanelByte(FRONT_SEQ_CC);
-            uart_sendFrontpanelByte(FRONT_SEQ_NOTE);
-            uart_sendFrontpanelByte(step->note);
-         
-            uart_sendFrontpanelByte(FRONT_SEQ_CC);
-            uart_sendFrontpanelByte(FRONT_SEQ_PROB);
-            uart_sendFrontpanelByte(step->prob);
-         
-         //send back automation params
-         // --AS **AUTOM subtract one for differing offsets when parameter is < 128
-            uint8_t hi,lo;
-            uint8_t dest = step->param1Nr;
-            if(dest < 128 && dest)
-               dest--;
-            hi = dest>>7;
-            lo = dest&0x7f;
-            uart_sendFrontpanelByte(FRONT_SET_P1_DEST);
-            uart_sendFrontpanelByte(hi);
-            uart_sendFrontpanelByte(lo);
-         
-            uint8_t val = step->param1Val;
-            hi = val>>7;
-            lo = val&0x7f;
-            uart_sendFrontpanelByte(FRONT_SET_P1_VAL);
-            uart_sendFrontpanelByte(hi);
-            uart_sendFrontpanelByte(lo);
-         // --AS **AUTOM subtract one for differing offsets
-            dest = step->param2Nr;
-            if(dest < 128 && dest)
-               dest--;
-            hi = dest>>7;
-            lo = dest&0x7f;
-            uart_sendFrontpanelByte(FRONT_SET_P2_DEST);
-            uart_sendFrontpanelByte(hi);
-            uart_sendFrontpanelByte(lo);
-         
-            val = step->param2Val;
-            hi = val>>7;
-            lo = val&0x7f;
-            uart_sendFrontpanelByte(FRONT_SET_P2_VAL);
-            uart_sendFrontpanelByte(hi);
-            uart_sendFrontpanelByte(lo);
+            frontPanelSending_sendStepParamsReply(frontParser_shownPattern,
+                                                 frontParser_activeTrack,
+                                                 frontParser_midiMsg.data2);
          
          
          
