@@ -587,12 +587,9 @@ static uint8_t menu_TargetVoiceGapIndex = 0xFF;
 uint8_t menu_numSamples = 0;
 
 //preset vars
-<<<<<<< HEAD
 #define NUM_PRESET_LOCATIONS 11 
 //kit, drum1, drum2, drum3, snare, cym, hh, morph sound, pattern, performance, all
 
-=======
->>>>>>> origin/master
 uint8_t menu_currentPresetNr[NUM_PRESET_LOCATIONS];
 
 uint8_t menu_shownPattern = 0;

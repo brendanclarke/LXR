@@ -1,0 +1,823 @@
+README.md:2:====================================
+README.md:72:====================================
+Binary file firmware image/FIRMWARE.BIN matches
+front/LxrAvr/Menu/menu.c:590:<<<<<<< HEAD
+front/LxrAvr/Menu/menu.c:594:=======
+front/LxrAvr/Menu/menu.c:595:>>>>>>> origin/master
+front/LxrAvr/Menu/menu.c:2509:		//============================= handle encoder change ==============================
+front/LxrAvr/Menu/menu.h:43:<<<<<<< HEAD
+front/LxrAvr/Menu/menu.h:55:=======
+front/LxrAvr/Menu/menu.h:59:>>>>>>> origin/master
+front/LxrAvr/Menu/menu.h:80:<<<<<<< HEAD
+front/LxrAvr/Menu/menu.h:82:=======
+front/LxrAvr/Menu/menu.h:84:>>>>>>> origin/master
+front/LxrAvr/Parameters.h:167:<<<<<<< HEAD
+front/LxrAvr/Parameters.h:169:=======
+front/LxrAvr/Parameters.h:171:>>>>>>> origin/master
+front/LxrAvr/README.md:2:=============================
+front/LxrAvr/main.c:31:<<<<<<< HEAD
+front/LxrAvr/main.c:33:=======
+front/LxrAvr/main.c:35:>>>>>>> origin/master
+front/LxrAvr_bootloader/README.md:2:===============================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:304: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:306: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:392: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:394: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:476: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:478: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:570: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:572: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:655: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:657: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:661: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:663: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:667: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:669: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/misc.c:12:  *          ===================================================================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/misc.c:14:  *          ===================================================================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/misc.c:24:  *    ==========================================================================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/misc.c:26:  *    ==========================================================================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/misc.c:41:  *    ==========================================================================================================================     
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:21:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:23:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:38:  *          ====================================    
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:49:  *          ===============================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:60:  *          ====================================================== 
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:68:  *          =====================================    
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:178: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:180: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:416: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:418: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:548: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:550: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:631: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:633: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1012: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1014: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1122: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1124: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1495: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1497: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1506:  =================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1527:  =================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1542:  ================================================= 
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:18:  *          ===================================================================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:20:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:140: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:142: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:553: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:555: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:725: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:727: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:846: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:848: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1006: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1008: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1101: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1103: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1110:  ===============  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1112:  ===============
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1173:  ===============  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1175:  ===============
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:17:  *          ===================================================================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:19:  *          =================================================================== 
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:48:  *          ===================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:50:  *          ===================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:53:  *      ===============  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:72:  *    ====================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:94:  *    ===========================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:118:  *    ====================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:189: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:191: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:394: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:396: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:435: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:437: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:584: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:586: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:637: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:639: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_aes.c:14:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_aes.c:16:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_aes.c:74: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_aes.c:76: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_des.c:14:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_des.c:16:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_des.c:73: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_des.c:75: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_tdes.c:14:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_tdes.c:16:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_tdes.c:73: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_tdes.c:75: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:15:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:17:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:20:  *          =============  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:27:  *          =============
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:43:  *          ========================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:54:  *          =============================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:62:  *          ================   
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:69:  *          ========================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:80:  *          =============    
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:90:  *          ===================================================================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:92:  *          ===================================================================          
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:161: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:163: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:473: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:475: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:522: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:524: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:16:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:18:  *          ===================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:109: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:111: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:281: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:283: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:352: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:354: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:16:  *          ===================================================================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:18:  *          =================================================================== 
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:164: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:166: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:568: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:570: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:657: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:659: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:844: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:846: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:874:  =============
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:888:  ===============
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:14:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:16:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:29:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:31:  *          ===================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:90: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:92: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:206: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:208: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:16:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:18:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:99: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:101: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:267: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:269: ===============================================================================   
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:609: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:611: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:885: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:887: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:71: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:73: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:292: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:294: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:568: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:570: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:725: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:727: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:15:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:17:  *          ===================================================================       
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:106: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:108: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:284: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:286: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:472: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:474: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:17:  *          ===================================================================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:19:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:150: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:152: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:262: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:264: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:359: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:361: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:437: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:439: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:484: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:486: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_md5.c:14:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_md5.c:16:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_md5.c:69: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_md5.c:71: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_sha1.c:14:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_sha1.c:16:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_sha1.c:69: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_sha1.c:71: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:17:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:19:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:119: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:121: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:675: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:677: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:718: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:720: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:826: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:828: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:892: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:894: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:900: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:902: ===============================================================================   
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:1052: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:1054: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:1125: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:1127: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:1160: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:1162: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:15:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:17:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:45:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:47:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:113: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:115: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:188: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:190: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:214: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:216: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:99: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:101: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:151: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:153: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:222: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:224: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:256: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:258: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:304: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:306: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:359: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:361: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:369:   ===========
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:377:   ==========
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:393:   ============
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:410:   =====================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:558: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:560: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:16:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:18:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:140: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:142: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:611: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:613: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:929: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:931: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:1630: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:1632: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:15:  *          ===================================================================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:17:  *          ===================================================================          
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:78: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:80: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:134: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:136: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:186: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:188: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:26:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:28:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:56:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:58:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:71:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:73:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:84:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:86:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:92:  *          ===========================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:101:  *          ===================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:108:  *          ========================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:118:  *          =====================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:129:  *          =================================    
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:135:  *          =================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:142:  *          =======================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:155:  *          ====================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:174:  *          ===================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:180:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:182:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:197:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:199:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:234:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:236:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:323: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:325: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:730: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:732: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1063: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1065: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1444: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1446: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1582: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1584: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1645: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1647: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1699: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1701: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1934: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1936: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2058: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2060: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2261: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2263: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2321: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2324: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2391: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2393: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2477: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2479: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:21:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:23:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:246: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:248: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:373: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:375: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:478: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:480: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:596: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:598: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:686: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:688: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:746: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:748: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:778: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:780: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:18:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:20:  *          ===================================================================        
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:195: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:197: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:754: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:756: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:812: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:814: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:966: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:968: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:1013: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:1015: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:1023:  =============
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:1043:  ===============
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:1070:  ========
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_syscfg.c:11:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_syscfg.c:13:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:21:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:23:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:159: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:161: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:163:       ===================================================================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:165:       =================================================================== 
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:611: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:613: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:615:       ===================================================================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:617:       =================================================================== 
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:1833: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:1835: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:1837:       ===================================================================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:1839:       =================================================================== 
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2175: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2177: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2179:       ===================================================================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2181:       =================================================================== 
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2326: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2328: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2656: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2658: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2831: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2833: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2835:       ===================================================================      
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2837:       =================================================================== 
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:3026: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:3028: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:3131: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:3133: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:22:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:24:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:128: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:130: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:507: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:509: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:571: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:573: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:670: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:672: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:780: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:782: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:843: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:845: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:970: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:972: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1060: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1062: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1109: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1111: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1120:  =============
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1138:  ===============
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1178:  ========
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:15:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:17:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:40:  *          ===================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:42:  *          =================================================================== 
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:121: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:123: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:220: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:222: ===============================================================================  
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:249: ===============================================================================
+mainboard/LxrStm32/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:251: ===============================================================================  
+mainboard/LxrStm32/src/MIDI/MidiParser.c:188:<<<<<<< HEAD
+mainboard/LxrStm32/src/MIDI/MidiParser.c:190:=======
+mainboard/LxrStm32/src/MIDI/MidiParser.c:1128:>>>>>>> origin/master
+mainboard/LxrStm32/src/config.h:106:<<<<<<< HEAD
+mainboard/LxrStm32/src/config.h:108:=======
+mainboard/LxrStm32/src/config.h:109:>>>>>>> origin/master
+mainboard/LxrStm32/src/system_stm32f4xx.c:43:  *=============================================================================
+mainboard/LxrStm32/src/system_stm32f4xx.c:44:  *=============================================================================
+mainboard/LxrStm32/src/system_stm32f4xx.c:97:  *=============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4-Discovery/stm32f4_discovery_audio_codec.c:22:/*==============================================================================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4-Discovery/stm32f4_discovery_audio_codec.c:123:===============================================================================================================================*/
+mainboard/LxrStm32_bootloader/Libraries/STM32F4-Discovery/stm32f4_discovery_audio_codec.c:615:/*========================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4-Discovery/stm32f4_discovery_audio_codec.c:618:                                                ==============================*/
+mainboard/LxrStm32_bootloader/Libraries/STM32F4-Discovery/stm32f4_discovery_audio_codec.c:1374:/*========================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4-Discovery/stm32f4_discovery_audio_codec.c:1378:                                                ==============================*/
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:304: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:306: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:392: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:394: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:476: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:478: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:570: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:572: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:655: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:657: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:661: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:663: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:667: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_i2c.h:669: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/misc.c:12:  *          ===================================================================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/misc.c:14:  *          ===================================================================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/misc.c:24:  *    ==========================================================================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/misc.c:26:  *    ==========================================================================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/misc.c:41:  *    ==========================================================================================================================     
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:21:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:23:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:38:  *          ====================================    
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:49:  *          ===============================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:60:  *          ====================================================== 
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:68:  *          =====================================    
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:178: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:180: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:416: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:418: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:548: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:550: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:631: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:633: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1012: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1014: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1122: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1124: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1495: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1497: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1506:  =================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1527:  =================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c:1542:  ================================================= 
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:18:  *          ===================================================================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:20:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:140: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:142: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:553: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:555: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:725: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:727: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:846: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:848: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1006: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1008: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1101: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1103: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1110:  ===============  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1112:  ===============
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1173:  ===============  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c:1175:  ===============
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:17:  *          ===================================================================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:19:  *          =================================================================== 
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:48:  *          ===================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:50:  *          ===================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:53:  *      ===============  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:72:  *    ====================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:94:  *    ===========================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:118:  *    ====================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:189: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:191: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:394: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:396: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:435: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:437: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:584: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:586: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:637: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c:639: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_aes.c:14:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_aes.c:16:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_aes.c:74: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_aes.c:76: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_des.c:14:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_des.c:16:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_des.c:73: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_des.c:75: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_tdes.c:14:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_tdes.c:16:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_tdes.c:73: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_tdes.c:75: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:15:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:17:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:20:  *          =============  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:27:  *          =============
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:43:  *          ========================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:54:  *          =============================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:62:  *          ================   
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:69:  *          ========================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:80:  *          =============    
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:90:  *          ===================================================================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:92:  *          ===================================================================          
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:161: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:163: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:473: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:475: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:522: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c:524: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:16:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:18:  *          ===================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:109: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:111: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:281: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:283: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:352: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c:354: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:16:  *          ===================================================================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:18:  *          =================================================================== 
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:164: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:166: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:568: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:570: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:657: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:659: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:844: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:846: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:874:  =============
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c:888:  ===============
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:14:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:16:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:29:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:31:  *          ===================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:90: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:92: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:206: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c:208: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:16:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:18:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:99: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:101: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:267: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:269: ===============================================================================   
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:609: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:611: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:885: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c:887: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:71: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:73: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:292: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:294: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:568: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:570: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:725: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c:727: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:15:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:17:  *          ===================================================================       
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:106: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:108: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:284: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:286: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:472: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c:474: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:17:  *          ===================================================================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:19:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:150: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:152: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:262: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:264: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:359: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:361: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:437: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:439: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:484: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c:486: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_md5.c:14:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_md5.c:16:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_md5.c:69: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_md5.c:71: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_sha1.c:14:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_sha1.c:16:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_sha1.c:69: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_sha1.c:71: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:17:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:19:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:119: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:121: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:675: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:677: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:718: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:720: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:826: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:828: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:892: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:894: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:900: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:902: ===============================================================================   
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:1052: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:1054: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:1125: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:1127: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:1160: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c:1162: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:15:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:17:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:45:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:47:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:113: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:115: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:188: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:190: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:214: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c:216: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:99: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:101: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:151: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:153: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:222: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:224: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:256: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:258: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:304: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:306: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:359: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:361: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:369:   ===========
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:377:   ==========
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:393:   ============
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:410:   =====================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:558: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c:560: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:16:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:18:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:140: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:142: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:611: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:613: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:929: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:931: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:1630: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c:1632: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:15:  *          ===================================================================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:17:  *          ===================================================================          
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:78: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:80: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:134: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:136: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:186: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c:188: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:26:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:28:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:56:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:58:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:71:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:73:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:84:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:86:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:92:  *          ===========================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:101:  *          ===================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:108:  *          ========================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:118:  *          =====================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:129:  *          =================================    
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:135:  *          =================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:142:  *          =======================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:155:  *          ====================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:174:  *          ===================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:180:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:182:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:197:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:199:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:234:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:236:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:323: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:325: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:730: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:732: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1063: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1065: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1444: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1446: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1582: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1584: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1645: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1647: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1699: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1701: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1934: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:1936: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2058: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2060: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2261: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2263: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2321: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2324: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2391: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2393: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2477: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c:2479: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:21:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:23:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:246: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:248: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:373: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:375: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:478: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:480: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:596: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:598: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:686: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:688: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:746: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:748: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:778: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c:780: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:18:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:20:  *          ===================================================================        
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:195: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:197: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:754: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:756: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:812: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:814: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:966: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:968: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:1013: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:1015: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:1023:  =============
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:1043:  ===============
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c:1070:  ========
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_syscfg.c:11:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_syscfg.c:13:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:21:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:23:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:159: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:161: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:163:       ===================================================================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:165:       =================================================================== 
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:611: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:613: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:615:       ===================================================================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:617:       =================================================================== 
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:1833: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:1835: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:1837:       ===================================================================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:1839:       =================================================================== 
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2175: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2177: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2179:       ===================================================================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2181:       =================================================================== 
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2326: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2328: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2656: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2658: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2831: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2833: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2835:       ===================================================================      
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:2837:       =================================================================== 
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:3026: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:3028: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:3131: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c:3133: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:22:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:24:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:128: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:130: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:507: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:509: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:571: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:573: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:670: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:672: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:780: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:782: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:843: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:845: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:970: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:972: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1060: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1062: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1109: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1111: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1120:  =============
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1138:  ===============
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c:1178:  ========
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:15:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:17:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:40:  *          ===================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:42:  *          =================================================================== 
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:121: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:123: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:220: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:222: ===============================================================================  
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:249: ===============================================================================
+mainboard/LxrStm32_bootloader/Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c:251: ===============================================================================  
+mainboard/LxrStm32_bootloader/src/system_stm32f4xx.c:43:  *=============================================================================
+mainboard/LxrStm32_bootloader/src/system_stm32f4xx.c:44:  *=============================================================================
+mainboard/LxrStm32_bootloader/src/system_stm32f4xx.c:97:  *=============================================================================

@@ -40,7 +40,6 @@ extern uint8_t menu_instPerfLockPreset;
 extern uint8_t menu_voiceArray;
 extern uint8_t menu_kitLockVoiceArray;
 
-<<<<<<< HEAD
 
 enum KitType
 {
@@ -52,11 +51,6 @@ enum KitType
 #define NUM_PRESET_LOCATIONS 11 
 //kit, drum1, drum2, drum3, snare, cym, hh, morph sound, pattern, performance, all
 extern uint8_t menu_currentPresetNr[NUM_PRESET_LOCATIONS];
-=======
-#define NUM_PRESET_LOCATIONS 5 //kit, pattern, morph sound, performance, all
-extern uint8_t menu_currentPresetNr[NUM_PRESET_LOCATIONS];
-
->>>>>>> origin/master
 void menu_setShownPattern(uint8_t patternNr);
 void menu_resetSubPage();
 void menu_updateMainStepDisplay();
@@ -77,11 +71,7 @@ enum PageNames
 	LOAD_PAGE,
 	SAVE_PAGE,
 	/*
-<<<<<<< HEAD
 	LFO1_PAGE, //TODO load und savepage verschwenken speicher... nicht gefüllt. ans ende und aus dem array nehmen?
-=======
-	LFO1_PAGE, //TODO load und savepage verschwenken speicher... nicht gef�llt. ans ende und aus dem array nehmen?
->>>>>>> origin/master
 	LFO2_PAGE,
 	LFO3_PAGE,
 	LFO4_PAGE,

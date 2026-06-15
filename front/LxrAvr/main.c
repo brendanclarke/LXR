@@ -28,11 +28,7 @@
 //-----------------------------------------------
 //defines
 //-----------------------------------------------
-<<<<<<< HEAD
 #define FIRMWARE_VERSION "0.37-bc-"
-=======
-#define FIRMWARE_VERSION "0.37"
->>>>>>> origin/master
 #define CORTEX_RESET_PIN	PB0
 //-----------------------------------------------
 //code
