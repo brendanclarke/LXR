@@ -238,7 +238,7 @@ const Name valueNames[NUM_NAMES] PROGMEM =
       {SHORT_TRANSPOSE, CAT_TRANSPOSE, LONG_TRANSPOSE},
       {SHORT_TRANSPOSE_ON_OFF, CAT_TRANSPOSE, LONG_TRANSPOSE_ON_OFF},
       
-      {SHORT_FILE_LOAD_FAST, CAT_FILE, LONG_FILE_LOAD_FAST},
+      {SHORT_FILE_LOAD_BACKGROUND, CAT_FILE, LONG_FILE_LOAD_BACKGROUND},
       
       {SHORT_ENVELOPE_POSITION, CAT_VELO_EG, LONG_ENVELOPE_POSITION},
 };
@@ -557,7 +557,7 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	   /*PAR_BUT_SHIFT_MODE*/ DTYPE_ON_OFF, // -bc- make shift a toggle
       /*PAR_LOAD_PERF_ON_BANK*/  DTYPE_ON_OFF, // -bc- load perfs instead of kits on bank change cc
       /*PAR_SKIP_FIRST_ROLL*/  DTYPE_ON_OFF,
-      /*PAR_FILE_LOAD_FAST*/  DTYPE_ON_OFF,
+      /*PAR_FILE_LOAD_BACKGROUND*/  DTYPE_MENU | (MENU_FILE_LOAD_BACKGROUND<<4),
       
       /*PAR_GLOBAL_SETTINGS_VERSION*/  DTYPE_0B127,
       
@@ -2391,6 +2391,8 @@ static uint8_t getMaxEntriesForMenu(uint8_t menuId)
 		return ppqNames[0][0];
    case MENU_TRACK_SCALE:
       return trackScaleNames[0][0];
+   case MENU_FILE_LOAD_BACKGROUND:
+      return backgroundLoadNames[0][0];
    case MENU_MIDI:
       return midiModes[0][0];
 	default:
@@ -2460,6 +2462,9 @@ static void getMenuItemNameForValue(const uint8_t menuId, const uint8_t curParmV
 		break;
    case MENU_TRACK_SCALE:
       p=trackScaleNames[curParmVal+1];
+      break;
+   case MENU_FILE_LOAD_BACKGROUND:
+      p=backgroundLoadNames[curParmVal+1];
       break;
 	default:
 		p=menuText_dash;
@@ -3668,9 +3673,9 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
       parameter_values[PAR_SKIP_FIRST_ROLL]=value; 
       avrComms_sendData(SEQ_CC, SEQ_ROLL_MODE, (uint8_t)(value+5) );
       break;
-   case PAR_FILE_LOAD_FAST:
-      parameter_values[PAR_FILE_LOAD_FAST]=value; 
-      avrComms_sendData(SEQ_CC, SEQ_LOAD_FAST,value);
+   case PAR_FILE_LOAD_BACKGROUND:
+      parameter_values[PAR_FILE_LOAD_BACKGROUND]=value; 
+      avrComms_sendData(SEQ_CC, SEQ_LOAD_BACKGROUND,value);
       break;
    case PAR_MIDI_NOTE1:
    case PAR_MIDI_NOTE2:

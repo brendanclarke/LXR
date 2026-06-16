@@ -192,7 +192,12 @@ These messages tell STM that the incoming traffic belongs to a file load or back
 - `SEQ_FILE_BEGIN`
 - `SEQ_FILE_DONE`
 - `SEQ_LOAD_VOICE`
-- `SEQ_LOAD_FAST`
+- `SEQ_LOAD_BACKGROUND`
+
+On the AVR side, the user-facing control is now the 5-state background-load
+selector `PAR_FILE_LOAD_BACKGROUND` on the load page. It still sends the same
+raw byte value on the same opcode number, so this is a naming/UI update rather
+than a new transport shape.
 
 The old `PresetLoadCache` and `presetLoad_*` cache API were removed in Session
 020. File-load receive paths now route bytes directly to normal Preset/Pattern

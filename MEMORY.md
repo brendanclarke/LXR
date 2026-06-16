@@ -49,9 +49,12 @@ make firmware
 
 **Current status after Session 022 closeout (2026-06-16)**: Copy-to-temp now snapshots the actually playing per-track pattern sources instead of a generic pending-pattern view, and the temp-pattern repeat path is keyed off `SEQ_TMP_PATTERN` so the temp slot keeps holding until the user makes a manual change. The `Sequencer` API surface was documented in-place in both `sequencer.h` and `sequencer.c`, the stale Sequencer temp-boundary declaration was removed, Pattern/PatternData naming and comments were cleaned up, and `make -C mainboard/LxrStm32 -j4 stm32` was verified again. This pass was implementation plus documentation cleanup only; no comms spec updates were needed.
 
-**Current consolidation / protocol planning artifacts**: the durable finalization notes now live in `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, and `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`. Current encoder details live in `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` and supersede the temporary `ENCODER_AUDIT.md`. `REFACTOR_FINALIZATION.md`, `REFACTOR_MY_MESS_CLEANUP.md`, `PRESET_CONSOLIDATION_AUDIT.md`, and `MIDI_UART_SPLIT_AUDIT_EDIT.md` were temporary working docs and may be deleted after Session 020.
+**Current status after Session 023 closeout (2026-06-16)**: The AVR load-page control was renamed to the 5-state background-load selector `PAR_FILE_LOAD_BACKGROUND`, with `TEXT_FILE_LOAD_BACKGROUND`, `backgroundLoadNames`, and `SEQ_LOAD_BACKGROUND` updated on the AVR side while STM runtime behavior stayed untouched. The packed menu-ID table used the free `MENU_FILE_LOAD_BACKGROUND = 0` slot because the existing dtype encoding only has four bits for the menu ID, and the globals file continues to round-trip the same raw byte without a serializer change. `make -C front/LxrAvr avr -j4`, `make -C mainboard/LxrStm32 -j4 stm32`, and `make firmware` all passed again after the rename. `TEMP_LOAD_MENU_AUDIT.md`, `knowledge_files/log_archive/000_SESSION_INDEX.md`, `knowledge_files/log_archive/023_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, and `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md` were updated to keep the new terminology canonical.
+
+**Current consolidation / protocol planning artifacts**: the durable finalization notes now live in `knowledge_files/log_archive/023_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, and `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`. Current encoder details live in `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` and supersede the temporary `ENCODER_AUDIT.md`. `TEMP_LOAD_MENU_AUDIT.md` was the temporary working doc for Session 023 and can be deleted after the closeout pass. `REFACTOR_FINALIZATION.md`, `REFACTOR_MY_MESS_CLEANUP.md`, `PRESET_CONSOLIDATION_AUDIT.md`, and `MIDI_UART_SPLIT_AUDIT_EDIT.md` were temporary working docs and may be deleted after Session 020.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/023_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/022_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`
@@ -79,17 +82,13 @@ Session 005 closeout / remaining follow-up:
 - Add global parameter switches for background loading if that work is revived.
 - Keep the temporary SEQ16 pattern keyhole in place until after the future preset/morph refactor.
 
-These older in-flight audits are stale after Session 003 and should not be treated as current:
+The `knowledge_files/session_in_flight/` directory was cleaned up (post-Session 020). The following audits no longer exist on disk and should not be referenced or recreated:
 - `knowledge_files/session_in_flight/AUDIT_MORPH_MOVE.md`
 - `knowledge_files/session_in_flight/TMP_VARS_AUDIT.md`
 - `knowledge_files/session_in_flight/PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`
 - `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT.md`
 - `knowledge_files/session_in_flight/TEMP_CACHE_LOAD-IN_FLIGHT-POST_MORPH_MOVE.md`
 - `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT-POST_MORPH_MOVE.md`
-
-The two pre-morph load/comms audits were expanded on 2026-05-29 from source diffs:
-- `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT.md`: compares `LXR-9120ea7620f1a9a4a924f029cdaf3ae71df303fd/front|mainboard` against `LXR-custom-develop-patload-envmod-90d3f08/front|mainboard`.
-- `knowledge_files/session_in_flight/PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`: compares `LXR-custom-develop-patload-envmod-90d3f08/front|mainboard` against the current `front|mainboard`.
 
 User-referenced checkpoints:
 - Commit `90d3f08` is the checkpoint where `.ALL` and `.PRF` load their parameters correctly provided there is no morph automation and background loading into the temp slot is turned off for `.PRF`.

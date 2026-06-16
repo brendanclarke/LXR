@@ -413,7 +413,7 @@ enum ParamEnums
 	PAR_LOAD_PERF_ON_BANK,			// 0, incoming bank changes select kit, 1 bank changes select perf
 	PAR_SKIP_FIRST_ROLL,			/*300*/
 
-	PAR_FILE_LOAD_FAST,			// bool, apply 'kit' load immediately
+	PAR_FILE_LOAD_BACKGROUND,	// menu, background-load mode selector
 
 	PAR_GLOBAL_SETTINGS_VERSION,
 

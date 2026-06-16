@@ -1111,7 +1111,7 @@ static void buttonHandler_voiceButtonReleased(uint8_t voiceNr)
    (menu_getWhat()==SAVE_TYPE_PERFORMANCE||menu_getWhat()==SAVE_TYPE_PATTERN||
    menu_getWhat()==SAVE_TYPE_ALL) )
    {
-      if(parameter_values[PAR_FILE_LOAD_FAST])
+      if(parameter_values[PAR_FILE_LOAD_BACKGROUND])
       {
       
          if(!buttonHandler_heldVoiceButtons)
@@ -1159,7 +1159,7 @@ static void buttonHandler_voiceButtonPressed(uint8_t voiceNr)
    (menu_getWhat()==SAVE_TYPE_PERFORMANCE||menu_getWhat()==SAVE_TYPE_PATTERN||
    menu_getWhat()==SAVE_TYPE_ALL) )
    {
-      if(parameter_values[PAR_FILE_LOAD_FAST])
+      if(parameter_values[PAR_FILE_LOAD_BACKGROUND])
       {
          if(!buttonHandler_heldVoiceButtons)
             menu_voiceArray=0;

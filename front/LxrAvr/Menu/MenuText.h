@@ -26,6 +26,7 @@
 #define MENU_MIDI_FILTERING 13
 #define MENU_PPQ		 	14
 #define MENU_TRACK_SCALE 15
+#define MENU_FILE_LOAD_BACKGROUND 0
 
 
 //-----------------------------------------------------------------
@@ -272,6 +273,16 @@ const char trackScaleNames[][4] PROGMEM =
 	{"128"},
 };
 //-----------------------------------------------------------------
+const char backgroundLoadNames[][4] PROGMEM =
+{
+	{5},	// number of entries
+	{"off"},
+	{"pat"},
+	{"prf"},
+	{"all"},
+	{"tot"},
+};
+//-----------------------------------------------------------------
 // these must correspond with shortNamesEnum
 const char shortNames[][4] PROGMEM  = 
 {
@@ -371,7 +382,7 @@ const char shortNames[][4] PROGMEM  =
    {"rol"}, // TEXT_ROLL_MODE
    {"xps"}, // TEXT_TRANSPOSE,
    {"xps"}, // TEXT_TRANSPOSE_ON_OFF,
-   {"flf"}, // TEXT_FILE_LOAD_FAST,
+   {"flb"}, // TEXT_FILE_LOAD_BACKGROUND,
    {"egp"}, // TEXT_ENVELOPE_POSITION
 };
 //-----------------------------------------------------------------
@@ -517,7 +528,7 @@ const char longNames[][16] PROGMEM =
    {"RollMode" },  // TEXT_ROLL_MODE
    {"NoteAmt"},   // TEXT_TRANSPOSE
    {"Sequence"}, // TEXT_TRANSPOSE_ON_OFF,
-   {"LoadFast"}, // TEXT_FILE_LOAD_FAST,
+   {"LoadBgnd"}, // TEXT_FILE_LOAD_BACKGROUND,
    {"Position"}, // TEXT_ENVELOPE_POSITION
 };
 

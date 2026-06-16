@@ -5,6 +5,11 @@ Status: current storage and switching spec after Session 020 finalization and cl
 
 Naming note: STM-side front-panel ownership stays under `mainboard/LxrStm32/src/uARTFrontSYX/` with `frontPanel*` names. AVR-side comms now live under `front/LxrAvr/avrComms/` with `avrComms*` names. Older AVR `frontPanel*` references are historical only.
 
+Session 023 note: the AVR load-page control is now the 5-state background-load
+selector `PAR_FILE_LOAD_BACKGROUND` / `TEXT_FILE_LOAD_BACKGROUND`, but it still
+persists and transmits the same raw byte value. STM behavior was intentionally
+left unchanged in that pass.
+
 ## Purpose
 
 This document defines how the firmware should think about:
