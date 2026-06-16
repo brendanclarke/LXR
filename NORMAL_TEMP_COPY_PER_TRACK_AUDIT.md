@@ -303,18 +303,25 @@ Before the cleanup pass starts, the temp snapshot should be verified to satisfy 
 
 ## Follow-On Cleanup Pass
 
-After the temp-copy helper is accepted, the next cleanup pass should consolidate the remaining Pattern ownership into `mainboard/LxrStm32/src/Sequencer/Pattern/` and give that module a clean public API.
+After the temp-copy helper is accepted, the next cleanup pass should rename and re-document the entire `mainboard/LxrStm32/src/Sequencer/Pattern/` surface so the module reads like the owner of pattern storage instead of a mixed `seq_*` compatibility layer.
 
-This pass is not meant to change playback behavior. It is a boundary and naming cleanup so the code clearly says:
+This pass is not meant to change playback behavior. It is a boundary, naming, and documentation cleanup so the code clearly says:
 
 - Pattern owns pattern storage and pattern mutation/copy helpers;
 - Sequencer owns scheduling, pattern-switch orchestration, and live playback timing;
-- `sequencer.c` should call Pattern APIs instead of hosting pattern-paste logic itself.
+- `sequencer.c` should call Pattern APIs instead of hosting pattern-paste logic itself;
+- new names inside `Pattern/` should be `pat_*`, `Pat*`, or another `pat`-prefixed variation, not `seq_*`, `Seq*`, or `seq*`.
 
-### Current Ownership Inventory
+### Current Rename Inventory
 
-The following helpers already live in `PatternData.c`, but the cleanup pass should formalize them as Pattern-owned APIs instead of leaving them exposed through an old `seq_*` surface:
+The scan of `mainboard/LxrStm32/src/Sequencer/Pattern/` still shows these Pattern-owned helpers and variables using `seq` naming:
 
+#### `PatternData.c` and `PatternData.h`
+
+- `seq_patternSet`
+- `seq_tmpPattern`
+- `seq_setTmpPatternHoldSettings`
+- `seq_resetNote`
 - `seq_normalizePatternNumber`
 - `seq_getStepPtr`
 - `seq_getLengthRotatePtr`
@@ -322,6 +329,20 @@ The following helpers already live in `PatternData.c`, but the cleanup pass shou
 - `seq_getMainSteps`
 - `seq_setMainSteps`
 - `seq_initPatternData`
+- `seq_applyTmpPatternTo`
+- `seq_activateTmpPattern`
+- `seq_setTrackLength`
+- `seq_getTrackLength`
+- `seq_setTrackScale`
+- `seq_getTrackScale`
+- `seq_setTrackRotation`
+- `seq_getTrackRotation`
+- `seq_setLoop`
+- `seq_toggleStep`
+- `seq_toggleMainStep`
+- `seq_setMainStep`
+- `seq_isStepActive`
+- `seq_isMainStepActive`
 - `seq_clearTrack`
 - `seq_clearAutomation`
 - `seq_clearPattern`
@@ -330,18 +351,22 @@ The following helpers already live in `PatternData.c`, but the cleanup pass shou
 - `seq_copyToTmpPattern`
 - `seq_copyTrackPattern`
 - `seq_copySubStep`
-- `seq_applyTmpPatternTo`
-- `seq_activateTmpPattern`
-- `seq_toggleStep`
-- `seq_toggleMainStep`
-- `seq_setMainStep`
-- `seq_setTrackLength`
-- `seq_setTrackScale`
-- `seq_setTrackRotation`
-- `seq_isStepActive`
-- `seq_isMainStepActive`
 
-The cleanup pass should verify whether any of these still need transitional wrappers after the rename, but the end state should expose them as Pattern APIs rather than sequencer-facing `seq_*` helpers.
+#### Cross-module names referenced from Pattern/
+
+These are not Pattern-owned, but they still appear inside the Pattern directory and should be treated as dependencies to minimize or wrap cleanly:
+
+- `seq_activePattern`
+- `seq_running`
+- `seq_perTrackActivePattern[]`
+- `seq_stepIndex[]`
+- `seq_loopLength`
+- `seq_pendingLoopLength`
+- `seq_loopCurrentPosition`
+- `seq_loopUpdateFlag`
+- `seq_triggerVoice()`
+
+The cleanup pass should verify whether any of these dependencies can be reduced to read-only arguments or small Pattern-facing wrappers, so the Pattern module stops depending on the wider `seq_*` surface for things it does not own.
 
 ### Functions That Stay In Sequencer
 
@@ -381,6 +406,7 @@ The Pattern public surface should be grouped and named consistently. The intende
 - `pat_setTrackLength`
 - `pat_setTrackScale`
 - `pat_setTrackRotation`
+- `pat_setLoop`
 - `pat_toggleStep`
 - `pat_toggleMainStep`
 - `pat_setMainStep`
@@ -397,6 +423,10 @@ The Pattern public surface should be grouped and named consistently. The intende
 - `pat_copyToTmpPattern`
 - `pat_applyTmpPatternTo`
 - `pat_activateTmpPattern`
+
+#### Temp-only helper
+
+- `pat_setTmpPatternHoldSettings`
 
 That naming gives the sequencer and front-panel protocol a single obvious module to call for pattern data movement.
 
@@ -415,6 +445,7 @@ The cleanup pass should update the specific call sites that currently depend on 
 - the Pattern accessor uses in `Preset/TempPlaybackSwitch.c`
 - the Pattern accessor uses in `frontPanelSendingProtocol.c`
 - the generator helpers in `mainboard/LxrStm32/src/Sequencer/Pattern/EuklidGenerator.c`
+- the SOM generator helpers in `mainboard/LxrStm32/src/Sequencer/Pattern/SomGenerator.c`
 
 The goal is for `sequencer.c` to read like a scheduler and dispatcher, not a storage layer.
 
@@ -424,10 +455,11 @@ The Pattern module should gain clearer ownership docs at the same time as the re
 
 That documentation should say:
 
-- Pattern owns `seq_patternSet` and `seq_tmpPattern`;
+- Pattern owns `seq_patternSet` and `seq_tmpPattern` today, and the rename pass should move those to `pat_patternSet` / `pat_tmpPattern`;
 - Pattern exposes the only public copy/paste surface for pattern data;
 - live temp snapshots are a Pattern responsibility even though they read the live playback source table;
-- Sequencer is allowed to ask Pattern for copy/paste behavior, but not to reimplement it.
+- Sequencer is allowed to ask Pattern for copy/paste behavior, but not to reimplement it;
+- generator files inside `Pattern/` should document whether they are editing helpers, pattern transforms, or audio-pattern generators.
 
 The header comments should also separate the API into sections so future work can see at a glance which helpers are initialization helpers, which are accessors, which are mutators, and which are copy/paste operations.
 
@@ -438,7 +470,14 @@ The header comments should also separate the API into sections so future work ca
 - an accessor block for read/write pattern storage helpers;
 - an edit/mutation block for step, track, automation, and rotation writes;
 - a copy/paste block for selected-pattern copy, temp snapshot copy, track copy, and temp apply helpers;
-- a short note that `sequencer.c` and the front-panel protocol should call these helpers instead of manipulating pattern payloads directly.
+- a short note that `sequencer.c` and the front-panel protocol should call these helpers instead of manipulating pattern payloads directly;
+- adjacent one-line comments for any static helper that has non-obvious state, especially `seq_setTmpPatternHoldSettings()` / its future `pat_*` equivalent.
+
+`EuklidGenerator.h/c` and `SomGenerator.h/c` should get the same treatment:
+
+- each exported helper should have a short purpose comment in the header;
+- each module should explain whether it owns pattern-generation state, per-track rotation state, or pattern transfer state;
+- module-global variables such as the Euclid working buffers and the SOM generator state should have one-line comments explaining what each one tracks.
 
 ### Rename Strategy
 
@@ -447,8 +486,10 @@ The prefix cleanup should prefer `pat_*` / `Pat*` for the exported Pattern API.
 The intended end state is:
 
 - no new Pattern ownership APIs should be introduced under `seq_*`;
+- no Pattern-owned variable should keep a `seq_` or `Seq` prefix once the rename pass is done;
+- the generator modules should also be moved onto `pat_*` / `Pat*` names rather than staying on bare `euklid_*` / `som_*`;
 - any temporary compatibility wrappers should be clearly marked and removed once callers are updated;
-- new code in `sequencer.c`, `frontPanelReceivingProtocol.c`, and the generator helpers should only include and call the Pattern API names.
+- new code in `sequencer.c`, `frontPanelReceivingProtocol.c`, `Preset/TempPlaybackSwitch.c`, and the generator helpers should only include and call the Pattern API names.
 
 That cleanup is intentionally separate from the per-track temp-copy fix so the first review stays narrow.
 
