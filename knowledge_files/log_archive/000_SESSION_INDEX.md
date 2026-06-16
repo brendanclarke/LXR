@@ -30,6 +30,7 @@
 | 019 | 2026-06-14 | local repo, AVR encoder retune + acceleration | Main encoder tuning moved to ~32 kHz Timer1 sampling with six-sample phase filtering, narrow rest-jump recovery, stronger button debounce, and edit-mode acceleration |
 | 020 | 2026-06-14 | local repo, refactor finalization and protocol split closeout | Removed obsolete `PresetLoadCache`, finalized STM/AVR receive/send protocol filenames, removed legacy shims, and superseded the stale preset/MIDI UART audits |
 | 021 | 2026-06-15 | local repo, AVR comms rename and docs pass | Renamed the AVR comms layer to `avrComms*`, kept STM front-panel ownership under `uARTFrontSYX/`, and updated the knowledge files to make the split explicit |
+| 022 | 2026-06-16 | local repo, Pattern temp-copy cleanup and Sequencer docs pass | Made copy-to-temp use the per-track playing patterns, cleaned up the Pattern/Sequencer temp-boundary rules, documented the exported Sequencer API and state, and removed stale Sequencer declarations |
 
 ---
 
@@ -119,6 +120,10 @@ Session 020 reconciled the stale preset and MIDI/UART audits with the actual cod
 Session 021 renamed the AVR comms layer into `front/LxrAvr/avrComms/`, updated the live reference docs so AVR uses `avrComms*` and STM keeps `frontPanel*` under `uARTFrontSYX/`, and refreshed `MEMORY.md` plus the session archive to keep the naming split explicit. No firmware behavior changed in this session.
 - **Find here**: `avrComms` directory move, AVR naming map, memory update, comms/hardware doc refresh, STM front-panel ownership note
 
+### 022 — Per-Track Temp Copy Cleanup + Sequencer API Documentation (2026-06-16)
+Session 022 finished the temp-copy cleanup pass so copy-to-temp now snapshots the actually playing per-track patterns and uses the temp-pattern sentinel rules consistently. It also cleaned up the Pattern layer documentation and naming, expanded the Sequencer header/source comments so exported state and APIs are explained next to the declarations and definitions, removed a stale Sequencer temp-boundary declaration, and verified the STM32 build still passes afterward.
+- **Find here**: per-track temp copy behavior, temp-pattern sentinel handling, PatternData/Sequencer documentation cleanup, exported API comments, stale Sequencer declaration removal, build verification
+
 
 ---
 
@@ -159,6 +164,8 @@ Session 021 renamed the AVR comms layer into `front/LxrAvr/avrComms/`, updated t
 | Internal CC/CC2 parameter application is owned by STM `uARTFrontSYX/frontPanelReceivingProtocol.c` via `frontParser_applyParameterCommand()`; `MIDI/MidiParser.c` parses external DIN/USB MIDI and forwards/apply-calls instead of owning those cases | 020 |
 | Sequencer-originated MIDI output now goes through `MIDI/MidiOutputControl.c/.h` `outputControl_*` helpers; old `MidiVoiceControl.c/.h` filenames were retired while existing `voiceControl_*` names stayed intact | 020 |
 | AVR comms now live in `front/LxrAvr/avrComms/` with `avrComms*` names, while STM front-panel ownership remains under `mainboard/LxrStm32/src/uARTFrontSYX/` with `frontPanel*` names | 021 |
+| Copy-to-temp now snapshots the actually playing per-track pattern sources into temp storage, and the temp-pattern repeat rule is tied to `SEQ_TMP_PATTERN` instead of pending-pattern state | 022 |
+| Sequencer exported globals/functions in `sequencer.h` and `sequencer.c` now carry adjacent explanatory comments, and the stale `seq_consumeTmpBoundaryPatternSwitchAck()` declaration was removed from Sequencer | 022 |
 
 
 ---

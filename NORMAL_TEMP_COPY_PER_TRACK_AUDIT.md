@@ -303,14 +303,15 @@ Before the cleanup pass starts, the temp snapshot should be verified to satisfy 
 
 ## Follow-On Cleanup Pass
 
-After the temp-copy helper is accepted, the next cleanup pass should rename and re-document the entire `mainboard/LxrStm32/src/Sequencer/Pattern/` surface so the module reads like the owner of pattern storage instead of a mixed `seq_*` compatibility layer.
+After the temp-copy helper is accepted, the next cleanup pass should rename and re-document the Pattern storage surface so the module reads like the owner of pattern storage instead of a mixed `seq_*` compatibility layer.
 
 This pass is not meant to change playback behavior. It is a boundary, naming, and documentation cleanup so the code clearly says:
 
 - Pattern owns pattern storage and pattern mutation/copy helpers;
 - Sequencer owns scheduling, pattern-switch orchestration, and live playback timing;
 - `sequencer.c` should call Pattern APIs instead of hosting pattern-paste logic itself;
-- new names inside `Pattern/` should be `pat_*`, `Pat*`, or another `pat`-prefixed variation, not `seq_*`, `Seq*`, or `seq*`.
+- new names inside `PatternData.*` should be `pat_*`, `Pat*`, or another `pat`-prefixed variation, not `seq_*`, `Seq*`, or `seq*`.
+- the SOM and Euclid generator files stay on their legacy public names for now and receive documentation comments only, with no renaming in those files.
 
 ### Current Rename Inventory
 
@@ -473,23 +474,29 @@ The header comments should also separate the API into sections so future work ca
 - a short note that `sequencer.c` and the front-panel protocol should call these helpers instead of manipulating pattern payloads directly;
 - adjacent one-line comments for any static helper that has non-obvious state, especially `seq_setTmpPatternHoldSettings()` / its future `pat_*` equivalent.
 
-`EuklidGenerator.h/c` and `SomGenerator.h/c` should get the same treatment:
+`EuklidGenerator.h/c` and `SomGenerator.h/c` should get documentation-only cleanup in this pass:
 
 - each exported helper should have a short purpose comment in the header;
 - each module should explain whether it owns pattern-generation state, per-track rotation state, or pattern transfer state;
-- module-global variables such as the Euclid working buffers and the SOM generator state should have one-line comments explaining what each one tracks.
+- module-global variables such as the Euclid working buffers and the SOM generator state should have one-line comments explaining what each one tracks;
+- the source-level names stay on `euklid_*` / `som_*` in this pass so the rename work stays isolated to the Pattern storage layer.
 
 ### Rename Strategy
 
 The prefix cleanup should prefer `pat_*` / `Pat*` for the exported Pattern API.
 
-The intended end state is:
+The intended end state for the Pattern storage layer is:
 
 - no new Pattern ownership APIs should be introduced under `seq_*`;
 - no Pattern-owned variable should keep a `seq_` or `Seq` prefix once the rename pass is done;
-- the generator modules should also be moved onto `pat_*` / `Pat*` names rather than staying on bare `euklid_*` / `som_*`;
+- temporary compatibility wrappers may be kept while legacy callers are migrated;
 - any temporary compatibility wrappers should be clearly marked and removed once callers are updated;
-- new code in `sequencer.c`, `frontPanelReceivingProtocol.c`, `Preset/TempPlaybackSwitch.c`, and the generator helpers should only include and call the Pattern API names.
+- new code in `sequencer.c`, `frontPanelReceivingProtocol.c`, `Preset/TempPlaybackSwitch.c`, and the Pattern-facing helpers should only include and call the Pattern API names.
+
+The generator modules are intentionally excluded from the rename in this pass:
+
+- `EuklidGenerator.*` stays on `euklid_*` names and gets documentation-only cleanup;
+- `SomGenerator.*` stays on `som_*` names and gets documentation-only cleanup.
 
 That cleanup is intentionally separate from the per-track temp-copy fix so the first review stays narrow.
 
@@ -502,3 +509,9 @@ That cleanup is intentionally separate from the per-track temp-copy fix so the f
 - `preset_captureTmpKitState()` is still the only place that copies preset parameter images and marks the temp kit valid.
 - `frontPanelReceivingProtocol.c` now routes `FRONT_SEQ_COPY_PATTERN` to `seq_copyToTmpPattern(src)` when the destination is `SEQ_TMP_PATTERN`.
 - STM32 build passes with the new helper split: `make -C mainboard/LxrStm32 -j4 stm32`.
+- `PatternData.h` and `PatternData.c` now export `pat_*` pattern-storage helpers and `pat_patternSet` / `pat_tmpPattern`, with temporary `seq_*` compatibility aliases left in place for legacy callers.
+- The temporary compatibility bridge was moved out of `PatternData.h` into `PatternDataLegacy.h`, so the main Pattern header stays clean while the Euclid generator still has access to the old function names.
+- The normal front-panel, sequencer, temp-switch, and MIDI call sites were updated to the new `pat_*` API names.
+- `EuklidGenerator.*` and `SomGenerator.*` were left on their legacy public names and only received documentation comments, per the current scope.
+- `make -C mainboard/LxrStm32 -j4 stm32` still passes after the rename/doc pass.
+- `pat_copyToTmpPattern()` now normalizes the temp hold state in both the live-running and stopped-playback branches so `SEQ_TMP_PATTERN` stays latched either way.

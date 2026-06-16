@@ -47,9 +47,12 @@ make firmware
 
 **Current status after Session 021 closeout (2026-06-15)**: The AVR comms layer was renamed and consolidated under `front/LxrAvr/avrComms/` with `avrCommsReceivingProtocol.c/.h`, `avrCommsSendingProtocol.c/.h`, and `avrCommsPanelParser.h`. AVR-side identifiers now use the `avrComms*` / `avrCommsParser*` prefixes, while STM-side front-panel ownership remains under `mainboard/LxrStm32/src/uARTFrontSYX/` with `frontPanel*` names. This session was a naming and documentation consolidation pass, so no firmware behavior changed; the most recent compiled verification remains the prior AVR build.
 
+**Current status after Session 022 closeout (2026-06-16)**: Copy-to-temp now snapshots the actually playing per-track pattern sources instead of a generic pending-pattern view, and the temp-pattern repeat path is keyed off `SEQ_TMP_PATTERN` so the temp slot keeps holding until the user makes a manual change. The `Sequencer` API surface was documented in-place in both `sequencer.h` and `sequencer.c`, the stale Sequencer temp-boundary declaration was removed, Pattern/PatternData naming and comments were cleaned up, and `make -C mainboard/LxrStm32 -j4 stm32` was verified again. This pass was implementation plus documentation cleanup only; no comms spec updates were needed.
+
 **Current consolidation / protocol planning artifacts**: the durable finalization notes now live in `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, and `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`. Current encoder details live in `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` and supersede the temporary `ENCODER_AUDIT.md`. `REFACTOR_FINALIZATION.md`, `REFACTOR_MY_MESS_CLEANUP.md`, `PRESET_CONSOLIDATION_AUDIT.md`, and `MIDI_UART_SPLIT_AUDIT_EDIT.md` were temporary working docs and may be deleted after Session 020.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/022_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md`

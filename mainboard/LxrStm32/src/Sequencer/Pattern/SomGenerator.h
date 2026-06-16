@@ -40,29 +40,39 @@
 #include "stm32f4xx.h"
 #include "random.h"
 
-
+/* Legacy SOM generator API.
+   The public names stay on som_* in this pass so the rename work stays
+   isolated to Pattern storage. */
 typedef struct SomGeneratorStruct
 {
-	//position
+	/* Current XY position in the SOM field. */
 	float x;
 	float y;
 
-	//voice frequency
+	/* Per-voice trigger thresholds derived from the SOM nodes. */
 	uint8_t frequency[7];
 
+	/* Randomness applied while interpolating node values. */
 	float flux;
 
 
 }SomGenerator;
 
+/* Initialize the SOM generator state. */
 void som_init();
+/* Advance the SOM generator on a sequencer tick. */
 void som_tick(uint8_t stepNr, uint8_t mutedTracks);
 
+/* Set the X coordinate used for SOM interpolation. */
 void som_setX(uint8_t x);
+/* Set the Y coordinate used for SOM interpolation. */
 void som_setY(uint8_t y);
+/* Set the flux amount used for SOM interpolation. */
 void som_setFlux(float flux);
+/* Set the trigger threshold for one voice. */
 void som_setFreq(uint8_t freq, uint8_t voice);
 
+/* Shared SOM generator state. */
 extern SomGenerator somGenerator;
 
 

@@ -10,29 +10,32 @@
 
 #include <string.h>
 
-extern uint8_t seq_activePattern;
-extern uint8_t seq_running;
-extern uint8_t seq_perTrackActivePattern[NUM_TRACKS];
-extern int8_t seq_stepIndex[NUM_TRACKS+1];
-extern uint8_t seq_loopLength;
-extern uint8_t seq_pendingLoopLength;
-extern int8_t seq_loopCurrentPosition;
-extern int8_t seq_loopUpdateFlag;
-extern uint8_t frontParser_shownPattern;
+/* Sequencer state that PatternData reads when it needs live playback context
+   or UI selection context. These values are owned by sequencer.c. */
+extern uint8_t seq_activePattern;                /* Currently selected active pattern index. */
+extern uint8_t seq_running;                      /* Non-zero while playback is running. */
+extern uint8_t seq_perTrackActivePattern[NUM_TRACKS]; /* Live per-track source pattern table. */
+extern int8_t seq_stepIndex[NUM_TRACKS+1];       /* Live step cursor for each track and master clock. */
+extern uint8_t seq_loopLength;                   /* Current loop length used by the transport. */
+extern uint8_t seq_pendingLoopLength;            /* Deferred loop length waiting for commit. */
+extern int8_t seq_loopCurrentPosition;           /* Current loop playback position. */
+extern int8_t seq_loopUpdateFlag;                /* Transport flag used to publish loop changes. */
+extern uint8_t frontParser_shownPattern;         /* Pattern currently shown in the front-panel UI. */
 
-PatternSet seq_patternSet;
-TempPattern seq_tmpPattern;
+/* Persistent storage for the eight normal patterns. */
+PatternSet pat_patternSet;
+/* Scratch storage for the temporary playback pattern image. */
+TempPattern pat_tmpPattern;
 
-/* Temp playback uses a dedicated hold state so the temp pattern never falls
-   back into the normal next-pattern chain. Keep that normalization in one
-   place so init and copy-to-temp stay aligned. */
-static void seq_setTmpPatternHoldSettings(void)
+/* Force the temp pattern to stay latched until a manual change replaces it. */
+static void pat_setTmpPatternHoldSettings(void)
 {
-   seq_tmpPattern.seq_patternSettings.changeBar = 0;
-   seq_tmpPattern.seq_patternSettings.nextPattern = SEQ_TMP_PATTERN;
+   pat_tmpPattern.pat_patternSettings.changeBar = 0;
+   pat_tmpPattern.pat_patternSettings.nextPattern = SEQ_TMP_PATTERN;
 }
 
-static void seq_resetNote(Step *step)
+/* Restore a step payload to the default inactive note/automation state. */
+static void pat_resetNote(Step *step)
 {
    step->note = SEQ_DEFAULT_NOTE;
    step->param1Nr = NO_AUTOMATION;
@@ -43,125 +46,160 @@ static void seq_resetNote(Step *step)
    step->volume = 100;
 }
 
-uint8_t seq_normalizePatternNumber(uint8_t pattern)
+/* Normalize a pattern index while preserving the temp sentinel. */
+uint8_t pat_normalizePatternNumber(uint8_t pattern)
 {
    if(pattern == SEQ_TMP_PATTERN)
       return SEQ_TMP_PATTERN;
    return pattern & 0x07;
 }
 
-Step* seq_getStepPtr(uint8_t pattern, uint8_t track, uint8_t step)
+/* Return the step slot for a normal or temp pattern.
+   pattern: source pattern index or SEQ_TMP_PATTERN.
+   track: track within the pattern.
+   step: absolute step index. Returns the matching step storage cell. */
+Step* pat_getStepPtr(uint8_t pattern, uint8_t track, uint8_t step)
 {
-   pattern = seq_normalizePatternNumber(pattern);
+   pattern = pat_normalizePatternNumber(pattern);
    if(pattern == SEQ_TMP_PATTERN)
-      return &seq_tmpPattern.seq_subStepPattern[track][step & 0x7f];
-   return &seq_patternSet.seq_subStepPattern[pattern][track][step & 0x7f];
+      return &pat_tmpPattern.pat_subStepPattern[track][step & 0x7f];
+   return &pat_patternSet.pat_subStepPattern[pattern][track][step & 0x7f];
 }
 
-LengthRotate* seq_getLengthRotatePtr(uint8_t pattern, uint8_t track)
+/* Return the length/rotation cell for a normal or temp pattern.
+   pattern: source pattern index or SEQ_TMP_PATTERN.
+   track: track within the pattern. Returns the matching length/rotation cell. */
+LengthRotate* pat_getLengthRotatePtr(uint8_t pattern, uint8_t track)
 {
-   pattern = seq_normalizePatternNumber(pattern);
+   pattern = pat_normalizePatternNumber(pattern);
    if(pattern == SEQ_TMP_PATTERN)
-      return &seq_tmpPattern.seq_patternLengthRotate[track];
-   return &seq_patternSet.seq_patternLengthRotate[pattern][track];
+      return &pat_tmpPattern.pat_patternLengthRotate[track];
+   return &pat_patternSet.pat_patternLengthRotate[pattern][track];
 }
 
-PatternSetting* seq_getPatternSettingPtr(uint8_t pattern)
+/* Return the pattern-level settings for a normal or temp pattern.
+   pattern: source pattern index or SEQ_TMP_PATTERN. Returns the settings cell. */
+PatternSetting* pat_getPatternSettingPtr(uint8_t pattern)
 {
-   pattern = seq_normalizePatternNumber(pattern);
+   pattern = pat_normalizePatternNumber(pattern);
    if(pattern == SEQ_TMP_PATTERN)
-      return &seq_tmpPattern.seq_patternSettings;
-   return &seq_patternSet.seq_patternSettings[pattern];
+      return &pat_tmpPattern.pat_patternSettings;
+   return &pat_patternSet.pat_patternSettings[pattern];
 }
 
-uint16_t seq_getMainSteps(uint8_t pattern, uint8_t track)
+/* Return the 16-bit main-step mask for one track.
+   pattern: source pattern index or SEQ_TMP_PATTERN.
+   track: track within that pattern. Returns the stored main-step bitmap. */
+uint16_t pat_getMainSteps(uint8_t pattern, uint8_t track)
 {
-   pattern = seq_normalizePatternNumber(pattern);
+   pattern = pat_normalizePatternNumber(pattern);
    if(pattern == SEQ_TMP_PATTERN)
-      return seq_tmpPattern.seq_mainSteps[track];
-   return seq_patternSet.seq_mainSteps[pattern][track];
+      return pat_tmpPattern.pat_mainSteps[track];
+   return pat_patternSet.pat_mainSteps[pattern][track];
 }
 
-void seq_setMainSteps(uint8_t pattern, uint8_t track, uint16_t steps)
+/* Store the 16-bit main-step mask for one track.
+   pattern: source pattern index or SEQ_TMP_PATTERN.
+   track: track within that pattern.
+   steps: new main-step bitmap to write. */
+void pat_setMainSteps(uint8_t pattern, uint8_t track, uint16_t steps)
 {
-   pattern = seq_normalizePatternNumber(pattern);
+   pattern = pat_normalizePatternNumber(pattern);
    if(pattern == SEQ_TMP_PATTERN)
-      seq_tmpPattern.seq_mainSteps[track] = steps;
+      pat_tmpPattern.pat_mainSteps[track] = steps;
    else
-      seq_patternSet.seq_mainSteps[pattern][track] = steps;
+      pat_patternSet.pat_mainSteps[pattern][track] = steps;
 }
 
-void seq_initPatternData(void)
+/* Clear and initialize all persistent pattern storage.
+   This seeds every normal pattern with self-chaining settings and resets the
+   temp image into the dedicated hold state. */
+void pat_initPatternData(void)
 {
    uint8_t i;
 
    for(i=0;i<NUM_PATTERN;i++)
    {
-      seq_patternSet.seq_patternSettings[i].changeBar = 0;
-      seq_patternSet.seq_patternSettings[i].nextPattern = i;
-      seq_clearPattern(i);
+      pat_patternSet.pat_patternSettings[i].changeBar = 0;
+      pat_patternSet.pat_patternSettings[i].nextPattern = i;
+      pat_clearPattern(i);
    }
 
-   seq_setTmpPatternHoldSettings();
-   seq_clearPattern(SEQ_TMP_PATTERN);
+   pat_setTmpPatternHoldSettings();
+   pat_clearPattern(SEQ_TMP_PATTERN);
 }
 
-void seq_applyTmpPatternTo(uint8_t pattern)
+/* Copy the temp image into one normal pattern slot.
+   pattern: destination normal pattern index. The temp slot itself is ignored. */
+void pat_applyTmpPatternTo(uint8_t pattern)
 {
    if(pattern == SEQ_TMP_PATTERN)
       return;
 
    pattern &= 0x07;
-   memcpy(&seq_patternSet.seq_subStepPattern[pattern],
-          &seq_tmpPattern.seq_subStepPattern,
+   memcpy(&pat_patternSet.pat_subStepPattern[pattern],
+          &pat_tmpPattern.pat_subStepPattern,
           sizeof(Step) * NUM_TRACKS * NUM_STEPS);
-   memcpy(&seq_patternSet.seq_mainSteps[pattern],
-          &seq_tmpPattern.seq_mainSteps,
+   memcpy(&pat_patternSet.pat_mainSteps[pattern],
+          &pat_tmpPattern.pat_mainSteps,
           sizeof(uint16_t) * NUM_TRACKS);
-   memcpy(&seq_patternSet.seq_patternSettings[pattern],
-          &seq_tmpPattern.seq_patternSettings,
+   memcpy(&pat_patternSet.pat_patternSettings[pattern],
+          &pat_tmpPattern.pat_patternSettings,
           sizeof(PatternSetting));
-   memcpy(&seq_patternSet.seq_patternLengthRotate[pattern],
-          &seq_tmpPattern.seq_patternLengthRotate,
+   memcpy(&pat_patternSet.pat_patternLengthRotate[pattern],
+          &pat_tmpPattern.pat_patternLengthRotate,
           sizeof(LengthRotate) * NUM_TRACKS);
 }
 
-void seq_activateTmpPattern(void)
+/* Apply the temp image to the currently active pattern slot.
+   This is the public temp-paste entry point used by the sequencer. */
+void pat_activateTmpPattern(void)
 {
-   seq_applyTmpPatternTo(seq_activePattern);
+   pat_applyTmpPatternTo(seq_activePattern);
 }
 
-void seq_setTrackLength(uint8_t trackNr, uint8_t length)
+/* Write a track length into the currently shown pattern.
+   trackNr: track to edit. length: encoded length value, with 16 mapped to 0. */
+void pat_setTrackLength(uint8_t trackNr, uint8_t length)
 {
    if(length == 16)
       length = 0;
-   seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->length = length;
+   pat_getLengthRotatePtr(frontParser_shownPattern, trackNr)->length = length;
 }
 
-void seq_setTrackScale(uint8_t trackNr, uint8_t scale)
+/* Write a track scale into the currently shown pattern.
+   trackNr: track to edit. scale: new scale value, clamped to the supported range. */
+void pat_setTrackScale(uint8_t trackNr, uint8_t scale)
 {
    if(scale > 7)
       scale = 7;
 
-   seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->scale = scale;
+   pat_getLengthRotatePtr(frontParser_shownPattern, trackNr)->scale = scale;
 }
 
-uint8_t seq_getTrackLength(uint8_t trackNr)
+/* Read the user-facing track length from the currently shown pattern.
+   trackNr: track to inspect. Returns the decoded length, where 0 maps to 16. */
+uint8_t pat_getTrackLength(uint8_t trackNr)
 {
-   uint8_t r = seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->length;
+   uint8_t r = pat_getLengthRotatePtr(frontParser_shownPattern, trackNr)->length;
    if(r == 0)
       return 16;
    return r;
 }
 
-uint8_t seq_getTrackScale(uint8_t trackNr)
+/* Read the user-facing track scale from the currently shown pattern.
+   trackNr: track to inspect. Returns the stored scale value. */
+uint8_t pat_getTrackScale(uint8_t trackNr)
 {
-   return seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->scale;
+   return pat_getLengthRotatePtr(frontParser_shownPattern, trackNr)->scale;
 }
 
-void seq_setTrackRotation(uint8_t trackNr, const uint8_t newRot)
+/* Write a track rotation and keep live playback aligned if the sequencer is running.
+   trackNr: track to edit.
+   newRot: new encoded rotation value. */
+void pat_setTrackRotation(uint8_t trackNr, const uint8_t newRot)
 {
-   LengthRotate *lr = seq_getLengthRotatePtr(frontParser_shownPattern, trackNr);
+   LengthRotate *lr = pat_getLengthRotatePtr(frontParser_shownPattern, trackNr);
 
    if(newRot == lr->rotate)
       return;
@@ -184,12 +222,17 @@ void seq_setTrackRotation(uint8_t trackNr, const uint8_t newRot)
    lr->rotate = newRot;
 }
 
-uint8_t seq_getTrackRotation(uint8_t trackNr)
+/* Read the current track rotation from the shown pattern.
+   trackNr: track to inspect. Returns the stored rotation value. */
+uint8_t pat_getTrackRotation(uint8_t trackNr)
 {
-   return seq_getLengthRotatePtr(frontParser_shownPattern, trackNr)->rotate;
+   return pat_getLengthRotatePtr(frontParser_shownPattern, trackNr)->rotate;
 }
 
-void seq_setLoop(uint8_t length)
+/* Update the transport loop length.
+   length: new loop length. Zero clears the loop; non-zero values are stored
+   immediately or staged as pending when a loop is already active. */
+void pat_setLoop(uint8_t length)
 {
    if(!length)
    {
@@ -209,9 +252,13 @@ void seq_setLoop(uint8_t length)
    }
 }
 
-void seq_toggleStep(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
+/* Toggle the active-step bit for one step.
+   voice: track index.
+   stepNr: absolute step index.
+   patternNr: pattern to edit. */
+void pat_toggleStep(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
 {
-   Step *step = seq_getStepPtr(patternNr, voice, stepNr);
+   Step *step = pat_getStepPtr(patternNr, voice, stepNr);
    if((step->volume & STEP_ACTIVE_MASK) == 0)
    {
       step->volume |= STEP_ACTIVE_MASK;
@@ -222,14 +269,23 @@ void seq_toggleStep(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
    }
 }
 
-void seq_toggleMainStep(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
+/* Toggle one main-step bit for a track.
+   voice: track index.
+   stepNr: main-step index.
+   patternNr: pattern to edit. */
+void pat_toggleMainStep(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
 {
-   seq_setMainSteps(patternNr, voice, (uint16_t)(seq_getMainSteps(patternNr, voice) ^ (1 << stepNr)));
+   pat_setMainSteps(patternNr, voice, (uint16_t)(pat_getMainSteps(patternNr, voice) ^ (1 << stepNr)));
 }
 
-void seq_setMainStep(uint8_t patternNr, uint8_t voice, uint8_t stepNr, uint8_t onOff)
+/* Set or clear one main-step bit for a track.
+   patternNr: pattern to edit.
+   voice: track index.
+   stepNr: main-step index.
+   onOff: non-zero writes the bit, zero clears it. */
+void pat_setMainStep(uint8_t patternNr, uint8_t voice, uint8_t stepNr, uint8_t onOff)
 {
-   uint16_t mainSteps = seq_getMainSteps(patternNr, voice);
+   uint16_t mainSteps = pat_getMainSteps(patternNr, voice);
    if(onOff)
    {
       mainSteps |= (1 << stepNr);
@@ -238,36 +294,52 @@ void seq_setMainStep(uint8_t patternNr, uint8_t voice, uint8_t stepNr, uint8_t o
    {
       mainSteps &= ~(1 << stepNr);
    }
-   seq_setMainSteps(patternNr, voice, mainSteps);
+   pat_setMainSteps(patternNr, voice, mainSteps);
 }
 
-uint8_t seq_isStepActive(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
+/* Test whether a step is active.
+   voice: track index.
+   stepNr: absolute step index.
+   patternNr: pattern to inspect. Returns non-zero if the active bit is set. */
+uint8_t pat_isStepActive(uint8_t voice, uint8_t stepNr, uint8_t patternNr)
 {
-   return ((seq_getStepPtr(patternNr, voice, stepNr)->volume & STEP_ACTIVE_MASK) > 0);
+   return ((pat_getStepPtr(patternNr, voice, stepNr)->volume & STEP_ACTIVE_MASK) > 0);
 }
 
-uint8_t seq_isMainStepActive(uint8_t voice, uint8_t mainStepNr, uint8_t pattern)
+/* Test whether a main-step bit is active.
+   voice: track index.
+   mainStepNr: main-step index.
+   pattern: pattern to inspect. Returns non-zero if the bit is set. */
+uint8_t pat_isMainStepActive(uint8_t voice, uint8_t mainStepNr, uint8_t pattern)
 {
-   return (seq_getMainSteps(pattern, voice) & (1 << mainStepNr)) > 0;
+   return (pat_getMainSteps(pattern, voice) & (1 << mainStepNr)) > 0;
 }
 
-void seq_clearTrack(uint8_t trackNr, uint8_t pattern)
+/* Clear one track in one pattern.
+   trackNr: track to reset.
+   pattern: pattern to reset. Step payloads, main steps, and rotation are
+   restored to defaults. */
+void pat_clearTrack(uint8_t trackNr, uint8_t pattern)
 {
    int k;
    for(k=0;k<128;k++)
    {
-      Step *step = seq_getStepPtr(pattern, trackNr, k);
-      seq_resetNote(step);
+      Step *step = pat_getStepPtr(pattern, trackNr, k);
+      pat_resetNote(step);
 
       if((k % 8) == 0)
          step->volume |= STEP_ACTIVE_MASK;
    }
 
-   seq_setMainSteps(pattern, trackNr, 0);
-   seq_getLengthRotatePtr(pattern, trackNr)->rotate = 0;
+   pat_setMainSteps(pattern, trackNr, 0);
+   pat_getLengthRotatePtr(pattern, trackNr)->rotate = 0;
 }
 
-void seq_clearAutomation(uint8_t trackNr, uint8_t pattern, uint8_t automTrack)
+/* Clear only one automation lane for one track.
+   trackNr: track to reset.
+   pattern: pattern to edit.
+   automTrack: automation lane selector, 0 for param1 and non-zero for param2. */
+void pat_clearAutomation(uint8_t trackNr, uint8_t pattern, uint8_t automTrack)
 {
    int k;
 
@@ -275,7 +347,7 @@ void seq_clearAutomation(uint8_t trackNr, uint8_t pattern, uint8_t automTrack)
    {
       for(k=0;k<128;k++)
       {
-         Step *step = seq_getStepPtr(pattern, trackNr, k);
+         Step *step = pat_getStepPtr(pattern, trackNr, k);
          step->param1Nr = NO_AUTOMATION;
          step->param1Val = 0;
       }
@@ -284,28 +356,34 @@ void seq_clearAutomation(uint8_t trackNr, uint8_t pattern, uint8_t automTrack)
    {
       for(k=0;k<128;k++)
       {
-         Step *step = seq_getStepPtr(pattern, trackNr, k);
+         Step *step = pat_getStepPtr(pattern, trackNr, k);
          step->param2Nr = NO_AUTOMATION;
          step->param2Val = 0;
       }
    }
 }
 
-void seq_clearPattern(uint8_t pattern)
+/* Clear every track in one pattern.
+   pattern: pattern to reset. This is the bulk pattern-reset helper. */
+void pat_clearPattern(uint8_t pattern)
 {
    int i;
    for(i=0;i<NUM_TRACKS;i++)
-      seq_clearTrack(i, pattern);
+      pat_clearTrack(i, pattern);
 }
 
-void seq_copyTrack(uint8_t srcNr, uint8_t dstNr, uint8_t pattern)
+/* Copy one track between tracks inside the same pattern.
+   srcNr: source track.
+   dstNr: destination track.
+   pattern: pattern that owns both tracks. */
+void pat_copyTrack(uint8_t srcNr, uint8_t dstNr, uint8_t pattern)
 {
    int k;
    Step *src, *dst;
    for(k=0;k<128;k++)
    {
-      dst = seq_getStepPtr(pattern, dstNr, k);
-      src = seq_getStepPtr(pattern, srcNr, k);
+      dst = pat_getStepPtr(pattern, dstNr, k);
+      src = pat_getStepPtr(pattern, srcNr, k);
       dst->note = src->note;
       dst->param1Nr = src->param1Nr;
       dst->param1Val = src->param1Val;
@@ -315,24 +393,28 @@ void seq_copyTrack(uint8_t srcNr, uint8_t dstNr, uint8_t pattern)
       dst->volume = src->volume;
    }
 
-   seq_setMainSteps(pattern, dstNr, seq_getMainSteps(pattern, srcNr));
-   seq_getLengthRotatePtr(pattern, dstNr)->value =
-      seq_getLengthRotatePtr(pattern, srcNr)->value;
+   pat_setMainSteps(pattern, dstNr, pat_getMainSteps(pattern, srcNr));
+   pat_getLengthRotatePtr(pattern, dstNr)->value =
+      pat_getLengthRotatePtr(pattern, srcNr)->value;
 }
 
-void seq_copyPattern(uint8_t src, uint8_t dst)
+/* Copy one whole pattern into another.
+   src: source pattern index.
+   dst: destination pattern index. Copies step data, main steps, and per-track
+   length/rotation state. Temp copies also trigger kit-state capture. */
+void pat_copyPattern(uint8_t src, uint8_t dst)
 {
    int k, j;
    Step *psrc, *pdst;
-   uint8_t normalizedSrc = seq_normalizePatternNumber(src);
-   uint8_t normalizedDst = seq_normalizePatternNumber(dst);
+   uint8_t normalizedSrc = pat_normalizePatternNumber(src);
+   uint8_t normalizedDst = pat_normalizePatternNumber(dst);
 
    for(j=0;j<NUM_TRACKS;j++)
    {
       for(k=0;k<128;k++)
       {
-         pdst = seq_getStepPtr(dst, j, k);
-         psrc = seq_getStepPtr(src, j, k);
+         pdst = pat_getStepPtr(dst, j, k);
+         psrc = pat_getStepPtr(src, j, k);
          pdst->note = psrc->note;
          pdst->param1Nr = psrc->param1Nr;
          pdst->param1Val = psrc->param1Val;
@@ -342,9 +424,9 @@ void seq_copyPattern(uint8_t src, uint8_t dst)
          pdst->volume = psrc->volume;
       }
 
-      seq_setMainSteps(dst, j, seq_getMainSteps(src, j));
-      seq_getLengthRotatePtr(dst, j)->value =
-         seq_getLengthRotatePtr(src, j)->value;
+      pat_setMainSteps(dst, j, pat_getMainSteps(src, j));
+      pat_getLengthRotatePtr(dst, j)->value =
+         pat_getLengthRotatePtr(src, j)->value;
    }
 
    if((normalizedDst == SEQ_TMP_PATTERN) && (normalizedSrc != SEQ_TMP_PATTERN))
@@ -353,39 +435,44 @@ void seq_copyPattern(uint8_t src, uint8_t dst)
    }
 }
 
-/* Copies either the selected pattern or the currently playing per-track
-   arrangement into the temp pattern image. When playback is running, the live
-   track source table wins; when playback is stopped, the caller's selected
-   source pattern remains the fallback so the old copy-to-temp semantics stay
-   intact. */
-void seq_copyToTmpPattern(uint8_t srcPattern)
+/* Copy the live or selected pattern image into the temp slot.
+   srcPattern: selected source pattern used when playback is stopped.
+   When playback is running, the currently audible per-track sources are copied
+   instead. The temp snapshot is forced into the hold state after the payload
+   copy finishes. */
+void pat_copyToTmpPattern(uint8_t srcPattern)
 {
    uint8_t track;
 
    if(!seq_running)
    {
-      seq_copyPattern(srcPattern, SEQ_TMP_PATTERN);
+      pat_copyPattern(srcPattern, SEQ_TMP_PATTERN);
+      pat_setTmpPatternHoldSettings();
       return;
    }
 
    for(track=0; track<NUM_TRACKS; track++)
    {
-      seq_copyTrackPattern(track, SEQ_TMP_PATTERN, seq_perTrackActivePattern[track]);
+      pat_copyTrackPattern(track, SEQ_TMP_PATTERN, seq_perTrackActivePattern[track]);
    }
 
-   seq_tmpPattern.seq_patternSettings = *seq_getPatternSettingPtr(seq_activePattern);
-   seq_setTmpPatternHoldSettings();
+   pat_tmpPattern.pat_patternSettings = *pat_getPatternSettingPtr(seq_activePattern);
+   pat_setTmpPatternHoldSettings();
    preset_captureTmpKitState();
 }
 
-void seq_copyTrackPattern(uint8_t srcNr, uint8_t dstPat, uint8_t srcPat)
+/* Copy one track from one pattern into one destination pattern.
+   srcNr: track to copy.
+   dstPat: destination pattern.
+   srcPat: source pattern that owns the track data. */
+void pat_copyTrackPattern(uint8_t srcNr, uint8_t dstPat, uint8_t srcPat)
 {
    int k;
    Step *psrc, *pdst;
    for(k=0;k<128;k++)
    {
-      pdst = seq_getStepPtr(dstPat, srcNr, k);
-      psrc = seq_getStepPtr(srcPat, srcNr, k);
+      pdst = pat_getStepPtr(dstPat, srcNr, k);
+      psrc = pat_getStepPtr(srcPat, srcNr, k);
       pdst->note = psrc->note;
       pdst->param1Nr = psrc->param1Nr;
       pdst->param1Val = psrc->param1Val;
@@ -395,17 +482,21 @@ void seq_copyTrackPattern(uint8_t srcNr, uint8_t dstPat, uint8_t srcPat)
       pdst->volume = psrc->volume;
    }
 
-   seq_setMainSteps(dstPat, srcNr, seq_getMainSteps(srcPat, srcNr));
-   seq_getLengthRotatePtr(dstPat, srcNr)->value =
-      seq_getLengthRotatePtr(srcPat, srcNr)->value;
+   pat_setMainSteps(dstPat, srcNr, pat_getMainSteps(srcPat, srcNr));
+   pat_getLengthRotatePtr(dstPat, srcNr)->value =
+      pat_getLengthRotatePtr(srcPat, srcNr)->value;
 }
 
-void seq_copySubStep(uint8_t src, uint8_t dst, uint8_t track)
+/* Copy one sub-step inside the currently active per-track pattern.
+   src: source step index.
+   dst: destination step index.
+   track: track whose active source pattern is used. */
+void pat_copySubStep(uint8_t src, uint8_t dst, uint8_t track)
 {
    Step *psrc, *pdst;
 
-   pdst = seq_getStepPtr(seq_perTrackActivePattern[track], track, dst);
-   psrc = seq_getStepPtr(seq_perTrackActivePattern[track], track, src);
+   pdst = pat_getStepPtr(seq_perTrackActivePattern[track], track, dst);
+   psrc = pat_getStepPtr(seq_perTrackActivePattern[track], track, src);
    pdst->note = psrc->note;
    pdst->param1Nr = psrc->param1Nr;
    pdst->param1Val = psrc->param1Val;

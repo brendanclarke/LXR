@@ -87,7 +87,7 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_SEQ_MUTE_TRACK			   0x09
 #define FRONT_SEQ_UNMUTE_TRACK			0x0a
 #define FRONT_SEQ_CHANGE_PAT			   0x0b	/**< the user requested a new pattern. send the same message back to the front as ack that the new pattern is loaded*/
-#define FRONT_SEQ_CHANGE_TMP_PAT		   0x0e	/**< request seq_tmpPattern as a temporary ninth performance pattern */
+#define FRONT_SEQ_CHANGE_TMP_PAT		   0x0e	/**< request pat_tmpPattern as a temporary ninth performance pattern */
 #define FRONT_SEQ_ROLL_ON			   	0x0c	/**< start roll for voice data2*/
 #define FRONT_SEQ_ROLL_OFF			   	0x0d	/**< stop roll for voice data2*/
 #define FRONT_SEQ_REQUEST_STEP_PARAMS 	0x0f

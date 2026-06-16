@@ -82,13 +82,13 @@ void frontPanelSending_sendTrackLengthReply(uint8_t trackNr)
    /* Reply with the current track length. */
    frontPanelSending_sendByte(FRONT_SEQ_CC);
    frontPanelSending_sendByte(FRONT_SEQ_TRACK_LENGTH);
-   frontPanelSending_sendByte(seq_getTrackLength(trackNr));
+   frontPanelSending_sendByte(pat_getTrackLength(trackNr));
 }
 
 void frontPanelSending_sendTrackRotationReply(uint8_t trackNr)
 {
    /* Reply with the current track rotation. */
-   frontPanelSending_sendTrackRotationValue(seq_getTrackRotation(trackNr));
+   frontPanelSending_sendTrackRotationValue(pat_getTrackRotation(trackNr));
 }
 
 void frontPanelSending_sendTrackRotationValue(uint8_t rotation)
@@ -139,7 +139,7 @@ void frontPanelSending_sendVoiceActivity(uint8_t voice)
 /* Pattern and step information replies used by the front-panel UI. */
 void frontPanelSending_sendPatternParamsReply(uint8_t patternNr)
 {
-   PatternSetting *patternSetting = seq_getPatternSettingPtr(patternNr);
+   PatternSetting *patternSetting = pat_getPatternSettingPtr(patternNr);
 
    frontPanelSending_sendByte(FRONT_SEQ_CC);
    frontPanelSending_sendByte(FRONT_SEQ_SET_PAT_BEAT);
@@ -153,8 +153,8 @@ void frontPanelSending_sendPatternParamsReply(uint8_t patternNr)
 void frontPanelSending_sendPatternDataReply(uint8_t patternNr)
 {
    /* Pattern data reply used by front-panel pattern dumps. */
-   frontPanelSending_sendSysExByte(seq_patternSet.seq_patternSettings[patternNr].nextPattern);
-   frontPanelSending_sendSysExByte(seq_patternSet.seq_patternSettings[patternNr].changeBar);
+   frontPanelSending_sendSysExByte(pat_patternSet.pat_patternSettings[patternNr].nextPattern);
+   frontPanelSending_sendSysExByte(pat_patternSet.pat_patternSettings[patternNr].changeBar);
 }
 
 void frontPanelSending_sendEuklidParamsReply(uint8_t trackNr)
@@ -178,7 +178,7 @@ void frontPanelSending_sendEuklidParamsReply(uint8_t trackNr)
 
    frontPanelSending_sendByte(FRONT_SEQ_CC);
    frontPanelSending_sendByte(FRONT_SEQ_TRACK_SCALE);
-   frontPanelSending_sendByte(seq_getTrackScale(trackNr));
+   frontPanelSending_sendByte(pat_getTrackScale(trackNr));
 }
 
 void frontPanelSending_sendActiveTrackReply(uint8_t trackNr)
@@ -194,7 +194,7 @@ void frontPanelSending_sendActiveTrackReply(uint8_t trackNr)
 void frontPanelSending_sendMainStepLedReply(uint8_t trackNr, uint8_t stepNr, uint8_t patternNr)
 {
    /* Main-step LED reply. */
-   if(seq_isMainStepActive(trackNr, stepNr, patternNr))
+   if(pat_isMainStepActive(trackNr, stepNr, patternNr))
    {
       frontPanelSending_sendTriplet(FRONT_STEP_LED_STATUS_BYTE,
                                     FRONT_LED_SEQ_BUTTON,
@@ -205,7 +205,7 @@ void frontPanelSending_sendMainStepLedReply(uint8_t trackNr, uint8_t stepNr, uin
 void frontPanelSending_sendStepParamsReply(uint8_t patternNr, uint8_t trackNr, uint8_t stepNr)
 {
    /* Full step-parameter reply used by the front-panel step editor. */
-   Step *step = seq_getStepPtr(patternNr, trackNr, stepNr);
+   Step *step = pat_getStepPtr(patternNr, trackNr, stepNr);
    uint8_t hi;
    uint8_t lo;
    uint8_t dest;
@@ -389,13 +389,13 @@ void frontPanelSending_sendMainStepInfo(uint16_t stepNr)
    /* Serialize the pattern main-step info into a SysEx reply. */
    const uint8_t currentPattern = (uint8_t)(stepNr / 7);
    const uint8_t currentTrack = (uint8_t)(stepNr - (currentPattern * 7));
-   uint16_t dataToSend = seq_patternSet.seq_mainSteps[currentPattern][currentTrack];
+   uint16_t dataToSend = pat_patternSet.pat_mainSteps[currentPattern][currentTrack];
 
    frontPanelSending_sendSysExByte((uint8_t)(dataToSend & 0x7f));
    frontPanelSending_sendSysExByte((uint8_t)((dataToSend >> 7) & 0x7f));
    frontPanelSending_sendSysExByte((uint8_t)((dataToSend >> 14) & 0x7f));
-   frontPanelSending_sendSysExByte(seq_patternSet.seq_patternLengthRotate[currentPattern][currentTrack].length);
-   frontPanelSending_sendSysExByte(seq_patternSet.seq_patternLengthRotate[currentPattern][currentTrack].scale);
+   frontPanelSending_sendSysExByte(pat_patternSet.pat_patternLengthRotate[currentPattern][currentTrack].length);
+   frontPanelSending_sendSysExByte(pat_patternSet.pat_patternLengthRotate[currentPattern][currentTrack].scale);
 }
 
 void frontPanelSending_sendStepInfo(uint16_t stepNr)
@@ -405,7 +405,7 @@ void frontPanelSending_sendStepInfo(uint16_t stepNr)
    const uint8_t currentTrack = (uint8_t)(absPat / 8);
    const uint8_t currentPattern = (uint8_t)(absPat - (currentTrack * 8));
    const uint8_t currentStep = (uint8_t)(stepNr - (absPat * 128));
-   Step *dataToSend = &seq_patternSet.seq_subStepPattern[currentPattern][currentTrack][currentStep];
+   Step *dataToSend = &pat_patternSet.pat_subStepPattern[currentPattern][currentTrack][currentStep];
 
    frontPanelSending_sendSysExByte((uint8_t)(dataToSend->volume & 0x7f));
    frontPanelSending_sendSysExByte((uint8_t)(dataToSend->prob & 0x7f));
@@ -438,7 +438,7 @@ void frontPanelSending_updateTrackLeds(uint8_t trackNr, uint8_t patternNr, uint8
    {
       for(i=0;i<4;i++)
       {
-         if(seq_isMainStepActive(trackNr,(uint8_t)((k<<2) + i),patternNr))
+         if(pat_isMainStepActive(trackNr,(uint8_t)((k<<2) + i),patternNr))
             ledByte |= (0x01<<i);
       }
 
@@ -460,7 +460,7 @@ void frontPanelSending_updateSubStepLeds(uint8_t trackNr, uint8_t patternNr, uin
 
    for(i=0;i<4;i++)
    {
-      if(seq_isStepActive(trackNr,(start+i),patternNr))
+      if(pat_isStepActive(trackNr,(start+i),patternNr))
          ledByte |= (0x01<<i);
    }
 
@@ -472,7 +472,7 @@ void frontPanelSending_updateSubStepLeds(uint8_t trackNr, uint8_t patternNr, uin
 
    for(i=0;i<4;i++)
    {
-      if(seq_isStepActive(trackNr,(start+4+i),patternNr))
+      if(pat_isStepActive(trackNr,(start+4+i),patternNr))
          ledByte |= (0x01<<i);
    }
 

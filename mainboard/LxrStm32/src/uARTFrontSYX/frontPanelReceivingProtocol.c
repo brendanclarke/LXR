@@ -1369,8 +1369,8 @@ static void frontParser_handleSysexData(unsigned char data)
             uint16_t mainStepData = frontParser_sysexBuffer[1] | frontParser_sysexBuffer[2]<<7 | frontParser_sysexBuffer[3]<<14;
          
          // File receive writes directly to normal pattern storage.
-            PatternSet* patternSet = &seq_patternSet;
-            patternSet->seq_mainSteps[currentPattern][currentTrack] = mainStepData;
+            PatternSet* patternSet = &pat_patternSet;
+            patternSet->pat_mainSteps[currentPattern][currentTrack] = mainStepData;
          
             
             frontParser_rxCnt = 0;
@@ -1390,9 +1390,9 @@ static void frontParser_handleSysexData(unsigned char data)
             uint8_t next = frontParser_sysexBuffer[0];
             uint8_t repeat = frontParser_sysexBuffer[1];
             // File receive writes directly to normal pattern storage.
-            PatternSet* patternSet = &seq_patternSet;
-            patternSet->seq_patternSettings[currentPattern].nextPattern = next;
-            patternSet->seq_patternSettings[currentPattern].changeBar = repeat;
+            PatternSet* patternSet = &pat_patternSet;
+            patternSet->pat_patternSettings[currentPattern].nextPattern = next;
+            patternSet->pat_patternSettings[currentPattern].changeBar = repeat;
             //inc the step counter
             frontParser_sysexSeqStepNr++;
             frontParser_rxCnt = 0;
@@ -1413,9 +1413,9 @@ static void frontParser_handleSysexData(unsigned char data)
             uint8_t currentTrack = (frontParser_sysexBuffer[0]>>3)&0x07;
             uint8_t currentPattern = (frontParser_sysexBuffer[0]&0x07);
          // File receive writes directly to normal pattern storage.
-            PatternSet* patternSet = &seq_patternSet;
+            PatternSet* patternSet = &pat_patternSet;
          
-            patternSet->seq_patternLengthRotate[currentPattern][currentTrack].length = data;
+            patternSet->pat_patternLengthRotate[currentPattern][currentTrack].length = data;
             
             frontParser_rxCnt = 0;
             frontPanelSending_sendSysexReceiveAck(SYSEX_RECEIVE_PAT_LEN_DATA);
@@ -1441,9 +1441,9 @@ static void frontParser_handleSysexData(unsigned char data)
             */
          
          // File receive writes directly to normal pattern storage.
-            PatternSet* patternSet = &seq_patternSet;
+            PatternSet* patternSet = &pat_patternSet;
          
-            patternSet->seq_patternLengthRotate[currentPattern][currentTrack].scale = data;
+            patternSet->pat_patternLengthRotate[currentPattern][currentTrack].scale = data;
          
          
             //inc the step counter
@@ -1485,27 +1485,27 @@ static void frontParser_handleSysexData(unsigned char data)
             const uint8_t currentPattern 	= absPat - currentTrack*8;
             const uint8_t currentStep		= frontParser_sysexSeqStepNr - absPat*128;
          
-            PatternSet* patternSet = &seq_patternSet;
+            PatternSet* patternSet = &pat_patternSet;
          /*
             if((seq_newPatternVoiceArray&(0x01<<currentTrack))==0)
             { // track is not in the array, use current step data instead
-               frontParser_sysexBuffer[0] = patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].volume;
-               frontParser_sysexBuffer[1] = patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].prob;
-               frontParser_sysexBuffer[2] = patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].note;
-               frontParser_sysexBuffer[3] = patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Nr;
-               frontParser_sysexBuffer[4] = patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Val;
-               frontParser_sysexBuffer[5] = patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Nr;
-               frontParser_sysexBuffer[6] = patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Val;
+               frontParser_sysexBuffer[0] = patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].volume;
+               frontParser_sysexBuffer[1] = patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].prob;
+               frontParser_sysexBuffer[2] = patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].note;
+               frontParser_sysexBuffer[3] = patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].param1Nr;
+               frontParser_sysexBuffer[4] = patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].param1Val;
+               frontParser_sysexBuffer[5] = patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].param2Nr;
+               frontParser_sysexBuffer[6] = patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].param2Val;
             }
          */
          // File receive writes directly to normal pattern storage.
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].volume 	= frontParser_sysexBuffer[0];
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].prob 	= frontParser_sysexBuffer[1];
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].note 	= frontParser_sysexBuffer[2];
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Nr = frontParser_sysexBuffer[3];
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Val 	= frontParser_sysexBuffer[4];
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Nr 	= frontParser_sysexBuffer[5];
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Val 	= frontParser_sysexBuffer[6];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].volume 	= frontParser_sysexBuffer[0];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].prob 	= frontParser_sysexBuffer[1];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].note 	= frontParser_sysexBuffer[2];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].param1Nr = frontParser_sysexBuffer[3];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].param1Val 	= frontParser_sysexBuffer[4];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].param2Nr 	= frontParser_sysexBuffer[5];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].param2Val 	= frontParser_sysexBuffer[6];
          //signal that a new data chunk is available
          //frontParser_newSeqDataAvailable = 1;
          //reset receive counter for next chunk
@@ -1538,17 +1538,17 @@ static void frontParser_handleSysexData(unsigned char data)
             
             }
          
-            PatternSet* patternSet = &seq_patternSet;
+            PatternSet* patternSet = &pat_patternSet;
             
          // File receive writes directly to normal pattern storage.
          
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].volume 	= frontParser_sysexBuffer[0];
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].prob 	= frontParser_sysexBuffer[1];
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].note 	= frontParser_sysexBuffer[2];
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Nr = frontParser_sysexBuffer[3];
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param1Val 	= frontParser_sysexBuffer[4];
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Nr 	= frontParser_sysexBuffer[5];
-            patternSet->seq_subStepPattern[currentPattern][currentTrack][currentStep].param2Val 	= frontParser_sysexBuffer[6];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].volume 	= frontParser_sysexBuffer[0];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].prob 	= frontParser_sysexBuffer[1];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].note 	= frontParser_sysexBuffer[2];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].param1Nr = frontParser_sysexBuffer[3];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].param1Val 	= frontParser_sysexBuffer[4];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].param2Nr 	= frontParser_sysexBuffer[5];
+            patternSet->pat_subStepPattern[currentPattern][currentTrack][currentStep].param2Val 	= frontParser_sysexBuffer[6];
             //signal that a new data chunk is available
             //frontParser_newSeqDataAvailable = 1;
             //reset receive counter for next chunk
@@ -1804,7 +1804,7 @@ void frontParser_handleMidiMessage(void)
             uint8_t val = (hi<<7)|lo;
             if(val && val < 128 )
                val++;
-            seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, seq_selectedStep)->param1Nr = val;
+            pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, seq_selectedStep)->param1Nr = val;
          }
          break;
       case FRONT_SET_P2_DEST: 
@@ -1815,14 +1815,14 @@ void frontParser_handleMidiMessage(void)
             uint8_t val = (hi<<7)|lo;
             if(val && val < 128 )
                val++;
-            seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, seq_selectedStep)->param2Nr = val;
+            pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, seq_selectedStep)->param2Nr = val;
          }
          break;
       case FRONT_SET_P1_VAL: 
          { // frontParser_command.status
             uint8_t stepNr = frontParser_command.data1;
             uint8_t value = frontParser_command.data2;
-            seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, stepNr)->param1Val = value;
+            pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, stepNr)->param1Val = value;
          
          }
          break;
@@ -1830,7 +1830,7 @@ void frontParser_handleMidiMessage(void)
          { // frontParser_command.status
             uint8_t stepNr = frontParser_command.data1;
             uint8_t value = frontParser_command.data2;
-            seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, stepNr)->param2Val = value;
+            pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, stepNr)->param2Val = value;
          }
          break;
    
@@ -1850,22 +1850,22 @@ void frontParser_handleMidiMessage(void)
          //data 1 = track und pattern nr
          //data 2 = step nr
             uint8_t voiceNr 	= frontParser_command.data1 >> 4;
-            uint8_t patternNr 	= seq_normalizePatternNumber(frontParser_command.data1 & 0x0f);
+            uint8_t patternNr 	= pat_normalizePatternNumber(frontParser_command.data1 & 0x0f);
             uint8_t stepNr 		= frontParser_command.data2 & 0x1f;
          
          
             if (frontParser_command.data2 & 0x40) // flag for force ON
             {
-               seq_setMainStep(patternNr, voiceNr, stepNr, 1);
+               pat_setMainStep(patternNr, voiceNr, stepNr, 1);
             }
             else if (frontParser_command.data2 & 0x20) // flag for force OFF
             {
-               seq_setMainStep(patternNr, voiceNr, stepNr, 0);
+               pat_setMainStep(patternNr, voiceNr, stepNr, 0);
             }
             
             else  //toggle the step in the seq
             {
-               seq_toggleMainStep(voiceNr, stepNr, patternNr);
+               pat_toggleMainStep(voiceNr, stepNr, patternNr);
             }   
          
          //if step active send led on message to front
@@ -1878,11 +1878,11 @@ void frontParser_handleMidiMessage(void)
          //data 1 = track und pattern nr
          //data 2 = step nr
             uint8_t voiceNr 	= frontParser_command.data1 >> 4;
-            uint8_t patternNr 	= seq_normalizePatternNumber(frontParser_command.data1 & 0x0f);
+            uint8_t patternNr 	= pat_normalizePatternNumber(frontParser_command.data1 & 0x0f);
             uint8_t stepNr 		= frontParser_command.data2;
          
          //toggle the step in the seq
-            seq_toggleStep(voiceNr, stepNr, patternNr);
+            pat_toggleStep(voiceNr, stepNr, patternNr);
          
          }
          break;
@@ -1941,7 +1941,7 @@ void frontParser_handleMidiMessage(void)
             case FRONT_LED_QUERY_SEQ_TRACK:
             {
                   uint8_t trackNr = frontParser_command.data2 >> 4;
-                  uint8_t patternNr = seq_normalizePatternNumber(frontParser_command.data2 & 0x0f);
+                  uint8_t patternNr = pat_normalizePatternNumber(frontParser_command.data2 & 0x0f);
                
                   frontParser_activeFrontTrack = trackNr;
                   frontPanelSending_updateTrackLeds(trackNr, patternNr, frontParser_activeStep);
@@ -1957,7 +1957,7 @@ void frontParser_handleMidiMessage(void)
             case FRONT_LED_ALL_SUBSTEP:
                {
                   uint8_t trackNr = frontParser_command.data2 >> 4;
-                  uint8_t patternNr = seq_normalizePatternNumber(frontParser_command.data2 & 0x0f);
+                  uint8_t patternNr = pat_normalizePatternNumber(frontParser_command.data2 & 0x0f);
                
                   frontPanelSending_updateSubStepLeds(trackNr, patternNr, frontParser_activeStep);               
                }
@@ -2142,10 +2142,10 @@ static void frontParser_handleSeqCC()
       
          break;
       case FRONT_SEQ_SET_PAT_BEAT:
-         seq_getPatternSettingPtr(frontParser_shownPattern)->changeBar = frontParser_command.data2;
+         pat_getPatternSettingPtr(frontParser_shownPattern)->changeBar = frontParser_command.data2;
          break;
       case FRONT_SEQ_SET_PAT_NEXT:
-         seq_getPatternSettingPtr(frontParser_shownPattern)->nextPattern = frontParser_command.data2;
+         pat_getPatternSettingPtr(frontParser_shownPattern)->nextPattern = frontParser_command.data2;
          break;
    
       case FRONT_SEQ_REC_ON_OFF:
@@ -2157,17 +2157,17 @@ static void frontParser_handleSeqCC()
          break;
    
       case FRONT_SEQ_NOTE:
-         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->note = frontParser_command.data2;
+         pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->note = frontParser_command.data2;
          break;
    
       case FRONT_SEQ_VOLUME:
-         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->volume &= ~(0x7f);
-         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->volume |= (frontParser_command.data2&0x7f);
+         pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->volume &= ~(0x7f);
+         pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->volume |= (frontParser_command.data2&0x7f);
          break;
    
       case FRONT_SEQ_PROB:
       
-         seq_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->prob = frontParser_command.data2;
+         pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, frontParser_activeStep)->prob = frontParser_command.data2;
          break;
          
       case FRONT_SEQ_EUKLID_RESET:
@@ -2225,12 +2225,12 @@ static void frontParser_handleSeqCC()
    
       case FRONT_SEQ_CLEAR_TRACK: 
          {
-            seq_clearTrack(frontParser_command.data2, frontParser_shownPattern);
+            pat_clearTrack(frontParser_command.data2, frontParser_shownPattern);
          }
          break;
    
       case FRONT_SEQ_CLEAR_PATTERN:
-         seq_clearPattern(frontParser_command.data2);
+         pat_clearPattern(frontParser_command.data2);
          break;
    
       case FRONT_SEQ_POSX:
@@ -2280,7 +2280,7 @@ static void frontParser_handleSeqCC()
          {
             const uint8_t voice 		= frontParser_command.data2 >> 4;
             const uint8_t automTrack 	= frontParser_command.data2 &  0x0f;
-            seq_clearAutomation(voice, frontParser_shownPattern, automTrack);
+            pat_clearAutomation(voice, frontParser_shownPattern, automTrack);
          }
          break;
    
@@ -2288,7 +2288,7 @@ static void frontParser_handleSeqCC()
          {
             const uint8_t src = frontParser_command.data2>>4;
             const uint8_t dst = frontParser_command.data2&0xf;
-            seq_copyTrack(src,dst,frontParser_shownPattern);
+            pat_copyTrack(src,dst,frontParser_shownPattern);
          }
          break;
    
@@ -2297,9 +2297,9 @@ static void frontParser_handleSeqCC()
             const uint8_t src = frontParser_command.data2>>4;
             const uint8_t dst = frontParser_command.data2&0xf;
             if(dst == SEQ_TMP_PATTERN)
-               seq_copyToTmpPattern(src);
+               pat_copyToTmpPattern(src);
             else
-               seq_copyPattern(src,dst);
+               pat_copyPattern(src,dst);
          }
          break;
          
@@ -2307,7 +2307,7 @@ static void frontParser_handleSeqCC()
          {
             const uint8_t srcNr = frontParser_command.data2>>4;
             const uint8_t dstPat = frontParser_command.data2&0xf;
-            seq_copyTrackPattern(srcNr,dstPat,frontParser_shownPattern);
+            pat_copyTrackPattern(srcNr,dstPat,frontParser_shownPattern);
          }
          break;
          
@@ -2319,20 +2319,20 @@ static void frontParser_handleSeqCC()
       
       case FRONT_SEQ_COPY_DST:
          {
-            seq_copySubStep(frontParser_stepCopySource,frontParser_command.data2,frontParser_activeTrack);
+            pat_copySubStep(frontParser_stepCopySource,frontParser_command.data2,frontParser_activeTrack);
          }
          break;
    
       case FRONT_SEQ_TRACK_LENGTH:
-         seq_setTrackLength(frontParser_activeTrack,frontParser_command.data2);
+         pat_setTrackLength(frontParser_activeTrack,frontParser_command.data2);
          break;
          
       case FRONT_SEQ_TRACK_SCALE:
-         seq_setTrackScale(frontParser_activeTrack,frontParser_command.data2);
+         pat_setTrackScale(frontParser_activeTrack,frontParser_command.data2);
          break;
    
       case FRONT_SEQ_TRACK_ROTATION: //**PATROT handle incoming track rotation. apply to active track
-         seq_setTrackRotation(frontParser_activeTrack,frontParser_command.data2);
+         pat_setTrackRotation(frontParser_activeTrack,frontParser_command.data2);
          break;
    
       case FRONT_SEQ_SHUFFLE:
@@ -2364,7 +2364,7 @@ static void frontParser_handleSeqCC()
          else
          {
             (void)preset_consumeTmpBoundaryPatternSwitchAck();
-            frontParser_shownPattern = seq_normalizePatternNumber(frontParser_command.data2);
+            frontParser_shownPattern = pat_normalizePatternNumber(frontParser_command.data2);
          }
          break;   
       case FRONT_SEQ_SET_ACTIVE_TRACK:
@@ -2541,7 +2541,7 @@ static void frontParser_handleSeqCC()
          break;
          
       case FRONT_SEQ_SET_LOOP:
-         seq_setLoop(frontParser_command.data2);
+         pat_setLoop(frontParser_command.data2);
          break;
       case FRONT_SEQ_LOAD_VOICE:
          frontParser_beginFileLoadIngress(0);
