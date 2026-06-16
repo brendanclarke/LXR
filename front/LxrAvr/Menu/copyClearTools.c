@@ -5,7 +5,7 @@
  *  Author: Julian
  */ 
 #include "copyClearTools.h"
-#include "../frontPanelSendingProtocol.h"
+#include "../avrComms/avrCommsSendingProtocol.h"
 #include "../buttonHandler.h"
 #include <avr/io.h>
 #include "../Hardware/lcd.h"
@@ -28,14 +28,14 @@ uint8_t copyClear_getCopyMode()
 void copyClear_clearTrackAutom(uint8_t automTrack)
 {
    uint8_t voice = menu_getActiveVoice();
-   frontPanel_sendData(SEQ_CC,SEQ_CLEAR_AUTOM,(uint8_t)((voice<<4)|(automTrack&0x0f)));
+   avrComms_sendData(SEQ_CC,SEQ_CLEAR_AUTOM,(uint8_t)((voice<<4)|(automTrack&0x0f)));
 };
 //-----------------------------------------------------------------------------
 void copyClear_clearCurrentPattern()
 {
    uint8_t pattern = menu_getViewedPattern();
    led_clearSequencerLeds();
-   frontPanel_sendData(SEQ_CC,SEQ_CLEAR_PATTERN,pattern);
+   avrComms_sendData(SEQ_CC,SEQ_CLEAR_PATTERN,pattern);
 };
 //-----------------------------------------------------------------------------
 void copyClear_executeClear()
@@ -100,7 +100,7 @@ void copyClear_clearCurrentTrack()
 {
    uint8_t voice = menu_getActiveVoice();
    led_clearSequencerLeds();
-   frontPanel_sendData(SEQ_CC,SEQ_CLEAR_TRACK,voice);
+   avrComms_sendData(SEQ_CC,SEQ_CLEAR_TRACK,voice);
 	
 };
 //-----------------------------------------------------------------------------
@@ -112,7 +112,7 @@ void copyClear_copyTrack()
    }
    uint8_t value = (uint8_t)(((buttonHandler_copySrc&0xf)<<4) | (buttonHandler_copyDst&0xf));
    led_clearSequencerLeds();
-   frontPanel_sendData(SEQ_CC,SEQ_COPY_TRACK,value);
+   avrComms_sendData(SEQ_CC,SEQ_COPY_TRACK,value);
 	
    buttonHandler_copySrc = buttonHandler_copyDst = SRC_DST_NONE;
 };
@@ -126,7 +126,7 @@ void copyClear_copyPattern()
 
    uint8_t value = (uint8_t)(((buttonHandler_copySrc&0xf)<<4) | (buttonHandler_copyDst&0xf));
    led_clearSequencerLeds();
-   frontPanel_sendData(SEQ_CC,SEQ_COPY_PATTERN,value);
+   avrComms_sendData(SEQ_CC,SEQ_COPY_PATTERN,value);
 
    buttonHandler_copySrc = buttonHandler_copyDst = SRC_DST_NONE;
 };
@@ -140,7 +140,7 @@ void copyClear_copyTrackPattern()
    }
    uint8_t value = (uint8_t)(((buttonHandler_copySrc&0xf)<<4) | (buttonHandler_copyDst&0xf));
    led_clearSequencerLeds();
-   frontPanel_sendData(SEQ_CC,SEQ_COPY_TRACK_PATTERN,value);
+   avrComms_sendData(SEQ_CC,SEQ_COPY_TRACK_PATTERN,value);
 	
    buttonHandler_copySrc = buttonHandler_copyDst = SRC_DST_NONE;
 };
@@ -156,15 +156,15 @@ void copyClear_copyStep()
    // send substep copy commands
    for (i=0;i<8;i++)
    {
-      frontPanel_sendData(SEQ_CC,SEQ_COPY_STEP_SET_SRC,(uint8_t)(srcStep+i));
-      frontPanel_sendData(SEQ_CC,SEQ_COPY_STEP_SET_DST,(uint8_t)(dstStep+i));
+      avrComms_sendData(SEQ_CC,SEQ_COPY_STEP_SET_SRC,(uint8_t)(srcStep+i));
+      avrComms_sendData(SEQ_CC,SEQ_COPY_STEP_SET_DST,(uint8_t)(dstStep+i));
       
    }
    // turn on destination main step
    uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
    uint8_t patternNr = menu_getViewedPattern(); //max 7 => 0x07 = 0b111
    uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x0f));
-   frontPanel_sendData(MAIN_STEP_CC, value, (uint8_t)( (buttonHandler_copyDst / 8) | (0x40) ) );
+   avrComms_sendData(MAIN_STEP_CC, value, (uint8_t)( (buttonHandler_copyDst / 8) | (0x40) ) );
    
    led_clearAllBlinkLeds();
 	copyClear_Mode = MODE_NONE;
@@ -176,14 +176,14 @@ void copyClear_copySubStep()
 {
 
    //led_clearSequencerLeds();
-   frontPanel_sendData(SEQ_CC,SEQ_COPY_STEP_SET_SRC,(uint8_t)buttonHandler_copySrc);
-   frontPanel_sendData(SEQ_CC,SEQ_COPY_STEP_SET_DST,(uint8_t)buttonHandler_copyDst);
+   avrComms_sendData(SEQ_CC,SEQ_COPY_STEP_SET_SRC,(uint8_t)buttonHandler_copySrc);
+   avrComms_sendData(SEQ_CC,SEQ_COPY_STEP_SET_DST,(uint8_t)buttonHandler_copyDst);
    
    // turn on destination main step
    uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
    uint8_t patternNr = menu_getViewedPattern(); //max 7 => 0x07 = 0b111
    uint8_t value = (uint8_t) ((trackNr << 4) | (patternNr & 0x0f));
-   frontPanel_sendData(MAIN_STEP_CC, value, (uint8_t)( (buttonHandler_copyDst / 8) | (0x40) ) );
+   avrComms_sendData(MAIN_STEP_CC, value, (uint8_t)( (buttonHandler_copyDst / 8) | (0x40) ) );
    
    led_clearAllBlinkLeds();
    copyClear_Mode = MODE_NONE;

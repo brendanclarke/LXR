@@ -88,7 +88,7 @@ The USART is the primary communication channel between the AVR front panel and t
 | TX buffer | Software FIFO (`uart_txBuffer`, type `FifoBuffer`) |
 | RX buffer | Software FIFO (`uart_rxBuffer`, type `FifoBuffer`) |
 
-Transmit is interrupt-driven: `uart_putc()` places a byte in the TX FIFO and enables `UDRIE0`; the `UDRE` ISR drains the FIFO and self-disables when empty. Receive is also interrupt-driven: the `RX_vect` ISR stuffs each byte directly into `uart_rxBuffer`. The main loop calls `uart_checkAndParse()` repeatedly (four times per iteration) to drain the RX FIFO through `frontPanel_parseData()`.
+Transmit is interrupt-driven: `uart_putc()` places a byte in the TX FIFO and enables `UDRIE0`; the `UDRE` ISR drains the FIFO and self-disables when empty. Receive is also interrupt-driven: the `RX_vect` ISR stuffs each byte directly into `uart_rxBuffer`. The main loop calls `uart_checkAndParse()` repeatedly (four times per iteration) to drain the RX FIFO through `avrComms_parseData()`.
 
 ### 4.2 SPI — SD Card
 

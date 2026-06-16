@@ -1,27 +1,27 @@
 /*
- * frontPanelReceivingProtocol.h
+ * avrCommsReceivingProtocol.h
  *
  * Created: 27.04.2012 12:03:52
  *  Author: Julian
  */ 
 
 
-#ifndef FRONTPANELRECEIVINGPROTOCOL_H_
-#define FRONTPANELRECEIVINGPROTOCOL_H_
+#ifndef AVRCOMMSRECEIVINGPROTOCOL_H_
+#define AVRCOMMSRECEIVINGPROTOCOL_H_
 #include <avr/io.h>
 #include "./Preset/SeqStep.h"
 
 
 
 /**for pattern request from seq we need a flag to signal if new data arrived*/
-extern volatile uint8_t frontParser_newSeqDataAvailable;
+extern volatile uint8_t avrCommsParser_newSeqDataAvailable;
 //a step instance to buffer the data received from the sequencer
-extern volatile StepData frontParser_stepData;
-extern uint8_t frontPanel_sysexMode;
-extern uint8_t frontPanel_longOp;
-extern uint8_t frontPanel_longData;
-extern uint8_t frontParser_rxDisable;
-uint8_t frontParser_isRestoreActive(void);
+extern volatile StepData avrCommsParser_stepData;
+extern uint8_t avrComms_sysexMode;
+extern uint8_t avrComms_longOp;
+extern uint8_t avrComms_longData;
+extern uint8_t avrCommsParser_rxDisable;
+uint8_t avrCommsParser_isRestoreActive(void);
 
 
 #define NOTE_ON 			0x90	// 2 data bytes
@@ -265,7 +265,7 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SYSEX_WAIT						0x11    // wait for main to catch up
 #define SYSEX_ACTIVE_MODE_NONE			0x7f	/**< a placeholder message indicating that sysex is active but no mode is selected yet*/
 
-/** Three-byte front-panel command storage. The wire format is MIDI-shaped, but
+/** Three-byte AVR comms command storage. The wire format is MIDI-shaped, but
     this object represents AVR/STM protocol traffic. */
 typedef struct MidiStruct {
 	uint8_t status;
@@ -286,10 +286,12 @@ enum sysexCallBack
 };
 
 /** parse incoming data from the cortex*/
-void frontPanel_parseData(uint8_t data);
+void avrComms_parseData(uint8_t data);
+void avrCommsParser_parseNrpn(uint8_t value);
+void avrCommsPanelParser_ccHandler(void);
 
-extern volatile MidiMsg frontParser_command;
-extern uint8_t frontParser_sysexCallback; 
-extern void frontPanel_checkLongOps();
+extern volatile MidiMsg avrCommsParser_command;
+extern uint8_t avrCommsParser_sysexCallback; 
+void avrComms_checkLongOps(void);
 
-#endif /* FRONTPANELRECEIVINGPROTOCOL_H_ */
+#endif /* AVRCOMMSRECEIVINGPROTOCOL_H_ */

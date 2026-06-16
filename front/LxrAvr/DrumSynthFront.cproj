@@ -86,16 +86,16 @@
     <Compile Include="fifo.h">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="frontPanelReceivingProtocol.c">
+    <Compile Include="avrComms\avrCommsReceivingProtocol.c">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="frontPanelReceivingProtocol.h">
+    <Compile Include="avrComms\avrCommsReceivingProtocol.h">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="frontPanelSendingProtocol.c">
+    <Compile Include="avrComms\avrCommsSendingProtocol.c">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="frontPanelSendingProtocol.h">
+    <Compile Include="avrComms\avrCommsSendingProtocol.h">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="Hardware\lcd.c">
@@ -222,6 +222,7 @@
     <Folder Include="Menu" />
     <Folder Include="Hardware" />
     <Folder Include="Preset" />
+    <Folder Include="avrComms" />
   </ItemGroup>
   <Import Project="$(AVRSTUDIO_EXE_PATH)\\Vs\\Compiler.targets" />
 </Project>

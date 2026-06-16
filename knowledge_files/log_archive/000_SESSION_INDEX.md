@@ -29,6 +29,7 @@
 | 018 | 2026-06-14 | local repo, UART send/receive split implementation | Front-panel send helpers were consolidated, the MIDI parser was split into channel/global ownership files, and the transitional front-panel load/session bridge moved into `PresetLoadCache` |
 | 019 | 2026-06-14 | local repo, AVR encoder retune + acceleration | Main encoder tuning moved to ~32 kHz Timer1 sampling with six-sample phase filtering, narrow rest-jump recovery, stronger button debounce, and edit-mode acceleration |
 | 020 | 2026-06-14 | local repo, refactor finalization and protocol split closeout | Removed obsolete `PresetLoadCache`, finalized STM/AVR receive/send protocol filenames, removed legacy shims, and superseded the stale preset/MIDI UART audits |
+| 021 | 2026-06-15 | local repo, AVR comms rename and docs pass | Renamed the AVR comms layer to `avrComms*`, kept STM front-panel ownership under `uARTFrontSYX/`, and updated the knowledge files to make the split explicit |
 
 ---
 
@@ -114,6 +115,10 @@ Session 019 re-examined the AVR main encoder after slow counter-clockwise clicks
 Session 020 reconciled the stale preset and MIDI/UART audits with the actual code, then finished the remaining architecture objectives. The recreated `PresetLoadCache.c/.h` from Session 018 was removed as obsolete rather than rehomed, active `presetLoad_*` cache APIs were removed, file-load receive paths now write directly to normal Preset/Pattern storage, and normal/temp Preset/Pattern switching remains the only staging model. STM receive code was renamed to `uARTFrontSYX/frontPanelReceivingProtocol.c/.h`, AVR protocol code was split into `frontPanelReceivingProtocol.c/.h` and `frontPanelSendingProtocol.c/.h`, and the old parser/protocol shim headers were removed after include/project redirection. A final cleanup moved the internal CC/CC2 parameter-apply ladder from `MIDI/MidiParser.c` to `uARTFrontSYX/frontPanelReceivingProtocol.c`, renamed front-panel command receive state away from `frontParser_midiMsg`, renamed `MidiVoiceControl.c/.h` to `MidiOutputControl.c/.h`, and moved Sequencer MIDI fan-out behind `outputControl_*`. STM, AVR, and aggregate firmware builds were verified, and the user hardware-tested Steps 1-3 successfully.
 - **Find here**: `PresetLoadCache` removal, direct normal-storage file loads, STM `frontPanelReceivingProtocol` rename, AVR receive/send protocol split, legacy shim removal, front-panel CC/CC2 apply ownership, `MidiOutputControl` rename, Sequencer MIDI output boundary, deprecated PRF/cache traffic status, superseded audit references, build and hardware verification
 
+### 021 — AVR Comms Rename + Knowledge Pass (2026-06-15)
+Session 021 renamed the AVR comms layer into `front/LxrAvr/avrComms/`, updated the live reference docs so AVR uses `avrComms*` and STM keeps `frontPanel*` under `uARTFrontSYX/`, and refreshed `MEMORY.md` plus the session archive to keep the naming split explicit. No firmware behavior changed in this session.
+- **Find here**: `avrComms` directory move, AVR naming map, memory update, comms/hardware doc refresh, STM front-panel ownership note
+
 
 ---
 
@@ -153,6 +158,7 @@ Session 020 reconciled the stale preset and MIDI/UART audits with the actual cod
 | STM and AVR front-panel protocol code now use matching receive/send boundaries: STM `uARTFrontSYX/frontPanelReceivingProtocol.c/.h` plus `frontPanelSendingProtocol.c/.h`, AVR `frontPanelReceivingProtocol.c/.h` plus `frontPanelSendingProtocol.c/.h`; old parser/protocol shim headers were removed after redirection | 020 |
 | Internal CC/CC2 parameter application is owned by STM `uARTFrontSYX/frontPanelReceivingProtocol.c` via `frontParser_applyParameterCommand()`; `MIDI/MidiParser.c` parses external DIN/USB MIDI and forwards/apply-calls instead of owning those cases | 020 |
 | Sequencer-originated MIDI output now goes through `MIDI/MidiOutputControl.c/.h` `outputControl_*` helpers; old `MidiVoiceControl.c/.h` filenames were retired while existing `voiceControl_*` names stayed intact | 020 |
+| AVR comms now live in `front/LxrAvr/avrComms/` with `avrComms*` names, while STM front-panel ownership remains under `mainboard/LxrStm32/src/uARTFrontSYX/` with `frontPanel*` names | 021 |
 
 
 ---

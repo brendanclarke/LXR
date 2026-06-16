@@ -53,6 +53,7 @@ SRCDIR=.
 CCSRCFILES  = $(shell find $(SRCDIR) -type f -name "*.c" | grep -v '/\.')
 
 vpath %.c ./
+vpath %.c ./avrComms
 vpath %.c ./Hardware
 vpath %.c ./Hardware/SD
 vpath %.c ./IO
@@ -78,6 +79,7 @@ INCLUDES += -I"./Hardware/SD"
 INCLUDES += -I"./IO"
 INCLUDES += -I"./Menu"
 INCLUDES += -I"./Preset"
+INCLUDES += -I"."
 
 CFLAGS += $(DEFINES) $(INCLUDES)
 CFLAGS += -O$(AVR_OPTIMIZE)

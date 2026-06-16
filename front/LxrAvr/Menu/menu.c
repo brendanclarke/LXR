@@ -10,7 +10,7 @@
 
 
 #include "../Preset/PresetManager.h"
-#include "../frontPanelSendingProtocol.h"
+#include "../avrComms/avrCommsSendingProtocol.h"
 //#include <util/delay.h>
 #include <util/delay.h>
 
@@ -657,7 +657,7 @@ void menu_init()
    parameter_values[PAR_ACTIVE_STEP] = 0;
    parameter_values[PAR_SKIP_FIRST_ROLL] = 0;
    
-	//frontPanel_sendData(SEQ_CC,SEQ_ROLL_RATE,8); //value is initialized in cortex firmware
+	//avrComms_sendData(SEQ_CC,SEQ_ROLL_RATE,8); //value is initialized in cortex firmware
 
 	parameter_values[PAR_BPM] = 120;
 
@@ -666,7 +666,7 @@ void menu_init()
 	// but then the global data loaded from glo.cfg seemed like it was not being sent to the back.
 	// need to figure out why as it's likely to crop up again at some point.
 
-	frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,0);
+	avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,0);
 	//the currently active button is lit
 	led_setActiveVoice(0);
 
@@ -781,7 +781,7 @@ void menu_enterActiveStepMode()
    led_clearVoiceLeds();
   
    menu_switchPage(ACTIVESTEP_PAGE);
-   frontPanel_updateActiveStepLeds();
+   avrComms_updateActiveStepLeds();
 	menu_repaintAll();
    led_setBlinkLed(LED_MODE3,1);
 }
@@ -806,7 +806,7 @@ void menu_enterStepMode()
 {
    menuIndex=menu_lastStepSubPage;
 	menu_switchPage(SEQ_PAGE);   
-	frontPanel_updatePatternLeds();
+	avrComms_updatePatternLeds();
 	// set mainstep blinking
    led_setBlinkLed(menu_selectedStepLed, 1);
    // set selected substep blinking
@@ -819,14 +819,14 @@ void menu_enterStepMode()
 //-----------------------------------------------------------------
 void menu_enterPatgenMode()
 {
-   frontPanel_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS,
+   avrComms_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS,
    				menu_getActiveVoice());
    menu_switchPage(EUKLID_PAGE);
    led_clearAllBlinkLeds();
    led_setBlinkLed(LED_MODE2,1);
    led_clearSequencerLeds();
 	led_clearSelectLeds();
-   frontPanel_updatePatternLeds();
+   avrComms_updatePatternLeds();
 }
 //-----------------------------------------------------------------
 void menu_shiftVoice(uint8_t shift)
@@ -837,7 +837,7 @@ void menu_shiftVoice(uint8_t shift)
       menu_switchPage(SEQ_PAGE);
       menu_resetSubPage(0);
       
-      frontPanel_updatePatternLeds();
+      avrComms_updatePatternLeds();
    
       // set mainstep blinking
 	   led_setBlinkLed(menu_selectedStepLed, 1);
@@ -891,7 +891,7 @@ void menu_shiftStep(uint8_t shift)
       led_setValue(0, menu_selectedStepLed);
       
       led_clearAllBlinkLeds();
-      frontPanel_updatePatternLeds();
+      avrComms_updatePatternLeds();
    }
    else
    {
@@ -899,7 +899,7 @@ void menu_shiftStep(uint8_t shift)
       //menu_switchSubPage(0);
 	   menu_switchPage(SEQ_PAGE);
 
-	   frontPanel_updatePatternLeds();
+	   avrComms_updatePatternLeds();
       
       // set mainstep blinking
 	   led_setBlinkLed(menu_selectedStepLed, 1);
@@ -927,7 +927,7 @@ void menu_shiftPatgen(uint8_t shift)
       menu_switchPage(SEQ_PAGE);
       menu_resetSubPage(0);
       
-      frontPanel_updatePatternLeds();
+      avrComms_updatePatternLeds();
       
       // set mainstep blinking
 	   led_setBlinkLed(menu_selectedStepLed, 1);
@@ -976,13 +976,13 @@ void menu_updateMainStepDisplay()
    uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
 	uint8_t patternNr = menu_shownPattern; //max 7 => 0x07 = 0b111
 	uint8_t value = (uint8_t)((trackNr<<4) | (patternNr&0x0f));
-	frontPanel_sendData(LED_CC,LED_QUERY_SEQ_TRACK,value);
+	avrComms_sendData(LED_CC,LED_QUERY_SEQ_TRACK,value);
 }
 //-----------------------------------------------------------------
 void menu_setShownPattern(uint8_t patternNr)
 {
 	menu_shownPattern = patternNr;
-	frontPanel_sendData(SEQ_CC,SEQ_SET_SHOWN_PATTERN,menu_shownPattern);
+	avrComms_sendData(SEQ_CC,SEQ_SET_SHOWN_PATTERN,menu_shownPattern);
 }
 //-----------------------------------------------------------------
 uint8_t menu_getViewedPattern()
@@ -2049,7 +2049,7 @@ void menu_handleLoadMenu(int8_t inc, uint8_t btnClicked)
                lcd_setcursor(0,2);
                lcd_string_F(PSTR("Started"));
                //send load sample command to mainboard
-               frontPanel_sendData(SAMPLE_CC,SAMPLE_START_UPLOAD,0x00);
+               avrComms_sendData(SAMPLE_CC,SAMPLE_START_UPLOAD,0x00);
                //wait for ack
                {
                   uint8_t ret = uart_waitAck();
@@ -2067,7 +2067,7 @@ void menu_handleLoadMenu(int8_t inc, uint8_t btnClicked)
                //redraw screen
                // menu_repaintAll(); --AS screen will be repainted later, relax!
                
-               frontPanel_sendData(SAMPLE_CC,SAMPLE_COUNT,0x00);
+               avrComms_sendData(SAMPLE_CC,SAMPLE_COUNT,0x00);
                break;
             
             
@@ -2618,7 +2618,7 @@ static void menu_encoderChangeParameter(int8_t inc)
 		upper = (uint8_t)( (uint8_t)((value&0x80)>>7) | ((voiceNr&0x3f)<<1) );
 		lower = value&0x7f;
       if (!isMorphParam)
-		frontPanel_sendData(CC_VELO_TARGET,upper,lower);
+		avrComms_sendData(CC_VELO_TARGET,upper,lower);
 		//return;
 	}
 		break;
@@ -2648,7 +2648,7 @@ static void menu_encoderChangeParameter(int8_t inc)
 		upper = (uint8_t)(((value&0x80)>>7) | ((((uint8_t)(paramNr - PAR_VOICE_LFO1))&0x3f)<<1));
 		lower = value&0x7f;
       if (!isMorphParam)
-		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
+		avrComms_sendData(CC_LFO_TARGET,upper,lower);
 		//return;
 	}
 		break;
@@ -2674,7 +2674,7 @@ static void menu_encoderChangeParameter(int8_t inc)
 		upper = (uint8_t)((uint8_t)((value&0x80)>>7) | (((paramNr - PAR_TARGET_LFO1)&0x3f)<<1));
 		lower = value&0x7f;
       if (!isMorphParam)
-		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
+		avrComms_sendData(CC_LFO_TARGET,upper,lower);
 		//--AS fall thru to update display
 	}
 		break;
@@ -2696,7 +2696,7 @@ static void menu_encoderChangeParameter(int8_t inc)
                               |(value>>7) );
                               
          
-         frontPanel_sendData(MACRO_CC,upper,lower);
+         avrComms_sendData(MACRO_CC,upper,lower);
       }      
 	}
    break;
@@ -2756,19 +2756,19 @@ static void menu_encoderChangeParameter(int8_t inc)
    {
       if (!isMorphParam)
       {
-		   frontPanel_sendData(MIDI_CC,(uint8_t)paramNr,*paramValue);
+		   avrComms_sendData(MIDI_CC,(uint8_t)paramNr,*paramValue);
       }
    }
 	else if(paramNr > 127 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
    {
       if (!isMorphParam)
       {
-		   frontPanel_sendData(CC_2,(uint8_t)(paramNr-128),*paramValue);
+		   avrComms_sendData(CC_2,(uint8_t)(paramNr-128),*paramValue);
       }
    }
 	else // non sound parameters (ie current step data, etc)
 		menu_parseGlobalParam(paramNr,parameter_values[paramNr]);
-	//frontPanel_sendData(0xb0,paramNr,*paramValue);
+	//avrComms_sendData(0xb0,paramNr,*paramValue);
 }
 
 
@@ -2778,9 +2778,9 @@ static void menu_sendMorphParameterEndpoint(uint16_t paramNr, uint8_t value)
    /* Morph endpoint edits send raw endpoint bytes to STM storage. They do not
       request AVR-side live morph computation. */
    if(paramNr < 128)
-      frontPanel_sendData(PRF_RESTORE_MORPH_CC, (uint8_t)paramNr, value);
+      avrComms_sendData(PRF_RESTORE_MORPH_CC, (uint8_t)paramNr, value);
    else if(paramNr < END_OF_SOUND_PARAMETERS)
-      frontPanel_sendData(PRF_RESTORE_MORPH_CC2, (uint8_t)(paramNr - 128), value);
+      avrComms_sendData(PRF_RESTORE_MORPH_CC2, (uint8_t)(paramNr - 128), value);
 }
 
 //-----------------------------------------------------------------
@@ -2838,7 +2838,7 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 		upper = (uint8_t)( (uint8_t)((value&0x80)>>7) | ((voiceNr&0x3f)<<1) );
 		lower = value&0x7f;
       if (!isMorphParam)
-		   frontPanel_sendData(CC_VELO_TARGET,upper,lower);
+		   avrComms_sendData(CC_VELO_TARGET,upper,lower);
 		//return;
 	}
 		break;
@@ -2875,7 +2875,7 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 		upper = (uint8_t)(((value&0x80)>>7) | ((((uint8_t)(paramNr - PAR_VOICE_LFO1))&0x3f)<<1));
 		lower = value&0x7f;
       if (!isMorphParam)
-		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
+		avrComms_sendData(CC_LFO_TARGET,upper,lower);
 		//return;
 	}
 		break;
@@ -2903,7 +2903,7 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 		upper = (uint8_t)((uint8_t)((value&0x80)>>7) | (((paramNr - PAR_TARGET_LFO1)&0x3f)<<1));
 		lower = value&0x7f;
       if (!isMorphParam)
-		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
+		avrComms_sendData(CC_LFO_TARGET,upper,lower);
 		//--AS fall thru to update display
 	}
 		break;
@@ -2969,21 +2969,21 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 	if(paramNr < 128) // => Sound Parameter
    {
       if (!isMorphParam)
-		frontPanel_sendData(MIDI_CC,(uint8_t)paramNr,*paramValue);
+		avrComms_sendData(MIDI_CC,(uint8_t)paramNr,*paramValue);
       else
          menu_sendMorphParameterEndpoint(paramNr, *paramValue);
    }
 	else if(paramNr > 127 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
    {
       if (!isMorphParam)
-		frontPanel_sendData(CC_2,(uint8_t)(paramNr-128),*paramValue);
+		avrComms_sendData(CC_2,(uint8_t)(paramNr-128),*paramValue);
       else
          menu_sendMorphParameterEndpoint(paramNr, *paramValue);
    }
 	else // non sound parameters (ie current step data, etc)
 		menu_parseGlobalParam(paramNr,parameter_values[paramNr]);
 
-	//frontPanel_sendData(0xb0,paramNr,*paramValue);
+	//avrComms_sendData(0xb0,paramNr,*paramValue);
 }
 
 
@@ -3306,7 +3306,7 @@ void menu_switchPage(uint8_t pageNr)
    		uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110
    		uint8_t patternNr = menu_shownPattern; //max 7 => 0x07 = 0b111
          uint8_t value = (uint8_t)((trackNr<<4) | (patternNr&0x0f));
-   		frontPanel_sendData(LED_CC,LED_QUERY_SEQ_TRACK,value);
+   		avrComms_sendData(LED_CC,LED_QUERY_SEQ_TRACK,value);
       
    	}
    	break;
@@ -3334,18 +3334,18 @@ void menu_switchPage(uint8_t pageNr)
 void menu_sendAllGlobals()
 {
 	uint16_t i;
-   if(!frontPanel_flowBegin(FLOW_CH_GLOBALS))
+   if(!avrComms_flowBegin(FLOW_CH_GLOBALS))
       return;
 
 	for(i=PAR_BEGINNING_OF_GLOBALS;(i<NUM_PARAMS);i++)
 	{
 		menu_parseGlobalParam(i,parameter_values[i]);
-      if(frontPanel_flowFailed())
+      if(avrComms_flowFailed())
          break;
 	}
 
-   if(!frontPanel_flowFailed())
-      (void)frontPanel_flowEnd(FLOW_CH_GLOBALS);
+   if(!avrComms_flowFailed())
+      (void)avrComms_flowEnd(FLOW_CH_GLOBALS);
 };
 //-----------------------------------------------------------------
 // This is used to send a global (non voice specific) parameter to the back.
@@ -3357,94 +3357,94 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 
 	// --AS midi mode is not used anymore
 	//case PAR_MIDI_MODE:
-	//	frontPanel_sendData(SEQ_CC,SEQ_MIDI_MODE,parameter_values[PAR_MIDI_MODE]);
+	//	avrComms_sendData(SEQ_CC,SEQ_MIDI_MODE,parameter_values[PAR_MIDI_MODE]);
 	//	break;
 
 	case PAR_MIDI_CHAN_1:
       if(value==0)
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x00);
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x00);
       else
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x00<<4) | ((value-1)&0x0f) ));
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x00<<4) | ((value-1)&0x0f) ));
       break;
 	case PAR_MIDI_CHAN_2:
       if(value==0)
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x01);
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x01);
       else
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x01<<4) | ((value-1)&0x0f) ));
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x01<<4) | ((value-1)&0x0f) ));
       break;
 	case PAR_MIDI_CHAN_3:
       if(value==0)
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x02);
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x02);
       else
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x02<<4) | ((value-1)&0x0f) ));
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x02<<4) | ((value-1)&0x0f) ));
       break;
 	case PAR_MIDI_CHAN_4:
       if(value==0)
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x03);
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x03);
       else
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x03<<4) | ((value-1)&0x0f) ));
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x03<<4) | ((value-1)&0x0f) ));
       break;
 	case PAR_MIDI_CHAN_5:
       if(value==0)
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x04);
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x04);
       else
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x04<<4) | ((value-1)&0x0f) ));
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x04<<4) | ((value-1)&0x0f) ));
       break;
 	case PAR_MIDI_CHAN_6:
       if(value==0)
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x05);
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x05);
       else
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x05<<4) | ((value-1)&0x0f) ));
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x05<<4) | ((value-1)&0x0f) ));
       break;
    case PAR_MIDI_CHAN_7:
       if(value==0)
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x06);
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x06);
       else
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x06<<4) | ((value-1)&0x0f) ));
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x06<<4) | ((value-1)&0x0f) ));
       break;
 	case PAR_MIDI_CHAN_GLOBAL:
       if(value==0)
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x07);
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN_OFF,0x07);
       else
-         frontPanel_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x07<<4) | ((value-1)&0x0f) ));
+         avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x07<<4) | ((value-1)&0x0f) ));
       break;
 
 	case PAR_POS_X:
-		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
-		frontPanel_sendData(SEQ_CC,SEQ_POSX,value);
+		avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
+		avrComms_sendData(SEQ_CC,SEQ_POSX,value);
 		break;
 
 	case PAR_POS_Y:
-		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
-		frontPanel_sendData(SEQ_CC,SEQ_POSY,value);
+		avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
+		avrComms_sendData(SEQ_CC,SEQ_POSY,value);
 		break;
 
 	case PAR_FLUX:
-		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
-		frontPanel_sendData(SEQ_CC,SEQ_FLUX,value);
+		avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
+		avrComms_sendData(SEQ_CC,SEQ_FLUX,value);
 		break;
 
 	case PAR_SOM_FREQ:
-		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
-		frontPanel_sendData(SEQ_CC,SEQ_SOM_FREQ,value);
+		avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
+		avrComms_sendData(SEQ_CC,SEQ_SOM_FREQ,value);
 		break;
 
 	case PAR_TRACK_LENGTH:
-		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
-		frontPanel_sendData(SEQ_CC,SEQ_TRACK_LENGTH,value);
+		avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
+		avrComms_sendData(SEQ_CC,SEQ_TRACK_LENGTH,value);
 		break;
       
    case PAR_TRACK_SCALE:
-      frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
-		frontPanel_sendData(SEQ_CC,SEQ_TRACK_SCALE,value);
+      avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
+		avrComms_sendData(SEQ_CC,SEQ_TRACK_SCALE,value);
 		break;
       
 	case PAR_SHUFFLE:
-		frontPanel_sendData(SEQ_CC,SEQ_SHUFFLE,value);
+		avrComms_sendData(SEQ_CC,SEQ_SHUFFLE,value);
 		break;
 
 	case PAR_AUTOM_TRACK:
-		frontPanel_sendData(SEQ_CC,SEQ_SET_AUTOM_TRACK,value);
+		avrComms_sendData(SEQ_CC,SEQ_SET_AUTOM_TRACK,value);
 		break;
 
 	case PAR_P1_DEST:
@@ -3452,22 +3452,22 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 	{ //step range 0-127 value range 0-255!
 		//**AUTOM - translate back into a parameter when sending value to cortex
 		uint8_t tmp=(uint8_t)pgm_read_word(&modTargets[value].param);
-		frontPanel_sendData(SEQ_CC, SEQ_SELECT_ACTIVE_STEP,parameter_values[PAR_ACTIVE_STEP]);
-		frontPanel_sendData((uint8_t)
+		avrComms_sendData(SEQ_CC, SEQ_SELECT_ACTIVE_STEP,parameter_values[PAR_ACTIVE_STEP]);
+		avrComms_sendData((uint8_t)
 				(paramNr==PAR_P1_DEST ? SET_P1_DEST : SET_P2_DEST),tmp>>7,tmp&0x7f);
 		break;
 	}
 
 	case PAR_P1_VAL:
-		frontPanel_sendData(SET_P1_VAL,parameter_values[PAR_ACTIVE_STEP],value);
+		avrComms_sendData(SET_P1_VAL,parameter_values[PAR_ACTIVE_STEP],value);
 		break;
 
 	case PAR_P2_VAL:
-		frontPanel_sendData(SET_P2_VAL,parameter_values[PAR_ACTIVE_STEP],value);
+		avrComms_sendData(SET_P2_VAL,parameter_values[PAR_ACTIVE_STEP],value);
 		break;
 
 	case PAR_QUANTISATION:
-		frontPanel_sendData(SEQ_CC,SEQ_SET_QUANT,value);
+		avrComms_sendData(SEQ_CC,SEQ_SET_QUANT,value);
 		break;
 
 	case PAR_SCREENSAVER_ON_OFF:
@@ -3475,7 +3475,7 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 		break;
 
 	case PAR_BPM:
-		frontPanel_sendData(SET_BPM,value&0x7f,(value>>7)&0x7f);
+		avrComms_sendData(SET_BPM,value&0x7f,(value>>7)&0x7f);
 		break;
 	case PAR_MORPH:
 	{
@@ -3485,8 +3485,8 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
          six per-voice morph amounts; STM performs the interpolation work.
          Send as two 7-bit-safe messages because raw values >= 128 look like
          status bytes to the STM MIDI-style parser. */
-		frontPanel_sendData(SEQ_CC, SEQ_SET_GLOBAL_MORPH_LSB, (uint8_t)(value & 0x7f));
-		frontPanel_sendData(SEQ_CC, SEQ_SET_GLOBAL_MORPH_MSB, (uint8_t)((value >> 7) & 0x01));
+		avrComms_sendData(SEQ_CC, SEQ_SET_GLOBAL_MORPH_LSB, (uint8_t)(value & 0x7f));
+		avrComms_sendData(SEQ_CC, SEQ_SET_GLOBAL_MORPH_MSB, (uint8_t)((value >> 7) & 0x01));
 	}
 	break;
 
@@ -3505,7 +3505,7 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 		case PAR_PHASE_VOICE4:
 		case PAR_PHASE_VOICE5:
 		case PAR_PHASE_VOICE6:
-			frontPanel_sendData(CC_2,paramNr-PAR_BEGINNING_OF_GLOBALS,value);
+			avrComms_sendData(CC_2,paramNr-PAR_BEGINNING_OF_GLOBALS,value);
 		break;
 		 */
 
@@ -3517,40 +3517,40 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 	case PAR_VOICE_DECIMATION6:
 	case PAR_VOICE_DECIMATION_ALL:
 		//select the track nr
-		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,((uint8_t)(paramNr-PAR_VOICE_DECIMATION1)));
+		avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,((uint8_t)(paramNr-PAR_VOICE_DECIMATION1)));
 		//send the new output channel
-		frontPanel_sendData(VOICE_CC,VOICE_DECIMATION,value);
+		avrComms_sendData(VOICE_CC,VOICE_DECIMATION,value);
 		break;
 
 	case PAR_ROLL:
 	{
-		frontPanel_sendData(SEQ_CC,SEQ_ROLL_RATE,value);
+		avrComms_sendData(SEQ_CC,SEQ_ROLL_RATE,value);
 	}
    break;
    case PAR_ROLL_NOTE:
 	{
-		frontPanel_sendData(SEQ_CC,SEQ_ROLL_NOTE,value);
+		avrComms_sendData(SEQ_CC,SEQ_ROLL_NOTE,value);
 	}
    break;
    case PAR_ROLL_VELOCITY:
 	{
-		frontPanel_sendData(SEQ_CC,SEQ_ROLL_VELOCITY,value);
+		avrComms_sendData(SEQ_CC,SEQ_ROLL_VELOCITY,value);
 	}
    break;
    case PAR_ROLL_MODE:
 	{
       // record notes if the sequencer note lock is 0
-		frontPanel_sendData(SEQ_CC,SEQ_ROLL_MODE,(uint8_t)(value));
+		avrComms_sendData(SEQ_CC,SEQ_ROLL_MODE,(uint8_t)(value));
 	}
 	break;
    case PAR_TRANSPOSE:
    {
-      frontPanel_sendData(SEQ_CC,SEQ_TRANSPOSE,value);
+      avrComms_sendData(SEQ_CC,SEQ_TRANSPOSE,value);
    }
    break;
    case PAR_TRANSPOSE_ON_OFF:
    {
-      frontPanel_sendData(SEQ_CC,SEQ_TRANSPOSE_ON_OFF,value);
+      avrComms_sendData(SEQ_CC,SEQ_TRANSPOSE_ON_OFF,value);
    }
    break;
 
@@ -3563,8 +3563,8 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 		uint8_t pattern = menu_shownPattern; //max 7
 		uint8_t msg = (uint8_t)((pattern&0x7) | (length<<3));
 		//select the track nr
-		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
-		frontPanel_sendData(SEQ_CC,SEQ_EUKLID_LENGTH,msg);
+		avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
+		avrComms_sendData(SEQ_CC,SEQ_EUKLID_LENGTH,msg);
       
 	}
 	break;
@@ -3575,11 +3575,11 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 		uint8_t msg =(uint8_t)( (pattern&0x7) | (steps<<3));
 
 		//select the track nr
-		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
+		avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
 
 
 
-		frontPanel_sendData(SEQ_CC,SEQ_EUKLID_STEPS,msg);
+		avrComms_sendData(SEQ_CC,SEQ_EUKLID_STEPS,msg);
 	}
 	break;
 	case PAR_EUKLID_ROTATION:	{
@@ -3588,9 +3588,9 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 		uint8_t msg =(uint8_t)( (pattern&0x7) | (rotation<<3));
 
 		//select the track nr
-		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
+		avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
 
-		frontPanel_sendData(SEQ_CC,SEQ_EUKLID_ROTATION,msg);
+		avrComms_sendData(SEQ_CC,SEQ_EUKLID_ROTATION,msg);
 	}
    break;
    
@@ -3600,63 +3600,63 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 		uint8_t msg =(uint8_t)( (pattern&0x7) | (rotation<<3));
 
 		//select the track nr
-		frontPanel_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
+		avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
 
-		frontPanel_sendData(SEQ_CC,SEQ_EUKLID_SUBSTEP_ROTATION,msg);
+		avrComms_sendData(SEQ_CC,SEQ_EUKLID_SUBSTEP_ROTATION,msg);
 	}
 	break;
 
 	case PAR_PATTERN_BEAT:
-		frontPanel_sendData(SEQ_CC,SEQ_SET_PAT_BEAT,value);
+		avrComms_sendData(SEQ_CC,SEQ_SET_PAT_BEAT,value);
 		break;
 
 	case PAR_PATTERN_NEXT:
-		frontPanel_sendData(SEQ_CC,SEQ_SET_PAT_NEXT,value);
+		avrComms_sendData(SEQ_CC,SEQ_SET_PAT_NEXT,value);
 		break;
 
 
 
 	case PAR_ACTIVE_STEP:
-		frontPanel_sendData(SEQ_CC,SEQ_REQUEST_STEP_PARAMS,value);
+		avrComms_sendData(SEQ_CC,SEQ_REQUEST_STEP_PARAMS,value);
 		break;
 
 	case PAR_STEP_PROB:
-		frontPanel_sendData(SEQ_CC,SEQ_PROB,value);
+		avrComms_sendData(SEQ_CC,SEQ_PROB,value);
 		break;
 
 	case PAR_STEP_NOTE:
-		frontPanel_sendData(SEQ_CC,SEQ_NOTE,value);
+		avrComms_sendData(SEQ_CC,SEQ_NOTE,value);
 		break;
 
 	case PAR_STEP_VOLUME:
-		frontPanel_sendData(SEQ_CC,SEQ_VOLUME,value);
+		avrComms_sendData(SEQ_CC,SEQ_VOLUME,value);
 		break;
 	case PAR_MIDI_ROUTING:
-		frontPanel_sendData(SEQ_CC, SEQ_MIDI_ROUTING, value);
+		avrComms_sendData(SEQ_CC, SEQ_MIDI_ROUTING, value);
 		break;
 	case PAR_MIDI_FILT_TX:
-		frontPanel_sendData(SEQ_CC, SEQ_MIDI_FILT_TX, value);
+		avrComms_sendData(SEQ_CC, SEQ_MIDI_FILT_TX, value);
 		break;
 	case PAR_MIDI_FILT_RX:
-		frontPanel_sendData(SEQ_CC, SEQ_MIDI_FILT_RX, value);
+		avrComms_sendData(SEQ_CC, SEQ_MIDI_FILT_RX, value);
 		break;
 	case PAR_PRESCALER_CLOCK_IN:
-			frontPanel_sendData(SEQ_CC, SEQ_TRIGGER_IN_PPQ, value);
+			avrComms_sendData(SEQ_CC, SEQ_TRIGGER_IN_PPQ, value);
 			break;
 	case PAR_PRESCALER_CLOCK_OUT1:
-			frontPanel_sendData(SEQ_CC, SEQ_TRIGGER_OUT1_PPQ, value);
+			avrComms_sendData(SEQ_CC, SEQ_TRIGGER_OUT1_PPQ, value);
 			break;
 	case PAR_PRESCALER_CLOCK_OUT2:
-			frontPanel_sendData(SEQ_CC, SEQ_TRIGGER_OUT2_PPQ, value);
+			avrComms_sendData(SEQ_CC, SEQ_TRIGGER_OUT2_PPQ, value);
 			break;
 	case PAR_TRIG_GATE_MODE:
-			frontPanel_sendData(SEQ_CC, SEQ_TRIGGER_GATE_MODE, value);
+			avrComms_sendData(SEQ_CC, SEQ_TRIGGER_GATE_MODE, value);
 			break;
 	case PAR_BAR_RESET_MODE:
-		frontPanel_sendData(SEQ_CC, SEQ_BAR_RESET_MODE, value);
+		avrComms_sendData(SEQ_CC, SEQ_BAR_RESET_MODE, value);
 		break;
 	case PAR_SEQ_PC_TIME:
-		frontPanel_sendData(SEQ_CC, SEQ_PC_TIME, value);
+		avrComms_sendData(SEQ_CC, SEQ_PC_TIME, value);
 		break;
 	case PAR_BUT_SHIFT_MODE:
 		shiftMode=value;
@@ -3666,11 +3666,11 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
       break;
    case PAR_SKIP_FIRST_ROLL:
       parameter_values[PAR_SKIP_FIRST_ROLL]=value; 
-      frontPanel_sendData(SEQ_CC, SEQ_ROLL_MODE, (uint8_t)(value+5) );
+      avrComms_sendData(SEQ_CC, SEQ_ROLL_MODE, (uint8_t)(value+5) );
       break;
    case PAR_FILE_LOAD_FAST:
       parameter_values[PAR_FILE_LOAD_FAST]=value; 
-      frontPanel_sendData(SEQ_CC, SEQ_LOAD_FAST,value);
+      avrComms_sendData(SEQ_CC, SEQ_LOAD_FAST,value);
       break;
    case PAR_MIDI_NOTE1:
    case PAR_MIDI_NOTE2:
@@ -3679,7 +3679,7 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
    case PAR_MIDI_NOTE5:
    case PAR_MIDI_NOTE6:
    case PAR_MIDI_NOTE7:
-      frontPanel_sendData(SEQ_CC, (uint8_t)(SEQ_TRACK_NOTE1+(paramNr-PAR_MIDI_NOTE1)), (uint8_t)(value) );
+      avrComms_sendData(SEQ_CC, (uint8_t)(SEQ_TRACK_NOTE1+(paramNr-PAR_MIDI_NOTE1)), (uint8_t)(value) );
    
       break;
 	}
@@ -3699,13 +3699,13 @@ static void menu_processSpecialCaseValues(uint16_t paramNr/*, const uint8_t *val
       
       menu_vMorph(parameter_values[PAR_MAC1_DST1],parameter_values[PAR_MAC1],parameter_values[PAR_MAC1_DST1_AMT]);
       menu_vMorph(parameter_values[PAR_MAC1_DST2],parameter_values[PAR_MAC1],parameter_values[PAR_MAC1_DST2_AMT]);
-      frontPanel_sendMacro(1,parameter_values[PAR_MAC1]);
+      avrComms_sendMacro(1,parameter_values[PAR_MAC1]);
    }
    else if (paramNr == PAR_MAC2)
    {
       menu_vMorph(parameter_values[PAR_MAC2_DST1],parameter_values[PAR_MAC2],parameter_values[PAR_MAC2_DST1_AMT]);
       menu_vMorph(parameter_values[PAR_MAC2_DST2],parameter_values[PAR_MAC2],parameter_values[PAR_MAC2_DST2_AMT]);
-      frontPanel_sendMacro(2,parameter_values[PAR_MAC2]);
+      avrComms_sendMacro(2,parameter_values[PAR_MAC2]);
    }
 	else if(paramNr == PAR_BPM)
 	{
@@ -3718,7 +3718,7 @@ static void menu_processSpecialCaseValues(uint16_t paramNr/*, const uint8_t *val
 	else if( (paramNr == PAR_EUKLID_LENGTH) || (paramNr == PAR_EUKLID_STEPS) || (paramNr == PAR_EUKLID_ROTATION) )
 	{
 		//query current sequencer step states and light up the corresponding leds 
-		//frontPanel_sendData(LED_CC,LED_QUERY_SEQ_TRACK,menu_activePage);
+		//avrComms_sendData(LED_CC,LED_QUERY_SEQ_TRACK,menu_activePage);
 		led_clearSequencerLeds();
 	}
 
@@ -3870,7 +3870,7 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
 		uint8_t upper,lower;
 		upper = (uint8_t)(((value&0x80)>>7) | ((((uint8_t)(paramNr - PAR_VEL_DEST_1))&0x3f)<<1));
 		lower = value&0x7f;
-		frontPanel_sendData(CC_VELO_TARGET,upper,lower);
+		avrComms_sendData(CC_VELO_TARGET,upper,lower);
 	}
 		break;
 
@@ -3889,7 +3889,7 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
 		uint8_t upper,lower;
 		upper = (uint8_t)(((value&0x80)>>7) | ((((uint8_t)(paramNr - PAR_VOICE_LFO1))&0x3f)<<1));
 		lower = value&0x7f;
-		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
+		avrComms_sendData(CC_LFO_TARGET,upper,lower);
 	}
 		break;
 	case DTYPE_TARGET_SELECTION_LFO:
@@ -3904,7 +3904,7 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
 		uint8_t upper,lower;
 		upper = (uint8_t)(((value&0x80)>>7) | ((((uint8_t)(paramNr - PAR_TARGET_LFO1))&0x3f)<<1));
 		lower = value&0x7f;
-		frontPanel_sendData(CC_LFO_TARGET,upper,lower);
+		avrComms_sendData(CC_LFO_TARGET,upper,lower);
 	}
 		break;
    case DTYPE_AUTOM_TARGET:
@@ -3921,14 +3921,14 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
                               <<2 )                      //  shift over 2 to make room for upper mod target bit
                               |(value>>7) );
                               
-         frontPanel_sendData(MACRO_CC,upper,lower);
+         avrComms_sendData(MACRO_CC,upper,lower);
       }
       else
       {
          if(paramNr<128) // => Sound Parameter below 128
-   			frontPanel_sendData(MIDI_CC,(uint8_t)paramNr,dtypeValue);
+   			avrComms_sendData(MIDI_CC,(uint8_t)paramNr,dtypeValue);
    		else if(paramNr>=128 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
-   			frontPanel_sendData(CC_2,(uint8_t)(paramNr-128),dtypeValue);
+   			avrComms_sendData(CC_2,(uint8_t)(paramNr-128),dtypeValue);
    		else
    			menu_parseGlobalParam(paramNr,dtypeValue);
       }
@@ -3937,9 +3937,9 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
 
 	default: // all other sound parameters are send as CC or CC2. anything else is handled specially
 		if(paramNr<128) // => Sound Parameter below 128
-			frontPanel_sendData(MIDI_CC,(uint8_t)paramNr,dtypeValue);
+			avrComms_sendData(MIDI_CC,(uint8_t)paramNr,dtypeValue);
 		else if(paramNr>=128 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
-			frontPanel_sendData(CC_2,(uint8_t)(paramNr-128),dtypeValue);
+			avrComms_sendData(CC_2,(uint8_t)(paramNr-128),dtypeValue);
 		else
 			menu_parseGlobalParam(paramNr,dtypeValue);
 		break;
@@ -3950,7 +3950,7 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
 void menu_reloadKit()
 {
    uint8_t i;
-   frontPanel_sendByte(PATCH_RESET);
+   avrComms_sendByte(PATCH_RESET);
    for(i=0;i<END_OF_MORPH_PARAMETERS;i++)
    {
       parameter_values[i]=parameter_values_fileLoadSnapshot[i];
@@ -3972,7 +3972,7 @@ void menu_setActiveVoice(uint8_t voiceNr)
 	// **LFOTARGFIX - save the gap index
 	menu_TargetVoiceGapIndex = getModTargetGapIndex(parameter_values[PAR_TARGET_LFO1+voiceNr]);
 	menu_activeVoice = voiceNr;
-   frontPanel_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS, voiceNr);
+   avrComms_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS, voiceNr);
 }
 //----------------------------------------------------------------
 uint8_t menu_areMuteLedsShown()
