@@ -1,7 +1,7 @@
 # Normal / Temp Copy Per-Track Audit
 
 Session: 022
-Status: draft for review before implementation
+Status: implemented in code, pending review
 
 ## Goal
 
@@ -9,7 +9,7 @@ Audit and plan the STM-side changes needed so the copy-to-temp path copies the p
 
 This is a narrow STM-side storage audit. It focuses on how the live playing pattern layout is read, assembled, and written into `seq_tmpPattern` before any broader background-load work is attempted.
 
-The temp-copy behavior should be implemented as a dedicated helper named `seq_copyToTmpPattern()` rather than by overloading `seq_copyPattern()`.
+The temp-copy behavior should be implemented as a dedicated helper named `seq_copyToTmpPattern(uint8_t srcPattern)` rather than by overloading `seq_copyPattern()`.
 
 ## What Exists Today
 
@@ -94,7 +94,7 @@ It should not be overloaded to mean "copy the currently playing arrangement" unl
 The planned split is:
 
 - `seq_copyPattern()` remains the selected-pattern copy path;
-- `seq_copyToTmpPattern()` becomes the only helper that snapshots the currently playing per-track arrangement into temp storage.
+- `seq_copyToTmpPattern(srcPattern)` becomes the only helper that snapshots the currently playing per-track arrangement into temp storage, while still falling back to the selected-pattern copy path when playback is stopped.
 
 ### 2. `seq_copyTrackPattern(uint8_t srcNr, uint8_t dstPat, uint8_t srcPat)`
 
@@ -115,7 +115,7 @@ The audit should decide whether to:
 - reuse this helper directly in a new temp-capture loop, or
 - add a more explicit helper that copies one track from a live source into `seq_tmpPattern` and also makes the pattern-level metadata step clearer.
 
-For this change, the new temp-copy helper should read only from the actual source pattern that is playing on that track, and it should not look at pending switch targets.
+For this change, the new temp-copy helper should read only from the actual source pattern that is playing on that track when playback is running, and it should not look at pending switch targets.
 
 ### 3. `seq_applyTmpPatternTo(uint8_t pattern)` and `seq_activateTmpPattern()`
 
@@ -203,7 +203,7 @@ The audit should confirm that the new live-capture logic populates those exact f
 
 The cleanest plan is:
 
-1. Add a dedicated helper in `PatternData.c` named `seq_copyToTmpPattern()` for capturing the currently playing arrangement into `seq_tmpPattern`.
+1. Add a dedicated helper in `PatternData.c` named `seq_copyToTmpPattern(uint8_t srcPattern)` for capturing the currently playing arrangement into `seq_tmpPattern`.
 2. Keep `seq_copyPattern()` as the single-source copy helper for the selected-pattern path.
 3. Reuse `seq_copyTrackPattern()` or a small track-copy helper inside the new capture loop.
 4. Leave `seq_applyTmpPatternTo()` and `seq_activateTmpPattern()` as the inverse temp playback path.
@@ -215,7 +215,7 @@ That keeps the selected-pattern copy path and the live-playback snapshot path se
 
 The implementation should answer these questions directly:
 
-- Is `seq_copyToTmpPattern()` the single entry point for capturing the live playing arrangement into temp?
+- Is `seq_copyToTmpPattern(srcPattern)` the single entry point for capturing the live playing arrangement into temp?
 - Does that helper read only `seq_perTrackActivePattern[]`, or does it need any extra latching from `sequencer.c` to avoid a race with an in-flight active switch?
 - Should `seq_patternSettings` come from `seq_activePattern` or from one of the per-track source patterns?
 - Should `seq_copyPattern()` remain untouched except for a call-site split, or should it share a lower-level internal helper with the new live-capture path?
@@ -245,15 +245,219 @@ Do not solve these yet:
 
 Those are later steps once the live per-track temp snapshot is approved.
 
+## Temporary Pattern Repeat / Next Rule
+
+The code already has the temp hold sentinel we need: `SEQ_TMP_PATTERN`.
+
+The temp-copy path should normalize the temp slot to a hold state after the payload copy finishes instead of cloning the source pattern's settings verbatim.
+
+### Required temp behavior
+
+- force `seq_tmpPattern.seq_patternSettings.changeBar = 0`;
+- force `seq_tmpPattern.seq_patternSettings.nextPattern = SEQ_TMP_PATTERN`;
+- keep the temp slot on the temp sentinel until the user makes a manual pattern change;
+- do not let a source pattern's next-pattern target leak into `seq_tmpPattern`.
+
+The important point is that the temp snapshot is a held temp image, not a normal pattern that participates in the source pattern's next-pattern chain.
+
+### Functions that need the temp rule
+
+The temp rule should be applied in the temp-specific path, not in the normal copy path:
+
+- `seq_copyToTmpPattern(uint8_t srcPattern)` should apply the hold-state normalization after it copies either the live per-track snapshot or the stopped-playback fallback;
+- `seq_initPatternData()` should initialize `seq_tmpPattern.seq_patternSettings` to the same hold state so the temp slot starts in the right mode at boot;
+- `seq_determineNextPattern()` already understands `SEQ_TMP_PATTERN`; the temp rule should preserve that sentinel by writing it back into the temp slot's `nextPattern` field;
+- `seq_applyTmpPatternTo(uint8_t pattern)` should be reviewed so the temp-only hold state does not leak into ordinary selected patterns when temp data is pasted back.
+
+### Open design point
+
+The audit should decide whether the hold-state normalization is best encoded as:
+
+- a small dedicated helper in `PatternData.c` that writes `seq_tmpPattern.seq_patternSettings` after a temp copy;
+- or a small Pattern API helper that returns the temp hold-state template and is reused by both temp initialization and temp capture.
+
+Either way, the temp copy must stop treating `seq_patternSettings` as a straight source-pattern clone.
+
+### Note on pending state
+
+This rule is separate from the pending-pattern switch state.
+
+- `preset_tempPlaybackSwitchState.pendingPattern` still belongs to the switch scheduler.
+- The temp-copy rule is only about the contents of `seq_tmpPattern.seq_patternSettings`.
+- The `SEQ_TMP_PATTERN` sentinel already exists in the sequencer switch logic, so the temp copy should preserve that sentinel in `nextPattern` rather than inventing a new pending concept.
+
+### Verification targets for the temp rule
+
+Before the cleanup pass starts, the temp snapshot should be verified to satisfy these cases:
+
+1. Copy-to-temp while playback is running still captures the live per-track pattern data.
+2. Copy-to-temp while playback is stopped still captures the selected-pattern payload, but the temp settings are normalized to the hold state.
+3. The temp slot never inherits a normal pattern's next-advance behavior.
+4. Manual pattern changes still replace the temp-held state correctly.
+5. Pasting temp data back into a normal pattern does not accidentally force that normal pattern to behave like temp.
+
+### Implementation note
+
+- Added a dedicated temp-settings normalizer in `PatternData.c` so both `seq_initPatternData()` and `seq_copyToTmpPattern()` force `seq_tmpPattern.seq_patternSettings.changeBar = 0` and `seq_tmpPattern.seq_patternSettings.nextPattern = SEQ_TMP_PATTERN`.
+- The normal selected-pattern copy path remains unchanged; only temp capture now rewrites the temp slot to the hold state after payload copy.
+
 ## Follow-On Cleanup Pass
 
-After the temp-copy helper is accepted, the next cleanup pass should consolidate all pattern copy/paste ownership into `mainboard/LxrStm32/src/Sequencer/Pattern/`.
+After the temp-copy helper is accepted, the next cleanup pass should consolidate the remaining Pattern ownership into `mainboard/LxrStm32/src/Sequencer/Pattern/` and give that module a clean public API.
 
-That follow-on pass should:
+This pass is not meant to change playback behavior. It is a boundary and naming cleanup so the code clearly says:
 
-- move pattern copy/paste orchestration out of `sequencer.c` and into `PatternData.c` or adjacent `Pattern/` files;
-- expose clearly documented public pattern copy/paste helpers for the sequencer to call;
-- give those helpers proper `Pat*` or `pat_*` names instead of `Seq*`, `seq_*`, or mixed variants;
-- keep `sequencer.c` focused on scheduling and playback control rather than owning pattern mutation primitives.
+- Pattern owns pattern storage and pattern mutation/copy helpers;
+- Sequencer owns scheduling, pattern-switch orchestration, and live playback timing;
+- `sequencer.c` should call Pattern APIs instead of hosting pattern-paste logic itself.
+
+### Current Ownership Inventory
+
+The following helpers already live in `PatternData.c`, but the cleanup pass should formalize them as Pattern-owned APIs instead of leaving them exposed through an old `seq_*` surface:
+
+- `seq_normalizePatternNumber`
+- `seq_getStepPtr`
+- `seq_getLengthRotatePtr`
+- `seq_getPatternSettingPtr`
+- `seq_getMainSteps`
+- `seq_setMainSteps`
+- `seq_initPatternData`
+- `seq_clearTrack`
+- `seq_clearAutomation`
+- `seq_clearPattern`
+- `seq_copyTrack`
+- `seq_copyPattern`
+- `seq_copyToTmpPattern`
+- `seq_copyTrackPattern`
+- `seq_copySubStep`
+- `seq_applyTmpPatternTo`
+- `seq_activateTmpPattern`
+- `seq_toggleStep`
+- `seq_toggleMainStep`
+- `seq_setMainStep`
+- `seq_setTrackLength`
+- `seq_setTrackScale`
+- `seq_setTrackRotation`
+- `seq_isStepActive`
+- `seq_isMainStepActive`
+
+The cleanup pass should verify whether any of these still need transitional wrappers after the rename, but the end state should expose them as Pattern APIs rather than sequencer-facing `seq_*` helpers.
+
+### Functions That Stay In Sequencer
+
+The following pieces should remain in `sequencer.c` because they are orchestration, not storage ownership:
+
+- `seq_setNextPattern`
+- `seq_determineNextPattern`
+- the pending-pattern state machine around `preset_tempPlaybackSwitchState`
+- the live trigger-time reads that consume pattern storage but do not own it
+
+Those functions may call Pattern helpers, but they should not implement copy/paste or direct pattern mutation themselves.
+
+### Proposed Pattern API After The Move
+
+The Pattern public surface should be grouped and named consistently. The intended names are:
+
+#### Module initialization and naming helpers
+
+- `pat_initPatternData`
+- `pat_normalizePatternNumber`
+
+#### Accessors
+
+- `pat_getStepPtr`
+- `pat_getLengthRotatePtr`
+- `pat_getPatternSettingPtr`
+- `pat_getMainSteps`
+- `pat_setMainSteps`
+
+#### Read helpers
+
+- `pat_isStepActive`
+- `pat_isMainStepActive`
+
+#### Pattern editing helpers
+
+- `pat_setTrackLength`
+- `pat_setTrackScale`
+- `pat_setTrackRotation`
+- `pat_toggleStep`
+- `pat_toggleMainStep`
+- `pat_setMainStep`
+- `pat_clearTrack`
+- `pat_clearAutomation`
+- `pat_clearPattern`
+
+#### Copy and paste helpers
+
+- `pat_copyTrack`
+- `pat_copyPattern`
+- `pat_copyTrackPattern`
+- `pat_copySubStep`
+- `pat_copyToTmpPattern`
+- `pat_applyTmpPatternTo`
+- `pat_activateTmpPattern`
+
+That naming gives the sequencer and front-panel protocol a single obvious module to call for pattern data movement.
+
+### Sequencer Call-Site Cleanup
+
+After the rename, `sequencer.c` should only call the Pattern APIs and should not need to know how the copy or paste is implemented internally.
+
+The cleanup pass should update the specific call sites that currently depend on Pattern helpers:
+
+- the temp activation path around `seq_activateTmpPattern()`
+- the live temp snapshot path around `seq_copyToTmpPattern()`
+- the selected-pattern copy and track-copy paths that the front-panel receive code reaches through Pattern APIs
+- the pattern-setting reads in `seq_determineNextPattern()`
+- the step state access helpers used while triggering voices, but only as read-only accessors
+- the per-track rotation reset path in the pattern-switch code
+- the Pattern accessor uses in `Preset/TempPlaybackSwitch.c`
+- the Pattern accessor uses in `frontPanelSendingProtocol.c`
+- the generator helpers in `mainboard/LxrStm32/src/Sequencer/Pattern/EuklidGenerator.c`
+
+The goal is for `sequencer.c` to read like a scheduler and dispatcher, not a storage layer.
+
+### Documentation To Add
+
+The Pattern module should gain clearer ownership docs at the same time as the rename.
+
+That documentation should say:
+
+- Pattern owns `seq_patternSet` and `seq_tmpPattern`;
+- Pattern exposes the only public copy/paste surface for pattern data;
+- live temp snapshots are a Pattern responsibility even though they read the live playback source table;
+- Sequencer is allowed to ask Pattern for copy/paste behavior, but not to reimplement it.
+
+The header comments should also separate the API into sections so future work can see at a glance which helpers are initialization helpers, which are accessors, which are mutators, and which are copy/paste operations.
+
+`PatternData.h` should read like the authoritative API reference for the module:
+
+- a module banner that states ownership of pattern storage;
+- a storage/constants section for `NUM_TRACKS`, `NUM_PATTERN`, `SEQ_TMP_PATTERN`, `NUM_STEPS`, `Step`, `PatternSetting`, `LengthRotate`, `PatternSet`, and `TempPattern`;
+- an accessor block for read/write pattern storage helpers;
+- an edit/mutation block for step, track, automation, and rotation writes;
+- a copy/paste block for selected-pattern copy, temp snapshot copy, track copy, and temp apply helpers;
+- a short note that `sequencer.c` and the front-panel protocol should call these helpers instead of manipulating pattern payloads directly.
+
+### Rename Strategy
+
+The prefix cleanup should prefer `pat_*` / `Pat*` for the exported Pattern API.
+
+The intended end state is:
+
+- no new Pattern ownership APIs should be introduced under `seq_*`;
+- any temporary compatibility wrappers should be clearly marked and removed once callers are updated;
+- new code in `sequencer.c`, `frontPanelReceivingProtocol.c`, and the generator helpers should only include and call the Pattern API names.
 
 That cleanup is intentionally separate from the per-track temp-copy fix so the first review stays narrow.
+
+## Implementation Notes
+
+- Added `seq_copyToTmpPattern(uint8_t srcPattern)` in `PatternData.c` as the dedicated temp-copy helper.
+- The new helper uses `seq_perTrackActivePattern[]` and `seq_copyTrackPattern()` when `seq_running` is true.
+- The new helper falls back to `seq_copyPattern(srcPattern, SEQ_TMP_PATTERN)` when playback is stopped so the old selected-pattern temp-copy behavior stays available.
+- Temp pattern settings are copied from `seq_activePattern` during the live-running path.
+- `preset_captureTmpKitState()` is still the only place that copies preset parameter images and marks the temp kit valid.
+- `frontPanelReceivingProtocol.c` now routes `FRONT_SEQ_COPY_PATTERN` to `seq_copyToTmpPattern(src)` when the destination is `SEQ_TMP_PATTERN`.
+- STM32 build passes with the new helper split: `make -C mainboard/LxrStm32 -j4 stm32`.

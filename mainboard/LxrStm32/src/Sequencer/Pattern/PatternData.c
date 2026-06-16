@@ -23,6 +23,15 @@ extern uint8_t frontParser_shownPattern;
 PatternSet seq_patternSet;
 TempPattern seq_tmpPattern;
 
+/* Temp playback uses a dedicated hold state so the temp pattern never falls
+   back into the normal next-pattern chain. Keep that normalization in one
+   place so init and copy-to-temp stay aligned. */
+static void seq_setTmpPatternHoldSettings(void)
+{
+   seq_tmpPattern.seq_patternSettings.changeBar = 0;
+   seq_tmpPattern.seq_patternSettings.nextPattern = SEQ_TMP_PATTERN;
+}
+
 static void seq_resetNote(Step *step)
 {
    step->note = SEQ_DEFAULT_NOTE;
@@ -93,8 +102,7 @@ void seq_initPatternData(void)
       seq_clearPattern(i);
    }
 
-   seq_tmpPattern.seq_patternSettings.changeBar = 0;
-   seq_tmpPattern.seq_patternSettings.nextPattern = SEQ_TMP_PATTERN;
+   seq_setTmpPatternHoldSettings();
    seq_clearPattern(SEQ_TMP_PATTERN);
 }
 
@@ -343,6 +351,31 @@ void seq_copyPattern(uint8_t src, uint8_t dst)
    {
       preset_captureTmpKitState();
    }
+}
+
+/* Copies either the selected pattern or the currently playing per-track
+   arrangement into the temp pattern image. When playback is running, the live
+   track source table wins; when playback is stopped, the caller's selected
+   source pattern remains the fallback so the old copy-to-temp semantics stay
+   intact. */
+void seq_copyToTmpPattern(uint8_t srcPattern)
+{
+   uint8_t track;
+
+   if(!seq_running)
+   {
+      seq_copyPattern(srcPattern, SEQ_TMP_PATTERN);
+      return;
+   }
+
+   for(track=0; track<NUM_TRACKS; track++)
+   {
+      seq_copyTrackPattern(track, SEQ_TMP_PATTERN, seq_perTrackActivePattern[track]);
+   }
+
+   seq_tmpPattern.seq_patternSettings = *seq_getPatternSettingPtr(seq_activePattern);
+   seq_setTmpPatternHoldSettings();
+   preset_captureTmpKitState();
 }
 
 void seq_copyTrackPattern(uint8_t srcNr, uint8_t dstPat, uint8_t srcPat)

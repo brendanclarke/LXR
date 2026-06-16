@@ -98,6 +98,7 @@ void seq_clearAutomation(uint8_t trackNr, uint8_t pattern, uint8_t automTrack);
 void seq_clearPattern(uint8_t pattern);
 void seq_copyTrack(uint8_t srcNr, uint8_t dstNr, uint8_t pattern);
 void seq_copyPattern(uint8_t src, uint8_t dst);
+void seq_copyToTmpPattern(uint8_t srcPattern);
 void seq_copyTrackPattern(uint8_t srcNr, uint8_t dstPat, uint8_t srcPat);
 void seq_copySubStep(uint8_t srcStep, uint8_t dstStep, uint8_t activeTrack);
 

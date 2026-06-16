@@ -2296,7 +2296,10 @@ static void frontParser_handleSeqCC()
          {
             const uint8_t src = frontParser_command.data2>>4;
             const uint8_t dst = frontParser_command.data2&0xf;
-            seq_copyPattern(src,dst);
+            if(dst == SEQ_TMP_PATTERN)
+               seq_copyToTmpPattern(src);
+            else
+               seq_copyPattern(src,dst);
          }
          break;
          
