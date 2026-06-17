@@ -1,7 +1,7 @@
 # LXR -bc- Enhanced Firmware — Session Index
 
 **Project**: Fork of LXR drum machine firmware  
-**Repo**: `/Users/bc/LXR01/LXR-current/LXR-custom-develop-patload-envmod` | **Log format**: `00x_SESSION_HANDOFF_LOG.md`
+**Repo**: `/Users/bc/LXR01/LXR-current/LXR` | **Log format**: `00x_SESSION_HANDOFF_LOG.md`
 
 ---
 
@@ -33,6 +33,7 @@
 | 022 | 2026-06-16 | local repo, Pattern temp-copy cleanup and Sequencer docs pass | Made copy-to-temp use the per-track playing patterns, cleaned up the Pattern/Sequencer temp-boundary rules, documented the exported Sequencer API and state, and removed stale Sequencer declarations |
 | 023 | 2026-06-16 | local repo, AVR background-load menu rename and docs pass | Renamed the AVR file-load toggle to a 5-state background-load selector, kept the raw byte / `.cfg` compatibility intact, left STM behavior unchanged, and refreshed the comms and session docs |
 | 024 | 2026-06-17 | local repo, opcode audit comment-out closeout | Commented out stale AVR/STM opcode constants plus the thin cache helper surface, preserved the live non-cache file-load/session path, and folded the audit into the session log archive |
+| 025 | 2026-06-17 | local repo, macro deprecation cleanup and docs handoff | Zeroed legacy macro slots during file load, disabled the live AVR/STM macro send/apply paths, added deprecation breadcrumbs to the macro parameter/text sites, and refreshed the comms and memory docs |
 
 ---
 
@@ -134,6 +135,10 @@ Session 023 replaced the AVR-facing file-load toggle with a 5-state background-l
 Session 024 converted the opcode audit into code changes. The high-confidence stale opcodes in the AVR and STM receive headers were commented out, the cache-family suspects were commented out or wrapped in disabled blocks where they had thin helper bodies, and the live non-cache file-load/background-load path was left intact because it still serves normal `.ALL` / `.PRF` loading. Anything with `cache` in it was treated as a retirement candidate only when it did not belong to the active non-cache file-load/session path.
 - **Find here**: commented-out opcode constants, deprecated PRF cache helper stubs, cache-family suspect list, preserved non-cache file-load/session path, session-log handoff archive
 
+### 025 — Macro Removal Deactivation + Documentation Handoff (2026-06-17)
+Session 025 disabled the remaining macro loading and application paths end-to-end. AVR file loads now force the legacy macro slots to zero before they reach live state, the AVR menu code keeps the old macro branches only as commented-out legacy context, the STM front-panel receive path ignores `MACRO_CC` and macro-amount traffic, and the remaining Preset macro storage/replay helpers are inert. The session also added breadcrumb comments at the AVR parameter/menu-text sites and the STM Preset storage sites, then promoted the implementation audit into a permanent handoff log so the temporary audit file can be deleted.
+- **Find here**: file-load macro zeroing, AVR menu macro send/apply disable blocks, STM macro receive/apply disable blocks, inert Preset macro storage/replay helpers, legacy parameter/menu-text breadcrumbs, comms spec refresh, MEMORY refresh, build verification
+
 
 ---
 
@@ -178,6 +183,7 @@ Session 024 converted the opcode audit into code changes. The high-confidence st
 | Sequencer exported globals/functions in `sequencer.h` and `sequencer.c` now carry adjacent explanatory comments, and the stale `seq_consumeTmpBoundaryPatternSwitchAck()` declaration was removed from Sequencer | 022 |
 | AVR background-load menu control now uses `PAR_FILE_LOAD_BACKGROUND`, `TEXT_FILE_LOAD_BACKGROUND`, `backgroundLoadNames`, and `SEQ_LOAD_BACKGROUND` while keeping STM behavior and raw `.cfg` byte storage unchanged | 023 |
 | Legacy PRF/cache opcode surface is commented out; the live non-cache file-load/session path remains active | 024 |
+| Legacy macro file-load/apply path is intentionally disabled; file loads zero macro slots and macro traffic is deprecated/ignored | 025 |
 
 
 ---

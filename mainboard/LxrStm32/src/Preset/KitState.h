@@ -48,9 +48,12 @@ typedef struct PresetAutomationTargetsStruct
 {
    uint16_t lfoDestination[PRESET_SYNTH_VOICES];
    uint16_t velocityDestination[PRESET_SYNTH_VOICES];
+   /* Legacy macro routing storage, retained only while the macro feature is
+      being phased out. */
    uint16_t macroDestination[4];
    uint8_t lfoDestinationValid;
    uint8_t velocityDestinationValid;
+   /* Matching validity bitmap for the legacy macro routing storage above. */
    uint8_t macroDestinationValid;
 } PresetAutomationTargets;
 

@@ -1100,6 +1100,9 @@ void frontParser_applyParameterCommand(MidiMsg msg, uint8_t updateOriginalValue)
          case CC2_MAC2_DST1:
          case CC2_MAC2_DST2:
             break;
+         /* Session 025: legacy macro amount messages are ignored during the
+            deprecation test so the old performance-macro path cannot apply. */
+#if 0
          case CC2_MAC1_DST1_AMT:       // bc: change perf macro destination amounts
             if (msg.data2)
                macroModulators[0].amount = ((msg.data2+1)/64.f)-1;
@@ -1128,6 +1131,7 @@ void frontParser_applyParameterCommand(MidiMsg msg, uint8_t updateOriginalValue)
                macroModulators[3].amount = -1;
             modNode_updateValue(&macroModulators[3],macroModulators[3].lastVal);
             break;            
+#endif
          default:
             break;
       }
@@ -1639,8 +1643,12 @@ void frontParser_handleMidiMessage(void)
 
       case FRONT_CC_MACRO_TARGET: //frontParser_command.status
          {
+            /* Session 025: legacy macro packets are intentionally ignored while
+               the macro feature is being deprecated. Keep the opcode comment
+               block here only as historical context for later removal. */
+#if 0
             uint8_t applyLive = preset_shouldApplyIngressToLive();
-         
+
             /* MACRO_CC message structure
             byte1 - status byte 0xaa as above
             byte2, data1 byte: xtta aa-b : tt= top level macro value sent (2 macros exist now, we can do 2 more if we want)
@@ -1648,10 +1656,10 @@ void frontParser_handleMidiMessage(void)
                                            b=macro mod target value top bit
                                            I have left a blank bit above this to make it easier to make more than 255 kit parameters
                                            if we ever want to take on that can of worms
-                                          
+
             byte3, data2 byte: xbbb bbbb : b=macro mod target value lower 7 bits or top level value full
             */
-            
+
             uint8_t upper = frontParser_command.data1;
             uint8_t lower = frontParser_command.data2;
             //sequencer_sendVMorph(0,(uint8_t)(lower*macroModulators[0].amount));
@@ -1687,6 +1695,7 @@ void frontParser_handleMidiMessage(void)
                   modNode_updateValue(&macroModulators[whichModDest],macroModulators[whichModDest].lastVal);
                }
             }
+#endif
          
          }
          break; // case FRONT_CC_LFO_TARGET

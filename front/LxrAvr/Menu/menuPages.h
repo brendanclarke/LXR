@@ -418,9 +418,12 @@ const Page menuPages[NUM_PAGES][NUM_SUB_PAGES] PROGMEM =
 	//These pages are shown when the selected mode is the "mute/pattern select" page
 	//there is only one page with subpages shown for the whole mode
 	{
+		// Session 025: the performance-page macro controls were intentionally
+		// removed from the visible UI; the blank slots stay here only as legacy
+		// placeholders while the old macro code is phased out.
 		{		
-		TEXT_SAMPLE_RATE,         TEXT_X_FADE, TEXT_EMPTY,TEXT_EMPTY, TEXT_SHUFFLE,	TEXT_ROLL_SPEED,	TEXT_ROLL_NOTE,	TEXT_ROLL_VELOCITY,
-		PAR_VOICE_DECIMATION_ALL, PAR_MORPH,   PAR_NONE,  PAR_NONE ,  PAR_SHUFFLE,	PAR_ROLL,         PAR_ROLL_NOTE,	   PAR_ROLL_VELOCITY
+		TEXT_SHUFFLE,	TEXT_ROLL_SPEED,	TEXT_ROLL_NOTE,	TEXT_ROLL_VELOCITY,   TEXT_SAMPLE_RATE,         TEXT_X_FADE, TEXT_EMPTY, TEXT_EMPTY, 
+		PAR_SHUFFLE,	PAR_ROLL,         PAR_ROLL_NOTE,	   PAR_ROLL_VELOCITY, PAR_VOICE_DECIMATION_ALL, PAR_MORPH,   PAR_NONE,   PAR_NONE
 		},{		
 			TEXT_EMPTY, TEXT_EMPTY, TEXT_EMPTY, TEXT_EMPTY, TEXT_EMPTY, TEXT_EMPTY, TEXT_EMPTY, TEXT_EMPTY,
 			PAR_NONE,   PAR_NONE,   PAR_NONE,   PAR_NONE,   PAR_NONE,   PAR_NONE,   PAR_NONE,   PAR_NONE

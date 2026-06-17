@@ -365,6 +365,8 @@ const char shortNames[][4] PROGMEM  =
    {"sfr"}, // skip first roll
    {"mrv"}, // morph individual voice
 
+   // Legacy macro UI strings, kept as placeholders until the macro feature is
+   // removed from the parameter/menu tables.
    {"mac"}, // TEXT_MAC1,
    {"mac"}, // TEXT_MAC2,
    
@@ -418,6 +420,7 @@ const char catNames[][16] PROGMEM =
 	{"Generatr"},
 	{"MIDI"},
 	{"Trigger"},
+   // Legacy macro long names retained for table stability during removal.
    {"Macro 1"},
    {"Macro 2"},
    {"Mac1Dst1"},
@@ -510,6 +513,8 @@ const char longNames[][16] PROGMEM =
    {"BnkToPrf" }, // Bank changes change perfs
    {"Skp1Roll"}, // skip first roll
    {"MrphVoice" }, // individual voice morph
+   // Legacy macro long text entries kept only until the macro menu/table code
+   // can be deleted.
    {"Amount"  }, // TEXT_MAC1,
    {"Amount"  }, // TEXT_MAC2,
    

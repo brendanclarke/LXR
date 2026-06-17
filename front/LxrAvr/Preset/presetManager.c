@@ -425,6 +425,18 @@ void preset_readKitToTemp(uint8_t isMorph)
    
 
    f_close((FIL*)&kitRead_File);
+
+   /* Session 025 deprecation step: force every legacy macro slot to neutral
+      values before the loaded snapshot is copied into live parameter storage.
+      This keeps file loading intact while macro assignments are phased out. */
+   para[PAR_MAC1_DST1] = 0;
+   para[PAR_MAC1_DST1_AMT] = 0;
+   para[PAR_MAC1_DST2] = 0;
+   para[PAR_MAC1_DST2_AMT] = 0;
+   para[PAR_MAC2_DST1] = 0;
+   para[PAR_MAC2_DST1_AMT] = 0;
+   para[PAR_MAC2_DST2] = 0;
+   para[PAR_MAC2_DST2_AMT] = 0;
    
    // set to 0 for any that were not read from the file
    if(END_OF_SOUND_PARAMETERS-bytesRead)
@@ -579,6 +591,14 @@ void preset_readDrumsetMeta(uint8_t isMorph)
          parameter_values[END_OF_INDIVIDUAL_VOICE_PARAMS+i]=
             parameter_values_fileLoadSnapshot[END_OF_INDIVIDUAL_VOICE_PARAMS+i];
       }
+
+      /* Session 025 deprecation step: the top-level macro amount params are
+         not file-backed, so they are cleared in the live arrays rather than in
+         the file snapshot. */
+      parameter_values[PAR_MAC1] = 0;
+      parameter_values[PAR_MAC2] = 0;
+      parameters2[PAR_MAC1] = 0;
+      parameters2[PAR_MAC2] = 0;
    
    // bc: special case macro targets - re-send targets on kit load
    /* MACRO_CC message structure

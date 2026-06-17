@@ -150,24 +150,12 @@ void preset_applyVoiceAutomationTargets(const PresetAutomationTargets *source,
    }
 }
 
-/* Applies the shared macro-target destinations for a live kit image. The
-   helper remains private because it is only meaningful as part of the live
-   replay path, not as a standalone API. */
+/* Session 025 deprecation note: shared macro replay is frozen so the macro
+   feature can be removed after the test build confirms the rest of the code
+   no longer depends on it. */
 static void preset_applySharedAutomationTargets(const PresetAutomationTargets *source)
 {
-   uint8_t i;
-
-   if(!source)
-      return;
-
-   for(i=0;i<4;i++)
-   {
-      if(source->macroDestinationValid & (1 << i))
-      {
-         modNode_setDestination(&macroModulators[i], source->macroDestination[i]);
-         modNode_updateValue(&macroModulators[i], macroModulators[i].lastVal);
-      }
-   }
+   (void)source;
 }
 
 /* Replays the normal kit image's live automation targets after the temp/normal

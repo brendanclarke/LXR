@@ -13,6 +13,17 @@ This audit is based on the current working tree state plus the existing menu-pag
   - STM Preset code still stores and replays macro destinations during endpoint restore.
 - The file-load path already has a natural choke point in `front/LxrAvr/Preset/presetManager.c`, because every file-supported sound image is first read into one of the `*_fileLoadSnapshot[]` buffers before it is copied into live parameter storage.
 
+## Execution Log
+
+- Started the implementation pass by confirming the current menu-page edit is already staged in the worktree.
+- Next step is file-load normalization in `preset_readKitToTemp()`, then the AVR and STM live macro branches will be disabled in-place.
+- File-load normalization is now in `front/LxrAvr/Preset/presetManager.c`; the legacy macro slots are forced to zero immediately after the SD read and before any snapshot is copied forward.
+- The AVR menu send/apply paths are now wrapped in disabled blocks, so the front panel still parses the old menu structures but no longer emits macro changes.
+- The STM receive/apply paths were frozen rather than deleted: the macro packet case now ignores the payload, the CC2 macro-amount handler is disabled, and the Preset replay/storage helpers no longer mutate macro destinations.
+- The first zeroing pass revealed that `PAR_MAC1` and `PAR_MAC2` are not part of the file snapshot, so those amounts were moved to the live-array reset path in `preset_readDrumsetMeta()` instead of being written out of bounds.
+- `make -C front/LxrAvr avr -j4`, `make -C mainboard/LxrStm32 -j4 stm32`, and `make firmware` all completed successfully after the cleanup.
+- The remaining `MACRO_CC` / `avrComms_sendMacro()` references in the tree are now either disabled blocks or zero-value restore helpers, so there is no active macro apply path left for the deprecation test.
+
 ## Required code changes
 
 ### 1. Zero macro assignments during file import

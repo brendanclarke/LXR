@@ -309,6 +309,8 @@ enum ParamEnums
 	PAR_MORPH_CYM,
 	PAR_MORPH_HIHAT,
 
+	/* Legacy performance-macro destination slots, kept as placeholders while
+	   file-load and protocol paths are being retired. */
 	PAR_MAC1_DST1,
 	PAR_MAC1_DST1_AMT,
 	PAR_MAC1_DST2,
@@ -362,7 +364,8 @@ enum ParamEnums
 	PAR_SOM_FREQ,
 	PAR_TRACK_ROTATION,			// --AS **PATROT
 
-	/*bc: start of performance macro parameters*/
+	/* Session 025 legacy macro parameters: kept only while the remaining
+	   file-load and protocol cleanup work is in flight. */
 	PAR_MAC1,
 	PAR_MAC2,
 

@@ -2692,6 +2692,7 @@ static void menu_encoderChangeParameter(int8_t inc)
    		*paramValue = (uint8_t)(nmt-1);
       if (menu_activePage == PERFORMANCE_PAGE)
       { // the only time you get a dtype autom target on the PERF page is when assigning macros
+#if 0
    		uint8_t value =  (uint8_t)pgm_read_word(&modTargets[*paramValue].param); // the value of the mod target
          uint8_t lower = value&0x7f;
          uint8_t upper = (uint8_t)
@@ -2702,6 +2703,7 @@ static void menu_encoderChangeParameter(int8_t inc)
                               
          
          avrComms_sendData(MACRO_CC,upper,lower);
+#endif
       }      
 	}
    break;
@@ -3699,6 +3701,8 @@ void menu_vMorph(uint8_t dest, uint8_t val, uint8_t amt)
 //-----------------------------------------------------------------
 static void menu_processSpecialCaseValues(uint16_t paramNr/*, const uint8_t *value*/)
 {
+   (void)paramNr;
+#if 0
    if(paramNr == PAR_MAC1)
    {
       
@@ -3726,6 +3730,7 @@ static void menu_processSpecialCaseValues(uint16_t paramNr/*, const uint8_t *val
 		//avrComms_sendData(LED_CC,LED_QUERY_SEQ_TRACK,menu_activePage);
 		led_clearSequencerLeds();
 	}
+#endif
 
 
 }
@@ -3917,7 +3922,7 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
       if (menu_activePage == PERFORMANCE_PAGE)
       {
          // bc: these are only used in perf for macro automation targets
-   
+#if 0
    		const uint8_t value = (uint8_t)pgm_read_word(&modTargets[dtypeValue].param); // the value of the mod target
          uint8_t lower = value&0x7f;
          uint8_t upper = (uint8_t)
@@ -3927,6 +3932,7 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
                               |(value>>7) );
                               
          avrComms_sendData(MACRO_CC,upper,lower);
+#endif
       }
       else
       {

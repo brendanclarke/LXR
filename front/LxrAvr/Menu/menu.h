@@ -219,6 +219,8 @@ enum NamesEnum
    TEXT_LOAD_PERF_ON_BANK,
    TEXT_SKIP_FIRST_ROLL,
    TEXT_MORPH_VOICE,
+   /* Legacy macro UI text slots, retained only as placeholders while the
+      macro feature is deprecated and can be removed safely later. */
    TEXT_MAC1,
    TEXT_MAC2,
    TEXT_MAC1_DST1,
@@ -388,6 +390,7 @@ enum catNamesEnum
 	CAT_MIDI,
 	CAT_TRIGGER,
    
+   /* Legacy macro categories kept only until the macro code can be removed. */
    CAT_MACRO1,
    CAT_MACRO2,
    CAT_MAC1D1,
@@ -591,8 +594,8 @@ enum Datatypes
 	DTYPE_TARGET_SELECTION_LFO,
 	DTYPE_TARGET_SELECTION_VELO,	
 	DTYPE_VOICE_LFO,
-	DTYPE_AUTOM_TARGET, // bc: these only get used for macroMod targets now, there is some
-                       // special code parsing their change in menu if new params get this dtype
+	DTYPE_AUTOM_TARGET, // Session 025 legacy macro target dtype; kept only while
+                       // the old macro plumbing is being removed safely.
 	DTYPE_0b1,
 	DTYPE_NOTE_NAME, // --AS eg C#0, D 1 for note name
 	DTYPE_0B15,		//0-15
