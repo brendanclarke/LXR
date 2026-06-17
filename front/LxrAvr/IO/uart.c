@@ -7,7 +7,7 @@
 
 #include "uart.h"
 #include <avr/io.h>
-#include "../frontPanelReceivingProtocol.h"
+#include "../avrComms/avrCommsReceivingProtocol.h"
 #include "../config.h"
 #if UART_DEBUG_ECHO_MODE
 #include <stdlib.h>
@@ -226,7 +226,7 @@ void uart_checkAndParse()
    while(budget && uart_getc(&data))
    {
    	//there is new data available
-      frontPanel_parseData(data);
+      avrComms_parseData(data);
       budget--;
    }
 #endif

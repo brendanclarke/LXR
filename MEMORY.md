@@ -9,7 +9,7 @@ Read it fully at the start of every session before touching any code.
 
 ```bash
 # Repository root (confirmed)
-cd /Users/bc/LXR01/LXR-current/LXR-custom-develop-patload-envmod
+cd /Users/bc/LXR01/LXR-current/LXR
 
 # Build
 make clean
@@ -21,7 +21,9 @@ make firmware
 # - firmware image/FIRMWARE.BIN
 ```
 
-**Current working source**: repository root, branch `custom-develop-patload-envmod`.
+**Current working source**: repository root, branch `master-avr-fp-clean`.
+
+**Canonical comms naming**: STM-side front-panel comms live under `mainboard/LxrStm32/src/uARTFrontSYX/` and keep the `frontPanel*` naming. AVR-side comms live under `front/LxrAvr/avrComms/` and use the `avrComms*` and `avrCommsParser*` naming. On the AVR side, `frontPanel` and `frontParser` are historical terminology only and should not be used for new code or docs.
 
 **Session 001 close status**: full top-level build succeeds in this repo with `make clean && make firmware` (warnings remain, no fatal errors).
 
@@ -41,11 +43,23 @@ make firmware
 
 **Current status after Session 019 closeout (2026-06-14)**: The AVR front-panel main encoder was retuned after slow counter-clockwise missed decrements returned. The current hardware-approved implementation still uses only Timer1 compare A and raw `encode_stableRead4()` detents, but now samples at roughly 32.05 kHz with six stable phase samples, fixed `AB=11` rest anchoring, narrow rest-jump recovery for filtered `11 -> 00 -> adjacent -> 11` contact sequences, and 192-sample button debounce. Edit-mode parameter acceleration is config-driven from complete emitted detents only, with `ENC_ACCEL_MIN_REV_PER_SEC = 1`, `ENC_ACCEL_MAX_REV_PER_SEC = 2`, and final hardware-tested `ENC_ACCEL_MAX_MULT = 4`. Acceleration is applied only to menu edit-mode value changes; navigation/load/save/copy-clear selection remain unaccelerated. `make -C front/LxrAvr avr -j4` and `make firmware` are green with the usual AVR warnings, and the user reported the final encoder behavior is good.
 
-**Current status after Session 020 closeout (2026-06-14)**: The refactor finalization pass corrected the Session 018 planning regression and completed the cache/protocol split objectives. `mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h` are gone again, no active `presetLoad_*` cache API remains, file loads route directly to normal Preset/Pattern storage, and the existing normal/temp Preset and Pattern switching remains the only supported staging model. STM front-panel receive is now `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c/.h`, STM front-panel send is `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelSendingProtocol.c/.h`, and the old STM `FrontPanelProtocol.h` / `frontPanelParser.h` shim headers were removed after include redirection. AVR front-panel code is split into `front/LxrAvr/frontPanelReceivingProtocol.c/.h` and `front/LxrAvr/frontPanelSendingProtocol.c/.h`, and the old AVR `frontPanelParser.h` shim was removed after include/project redirection. The final cleanup also renamed front-panel receive state from `frontParser_midiMsg` to `frontParser_command`, moved the internal CC/CC2 parameter-apply ladder from `MIDI/MidiParser.c` to `uARTFrontSYX/frontPanelReceivingProtocol.c` as `frontParser_applyParameterCommand()`, renamed `MidiVoiceControl.c/.h` to `MidiOutputControl.c/.h`, and moved Sequencer MIDI fan-out behind `outputControl_*` helpers. `make -C mainboard/LxrStm32 -j4 stm32`, `make -C front/LxrAvr avr -j4`, and `make firmware` were verified, and the user hardware-tested Steps 1, 2, and 3 successfully.
+**Current status after Session 020 closeout (2026-06-14)**: The refactor finalization pass corrected the Session 018 planning regression and completed the cache/protocol split objectives. `mainboard/LxrStm32/src/Preset/PresetLoadCache.c/.h` are gone again, no active `presetLoad_*` cache API remains, file loads route directly to normal Preset/Pattern storage, and the existing normal/temp Preset and Pattern switching remains the only supported staging model. STM front-panel receive is now `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c/.h`, STM front-panel send is `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelSendingProtocol.c/.h`, and the old STM `FrontPanelProtocol.h` / `frontPanelParser.h` shim headers were removed after include redirection. At that point the AVR side was still using the older `frontPanelReceivingProtocol.c/.h` and `frontPanelSendingProtocol.c/.h` names; Session 021 later renamed that layer to `front/LxrAvr/avrComms/` with `avrComms*` / `avrCommsParser*` prefixes and removed the AVR `frontPanelParser.h` shim. The final cleanup also renamed front-panel receive state from `frontParser_midiMsg` to `frontParser_command`, moved the internal CC/CC2 parameter-apply ladder from `MIDI/MidiParser.c` to `uARTFrontSYX/frontPanelReceivingProtocol.c` as `frontParser_applyParameterCommand()`, renamed `MidiVoiceControl.c/.h` to `MidiOutputControl.c/.h`, and moved Sequencer MIDI fan-out behind `outputControl_*` helpers. `make -C mainboard/LxrStm32 -j4 stm32`, `make -C front/LxrAvr avr -j4`, and `make firmware` were verified, and the user hardware-tested Steps 1, 2, and 3 successfully.
 
-**Current consolidation / protocol planning artifacts**: the durable finalization notes now live in `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, and `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`. Current encoder details live in `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` and supersede the temporary `ENCODER_AUDIT.md`. `REFACTOR_FINALIZATION.md`, `REFACTOR_MY_MESS_CLEANUP.md`, `PRESET_CONSOLIDATION_AUDIT.md`, and `MIDI_UART_SPLIT_AUDIT_EDIT.md` were temporary working docs and may be deleted after Session 020.
+**Current status after Session 021 closeout (2026-06-15)**: The AVR comms layer was renamed and consolidated under `front/LxrAvr/avrComms/` with `avrCommsReceivingProtocol.c/.h`, `avrCommsSendingProtocol.c/.h`, and `avrCommsPanelParser.h`. AVR-side identifiers now use the `avrComms*` / `avrCommsParser*` prefixes, while STM-side front-panel ownership remains under `mainboard/LxrStm32/src/uARTFrontSYX/` with `frontPanel*` names. This session was a naming and documentation consolidation pass, so no firmware behavior changed; the most recent compiled verification remains the prior AVR build.
+
+**Current status after Session 022 closeout (2026-06-16)**: Copy-to-temp now snapshots the actually playing per-track pattern sources instead of a generic pending-pattern view, and the temp-pattern repeat path is keyed off `SEQ_TMP_PATTERN` so the temp slot keeps holding until the user makes a manual change. The `Sequencer` API surface was documented in-place in both `sequencer.h` and `sequencer.c`, the stale Sequencer temp-boundary declaration was removed, Pattern/PatternData naming and comments were cleaned up, and `make -C mainboard/LxrStm32 -j4 stm32` was verified again. This pass was implementation plus documentation cleanup only; no comms spec updates were needed.
+
+**Current status after Session 023 closeout (2026-06-16)**: The AVR load-page control was renamed to the 5-state background-load selector `PAR_FILE_LOAD_BACKGROUND`, with `TEXT_FILE_LOAD_BACKGROUND`, `backgroundLoadNames`, and `SEQ_LOAD_BACKGROUND` updated on the AVR side while STM runtime behavior stayed untouched. The packed menu-ID table used the free `MENU_FILE_LOAD_BACKGROUND = 0` slot because the existing dtype encoding only has four bits for the menu ID, and the globals file continues to round-trip the same raw byte without a serializer change. `make -C front/LxrAvr avr -j4`, `make -C mainboard/LxrStm32 -j4 stm32`, and `make firmware` all passed again after the rename. `TEMP_LOAD_MENU_AUDIT.md`, `knowledge_files/log_archive/000_SESSION_INDEX.md`, `knowledge_files/log_archive/023_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, and `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md` were updated to keep the new terminology canonical.
+
+**Current status after Session 024 closeout (2026-06-17)**: The opcode audit closeout commented out the stale AVR and STM opcode constants plus the thin cache-only helper surface, while leaving the live non-cache file-load/session path untouched. `front/LxrAvr/avrComms/` and `mainboard/LxrStm32/src/uARTFrontSYX/` now keep the old cache handshake only as commented-out historical context, the durable audit details were folded into `knowledge_files/log_archive/024_SESSION_HANDOFF_LOG.md`, and `OPCODE_AUDIT.md` was removed as part of the handoff. This was a documentation and cleanup pass rather than a new firmware feature, so no new hardware behavior was introduced.
+
+**Current consolidation / protocol planning artifacts**: the durable finalization notes now live in `knowledge_files/log_archive/024_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/023_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, and `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`. Current encoder details live in `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` and supersede the temporary `ENCODER_AUDIT.md`. `TEMP_LOAD_MENU_AUDIT.md` was the temporary working doc for Session 023 and can be deleted after the closeout pass. `OPCODE_AUDIT.md` was the temporary working doc for Session 024 and was removed after the handoff. `REFACTOR_FINALIZATION.md`, `REFACTOR_MY_MESS_CLEANUP.md`, `PRESET_CONSOLIDATION_AUDIT.md`, and `MIDI_UART_SPLIT_AUDIT_EDIT.md` were temporary working docs and may be deleted after Session 020.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/024_SESSION_HANDOFF_LOG.md`
+- `knowledge_files/log_archive/023_SESSION_HANDOFF_LOG.md`
+- `knowledge_files/log_archive/022_SESSION_HANDOFF_LOG.md`
+- `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/018_SESSION_HANDOFF_LOG.md`
@@ -71,17 +85,13 @@ Session 005 closeout / remaining follow-up:
 - Add global parameter switches for background loading if that work is revived.
 - Keep the temporary SEQ16 pattern keyhole in place until after the future preset/morph refactor.
 
-These older in-flight audits are stale after Session 003 and should not be treated as current:
+The `knowledge_files/session_in_flight/` directory was cleaned up (post-Session 020). The following audits no longer exist on disk and should not be referenced or recreated:
 - `knowledge_files/session_in_flight/AUDIT_MORPH_MOVE.md`
 - `knowledge_files/session_in_flight/TMP_VARS_AUDIT.md`
 - `knowledge_files/session_in_flight/PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`
 - `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT.md`
 - `knowledge_files/session_in_flight/TEMP_CACHE_LOAD-IN_FLIGHT-POST_MORPH_MOVE.md`
 - `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT-POST_MORPH_MOVE.md`
-
-The two pre-morph load/comms audits were expanded on 2026-05-29 from source diffs:
-- `knowledge_files/session_in_flight/COMMS_FLOW_AUDIT-IN_FLIGHT.md`: compares `LXR-9120ea7620f1a9a4a924f029cdaf3ae71df303fd/front|mainboard` against `LXR-custom-develop-patload-envmod-90d3f08/front|mainboard`.
-- `knowledge_files/session_in_flight/PRF_ALL_LOAD_FIX_AUDIT-IN_FLIGHT.md`: compares `LXR-custom-develop-patload-envmod-90d3f08/front|mainboard` against the current `front|mainboard`.
 
 User-referenced checkpoints:
 - Commit `90d3f08` is the checkpoint where `.ALL` and `.PRF` load their parameters correctly provided there is no morph automation and background loading into the temp slot is turned off for `.PRF`.
@@ -92,110 +102,67 @@ User-referenced checkpoints:
 ## Repository Layout
 
 ```text
-/Users/bc/LXR01/LXR-current/LXR-custom-develop-patload-envmod
-├── .git/
-├── BUILD_AUDIT.md
-├── Changelog.txt
+./LXR/
 ├── LICENSE.txt
 ├── MEMORY.md
-├── MEMORY_example.md
 ├── Makefile
 ├── README.md
-├── Readme - firmware additions to v.36.txt
+├── conflicts.txt
 ├── firmware image/
 │   └── FIRMWARE.BIN
 ├── front/
 │   ├── LxrAvr/
 │   │   ├── Hardware/
-│   │   │   └── SD/
 │   │   ├── IO/
 │   │   ├── Menu/
 │   │   ├── Preset/
-│   │   ├── build/
+│   │   ├── avrComms/
 │   │   ├── Makefile
-│   │   ├── LxrAvr.bin
-│   │   ├── LxrAvr.map
 │   │   └── README.md
 │   └── LxrAvr_bootloader/
 │       ├── Bootloader/
 │       ├── default/
 │       ├── elmChan/
 │       ├── lcd/
-│       ├── README.md
-│       ├── SD_main.c
-│       ├── SD_routines.c
-│       ├── SPI_routines.c
-│       ├── UART_routines.c
-│       └── userInterface.c
+│       └── README.md
 ├── knowledge_files/
 │   ├── SESSION_HANDOFF_TEMPLATE.md
+│   ├── comms_spec_reference/
 │   ├── hardware_archive/
 │   │   ├── front/
+│   │   │   ├── AVR_SETUP_ALLOCATION.md
+│   │   │   └── AVR_HARDWARE.md
 │   │   ├── main/
+│   │   │   ├── STM32F4_SETUP_ALLOCATION.md
+│   │   │   └── STM32F4_HARDWARE.md
 │   │   └── ATMEGA_STM32F4_COMMS_AUDIT.md
-│   └── log_archive/
-│       ├── 000_SESSION_INDEX.md
-│       └── 001_SESSION_HANDOFF_LOG.md
-├── linux_build_guide.txt
-├── lxr-midi-assign.txt
+│   ├── log_archive/
+│   │   ├── 000_SESSION_INDEX.md
+│   │   ├── 001_SESSION_HANDOFF_LOG.md
+│   │   └── ...
+│   └── reference_material/
 ├── mainboard/
 │   ├── LxrStm32/
 │   │   ├── Libraries/
-│   │   │   ├── CMSIS/
-│   │   │   │   └── Include/
-│   │   │   ├── Device/
-│   │   │   │   └── STM32F4xx/
-│   │   │   │       └── Include/
-│   │   │   ├── STM32F4xx_StdPeriph_Driver/
-│   │   │   │   ├── inc/
-│   │   │   │   └── src/
-│   │   │   ├── STM32_USB_Device_Library/
-│   │   │   │   └── Core/
-│   │   │   │       ├── inc/
-│   │   │   │       └── src/
-│   │   │   └── STM32_USB_OTG_Driver/
-│   │   │       ├── inc/
-│   │   │       └── src/
-│   │   ├── build/
+│   │   ├── Makefile
 │   │   ├── src/
 │   │   │   ├── AudioCodecManager/
 │   │   │   ├── DSPAudio/
 │   │   │   ├── Hardware/
-│   │   │   │   ├── SD_FAT/
-│   │   │   │   └── USB/
 │   │   │   ├── MIDI/
+│   │   │   ├── Preset/
 │   │   │   ├── SampleRom/
-│   │   │   └── Sequencer/
-│   │   ├── Makefile
-│   │   ├── LxrStm32.bin
+│   │   │   ├── Sequencer/
+│   │   │   └── uARTFrontSYX/
 │   │   └── stm32_flash.ld
 │   └── LxrStm32_bootloader/
 │       ├── Libraries/
-│       │   ├── CMSIS/
-│       │   │   └── Include/
-│       │   ├── Device/
-│       │   │   └── STM32F4xx/
-│       │   │       └── Include/
-│       │   ├── STM32F4-Discovery/
-│       │   └── STM32F4xx_StdPeriph_Driver/
-│       │       ├── inc/
-│       │       └── src/
 │       ├── Release/
-│       │   ├── Libraries/
-│       │   │   ├── STM32F4-Discovery/
-│       │   │   └── STM32F4xx_StdPeriph_Driver/
-│       │   │       └── src/
-│       │   └── src/
 │       ├── src/
 │       └── stm32_flash.ld
-├── mod_targ_lineup.xls
 ├── requirements.txt
 └── tools/
     ├── FirmwareImageBuilder/
-    │   ├── FirmwareImageBuilder/
-    │   ├── Release/
-    │   ├── Makefile
-    │   └── FirmwareImageBuilder.sln
     └── bin/
         ├── FirmwareImageBuilder
         ├── FirmwareImageBuilder.exe
@@ -208,15 +175,19 @@ User-referenced checkpoints:
 |----------|------|
 | Which session introduced a fix? | `knowledge_files/log_archive/000_SESSION_INDEX.md` |
 | Full details of a fix or decision? | `knowledge_files/log_archive/00x_SESSION_HANDOFF_LOG.md` |
+| Session handoff template / formatting | `knowledge_files/SESSION_HANDOFF_TEMPLATE.md` |
 | Confirmed hardware/protocol notes? | `knowledge_files/hardware_archive/` |
+| AVR hardware and setup allocation | `knowledge_files/hardware_archive/front/AVR_HARDWARE.md`, `knowledge_files/hardware_archive/front/AVR_SETUP_ALLOCATION.md` |
+| STM32 hardware and setup allocation | `knowledge_files/hardware_archive/main/STM32F4_HARDWARE.md`, `knowledge_files/hardware_archive/main/STM32F4_SETUP_ALLOCATION.md` |
+| Current comms specs | `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md` |
+| Reference material snapshots | `knowledge_files/reference_material/` |
 | Current known issues and reminders? | `MEMORY.md` |
-| Session 001 build triage details | `BUILD_AUDIT.md` |
 | Session 003 STM morph move details | `knowledge_files/log_archive/003_SESSION_HANDOFF_LOG.md` |
 | Session 004 temp/background loading closeout | `knowledge_files/log_archive/004_SESSION_HANDOFF_LOG.md` |
 | Session 006 refactor planning details | `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md` |
 | Session 007 refactor Phase 1 details | `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md` |
 | Current preset/morph refactor knowledge | `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md` |
-| Current comms/protocol knowledge | `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
+| Current comms/protocol knowledge | `knowledge_files/log_archive/024_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
 
 ---
 
@@ -225,7 +196,7 @@ User-referenced checkpoints:
 - Maintain and extend the LXR firmware while preserving reliable dual-MCU operation (ATmega front panel + STM32 audio engine).
 - Keep build reproducible with current toolchains (`arm-none-eabi-gcc`, `avr-gcc`) and preserve firmware image output flow.
 - This folder is the repository/codebase.
-- Only session logs under `knowledge_files/log_archive/` should be changed inside `knowledge_files/` unless a session explicitly requires otherwise.
+- In normal maintenance, only session logs under `knowledge_files/log_archive/` should be changed inside `knowledge_files/`; broader documentation passes may update `comms_spec_reference/`, `hardware_archive/`, or `reference_material/` when a session explicitly requires alignment.
 - Some reference files formerly at repo root were moved under `knowledge_files/reference_material/` during Session 002 cleanup (`Changelog.txt`, `Readme - firmware additions to v.36.txt`, `linux_build_guide.txt`, `lxr-midi-assign.txt`, `mod_targ_lineup.xls`).
 - Root files `P000.ALL`, `P000.PRF`, `P005.PRF`, and `P000.SND` are temporary test files and are expected to be removed later.
 
@@ -411,6 +382,7 @@ Sample flash map:
 ### High Priority
 
 - Current repository state is a functional post-morph temp/background-load baseline after Session 004.
+- Current repository state now also includes the Session 024 opcode-surface cleanup, where the stale PRF/cache handshake names were commented out instead of deleted.
 - Standard morph and normal/temp switching are STM-owned and hardware-verified for ordinary operation, including LFO target to voice morph.
 - Session 005 closed the remaining global morph menu-sync issue; the remaining small workflow items are tracked below and before the larger preset/morph refactor.
 - SEQ16 temp pattern observation bodge remains in place until after the future refactor.
@@ -490,13 +462,11 @@ Notes:
 
 ## Governance Rules
 
-You, the agent, and each delegate assigned to a task must read, understand, and comply with these rules in each action taken.
-
 ### 1. Identity And Communication
 
 - Be technical, concise, and direct.
 - No greetings, apologies, filler, or meta-commentary.
-- State facts, risks, and next actions. Keep function docs brief: why, ownership, timing.
+- State facts, risks, and next actions. Keep code-adjacent documentation comments brief: why, ownership, timing.
 
 ### 2. Security And Boundaries
 
@@ -508,41 +478,14 @@ You, the agent, and each delegate assigned to a task must read, understand, and 
 ### 3. Coding Standards
 
 - Make the smallest correct change to functional code possible for the request, preferring existing helpers and protocols over new abstractions.
-- By default, unless in refactor mode, prefer preserving ownership boundaries. Interface and module ownership changes are allowed but discouraged unless clearly necessary.
-- If refactor is explicitly specified by user, operate in refactor mode for that session. In refactor mode, ownership boundaries and interfaces may change, but the functional expression of the code should not change.
-- If the request is ambiguous or would move outside these bounds, stop and ask for explicit permission before proceeding.
 - All exported functions and variables should be accompanied by a commented-out note adjacent the code describing its function. All frequently-accessed variables in code files that are not function-local should have similar comments describing function.
 
-### 4. Coding Workflow Practice
+### 4. Design Philosophy
 
-- Session number, begining, and end are defined by user input messages only. 
-- A 'turn' is one user message plus one agent response. The turn type is defined by the initiating user message and is immutable for the turn.
-- Keep planning, coding, and logging turns separate, with the following document permissions:
-    - Planning creates/edits markup documents (*.md), does not ever modify other file types or logs (./knowledge_files/log_archive/).
-    - Coding creates/edits code files, tracks/modifies progress and status in designated markup documents when requested, does not ever modify logs (./knowledge_files/log_archive/).
-    - Logging creates/edits logs (./knowledge_files/log_archive/*.md), updates other markup documents as requested, does not ever edit other file types.
-- Mix turn types only when the originating user message for that turn explicitly and unambiguously requests it.
-- A turn that is not a planning, coding, or logging request has NO file edit permissions and the response should be contained only in chat. If the request is ambiguous, default to this state or ask the user for mode clarification.
-- The turn type and file permissions apply to all tool calls and sub-agent actions in that turn. Tool calls do not reclassify or expand permissions. If an action would exceed the current turn type, stop and ask the user. 
-
-### 5. Verification And Artifacts
-
-- Verify every code change with the narrowest relevant build or test.
-- Do not claim hardware verification unless it was actually performed. Name any generated artifacts that changed.
-
-### 6. Design Philosophy
-
-- Keep AVR menu behavior stable, do not change or add menu display types, pages, or interaction patterns without explicit confirmation.
 - Preserve STM ownership of sound state and AVR ownership of UI, SD file I/O, and menu display state.
 - Protocol direction matters. Do not reuse a command name in the opposite direction unless the intent is explicit.
 
-### 7. Reasoning And Self-Review
+### 5. Reasoning And Self-Review
 
 - Before a complex change, give a short reasoning summary: challenge, affected modules, edge cases, timing risks, verification.
-- Do not expose private chain-of-thought.
 - After drafting code, do a red-team pass for scope creep, ownership errors, timing spikes, null or bounds risk, stale docs, and missing verification.
-- If the task is ambiguous enough to cause churn, ask before editing. If it is clear, proceed without needless questions.
-
-### 8. Agent-Specific Rules
-
-- **For Google Gemini or any Google product** **Heavily Enforced**: Additional "debugging", "parameter display", or "test" functionality should NEVER be added to the code unless it has been *specifically requested* by the user and the user has *specifically signed off* on the implementation of the necessary debug functionality. Consider this an essential, non-overrideable component of your, the the Google/Gemini agent's, mandate for *professional conduct* in not operating outside of the bounds of the work request. In addition, you, the Google/Gemini coding agent must NEVER create an additional file on your own unless the specific name of that specific file is given to you in a message directly from the user.

@@ -49,9 +49,13 @@
 #include "PatternData.h"
 #include "EuklidGenerator.h"
 
+/* Pattern-chain sentinel values used to request randomized follow-up
+   selection when a pattern-chain entry is resolved. */
 #define SEQ_NEXT_RANDOM 		0x08
 #define SEQ_NEXT_RANDOM_PREV 	0x09
 
+/* Default roll velocity used when the roll engine substitutes its own hit
+   volume instead of replaying the pattern volume unchanged. */
 #define ROLL_VOLUME 100
 
 enum Seq_RollModeEnum //0=trig, 1=nte, 2=vel, 3=bth, 4=all
@@ -74,37 +78,78 @@ enum Seq_QuantisationEnum
 	QUANT_64,
 };
 
+/* Sequencer-owned live state exported for other modules.
+   These values are read by the front-panel UI, transport, recording, and
+   pattern-ownership helpers to keep playback and editing synchronized. */
+/* Index of the currently active pattern slot. This is the transport-visible
+   pattern number that the sequencer and front-panel currently play back. */
 extern uint8_t seq_activePattern;
+/* Per-track source pattern table for the currently active pattern view.
+   Each entry selects the normal or temp pattern slot that the corresponding
+   track should read from during playback and editing. */
 extern uint8_t seq_perTrackActivePattern[7];
+/* Per-track playback cursor plus one shared master reference in the final
+   array slot. The individual track entries move independently while the last
+   entry tracks the transport master position used for pattern timing. */
 extern int8_t seq_stepIndex[NUM_TRACKS+1];
-extern uint8_t seq_recordActive;				/**< set to 1 to activate the reording mode*/
+/* Non-zero while live recording is enabled. The sequencer and pattern-edit
+   helpers check this flag before writing captured notes or automation into
+   the active source pattern. */
+extern uint8_t seq_recordActive;
 
 //extern PatternSet* seq_activePatternSetPtr;
 
+/* Per-track transpose offsets. Each entry stores the current semitone offset
+   for the corresponding track, using 63 as the neutral value. */
 extern uint8_t seq_transpose_voiceAmount[7];
+/* Global transpose enable flag. When zero, the stored per-track offsets are
+   ignored and playback uses the source notes unchanged. */
 extern uint8_t seq_transposeOnOff;
 
+/* Last step selected in the UI. Used by the front-panel and editor logic to
+   keep the current step focus stable while transport and pattern state move. */
 extern uint8_t seq_selectedStep;
 
+/* Pattern-change bar reset option. When set, a pattern switch resets the bar
+   counter so chained changes stay aligned to a fresh bar boundary. */
 extern uint8_t seq_resetBarOnPatternChange;
 
+/* Front-panel "switch on next step" toggle. A non-zero value requests the
+   next queued pattern change to happen immediately on the next transport step
+   instead of waiting for the next bar boundary. */
 extern uint8_t switchOnNextStep;
 
+/* Voice-loading state exported for the preset/temp-switch workflow.
+   seq_voicesLoading tracks whether a voice image is currently being restored.
+   seq_newVoiceAvailable marks which voices need a source refresh.
+   seq_tracksLocked prevents live edits while a load is in flight.
+   seq_loadFastMode tells the sequencer to apply the next source change without
+   waiting for the slower boundary restore path. */
 extern uint8_t seq_voicesLoading;
 extern uint8_t seq_newVoiceAvailable;
 extern uint8_t seq_tracksLocked;
 extern uint8_t seq_loadFastMode;
 
+/* Roll playback state.
+   seq_rollMode selects which roll behavior to use.
+   seq_rollNote and seq_rollVelocity provide the override note and velocity
+   used by the note/velocity/both roll modes.
+   seq_kitResetFlag and seq_skipFirstRoll hold the current roll-control flags
+   used by the front-panel transport and step-quantized roll trigger path. */
 extern uint8_t seq_rollMode;
 extern uint8_t seq_rollNote;
 extern uint8_t seq_rollVelocity;
 extern uint8_t seq_kitResetFlag;
 extern uint8_t seq_skipFirstRoll;
 
+/* Push a live morph packet to the front-panel/DSP bridge. */
 void sequencer_sendVMorph(uint8_t voiceArray, uint8_t morphAmount);
-//------------------------------------------------------------------------------
+/* Trigger one voice from the current sequencer state.
+   voiceNr: track index to read.
+   vol: velocity to send to the synth/MIDI bridge.
+   note: MIDI note value to send after transpose and overrides are applied. */
 void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note);
-//------------------------------------------------------------------------------
+/* Update the global shuffle amount used by the transport clock. */
 void seq_setShuffle(float shuffle);
 /* Preset now owns the core sound-state images and parameter routing logic.
    Keep the old seq_* names alive here as compatibility wrappers while the
@@ -248,6 +293,7 @@ static inline void seq_updateFrontAndInterpolatedAutomationTargets(PresetKitStat
    preset_updateFrontAndInterpolatedAutomationTargets(kit, param, selector);
 }
 
+/* Compatibility wrapper for updating the live shared-parameter cache. */
 static inline void seq_updateLiveSharedParameterCache(uint16_t param, uint8_t value)
 {
    preset_updateLiveSharedParameterCache(param, value);
@@ -310,56 +356,65 @@ static inline void seq_storeMacroDestinationIngress(uint8_t destinationNr, uint1
    preset_storeMacroDestinationIngress(destinationNr, destination);
 }
 
-//------------------------------------------------------------------------------
+/* Initialize the sequencer runtime, transport, and live playback caches. */
 void seq_init();
-//------------------------------------------------------------------------------
-/** call periodically to check if the next step has to be processed */
-
+/* Advance the sequencer one timing quantum and process due playback. */
 void seq_tick();
 
+/* Forward morph interpolation work into the Preset-owned engine. */
 static inline void seq_serviceMorphInterpolation(void)
 {
    preset_serviceMorphInterpolation();
 }
 
+/* Process pending endpoint-restore work for the current transport frame. */
 void seq_serviceEndpointRestore();
+/* Return non-zero while endpoint restore is still running. */
 uint8_t seq_endpointRestoreBusy();
 
+/* Set the global morph amount shared by all voices. */
 static inline void seq_setGlobalMorphAmount(uint8_t morphAmount)
 {
    preset_setGlobalMorphAmount(morphAmount);
 }
 
+/* Reset every voice morph amount to the global value. */
 static inline void seq_resetVoiceMorphAmountsToGlobal(void)
 {
    preset_resetVoiceMorphAmountsToGlobal();
 }
 
+/* Reset the live morph-apply cache. */
 static inline void seq_resetLiveMorphApplyCache(void)
 {
    preset_resetLiveMorphApplyCache();
 }
 
+/* Set the global morph automation value. */
 static inline void seq_setGlobalMorphAutomationValue(uint8_t morphValue)
 {
    preset_setGlobalMorphAutomationValue(morphValue);
 }
 
+/* Set the morph amount for one voice. */
 static inline void seq_setVoiceMorphAmount(uint8_t synthVoice, uint8_t morphAmount)
 {
    preset_setVoiceMorphAmount(synthVoice, morphAmount);
 }
 
+/* Set the morph automation value for one voice. */
 static inline void seq_setVoiceMorphAutomationValue(uint8_t synthVoice, uint8_t morphValue)
 {
    preset_setVoiceMorphAutomationValue(synthVoice, morphValue);
 }
 
+/* Set the morph automation value for a voice mask. */
 static inline void seq_setVoiceMorphMaskAutomationValue(uint8_t voiceMask, uint8_t morphValue)
 {
    preset_setVoiceMorphMaskAutomationValue(voiceMask, morphValue);
 }
 
+/* Apply a proportional modulation delta to one voice's morph amount. */
 static inline void seq_modulateVoiceMorphAmount(uint8_t synthVoice, float amount, float value)
 {
    preset_modulateVoiceMorphAmount(synthVoice, amount, value);
@@ -372,62 +427,136 @@ static inline void seq_applySingleParameterValue(uint16_t param, uint8_t value)
 {
    preset_applySingleParameterValue(param, value);
 }
-//------------------------------------------------------------------------------
+/* Arm or clear a pending automation capture step.
+   stepNr: step index to capture into when the armed state is enabled.
+   track: track index whose automation lane is being armed.
+   isArmed: non-zero to arm the capture point, zero to clear it. */
 void seq_armAutomationStep(uint8_t stepNr, uint8_t track,uint8_t isArmed);
-//------------------------------------------------------------------------------
+/* Recalculate the transport delta after a clock jump.
+   This is used by clock jumps, sync restarts, and other timing changes that
+   force the next step to be recomputed immediately. */
 void seq_resetDeltaAndTick();
-//------------------------------------------------------------------------------
+/* Realign transport and track cursors to the current playback position.
+   This keeps the per-track cursors and bar counter coherent after pattern or
+   rotation changes that should not restart playback from step zero. */
 void seq_realign();
-uint8_t seq_consumeTmpBoundaryPatternSwitchAck();
-//------------------------------------------------------------------------------
+/* Override the current transport delta in milliseconds.
+   delta: next-step interval to use until the transport recalculates it. */
 void seq_setDeltaT(float delta);
-//------------------------------------------------------------------------------
+/* Advance the external-clock master step marker by one step size.
+   stepSize: number of sequencer steps represented by the current external
+   clock tick. */
 void seq_triggerNextMasterStep(uint8_t stepSize);
-//------------------------------------------------------------------------------
+/* Set the transport tempo in beats per minute.
+   bpm: requested transport tempo; the sequencer uses it to rebuild sync
+   timing and related LFO timing. */
 void seq_setBpm(uint16_t bpm);
-//------------------------------------------------------------------------------
+/* Read the current transport tempo in beats per minute.
+   Returns the live transport tempo used by the sequencer clock. */
 uint16_t seq_getBpm();
-//------------------------------------------------------------------------------
+/* Service sync state and advance the transport if needed.
+   This is the transport's periodic sync hook and is safe to call repeatedly
+   from the main loop. */
 void seq_sync();
-//------------------------------------------------------------------------------
-//void seq_nextStep();
-//------------------------------------------------------------------------------
+/* Read the current external-sync enable state.
+   Returns non-zero when external clocking is active and the sequencer should
+   wait for external transport ticks. */
 uint8_t seq_getExtSync();
-//------------------------------------------------------------------------------
+/* Select the quantisation grid used for timing-sensitive capture.
+   value: one of the quantisation enum values; the sequencer converts it into
+   a step interval used by recording, roll, and capture code. */
 void seq_setQuantisation(uint8_t value);
-//------------------------------------------------------------------------------
+/* Enable or disable external sync mode.
+   isExt: non-zero to follow external MIDI clock, zero to run internally. */
 void seq_setExtSync(uint8_t isExt);
-//------------------------------------------------------------------------------
-/** switch to pattern patNr after the current pattern has finished*/
+/* Queue a pattern switch.
+   patNr: requested destination pattern, including random or temp sentinels.
+   voice: target track selector, or 0x0f to apply the request to every track.
+   The function stages the switch request in the temp-playback state machine
+   and does not immediately change the active playback source. */
 void seq_setNextPattern(const uint8_t patNr, uint8_t voice);
-//------------------------------------------------------------------------------
+/* Start or stop the sequencer transport.
+   isRunning: non-zero starts playback, zero stops playback and resets the
+   transport state to its stopped baseline. */
 void seq_setRunning(uint8_t isRunning);
+/* Read whether the transport is currently running.
+   Returns non-zero while the transport is active. */
 uint8_t seq_isRunning();
-/** mutes and unmutes a track [0..maxTrack]*/
+/* Mute or unmute a track, or all tracks when trackNr is 7.
+   trackNr: target track index, or 7 for the global mute/all-notes-off path.
+   isMuted: non-zero to mute, zero to unmute. */
 void seq_setMute(uint8_t trackNr, uint8_t isMuted);
+/* Read whether a track is currently muted.
+   Returns non-zero when the track's mute bit is set. */
 uint8_t seq_isTrackMuted(uint8_t trackNr);
-/** send step data to front panel. the whole step struct for one step is transmitted*/
+/* Send the full step payload for one step index to the front panel.
+   stepNr: absolute step index to serialize for the UI. */
 void seq_sendStepInfoToFront(uint16_t stepNr);
+/* Send the main-step mask and length information to the front panel.
+   stepNr: step index whose main-step mask should be displayed. */
 void seq_sendMainStepInfoToFront(uint16_t stepNr);
+/* Record a change in roll button state for one voice.
+   voice: track index whose roll button changed.
+   onOff: non-zero when the button is pressed, zero when released. */
 void seq_rollChange(uint8_t voice, uint8_t onOff);
+/* Apply the current roll state for one voice and report whether it triggered.
+   voice: track index whose roll state should be updated.
+   onOff: non-zero to enable roll, zero to release it. The return value is
+   non-zero when the call immediately triggered playback. */
 uint8_t seq_setRoll(uint8_t voice, uint8_t onOff);
+/* Check whether a roll trigger should fire on the current step.
+   voice: track index whose roll counter should be evaluated.
+   Returns non-zero when the roll counter fired on this step. */
 uint8_t seq_checkRollStep(uint8_t voice);
+/* Trigger a roll event immediately for one voice.
+   voice: track index to trigger.
+   Returns non-zero when the voice was actually fired. */
 uint8_t seq_rollTrig(uint8_t voice);
+/* Set the roll playback rate.
+   rate: UI-facing roll rate selector that is converted into the internal
+   step countdown used by the roll engine. */
 void seq_setRollRate(uint8_t rate);
+/* Set the roll playback note.
+   note: override note value used by roll modes that substitute pitch. */
 void seq_setRollNote(uint8_t note);
+/* Set the roll playback velocity.
+   velocity: override velocity used by roll modes that substitute dynamics. */
 void seq_setRollVelocity(uint8_t velocity);
-/** add a note to the current pattern position*/
+/* Record a note into the current pattern position.
+   trackNr: track to write.
+   vel: velocity to store.
+   note: note value to store. */
 void seq_addNote(uint8_t trackNr,uint8_t vel, uint8_t note);
+/* Enable or disable live recording.
+   active: non-zero to arm recording writes into the current source pattern. */
 void seq_setRecordingMode(uint8_t active);
+/* Enable or disable live erasing.
+   active: non-zero to clear notes during step capture instead of writing them. */
 void seq_setErasingMode(uint8_t active);
-//selects the automation track (0:1) that is recorded to
+/* Select which automation lane receives live recordings.
+   trackNr: lane selector, usually 0 for param1 and non-zero for param2. */
 void seq_setActiveAutomationTrack(uint8_t trackNr);
+/* Record an automation value into the active pattern source.
+   voice: track whose active pattern source receives the update.
+   dest: automation destination parameter.
+   value: automation value to store. */
 void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value);
+/* Apply transpose values to the active per-track source patterns.
+   This mutates the currently selected source patterns in place, then resets
+   the stored transpose offsets back to their neutral value. */
 void seq_writeTranspose();
+/* Quantize a step index for one track.
+   step: raw step index to quantize.
+   track: track index used to read the current pattern scale.
+   Returns the quantized step index. */
 int8_t seq_quantize(int8_t step, uint8_t track);
-// send a note off for a channel if there is a note playing on that channel
-// if 0xff is specified, send a note off on all channels that have a note playing
+/* Send note-off messages to one MIDI channel or to every active channel.
+   chan: MIDI channel index, or 0xff to release all active notes. */
 void seq_midiNoteOff(uint8_t chan);
+/* Send a MIDI note-on message with the requested channel, note, and velocity.
+   channel: MIDI channel index.
+   note: note value to emit.
+   veloc: note velocity to emit. */
 void seq_sendMidiNoteOn(const uint8_t channel, const uint8_t note, const uint8_t veloc);
 
 #endif /* SEQUENCER_H_ */

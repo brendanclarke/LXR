@@ -104,10 +104,15 @@ void frontPanelSending_updateSubStepLeds(uint8_t trackNr,
    during normal parser progress; wait version is used when bracketing needs a
    synchronous grant. */
 void frontPanelSending_sendFlowGrant(uint8_t channel, uint8_t credits);
-void frontPanelSending_sendFlowGrantWait(uint8_t channel, uint8_t credits);
+//#define FRONT_PANEL_SEND_FLOW_GRANT_WAIT_DISABLED
+//#if 0
+//void frontPanelSending_sendFlowGrantWait(uint8_t channel, uint8_t credits);
+//#endif
 /* Abort a long-transfer flow-control session for channel. */
 void frontPanelSending_sendFlowAbort(uint8_t channel);
 /* Deprecated PRF compatibility status only; there is no active cache owner. */
-void frontPanelSending_sendPrfCacheStatus(uint8_t command, uint8_t status);
+//#if 0
+//void frontPanelSending_sendPrfCacheStatus(uint8_t command, uint8_t status);
+//#endif
 
 #endif /* UARTFRONTSYX_FRONTPANELSENDINGPROTOCOL_H_ */

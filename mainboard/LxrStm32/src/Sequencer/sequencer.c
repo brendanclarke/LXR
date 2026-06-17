@@ -192,494 +192,7 @@ static inline uint8_t seq_voiceNoteOverride(uint8_t voice)
    return (voice < 7) ? midi_NoteOverride[voice] : 0;
 }
 
-//------------------------------------------------------------------------------
-/* Phase 3 moves the temp-switch and restore ownership into Preset-owned
-   modules. Keep the old implementations disabled here as a migration reference
-   while the new call graph finishes settling. */
-#if 0
-//------------------------------------------------------------------------------
-static void seq_applyVoiceSource(uint8_t synthVoice, uint8_t useTmp)
-{
-   const PresetKitState *kit = useTmp ? &preset_tmpKitState : &preset_normalKitState;
-
-   preset_applyVoiceParameterValues(kit, synthVoice);
-   preset_applyVoiceAutomationTargets(&kit->interpolatedAutomationTargets, synthVoice);
-}
-
-//------------------------------------------------------------------------------
-static void seq_markVoiceSourceTarget(uint8_t synthVoice, uint8_t useTmp)
-{
-   uint8_t targetState = useTmp ? SEQ_VOICE_SOURCE_TMP : SEQ_VOICE_SOURCE_NORMAL;
-
-   if(synthVoice >= SEQ_SYNTH_VOICES)
-      return;
-
-   if(preset_voiceSourceState[synthVoice] == targetState)
-      return;
-
-   if(useTmp)
-   {
-      if(!preset_tmpKitState.valid)
-      {
-         /* TEMP PATTERN: per-track temp playback can request temporary voice
-            params even when the global active pattern stays normal. Ensure the
-            temporary parameter image exists before applying that voice source. */
-         preset_captureTmpKitState();
-      }
-   }
-
-   /* TEMP PATTERN: publish the source before applying automation targets so any
-      modulation callback observes the selected normal/temp image. */
-   preset_setVoiceSourceState(synthVoice, targetState);
-   preset_selectVoiceMorphAmountFromKit(synthVoice,
-                                     useTmp ? &preset_tmpKitState
-                                            : &preset_normalKitState);
-   seq_applyVoiceSource(synthVoice, useTmp);
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_allVoiceSourcesUseTmp()
-{
-   uint8_t synthVoice;
-
-   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
-   {
-      if(preset_voiceSourceState[synthVoice] != SEQ_VOICE_SOURCE_TMP)
-         return 0;
-   }
-
-   return 1;
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_allVoiceSourcesUseNormal()
-{
-   uint8_t synthVoice;
-
-   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
-   {
-      if(preset_voiceSourceState[synthVoice] != SEQ_VOICE_SOURCE_NORMAL)
-         return 0;
-   }
-
-   return 1;
-}
-
-//------------------------------------------------------------------------------
-static void seq_updateVoiceSourcesForPatternChange(const uint8_t *oldPatternForTrack,
-                                                   uint8_t pushEndpointUpdates)
-{
-   uint8_t synthVoice;
-   uint8_t changedVoiceMask = 0;
-
-   if(!oldPatternForTrack)
-      return;
-
-   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
-   {
-      uint8_t oldUseTmp =
-         seq_synthVoiceUsesTmpFromTrackPatterns(oldPatternForTrack, synthVoice);
-      uint8_t newUseTmp =
-         seq_synthVoiceUsesTmpFromTrackPatterns(seq_perTrackActivePattern, synthVoice);
-
-      if(oldUseTmp != newUseTmp)
-      {
-         seq_markVoiceSourceTarget(synthVoice, newUseTmp);
-         changedVoiceMask |= (uint8_t)(1 << synthVoice);
-      }
-   }
-
-   if(pushEndpointUpdates && changedVoiceMask)
-      preset_pushEndpointUpdateForVoiceSourceChange(changedVoiceMask);
-}
-
-//------------------------------------------------------------------------------
-static void seq_pushKitEndpointsToFront(const PresetKitState *kit)
-{
-   if(!kit)
-      return;
-
-   seq_pushKitEndpointVoiceMaskToFrontInternal(kit, 0xff, 0);
-}
-
-//------------------------------------------------------------------------------
-static void seq_pushKitEndpointsToFrontWithGlobalMorphReport(const PresetKitState *kit)
-{
-   if(!kit)
-      return;
-
-   seq_pushKitEndpointVoiceMaskToFrontInternal(kit, 0xff, 1);
-}
-
-//------------------------------------------------------------------------------
-static void seq_pushKitEndpointVoiceMaskToFront(const PresetKitState *kit,
-                                                uint8_t voiceMask)
-{
-   seq_pushKitEndpointVoiceMaskToFrontInternal(kit, voiceMask, 0);
-}
-
-//------------------------------------------------------------------------------
-static void seq_pushKitEndpointVoiceMaskToFrontInternal(const PresetKitState *kit,
-                                                        uint8_t voiceMask,
-                                                        uint8_t reportGlobalMorph)
-{
-   PresetEndpointRestoreRequest request;
-   uint8_t tail;
-   uint8_t last;
-
-   if(!kit || !voiceMask)
-      return;
-
-   request.kit = kit;
-   request.mode = (voiceMask == 0xff) ? SEQ_ENDPOINT_RESTORE_FULL
-                                      : SEQ_ENDPOINT_RESTORE_MASK;
-   request.voiceMask = voiceMask;
-   request.reportGlobalMorph = reportGlobalMorph;
-
-   /* RESTORE RATE LIMIT: endpoint/menu restores are queued and sent by
-      seq_serviceEndpointRestore(), one endpoint parameter per STM main-loop
-      pass. This keeps temp/normal pattern switching from performing a large
-      blocking UART dump in the sequencer boundary path. */
-   if(seq_endpointRestoreQueueCount)
-   {
-      last = (uint8_t)((seq_endpointRestoreQueueHead +
-                        seq_endpointRestoreQueueCount - 1) %
-                       SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH);
-
-      if(seq_endpointRestoreQueue[last].kit == request.kit &&
-         seq_endpointRestoreQueue[last].mode == request.mode)
-      {
-         if(request.mode == SEQ_ENDPOINT_RESTORE_MASK)
-            seq_endpointRestoreQueue[last].voiceMask |= request.voiceMask;
-         if(request.reportGlobalMorph)
-            seq_endpointRestoreQueue[last].reportGlobalMorph = 1;
-         return;
-      }
-   }
-
-   if(seq_endpointRestoreQueueCount >= SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH)
-   {
-      last = (uint8_t)((seq_endpointRestoreQueueHead +
-                        seq_endpointRestoreQueueCount - 1) %
-                       SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH);
-      seq_endpointRestoreQueue[last] = request;
-      return;
-   }
-
-   tail = (uint8_t)((seq_endpointRestoreQueueHead + seq_endpointRestoreQueueCount) %
-                    SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH);
-   seq_endpointRestoreQueue[tail] = request;
-   seq_endpointRestoreQueueCount++;
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_endpointRestorePopRequest()
-{
-   if(!seq_endpointRestoreQueueCount)
-      return 0;
-
-   seq_endpointRestoreCurrent = seq_endpointRestoreQueue[seq_endpointRestoreQueueHead];
-   seq_endpointRestoreQueueHead =
-      (uint8_t)((seq_endpointRestoreQueueHead + 1) % SEQ_ENDPOINT_RESTORE_QUEUE_LENGTH);
-   seq_endpointRestoreQueueCount--;
-
-   seq_endpointRestoreParamCursor = 0;
-   seq_endpointRestoreVoiceCursor = 0;
-   seq_endpointRestoreVoiceParamCursor = 0;
-   seq_endpointRestoreWaitCounter = 0;
-   return 1;
-}
-
-//------------------------------------------------------------------------------
-static void seq_endpointRestoreClearCurrent()
-{
-   seq_endpointRestoreCurrent.kit = 0;
-   seq_endpointRestoreCurrent.mode = SEQ_ENDPOINT_RESTORE_NONE;
-   seq_endpointRestoreCurrent.voiceMask = 0;
-   seq_endpointRestoreCurrent.reportGlobalMorph = 0;
-   seq_endpointRestoreParamCursor = 0;
-   seq_endpointRestoreVoiceCursor = 0;
-   seq_endpointRestoreVoiceParamCursor = 0;
-   seq_endpointRestoreWaitCounter = 0;
-   seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_IDLE;
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_endpointRestoreWaitTimedOut()
-{
-   if(seq_endpointRestoreWaitCounter < SEQ_ENDPOINT_RESTORE_WAIT_TIMEOUT)
-   {
-      seq_endpointRestoreWaitCounter++;
-      return 0;
-   }
-
-   return 1;
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_endpointRestoreSendNextFull(uint8_t morphEndpoint)
-{
-   uint16_t param;
-   const PresetKitState *kit = seq_endpointRestoreCurrent.kit;
-   const uint8_t *values = morphEndpoint ? kit->morphEndpointParams
-                                         : kit->kitEndpointParams;
-
-   param = seq_endpointRestoreParamCursor;
-   if(param < END_OF_SOUND_PARAMETERS)
-   {
-      if(morphEndpoint)
-         frontPanelSending_sendRestoreMorphParam(param, values[param]);
-      else
-         frontPanelSending_sendRestoreParam(param, values[param]);
-
-      seq_endpointRestoreParamCursor = (uint16_t)(param + 1);
-      return 1;
-   }
-
-   return 0;
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_endpointRestoreSendNextMasked(uint8_t morphEndpoint)
-{
-   const PresetKitState *kit = seq_endpointRestoreCurrent.kit;
-   const uint8_t *values = morphEndpoint ? kit->morphEndpointParams
-                                         : kit->kitEndpointParams;
-
-   while(seq_endpointRestoreVoiceCursor < SEQ_SYNTH_VOICES)
-   {
-      uint8_t synthVoice = seq_endpointRestoreVoiceCursor;
-
-      if(!(seq_endpointRestoreCurrent.voiceMask & (uint8_t)(1 << synthVoice)))
-      {
-         seq_endpointRestoreVoiceCursor++;
-         seq_endpointRestoreVoiceParamCursor = 0;
-         continue;
-      }
-
-      while(seq_endpointRestoreVoiceParamCursor < SEQ_VOICE_PARAM_LENGTH)
-      {
-         uint16_t param =
-            seq_canonicalParamFromVoiceMask(
-               preset_voiceParamMask[synthVoice][seq_endpointRestoreVoiceParamCursor]);
-
-         seq_endpointRestoreVoiceParamCursor++;
-
-         if(param < END_OF_SOUND_PARAMETERS)
-         {
-            if(morphEndpoint)
-               frontPanelSending_sendRestoreMorphParam(param, values[param]);
-            else
-               frontPanelSending_sendRestoreParam(param, values[param]);
-
-            return 1;
-         }
-      }
-
-      seq_endpointRestoreVoiceCursor++;
-      seq_endpointRestoreVoiceParamCursor = 0;
-   }
-
-   return 0;
-}
-
-//------------------------------------------------------------------------------
-static uint8_t seq_endpointRestoreSendNext(uint8_t morphEndpoint)
-{
-   if(!seq_endpointRestoreCurrent.kit)
-      return 0;
-
-   if(seq_endpointRestoreCurrent.mode == SEQ_ENDPOINT_RESTORE_FULL)
-      return seq_endpointRestoreSendNextFull(morphEndpoint);
-
-   return seq_endpointRestoreSendNextMasked(morphEndpoint);
-}
-
-//------------------------------------------------------------------------------
-uint8_t seq_endpointRestoreBusy()
-{
-   return (uint8_t)((seq_endpointRestorePhase != SEQ_ENDPOINT_RESTORE_PHASE_IDLE) ||
-                   (seq_endpointRestoreQueueCount != 0));
-}
-
-//------------------------------------------------------------------------------
-void seq_serviceEndpointRestore()
-{
-   switch(seq_endpointRestorePhase)
-   {
-      case SEQ_ENDPOINT_RESTORE_PHASE_IDLE:
-         if(!seq_endpointRestorePopRequest())
-            return;
-
-         preset_tmpKitHandshakeReady = 0;
-         preset_tmpKitHandshakeAck = 0;
-         frontPanelSending_sendRestoreBegin();
-         seq_endpointRestoreWaitCounter = 0;
-         seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_WAIT_READY;
-         return;
-
-      case SEQ_ENDPOINT_RESTORE_PHASE_WAIT_READY:
-         if(preset_tmpKitHandshakeReady)
-         {
-            seq_endpointRestoreParamCursor = 0;
-            seq_endpointRestoreVoiceCursor = 0;
-            seq_endpointRestoreVoiceParamCursor = 0;
-            seq_endpointRestoreWaitCounter = 0;
-            seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_SEND_FRONT;
-         }
-         else if(seq_endpointRestoreWaitTimedOut())
-         {
-            /* RESTORE: If READY is lost, release AVR restoreActive with DONE so
-               front-panel traffic cannot remain suppressed indefinitely. */
-            frontPanelSending_sendRestoreDone();
-            seq_endpointRestoreClearCurrent();
-         }
-         return;
-
-      case SEQ_ENDPOINT_RESTORE_PHASE_SEND_FRONT:
-         if(seq_endpointRestoreSendNext(0))
-            return;
-
-         seq_endpointRestoreParamCursor = 0;
-         seq_endpointRestoreVoiceCursor = 0;
-         seq_endpointRestoreVoiceParamCursor = 0;
-         seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_SEND_MORPH;
-         return;
-
-      case SEQ_ENDPOINT_RESTORE_PHASE_SEND_MORPH:
-         if(seq_endpointRestoreSendNext(1))
-            return;
-
-         preset_tmpKitHandshakeAck = 0;
-         if(seq_endpointRestoreCurrent.reportGlobalMorph)
-            frontPanelSending_sendGlobalMorphReport(seq_endpointRestoreCurrent.kit->globalMorphAmount);
-         frontPanelSending_sendRestoreDone();
-         seq_endpointRestoreWaitCounter = 0;
-         seq_endpointRestorePhase = SEQ_ENDPOINT_RESTORE_PHASE_WAIT_ACK;
-         return;
-
-      case SEQ_ENDPOINT_RESTORE_PHASE_WAIT_ACK:
-         if(preset_tmpKitHandshakeAck)
-         {
-            seq_endpointRestoreClearCurrent();
-         }
-         else if(seq_endpointRestoreWaitTimedOut())
-         {
-            seq_endpointRestoreClearCurrent();
-         }
-         return;
-
-      default:
-         seq_endpointRestoreClearCurrent();
-         return;
-   }
-}
-
-//------------------------------------------------------------------------------
-static void seq_pushEndpointUpdateForVoiceSourceChange(uint8_t changedVoiceMask)
-{
-   uint8_t synthVoice;
-   uint8_t normalVoiceMask = 0;
-   uint8_t tmpVoiceMask = 0;
-
-   if(!seq_tmpKitPushParamsToFrontEnabled || !changedVoiceMask)
-      return;
-
-   if(seq_allVoiceSourcesUseTmp())
-   {
-      if(!preset_tmpKitState.valid)
-         preset_captureTmpKitState();
-
-      seq_pushKitEndpointsToFront(&preset_tmpKitState);
-      return;
-   }
-
-   if(seq_allVoiceSourcesUseNormal())
-   {
-      seq_pushKitEndpointsToFront(&preset_normalKitState);
-      return;
-   }
-
-   for(synthVoice=0;synthVoice<SEQ_SYNTH_VOICES;synthVoice++)
-   {
-      uint8_t bit = (uint8_t)(1 << synthVoice);
-
-      if(!(changedVoiceMask & bit))
-         continue;
-
-      if(preset_voiceSourceState[synthVoice] == SEQ_VOICE_SOURCE_TMP)
-         tmpVoiceMask |= bit;
-      else
-         normalVoiceMask |= bit;
-   }
-
-   if(tmpVoiceMask)
-   {
-      if(!preset_tmpKitState.valid)
-         preset_captureTmpKitState();
-
-      seq_pushKitEndpointVoiceMaskToFront(&preset_tmpKitState, tmpVoiceMask);
-   }
-
-   if(normalVoiceMask)
-      seq_pushKitEndpointVoiceMaskToFront(&preset_normalKitState, normalVoiceMask);
-}
-
-//------------------------------------------------------------------------------
-static void seq_maybePushKitEndpointsToFrontWithGlobalMorphReport(const PresetKitState *kit)
-{
-   if(!seq_tmpKitPushParamsToFrontEnabled)
-      return;
-
-   seq_pushKitEndpointsToFrontWithGlobalMorphReport(kit);
-}
-
-//------------------------------------------------------------------------------
-static void seq_setTmpKitActive(uint8_t active)
-{
-   if(active)
-   {
-      if(preset_tmpKitActive)
-         return;
-
-      if(!preset_tmpKitState.valid)
-      {
-         /* TEMP PATTERN: A user can switch to the temporary pattern without
-            first copying a normal pattern into it. Create a parameter sandbox
-            from the current normal images so menu edits while the temp pattern
-            is active cannot land in normal parameter storage. */
-         preset_captureTmpKitState();
-      }
-
-      /* TEMP PATTERN: Phase 1 avoids broad shared/non-voice DSP application on
-         switch. Voice-local params are applied per synth voice after per-track
-         pattern sources are committed. */
-      preset_tmpKitActive = 1;
-      preset_syncVMorphAmountMirrorsFromLiveSources();
-      preset_invalidateLiveMorphApplyCache(PRESET_MORPH_IMAGE_TMP);
-
-      /* RESTORE: Push the full temporary kit endpoints (Main + Morph) to the AVR.
-         These may come from copy-to-temp or from lazy temp-kit initialization. */
-      preset_maybePushKitEndpointsToFrontWithGlobalMorphReport(&preset_tmpKitState);
-      return;
-   }
-
-   if(!preset_tmpKitActive)
-      return;
-
-   /* TEMP PATTERN: Phase 1 avoids broad shared/non-voice DSP application on
-      switch. Voice-local params are applied per synth voice after per-track
-      pattern sources are committed. */
-   preset_tmpKitActive = 0;
-   preset_syncVMorphAmountMirrorsFromLiveSources();
-   preset_invalidateLiveMorphApplyCache(PRESET_MORPH_IMAGE_NORMAL);
-
-   /* RESTORE: Push the full captured normal kit endpoints (Main + Morph) to the AVR. */
-   preset_maybePushKitEndpointsToFrontWithGlobalMorphReport(&preset_normalKitState);
-}
-#endif
-
-//------------------------------------------------------------------------------
+/* Initialize the sequencer runtime, transport, and live playback caches. */
 void seq_init()
 {
    int i;
@@ -719,9 +232,10 @@ void seq_init()
    seq_transposeOnOff = 0;
 
 
-   seq_initPatternData();
+   pat_initPatternData();
 
 }
+/* Set the global shuffle amount used by the transport clock. */
 void seq_setShuffle(float shuffle)
 {
    seq_shuffle = shuffle;
@@ -755,6 +269,7 @@ static void seq_calcDeltaT(uint16_t bpm)
    }
 }
 //------------------------------------------------------------------------------
+/* Set the transport tempo in beats per minute. */
 void seq_setBpm(uint16_t bpm)
 {
    seq_tempo 	= bpm;
@@ -762,19 +277,26 @@ void seq_setBpm(uint16_t bpm)
    lfo_recalcSync();
 }
 //------------------------------------------------------------------------------
+/* Read the current transport tempo in beats per minute. */
 uint16_t seq_getBpm()
 {
    return seq_tempo;
 }
 //------------------------------------------------------------------------------
+/* Service the sync source and advance the transport if needed. */
 void seq_sync()
 {
    sync_tick();
 }
 //------------------------------------------------------------------------------
+/* Queue a pattern switch request for one track or for the whole pattern.
+   patNr: requested destination pattern, including temp and random sentinels.
+   voice: target track selector, or 0x0f to broadcast the same request to all
+   tracks. The request is staged in the temp-playback switch state and is not
+   applied immediately. */
 void seq_setNextPattern(const uint8_t patNr, uint8_t voice)
 {
-   uint8_t nextPattern = seq_normalizePatternNumber(patNr);
+   uint8_t nextPattern = pat_normalizePatternNumber(patNr);
    if(voice>=0x0f)
    {
       preset_tempPlaybackSwitchState.pendingPattern = nextPattern;
@@ -855,7 +377,7 @@ static Step* seq_liveStepForTrack(uint8_t track, uint8_t step)
    if(track >= NUM_TRACKS)
       track = 0;
 
-   return seq_getStepPtr(seq_perTrackActivePattern[track], track, step);
+   return pat_getStepPtr(seq_perTrackActivePattern[track], track, step);
 }
 //------------------------------------------------------------------------------
 static LengthRotate seq_liveLengthRotateForTrack(uint8_t track)
@@ -863,7 +385,7 @@ static LengthRotate seq_liveLengthRotateForTrack(uint8_t track)
    if(track >= NUM_TRACKS)
       track = 0;
 
-   return *seq_getLengthRotatePtr(seq_perTrackActivePattern[track], track);
+   return *pat_getLengthRotatePtr(seq_perTrackActivePattern[track], track);
 }
 //------------------------------------------------------------------------------
 static uint8_t seq_liveMainStepActive(uint8_t track, uint8_t mainStep)
@@ -871,7 +393,7 @@ static uint8_t seq_liveMainStepActive(uint8_t track, uint8_t mainStep)
    if(track >= NUM_TRACKS)
       track = 0;
 
-   return (seq_getMainSteps(seq_perTrackActivePattern[track], track) & (1<<mainStep)) > 0;
+   return (pat_getMainSteps(seq_perTrackActivePattern[track], track) & (1<<mainStep)) > 0;
 }
 //------------------------------------------------------------------------------
 static uint8_t seq_liveStepActive(uint8_t track, uint8_t step)
@@ -879,6 +401,9 @@ static uint8_t seq_liveStepActive(uint8_t track, uint8_t step)
    return (seq_liveStepForTrack(track, step)->volume & STEP_ACTIVE_MASK) > 0;
 }
 //------------------------------------------------------------------------------
+/* Trigger one voice from the current sequencer state.
+   voiceNr selects the track source, vol is the output velocity, and note is
+   the final MIDI/synth note after transpose and overrides. */
 void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
 {
    uint8_t midiChan; // which midi channel to send a note on
@@ -945,6 +470,9 @@ void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
    }
 }
 //------------------------------------------------------------------------------
+/* Apply the current transpose offset for one voice.
+   voice: track index.
+   note: source note before transpose. Returns the adjusted note. */
 uint8_t seq_getTransposedNote(uint8_t voice, uint8_t note)
 {
    uint8_t retNote = note;
@@ -978,7 +506,7 @@ static uint8_t seq_determineNextPattern()
 {
    PatternSetting p;
 
-   p = *seq_getPatternSettingPtr(seq_activePattern);
+   p = *pat_getPatternSettingPtr(seq_activePattern);
 
    if( (seq_barCounter>0)&&(seq_barCounter % (p.changeBar+1) == 0) )
    {
@@ -989,6 +517,7 @@ static uint8_t seq_determineNextPattern()
    else
       return seq_activePattern;
 }
+/* Capture the current transport position as the start of a loop range. */
 void seq_startLoop()
 {
    uint8_t i;
@@ -1053,7 +582,7 @@ static void seq_nextStep()
    uint8_t voiceTriggered=0; // did we already trigger this voice?
    
 	//if( (((seq_stepIndex[0]+1) &0x7f) == 0) ||
-	//    (((seq_patternSet.seq_subStepPattern[seq_activePattern][0][seq_stepIndex[0]+1]).note & PATTERN_END_MASK)>=PATTERN_END_MASK) )
+	//    (((pat_patternSet.pat_subStepPattern[seq_activePattern][0][seq_stepIndex[0]+1]).note & PATTERN_END_MASK)>=PATTERN_END_MASK) )
    if ( ( (seq_stepIndex[NUM_TRACKS]+1) & 0x7f) == 0)
    {
       masterStepPos = 0;
@@ -1124,7 +653,7 @@ static void seq_nextStep()
          
          if(preset_tempPlaybackSwitchState.newPatternAvailable)
          {
-            seq_activateTmpPattern();
+            pat_activateTmpPattern();
             preset_tempPlaybackSwitchState.newPatternAvailable = 0;
          }
 
@@ -1134,7 +663,7 @@ static void seq_nextStep()
             oldTrackPattern[i] = seq_perTrackActivePattern[i];
          }
          uint8_t oldActivePattern = seq_activePattern;
-         uint8_t newActivePattern = seq_normalizePatternNumber(preset_tempPlaybackSwitchState.pendingPattern);
+         uint8_t newActivePattern = pat_normalizePatternNumber(preset_tempPlaybackSwitchState.pendingPattern);
          uint8_t activePatternChanged = (oldActivePattern != newActivePattern);
          uint8_t tmpBoundaryPatternChanged = 0;
          
@@ -1147,7 +676,7 @@ static void seq_nextStep()
             euklid_clearRotation();
             for (i=0;i<NUM_TRACKS;i++)
             {
-               seq_perTrackActivePattern[i]=seq_normalizePatternNumber(preset_tempPlaybackSwitchState.perTrackPendingPattern[i]);
+               seq_perTrackActivePattern[i]=pat_normalizePatternNumber(preset_tempPlaybackSwitchState.perTrackPendingPattern[i]);
             }
          }
          else
@@ -1157,7 +686,7 @@ static void seq_nextStep()
             for (i=0;i<NUM_TRACKS;i++)
             {
             
-               seq_perTrackActivePattern[i]=seq_normalizePatternNumber(preset_tempPlaybackSwitchState.pendingPattern);
+               seq_perTrackActivePattern[i]=pat_normalizePatternNumber(preset_tempPlaybackSwitchState.pendingPattern);
             }
          
          }
@@ -1377,16 +906,22 @@ static void seq_nextStep()
 
 }
 //------------------------------------------------------------------------------
+/* Read whether external sync is enabled. */
 uint8_t seq_getExtSync()
 {
    return seq_isSyncExternal;
 }
 //------------------------------------------------------------------------------
+/* Enable or disable external sync mode. */
 void seq_setExtSync(uint8_t isExt)
 {
    seq_isSyncExternal = isExt;
 }
 //------------------------------------------------------------------------------
+/* Arm or clear one captured automation step.
+   stepNr: step index to capture when the arm is active.
+   track: track index whose automation lane is being armed.
+   isArmed: non-zero to store the step location, zero to clear it. */
 void seq_armAutomationStep(uint8_t stepNr, uint8_t track,uint8_t isArmed)
 {
    if(isArmed) {
@@ -1399,6 +934,8 @@ void seq_armAutomationStep(uint8_t stepNr, uint8_t track,uint8_t isArmed)
    }
 }
 //------------------------------------------------------------------------------
+/* Override the next transport interval directly.
+   delta: interval in milliseconds until the next transport step. */
 void seq_setDeltaT(float delta)
 {
    seq_deltaT = delta;
@@ -1415,6 +952,7 @@ void seq_setDeltaT(float delta)
  * We set the next step index to a value - 1 because seq_nextStep() will
  * increment the value itself
  */
+/* Advance the external-clock master step markers by one step size. */
 void seq_triggerNextMasterStep(uint8_t stepSize)
 {
    uint8_t i, sn, len;
@@ -1444,6 +982,7 @@ void seq_triggerNextMasterStep(uint8_t stepSize)
    seq_stepIndex[NUM_TRACKS]=sn;
 }
 //------------------------------------------------------------------------------
+/* Recalculate the transport delta after a clock jump and process overdue work. */
 void seq_resetDeltaAndTick()
 {
 	//if there are unplayed steps jump over them
@@ -1500,6 +1039,7 @@ void seq_resetDeltaAndTick()
 }
 //------------------------------------------------------------------------------
 /** call periodically to check if the next step has to be processed */
+/* Advance the sequencer when enough time has elapsed for the next step. */
 void seq_tick()
 {
    if(seq_deltaT == -1)
@@ -1549,6 +1089,7 @@ void seq_tick()
 
 }
 //------------------------------------------------------------------------------
+/* Select the quantisation grid used for recording and roll timing. */
 void seq_setQuantisation(uint8_t value)
 {
    seq_quantisation = value;
@@ -1580,19 +1121,21 @@ void seq_setQuantisation(uint8_t value)
 //{
 //	if(onOff)
 //	{
-//		seq_patternSet.seq_subStepPattern[seq_activePattern][voice][stepNr].volume |= STEP_ACTIVE_MASK;
+//		pat_patternSet.pat_subStepPattern[seq_activePattern][voice][stepNr].volume |= STEP_ACTIVE_MASK;
 //	}
 //	else
 //	{
-//		seq_patternSet.seq_subStepPattern[seq_activePattern][voice][stepNr].volume &= ~STEP_ACTIVE_MASK;
+//		pat_patternSet.pat_subStepPattern[seq_activePattern][voice][stepNr].volume &= ~STEP_ACTIVE_MASK;
 //	}
 //}
 //------------------------------------------------------------------------------
+/* Read whether the transport is currently running. */
 uint8_t seq_isRunning() {
    return seq_running;
 }
 
 //------------------------------------------------------------------------------
+/* Start or stop the transport and update the live playback state. */
 void seq_setRunning(uint8_t isRunning)
 {
    seq_running = isRunning;
@@ -1602,7 +1145,7 @@ void seq_setRunning(uint8_t isRunning)
    	// --AS reset all track rotations to 0. We are not saving rotated value. it's a performance tool.
       uint8_t i;
       for(i=0;i<NUM_TRACKS;i++) {
-         seq_getLengthRotatePtr(seq_perTrackActivePattern[i], i)->rotate=0;
+         pat_getLengthRotatePtr(seq_perTrackActivePattern[i], i)->rotate=0;
       	// let the front know this is happening
          frontPanelSending_sendTrackRotationReply(i);
       }
@@ -1636,6 +1179,7 @@ void seq_setRunning(uint8_t isRunning)
    seq_setStepIndexToStart();
    frontPanelSending_sendRunStop(isRunning);
 }
+/* Mute or unmute a track, or all tracks when trackNr is 7. */
 void seq_setMute(uint8_t trackNr, uint8_t isMuted)
 {
    
@@ -1675,6 +1219,7 @@ void seq_setMute(uint8_t trackNr, uint8_t isMuted)
    }
 };
 //------------------------------------------------------------------------------
+/* Read whether a track is currently muted. */
 uint8_t seq_isTrackMuted(uint8_t trackNr)
 {
    if(seq_mutedTracks & (1<<trackNr) )
@@ -1687,6 +1232,7 @@ uint8_t seq_isTrackMuted(uint8_t trackNr)
 // given a pattern and a track:
 // this sends the main step info (which main steps are on/off) in addition
 // to the length of the track
+/* Send the main-step mask and length information for one step to the front panel. */
 void seq_sendMainStepInfoToFront(uint16_t stepNr)
 {
    frontPanelSending_sendMainStepInfo(stepNr);
@@ -1709,12 +1255,16 @@ void seq_sendMainStepInfoToFront(uint16_t stepNr)
  *
  * 8th - (0 MSB7 MSB6 MSB5 MSB4 MSB3 MSB2 MSB1)
  */
+/* Send the full step payload for one step index to the front panel. */
 void seq_sendStepInfoToFront(uint16_t stepNr)
 {
    frontPanelSending_sendStepInfo(stepNr);
 }
 //-------------------------------------------------------------------------------
-uint8_t seq_rollTrig(uint8_t voice) // called by all roll modes to trigger a voice
+/* Trigger one roll hit for the requested voice.
+   voice: track index to fire.
+   Returns non-zero when the trigger path actually emitted playback. */
+uint8_t seq_rollTrig(uint8_t voice)
 {
    uint8_t triggered = 0;
    Step *stepData = seq_liveStepForTrack(voice, seq_stepIndex[voice]);
@@ -1788,6 +1338,7 @@ uint8_t seq_rollTrig(uint8_t voice) // called by all roll modes to trigger a voi
    return triggered;
 }
 //-------------------------------------------------------------------------------
+/* Record a change in roll button state for one voice. */
 void seq_rollChange(uint8_t voice, uint8_t onOff) // a message about changing roll state was received
                                                   // note it and let the next step deal
 {
@@ -1806,6 +1357,7 @@ void seq_rollChange(uint8_t voice, uint8_t onOff) // a message about changing ro
    }
 }
 //-------------------------------------------------------------------------------
+/* Apply the current roll state for one voice and report whether it triggered. */
 uint8_t seq_setRoll(uint8_t voice, uint8_t onOff)// called processing step if roll changed since last step
                                                  // deals with setting roll on/off, triggering 1-shot, 
                                                  // and quantizing and loading step countdown timer
@@ -1861,6 +1413,7 @@ uint8_t seq_setRoll(uint8_t voice, uint8_t onOff)// called processing step if ro
    return 0;
 }// end func
 //--------------------------------------------------------------------------------
+/* Check whether a roll trigger should fire on the current step. */
 uint8_t seq_checkRollStep(uint8_t voice) // called every step if roll active for voice
                                          // will: 1. check if roll counter=0, if so...
                                          // 2. switch through different roll modes 3. load
@@ -1879,16 +1432,19 @@ uint8_t seq_checkRollStep(uint8_t voice) // called every step if roll active for
    return triggered;
 }
 //--------------------------------------------------------------------------------
+/* Set the roll playback note. */
 void seq_setRollNote(uint8_t note)
 {  
    seq_rollNote = note;
 }
 //--------------------------------------------------------------------------------
+/* Set the roll playback velocity. */
 void seq_setRollVelocity(uint8_t velocity)
 {
    seq_rollVelocity = velocity;
 }
 //--------------------------------------------------------------------------------
+/* Set the roll playback rate. */
 void seq_setRollRate(uint8_t rate)
 {
 	/*roll rates
@@ -1989,7 +1545,7 @@ void seq_setRollRate(uint8_t rate)
 int8_t seq_quantize(int8_t step, uint8_t track)
 {
    uint8_t quantisationMultiplier=1;
-   uint8_t scale=seq_getLengthRotatePtr(seq_perTrackActivePattern[track], track)->scale;
+   uint8_t scale=pat_getLengthRotatePtr(seq_perTrackActivePattern[track], track)->scale;
    switch(seq_quantisation)
    {
       case QUANT_8:
@@ -2042,18 +1598,18 @@ void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value)
       		seq_isStepActive(voice,quantizedStep,seq_perTrackActivePattern[voice]))
       {*/
       if(seq_activeAutomTrack == 0) {
-         Step *step = seq_getStepPtr(seq_perTrackActivePattern[voice], voice, quantizedStep);
+         Step *step = pat_getStepPtr(seq_perTrackActivePattern[voice], voice, quantizedStep);
          step->param1Nr = dest;
          step->param1Val = value;
       } 
       else {
-         Step *step = seq_getStepPtr(seq_perTrackActivePattern[voice], voice, quantizedStep);
+         Step *step = pat_getStepPtr(seq_perTrackActivePattern[voice], voice, quantizedStep);
          step->param2Nr = dest;
          step->param2Val = value;
       }
       
-      if(!seq_isStepActive(voice,quantizedStep,seq_perTrackActivePattern[voice])&&(quantizedStep%8))
-         seq_getStepPtr(seq_perTrackActivePattern[voice], voice, quantizedStep)->volume=0;
+      if(!pat_isStepActive(voice,quantizedStep,seq_perTrackActivePattern[voice])&&(quantizedStep%8))
+         pat_getStepPtr(seq_perTrackActivePattern[voice], voice, quantizedStep)->volume=0;
          
       //}
    }
@@ -2063,14 +1619,14 @@ void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value)
    	//step button is held down
    	//-> set step automation parameters
       if(seq_activeAutomTrack == 0) {
-         Step *step = seq_getStepPtr(seq_perTrackActivePattern[voice],
+         Step *step = pat_getStepPtr(seq_perTrackActivePattern[voice],
                                            seq_armedArmedAutomationTrack,
                                            seq_armedArmedAutomationStep);
          step->param1Nr = dest;
          step->param1Val = value;
       } 
       else {
-         Step *step = seq_getStepPtr(seq_perTrackActivePattern[voice],
+         Step *step = pat_getStepPtr(seq_perTrackActivePattern[voice],
                                            seq_armedArmedAutomationTrack,
                                            seq_armedArmedAutomationStep);
          step->param2Nr = dest;
@@ -2106,18 +1662,18 @@ void seq_addNote(uint8_t trackNr,uint8_t vel, uint8_t note)
    	//special care must be taken when recording midi notes!
    	//since per default the 1st substep of a mainstep cluster is always active
    	//we will get double notes when a substep other than ss1 is recorded
-      if(!seq_isMainStepActive(trackNr, quantizedStep/8, targetPattern))
+      if(!pat_isMainStepActive(trackNr, quantizedStep/8, targetPattern))
       {
       	//if the mainstep is not active, we clear the 1st substep
       	//to prevent double notes while recording
-         seq_getStepPtr(targetPattern, trackNr, (uint8_t)((quantizedStep/8)*8))->volume 	&= ~STEP_ACTIVE_MASK;
+         pat_getStepPtr(targetPattern, trackNr, (uint8_t)((quantizedStep/8)*8))->volume 	&= ~STEP_ACTIVE_MASK;
       }
    
    	//set the current step in the requested track active
       if (vel==0)
-         stepPtr=seq_getStepPtr(targetPattern, trackNr, unquantizedStep);
+         stepPtr=pat_getStepPtr(targetPattern, trackNr, unquantizedStep);
       else
-         stepPtr=seq_getStepPtr(targetPattern, trackNr, quantizedStep);
+         stepPtr=pat_getStepPtr(targetPattern, trackNr, quantizedStep);
       
    
       stepPtr->note 		= note;				// note (--AS was SEQ_DEFAULT_NOTE)
@@ -2127,7 +1683,7 @@ void seq_addNote(uint8_t trackNr,uint8_t vel, uint8_t note)
       stepPtr->volume 	|= STEP_ACTIVE_MASK;
    
    	//activate corresponding main step
-      seq_setMainStep(targetPattern, trackNr, quantizedStep/8,1);
+      pat_setMainStep(targetPattern, trackNr, quantizedStep/8,1);
    
       if( (frontParser_shownPattern == targetPattern) && ( frontParser_activeTrack == trackNr) )
       {
@@ -2149,15 +1705,15 @@ static void seq_eraseStepAndSubSteps(const uint8_t voice, const uint8_t mainStep
 {
    uint8_t i;
 	// turn off the main step
-   seq_setMainStep(seq_perTrackActivePattern[voice], voice, mainStep,0);
+   pat_setMainStep(seq_perTrackActivePattern[voice], voice, mainStep,0);
 
 	// turn off all substeps
    for(i=(uint8_t)(mainStep*8);i<(uint8_t)((mainStep+1)*8);i++) {
-      seq_resetNote(seq_getStepPtr(seq_perTrackActivePattern[voice], voice, i));
+      seq_resetNote(pat_getStepPtr(seq_perTrackActivePattern[voice], voice, i));
    }
 
 	// first substep needs to be made active
-   seq_getStepPtr(seq_perTrackActivePattern[voice], voice, (uint8_t)(mainStep*8))->volume |= STEP_ACTIVE_MASK;
+   pat_getStepPtr(seq_perTrackActivePattern[voice], voice, (uint8_t)(mainStep*8))->volume |= STEP_ACTIVE_MASK;
 
 	//if( (frontParser_shownPattern == seq_activePattern) && ( frontParser_activeTrack == voice) )
 	//{
@@ -2166,6 +1722,7 @@ static void seq_eraseStepAndSubSteps(const uint8_t voice, const uint8_t mainStep
 	//}
 
 }
+/* Apply transpose values to the active per-track source patterns. */
 void seq_writeTranspose()
 {
    uint8_t i,k,transposeAmt,trnNote;
@@ -2179,7 +1736,7 @@ void seq_writeTranspose()
             for (i=0;i<128;i++) // for all steps
             {
                // legitimate transpose value - do the transpose
-               Step *step = seq_getStepPtr(seq_perTrackActivePattern[k], k, i);
+               Step *step = pat_getStepPtr(seq_perTrackActivePattern[k], k, i);
                trnNote = step->note;
                if (trnNote<(63-transposeAmt)) // transposing would result in a note less than zero!
                {
@@ -2202,11 +1759,13 @@ void seq_writeTranspose()
 }   
 
 //------------------------------------------------------------------------
+/* Enable or disable live recording. */
 void seq_setRecordingMode(uint8_t active)
 {
    seq_recordActive = active;
 }
 
+/* Enable or disable live erasing. */
 void seq_setErasingMode(uint8_t active)
 {
    seq_eraseActive = active;
@@ -2224,6 +1783,7 @@ static void seq_resetNote(Step *step)
    step->prob		= 127;
    step->volume	= 100; // clears active bit as well
 }
+/* Select which automation lane receives live recordings. */
 void seq_setActiveAutomationTrack(uint8_t trackNr)
 {
    seq_activeAutomTrack = trackNr;
@@ -2245,6 +1805,7 @@ static uint8_t seq_isNextStepSyncStep()
 }
 //------------------------------------------------------------------------------
 
+/* Send note-off messages to one MIDI channel or to every active channel. */
 void seq_midiNoteOff(uint8_t chan)
 {
    uint8_t i;
@@ -2290,6 +1851,7 @@ static void seq_sendRealtime(const uint8_t status)
 
 /* Send a note on message. This will filter out these messages if appropriate
  */
+/* Send a MIDI note-on message with the requested channel, note, and velocity. */
 void seq_sendMidiNoteOn(const uint8_t channel, const uint8_t note, const uint8_t veloc)
 {
    static MidiMsg msg = {0,0,0, {0,0,2}};
@@ -2394,7 +1956,7 @@ void seq_realign()
       
       seq_stepIndex[i] = trackSteps;
       // resetting the stepindex also resets rotation
-      seq_getLengthRotatePtr(seq_perTrackActivePattern[i], i)->rotate = 0;
+      pat_getLengthRotatePtr(seq_perTrackActivePattern[i], i)->rotate = 0;
    }
    
    // make sure the front panel knows that roation has been reset
@@ -2403,6 +1965,7 @@ void seq_realign()
    seq_midiNoteOff(0xff);
 }
 
+/* Push one live voice-morph value to the Preset routing layer. */
 void sequencer_sendVMorph(uint8_t voiceArray, uint8_t morphAmount)
 {
    if(preset_morphLoadDisabled)

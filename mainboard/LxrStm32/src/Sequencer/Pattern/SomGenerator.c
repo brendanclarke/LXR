@@ -41,6 +41,7 @@
 
 extern void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note);
 
+/* Shared SOM generator state. The legacy symbol name stays unchanged in this pass. */
 SomGenerator somGenerator;
 
 //-----------------------------------------------

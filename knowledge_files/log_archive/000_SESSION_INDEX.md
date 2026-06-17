@@ -1,7 +1,7 @@
 # LXR -bc- Enhanced Firmware — Session Index
 
 **Project**: Fork of LXR drum machine firmware  
-**Repo**: `/Users/bc/LXR01/LXR-current/LXR-custom-develop-patload-envmod` | **Log format**: `00x_SESSION_HANDOFF_LOG.md`
+**Repo**: `/Users/bc/LXR01/LXR-current/LXR` | **Log format**: `00x_SESSION_HANDOFF_LOG.md`
 
 ---
 
@@ -29,6 +29,11 @@
 | 018 | 2026-06-14 | local repo, UART send/receive split implementation | Front-panel send helpers were consolidated, the MIDI parser was split into channel/global ownership files, and the transitional front-panel load/session bridge moved into `PresetLoadCache` |
 | 019 | 2026-06-14 | local repo, AVR encoder retune + acceleration | Main encoder tuning moved to ~32 kHz Timer1 sampling with six-sample phase filtering, narrow rest-jump recovery, stronger button debounce, and edit-mode acceleration |
 | 020 | 2026-06-14 | local repo, refactor finalization and protocol split closeout | Removed obsolete `PresetLoadCache`, finalized STM/AVR receive/send protocol filenames, removed legacy shims, and superseded the stale preset/MIDI UART audits |
+| 021 | 2026-06-15 | local repo, AVR comms rename and docs pass | Renamed the AVR comms layer to `avrComms*`, kept STM front-panel ownership under `uARTFrontSYX/`, and updated the knowledge files to make the split explicit |
+| 022 | 2026-06-16 | local repo, Pattern temp-copy cleanup and Sequencer docs pass | Made copy-to-temp use the per-track playing patterns, cleaned up the Pattern/Sequencer temp-boundary rules, documented the exported Sequencer API and state, and removed stale Sequencer declarations |
+| 023 | 2026-06-16 | local repo, AVR background-load menu rename and docs pass | Renamed the AVR file-load toggle to a 5-state background-load selector, kept the raw byte / `.cfg` compatibility intact, left STM behavior unchanged, and refreshed the comms and session docs |
+| 024 | 2026-06-17 | local repo, opcode audit comment-out closeout | Commented out stale AVR/STM opcode constants plus the thin cache helper surface, preserved the live non-cache file-load/session path, and folded the audit into the session log archive |
+| 025 | 2026-06-17 | local repo, macro deprecation cleanup and docs handoff | Zeroed legacy macro slots during file load, disabled the live AVR/STM macro send/apply paths, added deprecation breadcrumbs to the macro parameter/text sites, and refreshed the comms and memory docs |
 
 ---
 
@@ -114,6 +119,26 @@ Session 019 re-examined the AVR main encoder after slow counter-clockwise clicks
 Session 020 reconciled the stale preset and MIDI/UART audits with the actual code, then finished the remaining architecture objectives. The recreated `PresetLoadCache.c/.h` from Session 018 was removed as obsolete rather than rehomed, active `presetLoad_*` cache APIs were removed, file-load receive paths now write directly to normal Preset/Pattern storage, and normal/temp Preset/Pattern switching remains the only staging model. STM receive code was renamed to `uARTFrontSYX/frontPanelReceivingProtocol.c/.h`, AVR protocol code was split into `frontPanelReceivingProtocol.c/.h` and `frontPanelSendingProtocol.c/.h`, and the old parser/protocol shim headers were removed after include/project redirection. A final cleanup moved the internal CC/CC2 parameter-apply ladder from `MIDI/MidiParser.c` to `uARTFrontSYX/frontPanelReceivingProtocol.c`, renamed front-panel command receive state away from `frontParser_midiMsg`, renamed `MidiVoiceControl.c/.h` to `MidiOutputControl.c/.h`, and moved Sequencer MIDI fan-out behind `outputControl_*`. STM, AVR, and aggregate firmware builds were verified, and the user hardware-tested Steps 1-3 successfully.
 - **Find here**: `PresetLoadCache` removal, direct normal-storage file loads, STM `frontPanelReceivingProtocol` rename, AVR receive/send protocol split, legacy shim removal, front-panel CC/CC2 apply ownership, `MidiOutputControl` rename, Sequencer MIDI output boundary, deprecated PRF/cache traffic status, superseded audit references, build and hardware verification
 
+### 021 — AVR Comms Rename + Knowledge Pass (2026-06-15)
+Session 021 renamed the AVR comms layer into `front/LxrAvr/avrComms/`, updated the live reference docs so AVR uses `avrComms*` and STM keeps `frontPanel*` under `uARTFrontSYX/`, and refreshed `MEMORY.md` plus the session archive to keep the naming split explicit. No firmware behavior changed in this session.
+- **Find here**: `avrComms` directory move, AVR naming map, memory update, comms/hardware doc refresh, STM front-panel ownership note
+
+### 022 — Per-Track Temp Copy Cleanup + Sequencer API Documentation (2026-06-16)
+Session 022 finished the temp-copy cleanup pass so copy-to-temp now snapshots the actually playing per-track patterns and uses the temp-pattern sentinel rules consistently. It also cleaned up the Pattern layer documentation and naming, expanded the Sequencer header/source comments so exported state and APIs are explained next to the declarations and definitions, removed a stale Sequencer temp-boundary declaration, and verified the STM32 build still passes afterward.
+- **Find here**: per-track temp copy behavior, temp-pattern sentinel handling, PatternData/Sequencer documentation cleanup, exported API comments, stale Sequencer declaration removal, build verification
+
+### 023 — AVR Background-Load Menu Rename + Docs Refresh (2026-06-16)
+Session 023 replaced the AVR-facing file-load toggle with a 5-state background-load selector named `PAR_FILE_LOAD_BACKGROUND`, updated the matching menu labels and text table to `TEXT_FILE_LOAD_BACKGROUND` / `backgroundLoadNames`, and renamed the AVR send opcode alias to `SEQ_LOAD_BACKGROUND` without changing the wire value or STM runtime behavior. The new selector uses the free packed menu slot `MENU_FILE_LOAD_BACKGROUND = 0`, which keeps the 4-bit menu-ID encoding intact, and the globals file continues to persist the same raw byte value directly in `glo.cfg` / `.cfg` storage. The session also updated the comms reference, session index, and MEMORY so the new background terminology is now the canonical planning language.
+- **Find here**: AVR menu rename, 5-state background-load selector, `MENU_FILE_LOAD_BACKGROUND = 0` packed-menu slot, raw byte `.cfg` compatibility, `SEQ_LOAD_BACKGROUND` alias, STM unchanged, comms/spec refresh, session log closeout
+
+### 024 — Opcode Audit Closeout + Session Handoff Archive (2026-06-17)
+Session 024 converted the opcode audit into code changes. The high-confidence stale opcodes in the AVR and STM receive headers were commented out, the cache-family suspects were commented out or wrapped in disabled blocks where they had thin helper bodies, and the live non-cache file-load/background-load path was left intact because it still serves normal `.ALL` / `.PRF` loading. Anything with `cache` in it was treated as a retirement candidate only when it did not belong to the active non-cache file-load/session path.
+- **Find here**: commented-out opcode constants, deprecated PRF cache helper stubs, cache-family suspect list, preserved non-cache file-load/session path, session-log handoff archive
+
+### 025 — Macro Removal Deactivation + Documentation Handoff (2026-06-17)
+Session 025 disabled the remaining macro loading and application paths end-to-end. AVR file loads now force the legacy macro slots to zero before they reach live state, the AVR menu code keeps the old macro branches only as commented-out legacy context, the STM front-panel receive path ignores `MACRO_CC` and macro-amount traffic, and the remaining Preset macro storage/replay helpers are inert. The session also added breadcrumb comments at the AVR parameter/menu-text sites and the STM Preset storage sites, then promoted the implementation audit into a permanent handoff log so the temporary audit file can be deleted.
+- **Find here**: file-load macro zeroing, AVR menu macro send/apply disable blocks, STM macro receive/apply disable blocks, inert Preset macro storage/replay helpers, legacy parameter/menu-text breadcrumbs, comms spec refresh, MEMORY refresh, build verification
+
 
 ---
 
@@ -153,6 +178,12 @@ Session 020 reconciled the stale preset and MIDI/UART audits with the actual cod
 | STM and AVR front-panel protocol code now use matching receive/send boundaries: STM `uARTFrontSYX/frontPanelReceivingProtocol.c/.h` plus `frontPanelSendingProtocol.c/.h`, AVR `frontPanelReceivingProtocol.c/.h` plus `frontPanelSendingProtocol.c/.h`; old parser/protocol shim headers were removed after redirection | 020 |
 | Internal CC/CC2 parameter application is owned by STM `uARTFrontSYX/frontPanelReceivingProtocol.c` via `frontParser_applyParameterCommand()`; `MIDI/MidiParser.c` parses external DIN/USB MIDI and forwards/apply-calls instead of owning those cases | 020 |
 | Sequencer-originated MIDI output now goes through `MIDI/MidiOutputControl.c/.h` `outputControl_*` helpers; old `MidiVoiceControl.c/.h` filenames were retired while existing `voiceControl_*` names stayed intact | 020 |
+| AVR comms now live in `front/LxrAvr/avrComms/` with `avrComms*` names, while STM front-panel ownership remains under `mainboard/LxrStm32/src/uARTFrontSYX/` with `frontPanel*` names | 021 |
+| Copy-to-temp now snapshots the actually playing per-track pattern sources into temp storage, and the temp-pattern repeat rule is tied to `SEQ_TMP_PATTERN` instead of pending-pattern state | 022 |
+| Sequencer exported globals/functions in `sequencer.h` and `sequencer.c` now carry adjacent explanatory comments, and the stale `seq_consumeTmpBoundaryPatternSwitchAck()` declaration was removed from Sequencer | 022 |
+| AVR background-load menu control now uses `PAR_FILE_LOAD_BACKGROUND`, `TEXT_FILE_LOAD_BACKGROUND`, `backgroundLoadNames`, and `SEQ_LOAD_BACKGROUND` while keeping STM behavior and raw `.cfg` byte storage unchanged | 023 |
+| Legacy PRF/cache opcode surface is commented out; the live non-cache file-load/session path remains active | 024 |
+| Legacy macro file-load/apply path is intentionally disabled; file loads zero macro slots and macro traffic is deprecated/ignored | 025 |
 
 
 ---

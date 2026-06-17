@@ -216,7 +216,7 @@ The following sequence is executed from `main()`, in order, before the main loop
 18. `preset_loadGlobals()` — loads global settings from SD.
 19. `preset_loadDrumset(0, 0)` — loads kit 0 from SD; on failure displays "Kit read error" and sends all-zero parameters to STM32F4.
 20. `copyClear_clearCurrentPattern()` — resets the sequencer pattern buffer.
-21. `frontPanel_sendData(SAMPLE_CC, SAMPLE_COUNT, 0x00)` — requests sample count from STM32F4.
+21. `avrComms_sendData(SAMPLE_CC, SAMPLE_COUNT, 0x00)` — requests sample count from STM32F4.
 22. Enter the **main loop**.
 
 ---

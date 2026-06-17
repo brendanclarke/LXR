@@ -254,7 +254,7 @@ void globalMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                }  
                break;
             case UNDEF_103: // FMDTN* (1-3 only)
-	       seq_setLoop(msg.data2); // loop the sequence, just as from the frontpanel keys in perf mode. on yer own to send valid CC data. 0 is off.
+	       pat_setLoop(msg.data2); // loop the sequence, just as from the frontpanel keys in perf mode. on yer own to send valid CC data. 0 is off.
                break;
             case UNDEF_104: /*104*/	// FMAMNT* (1-3 only)
                break;

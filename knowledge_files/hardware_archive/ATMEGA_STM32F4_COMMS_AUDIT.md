@@ -2,6 +2,7 @@
 
 **Project:** LXR Drum Synth — custom-develop-patload-envmod branch  
 **Audit scope:** Inter-processor UART link (USART3 on STM32F4 / USART0 on ATmega644)  
+**Naming note:** this audit predates the Session 021 AVR rename. Current AVR-side code lives in `front/LxrAvr/avrComms/` and uses `avrComms*`; STM-side front-panel code lives in `mainboard/LxrStm32/src/uARTFrontSYX/` and keeps `frontPanel*`.
 **Files examined:**  
 - `mainboard/LxrStm32/src/MIDI/Uart.c / Uart.h`  
 - `mainboard/LxrStm32/src/MIDI/frontPanelParser.c / frontPanelParser.h`  

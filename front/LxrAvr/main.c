@@ -24,7 +24,7 @@
 #include "ledHandler.h"
 #include "buttonHandler.h"
 #include "Menu/copyClearTools.h"
-#include "frontPanelSendingProtocol.h"
+#include "avrComms/avrCommsSendingProtocol.h"
 //-----------------------------------------------
 //defines
 //-----------------------------------------------
@@ -156,7 +156,7 @@ sei();
 	copyClear_clearCurrentPattern();
 	
 	//request number of samples
-	frontPanel_sendData(SAMPLE_CC,SAMPLE_COUNT,0x00);
+	avrComms_sendData(SAMPLE_CC,SAMPLE_COUNT,0x00);
 
    void led_clearSequencerLeds();
    
@@ -185,7 +185,7 @@ sei();
 		uart_checkAndParse();
 		uart_checkAndParse();
 		
-      	frontPanel_checkLongOps(); // resolve any long front-panel ops that need to happen
+      	avrComms_checkLongOps(); // resolve any long AVR comms ops that need to happen
                               // for now, these include automated bank and pattern
                               // change, and midi morph
       

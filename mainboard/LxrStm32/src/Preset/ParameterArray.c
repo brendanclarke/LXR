@@ -680,6 +680,8 @@ void parameterArray_init()
 	parameterArray[PAR_MORPH_HIHAT].ptr 		= &preset_vMorphAmount[6];
 	parameterArray[PAR_MORPH_HIHAT].type 	   = TYPE_UINT8_VMORPH;
    
+   /* Legacy macro destination bindings, kept while the macro path is
+      deprecated and can be removed after the test pass. */
    parameterArray[PAR_MAC1_DST1].ptr 		= &macroModulators[0].destination;
 	parameterArray[PAR_MAC1_DST1].type		= TYPE_UINT8;
 	parameterArray[PAR_MAC1_DST1_AMT].ptr 	= &macroModulators[0].amount;

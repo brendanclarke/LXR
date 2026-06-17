@@ -14,7 +14,7 @@
 #include <util/delay.h>
 #include "../Hardware/lcd.h"
 #include <avr/pgmspace.h>
-#include "../frontPanelSendingProtocol.h"
+#include "../avrComms/avrCommsSendingProtocol.h"
 #include <stdlib.h>
 #include <util/atomic.h> 
 #include "../IO/uart.h"
@@ -425,6 +425,18 @@ void preset_readKitToTemp(uint8_t isMorph)
    
 
    f_close((FIL*)&kitRead_File);
+
+   /* Session 025 deprecation step: force every legacy macro slot to neutral
+      values before the loaded snapshot is copied into live parameter storage.
+      This keeps file loading intact while macro assignments are phased out. */
+   para[PAR_MAC1_DST1] = 0;
+   para[PAR_MAC1_DST1_AMT] = 0;
+   para[PAR_MAC1_DST2] = 0;
+   para[PAR_MAC1_DST2_AMT] = 0;
+   para[PAR_MAC2_DST1] = 0;
+   para[PAR_MAC2_DST1_AMT] = 0;
+   para[PAR_MAC2_DST2] = 0;
+   para[PAR_MAC2_DST2_AMT] = 0;
    
    // set to 0 for any that were not read from the file
    if(END_OF_SOUND_PARAMETERS-bytesRead)
@@ -469,8 +481,8 @@ void preset_readDrumVoice(uint8_t track, uint8_t isMorph)
    uint8_t i, value, upper, lower;
    uint8_t *paramMask;
    
-   frontPanel_holdForBuffer();
-   frontPanel_sendData(SEQ_CC,SEQ_LOAD_VOICE,track);
+   avrComms_holdForBuffer();
+   avrComms_sendData(SEQ_CC,SEQ_LOAD_VOICE,track);
    
    switch(track)
    {
@@ -498,7 +510,7 @@ void preset_readDrumVoice(uint8_t track, uint8_t isMorph)
          return;
    }
 
-   if(!frontPanel_flowBegin(FLOW_CH_VOICE_PARAM))
+   if(!avrComms_flowBegin(FLOW_CH_VOICE_PARAM))
       return;
    
    if(isMorph)
@@ -521,7 +533,7 @@ void preset_readDrumVoice(uint8_t track, uint8_t isMorph)
    value = (uint8_t)pgm_read_word(&modTargets[parameter_values[PAR_VEL_DEST_1+track]].param);
    upper = (uint8_t)(((value&0x80)>>7) | (((track)&0x3f)<<1));
    lower = value&0x7f;
-   frontPanel_sendData(CC_VELO_TARGET,upper,lower);
+   avrComms_sendData(CC_VELO_TARGET,upper,lower);
    
    // ensure lfo target voice # is valid
    if(parameter_values[PAR_VOICE_LFO1+track] < 1 || parameter_values[PAR_VOICE_LFO1+track] > 6 )
@@ -531,20 +543,20 @@ void preset_readDrumVoice(uint8_t track, uint8_t isMorph)
    value = (uint8_t)pgm_read_word(&modTargets[parameter_values[PAR_TARGET_LFO1+track]].param);
    upper = (uint8_t)(((value&0x80)>>7) | (((track)&0x3f)<<1));
    lower = value&0x7f;
-   frontPanel_sendData(CC_LFO_TARGET,upper,lower);
+   avrComms_sendData(CC_LFO_TARGET,upper,lower);
    
    // --AS todo will this morph (and fuck up) our modulation targets?
    // send parameters (possibly combined with morph parameters) to back
    
    // bc: output dests aren't morphed anymore - they need to be a special case
-   frontPanel_sendData(CC_2,(uint8_t)(PAR_AUDIO_OUT1+track-128),parameter_values[track+PAR_AUDIO_OUT1]);
-   frontPanel_holdForBuffer();
+   avrComms_sendData(CC_2,(uint8_t)(PAR_AUDIO_OUT1+track-128),parameter_values[track+PAR_AUDIO_OUT1]);
+   avrComms_holdForBuffer();
    
-   frontPanel_holdForBuffer();
-   frontPanel_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,track);
+   avrComms_holdForBuffer();
+   avrComms_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,track);
 
-   if(!frontPanel_flowFailed())
-      (void)frontPanel_flowEnd(FLOW_CH_VOICE_PARAM);
+   if(!avrComms_flowFailed())
+      (void)avrComms_flowEnd(FLOW_CH_VOICE_PARAM);
    
 }
  
@@ -569,7 +581,7 @@ void preset_readDrumsetMeta(uint8_t isMorph)
    }
    else
    {
-      if(!frontPanel_flowBegin(FLOW_CH_DRUM_META))
+      if(!avrComms_flowBegin(FLOW_CH_DRUM_META))
          return;
 
    // copy values from temp to where they are supposed to be - normal params or morph
@@ -579,6 +591,14 @@ void preset_readDrumsetMeta(uint8_t isMorph)
          parameter_values[END_OF_INDIVIDUAL_VOICE_PARAMS+i]=
             parameter_values_fileLoadSnapshot[END_OF_INDIVIDUAL_VOICE_PARAMS+i];
       }
+
+      /* Session 025 deprecation step: the top-level macro amount params are
+         not file-backed, so they are cleared in the live arrays rather than in
+         the file snapshot. */
+      parameter_values[PAR_MAC1] = 0;
+      parameter_values[PAR_MAC2] = 0;
+      parameters2[PAR_MAC1] = 0;
+      parameters2[PAR_MAC2] = 0;
    
    // bc: special case macro targets - re-send targets on kit load
    /* MACRO_CC message structure
@@ -602,18 +622,18 @@ void preset_readDrumsetMeta(uint8_t isMorph)
                            <<2 )  //  shift over 2 to make room for upper mod target bit
                            |(value>>7) );
                            
-         frontPanel_sendData(MACRO_CC,upper,lower);
+         avrComms_sendData(MACRO_CC,upper,lower);
       }
    
          
    // send macro amounts as special cases
-      frontPanel_sendData(CC_2,(uint8_t)(PAR_MAC1_DST1_AMT-128),parameter_values[PAR_MAC1_DST1_AMT]);
-      frontPanel_sendData(CC_2,(uint8_t)(PAR_MAC1_DST2_AMT-128),parameter_values[PAR_MAC1_DST2_AMT]);
-      frontPanel_sendData(CC_2,(uint8_t)(PAR_MAC2_DST1_AMT-128),parameter_values[PAR_MAC2_DST1_AMT]);
-      frontPanel_sendData(CC_2,(uint8_t)(PAR_MAC2_DST2_AMT-128),parameter_values[PAR_MAC2_DST2_AMT]);
+      avrComms_sendData(CC_2,(uint8_t)(PAR_MAC1_DST1_AMT-128),parameter_values[PAR_MAC1_DST1_AMT]);
+      avrComms_sendData(CC_2,(uint8_t)(PAR_MAC1_DST2_AMT-128),parameter_values[PAR_MAC1_DST2_AMT]);
+      avrComms_sendData(CC_2,(uint8_t)(PAR_MAC2_DST1_AMT-128),parameter_values[PAR_MAC2_DST1_AMT]);
+      avrComms_sendData(CC_2,(uint8_t)(PAR_MAC2_DST2_AMT-128),parameter_values[PAR_MAC2_DST2_AMT]);
 
-      if(!frontPanel_flowFailed())
-         (void)frontPanel_flowEnd(FLOW_CH_DRUM_META);
+      if(!avrComms_flowFailed())
+         (void)avrComms_flowEnd(FLOW_CH_DRUM_META);
    }
 }
 
@@ -632,12 +652,12 @@ static void preset_dumpAutomationTargetsToStm(const uint8_t *params)
       value = (uint8_t)pgm_read_word(&modTargets[params[PAR_VEL_DEST_1 + i]].param);
       upper = (uint8_t)(((value & 0x80) >> 7) | (((i) & 0x3f) << 1));
       lower = value & 0x7f;
-      frontPanel_sendData(CC_VELO_TARGET, upper, lower);
+      avrComms_sendData(CC_VELO_TARGET, upper, lower);
 
       value = (uint8_t)pgm_read_word(&modTargets[params[PAR_TARGET_LFO1 + i]].param);
       upper = (uint8_t)(((value & 0x80) >> 7) | (((i) & 0x3f) << 1));
       lower = value & 0x7f;
-      frontPanel_sendData(CC_LFO_TARGET, upper, lower);
+      avrComms_sendData(CC_LFO_TARGET, upper, lower);
    }
 
    for (i = 0; i < 7; i = (uint8_t)(i + 2)) // 0, 2, 4, 6
@@ -645,7 +665,7 @@ static void preset_dumpAutomationTargetsToStm(const uint8_t *params)
       value = (uint8_t)pgm_read_word(&modTargets[params[PAR_MAC1_DST1 + i]].param);
       lower = value & 0x7f;
       upper = (uint8_t)((((i) >> 1) << 2) | (value >> 7));
-      frontPanel_sendData(MACRO_CC, upper, lower);
+      avrComms_sendData(MACRO_CC, upper, lower);
    }
 }
 
@@ -663,7 +683,7 @@ static void preset_dumpEndpointsToStm(uint8_t endpointMode)
    /* RESTORE: Endpoint capture BEGIN. The data byte selects which normal
       endpoint image the STM clears and receives. This is used both for
       copy-to-temp full dumps and file-load normal endpoint storage. */
-   frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_ENDPOINT_BEGIN, endpointMode);
+   avrComms_sendData(SEQ_CC, SEQ_TMP_KIT_ENDPOINT_BEGIN, endpointMode);
 
    if(endpointMode != SEQ_TMP_KIT_ENDPOINT_MORPH_ONLY)
    {
@@ -671,14 +691,14 @@ static void preset_dumpEndpointsToStm(uint8_t endpointMode)
       for (i = 0; i < END_OF_SOUND_PARAMETERS; i++)
       {
          if (i < 128)
-            frontPanel_sendData(PRF_RESTORE_PARAM_CC, (uint8_t)i, parameter_values[i]);
+            avrComms_sendData(PRF_RESTORE_PARAM_CC, (uint8_t)i, parameter_values[i]);
          else
-            frontPanel_sendData(PRF_RESTORE_PARAM_CC2, (uint8_t)(i - 128), parameter_values[i]);
+            avrComms_sendData(PRF_RESTORE_PARAM_CC2, (uint8_t)(i - 128), parameter_values[i]);
       }
 
       /* RESTORE: Resolved automation targets for parameter_values[] are bracketed
          immediately after the kit/front endpoint bytes they describe. */
-      frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT);
+      avrComms_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT);
       preset_dumpAutomationTargetsToStm(parameter_values);
    }
 
@@ -688,21 +708,21 @@ static void preset_dumpEndpointsToStm(uint8_t endpointMode)
       for (i = 0; i < END_OF_SOUND_PARAMETERS; i++)
       {
          if (i < 128)
-            frontPanel_sendData(PRF_RESTORE_MORPH_CC, (uint8_t)i, parameters2[i]);
+            avrComms_sendData(PRF_RESTORE_MORPH_CC, (uint8_t)i, parameters2[i]);
          else
-            frontPanel_sendData(PRF_RESTORE_MORPH_CC2, (uint8_t)(i - 128), parameters2[i]);
+            avrComms_sendData(PRF_RESTORE_MORPH_CC2, (uint8_t)(i - 128), parameters2[i]);
       }
 
       /* RESTORE: Resolved automation targets for parameters2[] are sent as the
          morph automation target endpoint image, separate from kit/front endpoints. */
-      frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_MORPH_ENDPOINT);
+      avrComms_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_MORPH_ENDPOINT);
       preset_dumpAutomationTargetsToStm(parameters2);
    }
 
-   frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_NONE);
+   avrComms_sendData(SEQ_CC, SEQ_TMP_KIT_AUTOMATION_PHASE, SEQ_TMP_KIT_AUTOMATION_NONE);
 
    /* RESTORE: Handshake END. Inform STM we have finished the dump. */
-   frontPanel_sendData(SEQ_CC, SEQ_TMP_KIT_ENDPOINT_END, 0);
+   avrComms_sendData(SEQ_CC, SEQ_TMP_KIT_ENDPOINT_END, 0);
 }
 
 //----------------------------------------------------
@@ -715,7 +735,7 @@ uint8_t preset_loadDrumset(uint8_t presetNr, uint8_t voiceArray, uint8_t isMorph
    uint8_t trkNum;
 
    uart_clearRxFifo();
-   frontParser_rxDisable=1;
+   avrCommsParser_rxDisable=1;
    
    preset_workingPreset=presetNr;
    preset_workingType=WTYPE_KIT;
@@ -733,7 +753,7 @@ uint8_t preset_loadDrumset(uint8_t presetNr, uint8_t voiceArray, uint8_t isMorph
    if(!bytesRead)
       goto closeFile;
    
-   frontPanel_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_KIT);
+   avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_KIT);
    preset_readKitToTemp(isMorph);
 
    
@@ -744,18 +764,18 @@ uint8_t preset_loadDrumset(uint8_t presetNr, uint8_t voiceArray, uint8_t isMorph
          
          if(trkNum<6)
          {
-            frontPanel_sendData(SEQ_CC,SEQ_LOAD_VOICE,trkNum); 
+            avrComms_sendData(SEQ_CC,SEQ_LOAD_VOICE,trkNum); 
             preset_readDrumVoice(trkNum, isMorph);
          }
          
          if(trkNum<5)
-            frontPanel_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,trkNum);
+            avrComms_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,trkNum);
             
       }
       
    }
    
-   frontPanel_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,5); 
+   avrComms_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,5); 
    
    if( (voiceArray>=0x7f) || (voiceArray==0) )
    {
@@ -766,20 +786,20 @@ uint8_t preset_loadDrumset(uint8_t presetNr, uint8_t voiceArray, uint8_t isMorph
                              ? SEQ_TMP_KIT_ENDPOINT_MORPH_ONLY
                              : SEQ_TMP_KIT_ENDPOINT_FRONT_ONLY);
    
-   frontPanel_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_KIT);
+   avrComms_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_KIT);
    
 	//force complete repaint
    menu_repaintAll();
 
 #else
-	frontPanel_sendData(PRESET,PRESET_LOAD,presetNr);
+	avrComms_sendData(PRESET,PRESET_LOAD,presetNr);
 #endif
 
 closeFile:
 	//close the file handle
    f_close((FIL*)&preset_File);
    
-   frontParser_rxDisable=0;
+   avrCommsParser_rxDisable=0;
    uart_clearRxFifo();
    
    return 0;
@@ -886,13 +906,13 @@ return "ToDo";
 /** request step data from the cortex via uart and save it in the provided step struct*/
 void preset_queryStepDataFromSeq(uint16_t stepNr)
 {
-   frontParser_newSeqDataAvailable = 0;
+   avrCommsParser_newSeqDataAvailable = 0;
 
 	//request step data
 	//the max number for 14 bit data is 16383!!!
 	//current max step nr is 128*7*8 = 7168
-   frontPanel_sendByte((stepNr>>7)&0x7f);		//upper nibble 7 bit
-   frontPanel_sendByte(stepNr&0x7f);			//lower nibble 7 bit
+   avrComms_sendByte((stepNr>>7)&0x7f);		//upper nibble 7 bit
+   avrComms_sendByte(stepNr&0x7f);			//lower nibble 7 bit
 
 	//wait until data arrives
    uint8_t newSeqDataLocal = 0;
@@ -902,15 +922,15 @@ void preset_queryStepDataFromSeq(uint16_t stepNr)
    	//we have to call the uart parser to handle incoming messages from the sequencer
       uart_checkAndParse();
    	
-      newSeqDataLocal = frontParser_newSeqDataAvailable;
+      newSeqDataLocal = avrCommsParser_newSeqDataAvailable;
    	
       if(time_sysTick-now >= 31)
       {
       	//timeout
          now = time_sysTick;
       	//request step again
-         frontPanel_sendByte((stepNr>>7)&0x7f);		//upper nibble 7 bit
-         frontPanel_sendByte(stepNr&0x7f);
+         avrComms_sendByte((stepNr>>7)&0x7f);		//upper nibble 7 bit
+         avrComms_sendByte(stepNr&0x7f);
       }
    }
 }
@@ -918,9 +938,9 @@ void preset_queryStepDataFromSeq(uint16_t stepNr)
  //----------------------------------------------------
 void preset_queryPatternInfoFromSeq(uint8_t patternNr, uint8_t* next, uint8_t* repeat)
 {
-   frontParser_newSeqDataAvailable = 0;
+   avrCommsParser_newSeqDataAvailable = 0;
 	//request pattern info
-   frontPanel_sendByte(patternNr);	
+   avrComms_sendByte(patternNr);	
 
 	//wait until data arrives
    uint8_t newSeqDataLocal = 0;
@@ -930,31 +950,31 @@ void preset_queryPatternInfoFromSeq(uint8_t patternNr, uint8_t* next, uint8_t* r
    	//we have to call the uart parser to handle incoming messages from the sequencer
       uart_checkAndParse();
    	
-      newSeqDataLocal = frontParser_newSeqDataAvailable;
+      newSeqDataLocal = avrCommsParser_newSeqDataAvailable;
    	
       if(time_sysTick-now >= 31)
       {
       	//timeout
          now = time_sysTick;
       	//request step again
-         frontPanel_sendByte(patternNr);	
+         avrComms_sendByte(patternNr);	
       }
    }
 	
 	//the stepdata struct is used as buffer for the data
-   *next = frontParser_stepData.volume; 
-   *repeat =  frontParser_stepData.prob;
+   *next = avrCommsParser_stepData.volume; 
+   *repeat =  avrCommsParser_stepData.prob;
 }
  //----------------------------------------------------
 void preset_queryMainStepDataFromSeq(uint16_t stepNr, uint16_t *mainStepData, uint8_t *length, uint8_t *scale)
 {
-   frontParser_newSeqDataAvailable = 0;
+   avrCommsParser_newSeqDataAvailable = 0;
 
 	//request step data
 	//the max number for 14 bit data is 16383!!!
 	//current max step nr is 7*8 = 56
-   frontPanel_sendByte((stepNr>>7)&0x7f);		//upper nibble 7 bit
-   frontPanel_sendByte(stepNr&0x7f);	//lower nibble 7 bit
+   avrComms_sendByte((stepNr>>7)&0x7f);		//upper nibble 7 bit
+   avrComms_sendByte(stepNr&0x7f);	//lower nibble 7 bit
 
 	//wait until data arrives
    uint8_t newSeqDataLocal = 0;
@@ -964,22 +984,22 @@ void preset_queryMainStepDataFromSeq(uint16_t stepNr, uint16_t *mainStepData, ui
    	//we have to call the uart parser to handle incoming messages from the sequencer
       uart_checkAndParse();
    	
-      newSeqDataLocal = frontParser_newSeqDataAvailable;
+      newSeqDataLocal = avrCommsParser_newSeqDataAvailable;
    	
       if(time_sysTick-now >= 31)
       {
       	//timeout
          now = time_sysTick;
       	//request step again
-         frontPanel_sendByte((stepNr>>7)&0x7f);		//upper nibble 7 bit
-         frontPanel_sendByte(stepNr&0x7f);
+         avrComms_sendByte((stepNr>>7)&0x7f);		//upper nibble 7 bit
+         avrComms_sendByte(stepNr&0x7f);
       }
    }
 	
 	// we are reusing these members for purposes other than those that were originally intended
-   *mainStepData =(uint16_t) ((frontParser_stepData.volume<<8) | frontParser_stepData.prob);
-   *length=frontParser_stepData.note;
-   *scale=frontParser_stepData.param1Nr;
+   *mainStepData =(uint16_t) ((avrCommsParser_stepData.volume<<8) | avrCommsParser_stepData.prob);
+   *length=avrCommsParser_stepData.note;
+   *scale=avrCommsParser_stepData.param1Nr;
 };
  //----------------------------------------------------
 static void preset_writePatternData()
@@ -988,20 +1008,20 @@ static void preset_writePatternData()
    uint8_t length;
    uint8_t scale;
 
-   frontPanel_sendData(SEQ_CC,SEQ_EUKLID_RESET,0x01);
+   avrComms_sendData(SEQ_CC,SEQ_EUKLID_RESET,0x01);
 
 	//write the preset data
 	//initiate the sysex mode
 	
-   while( (frontParser_command.status != SYSEX_START))
+   while( (avrCommsParser_command.status != SYSEX_START))
    {
-      frontPanel_sendByte(SYSEX_START);
+      avrComms_sendByte(SYSEX_START);
       uart_checkAndParse();
    }		
    _delay_ms(10);
 	//enter step data mode
-   frontPanel_sendByte(SYSEX_REQUEST_STEP_DATA);
-   frontPanel_sysexMode = SYSEX_REQUEST_STEP_DATA;
+   avrComms_sendByte(SYSEX_REQUEST_STEP_DATA);
+   avrComms_sysexMode = SYSEX_REQUEST_STEP_DATA;
 	
    uint8_t percent=0;
    char text[5];
@@ -1022,21 +1042,21 @@ static void preset_writePatternData()
    	
    	//get next data chunk and write it to file
       preset_queryStepDataFromSeq(i);
-      f_write((FIL*)&preset_File,(const void*)&frontParser_stepData,sizeof(StepData),&bytesWritten);	
+      f_write((FIL*)&preset_File,(const void*)&avrCommsParser_stepData,sizeof(StepData),&bytesWritten);	
    }
 	
 	//end sysex mode
-   frontPanel_sendByte(SYSEX_END);
-   frontParser_command.status = 0;
+   avrComms_sendByte(SYSEX_END);
+   avrCommsParser_command.status = 0;
 	//now the main step data
-   while( (frontParser_command.status != SYSEX_START))
+   while( (avrCommsParser_command.status != SYSEX_START))
    {
-      frontPanel_sendByte(SYSEX_START);
+      avrComms_sendByte(SYSEX_START);
       uart_checkAndParse();
    }	
    _delay_ms(50);	
-   frontPanel_sendByte(SYSEX_REQUEST_MAIN_STEP_DATA);
-   frontPanel_sysexMode = SYSEX_REQUEST_MAIN_STEP_DATA;
+   avrComms_sendByte(SYSEX_REQUEST_MAIN_STEP_DATA);
+   avrComms_sysexMode = SYSEX_REQUEST_MAIN_STEP_DATA;
 	
    uint16_t mainStepData;
    for(i=0;i<(NUM_PATTERN*NUM_TRACKS);i++)
@@ -1047,19 +1067,19 @@ static void preset_writePatternData()
    }
 		
 	//end sysex mode
-   frontPanel_sendByte(SYSEX_END);
-   frontParser_command.status = 0;
+   avrComms_sendByte(SYSEX_END);
+   avrCommsParser_command.status = 0;
 	
 	//----- pattern info (next/repeat) ------
 	
-   while( (frontParser_command.status != SYSEX_START))
+   while( (avrCommsParser_command.status != SYSEX_START))
    {
-      frontPanel_sendByte(SYSEX_START);
+      avrComms_sendByte(SYSEX_START);
       uart_checkAndParse();
    }	
    _delay_ms(50);	
-   frontPanel_sendByte(SYSEX_REQUEST_PATTERN_DATA);
-   frontPanel_sysexMode = SYSEX_REQUEST_PATTERN_DATA;
+   avrComms_sendByte(SYSEX_REQUEST_PATTERN_DATA);
+   avrComms_sysexMode = SYSEX_REQUEST_PATTERN_DATA;
 	
    uint8_t next;
    uint8_t repeat;
@@ -1072,8 +1092,8 @@ static void preset_writePatternData()
    }
 		
 	//end sysex mode
-   frontPanel_sendByte(SYSEX_END);
-   frontParser_command.status = 0;
+   avrComms_sendByte(SYSEX_END);
+   avrCommsParser_command.status = 0;
 	
 	
 	//----- shuffle setting ------
@@ -1083,14 +1103,14 @@ static void preset_writePatternData()
 	// --AS we reuse the same call from above (when saving main step data)
 	// but we only use the length info retrieved. We want to store it at the end
 	// to avoid breaking compatibility with save file
-   while( (frontParser_command.status != SYSEX_START))
+   while( (avrCommsParser_command.status != SYSEX_START))
    {
-      frontPanel_sendByte(SYSEX_START);
+      avrComms_sendByte(SYSEX_START);
       uart_checkAndParse();
    }
    _delay_ms(50);
-   frontPanel_sendByte(SYSEX_REQUEST_MAIN_STEP_DATA);
-   frontPanel_sysexMode = SYSEX_REQUEST_MAIN_STEP_DATA;
+   avrComms_sendByte(SYSEX_REQUEST_MAIN_STEP_DATA);
+   avrComms_sysexMode = SYSEX_REQUEST_MAIN_STEP_DATA;
 
    for(i=0;i<(NUM_PATTERN*NUM_TRACKS);i++)
    {
@@ -1109,8 +1129,8 @@ static void preset_writePatternData()
    
 
 	//end sysex mode
-   frontPanel_sendByte(SYSEX_END);
-   frontParser_command.status = 0;
+   avrComms_sendByte(SYSEX_END);
+   avrCommsParser_command.status = 0;
 
 }
  //----------------------------------------------------
@@ -1118,7 +1138,7 @@ void preset_savePattern(uint8_t presetNr)
 {
 #if USE_SD_CARD
 
-   frontPanel_sendData(SEQ_CC,SEQ_EUKLID_RESET,0x01);
+   avrComms_sendData(SEQ_CC,SEQ_EUKLID_RESET,0x01);
    
    uint16_t bytesWritten;
    lcd_clear();
@@ -1204,16 +1224,16 @@ static void preset_readPatternScale()
    
    uint8_t scale[NUM_PATTERN*NUM_TRACKS];
    
-   frontParser_command.status = 0;
-   frontPanel_sendByte(SYSEX_START);
-   while(frontParser_command.status != SYSEX_START)
+   avrCommsParser_command.status = 0;
+   avrComms_sendByte(SYSEX_START);
+   while(avrCommsParser_command.status != SYSEX_START)
    {
       uart_checkAndParse();
    }
    
-   frontPanel_sendByte(SYSEX_SEND_PAT_SCALE_DATA);
-   frontPanel_sysexMode = SYSEX_SEND_PAT_SCALE_DATA;
-   frontParser_sysexCallback=NO_CALLBACK;
+   avrComms_sendByte(SYSEX_SEND_PAT_SCALE_DATA);
+   avrComms_sysexMode = SYSEX_SEND_PAT_SCALE_DATA;
+   avrCommsParser_sysexCallback=NO_CALLBACK;
       
    for(i=0;i<(NUM_PATTERN*NUM_TRACKS);i++)
    {
@@ -1245,25 +1265,25 @@ static void preset_readPatternScale()
          {
             infoByte = (uint8_t)((trkNum&0x07)<<3);
             infoByte = (uint8_t)( (infoByte)|(patNum&0x07) );
-            frontPanel_sendByte(infoByte);
+            avrComms_sendByte(infoByte);
             
-            frontPanel_sendByte(scale[patNum*NUM_TRACKS+trkNum]);
+            avrComms_sendByte(scale[patNum*NUM_TRACKS+trkNum]);
            
          // wait to get ack from cortex
-            while(frontParser_sysexCallback!=SCALE_CALLBACK)
+            while(avrCommsParser_sysexCallback!=SCALE_CALLBACK)
             {
                uart_checkAndParse();
             }
-            frontParser_sysexCallback=NO_CALLBACK;
+            avrCommsParser_sysexCallback=NO_CALLBACK;
          }
             
       }         
    }
 
    // end sysex mode
-   frontParser_command.status = 0;
-   frontPanel_sendByte(SYSEX_END);
-   while(frontParser_command.status != SYSEX_END)
+   avrCommsParser_command.status = 0;
+   avrComms_sendByte(SYSEX_END);
+   while(avrCommsParser_command.status != SYSEX_END)
    {
       uart_checkAndParse();
    }
@@ -1326,16 +1346,16 @@ static void preset_readPatternLength()
    
    uint8_t length[NUM_PATTERN*NUM_TRACKS];
    
-   frontParser_command.status = 0;
-   frontPanel_sendByte(SYSEX_START);
-   while(frontParser_command.status != SYSEX_START)
+   avrCommsParser_command.status = 0;
+   avrComms_sendByte(SYSEX_START);
+   while(avrCommsParser_command.status != SYSEX_START)
    {
       uart_checkAndParse();
    }
    
-   frontPanel_sendByte(SYSEX_SEND_PAT_LEN_DATA);
-   frontPanel_sysexMode = SYSEX_SEND_PAT_LEN_DATA;
-   frontParser_sysexCallback=NO_CALLBACK;
+   avrComms_sendByte(SYSEX_SEND_PAT_LEN_DATA);
+   avrComms_sysexMode = SYSEX_SEND_PAT_LEN_DATA;
+   avrCommsParser_sysexCallback=NO_CALLBACK;
       
    for(i=0;i<(NUM_PATTERN*NUM_TRACKS);i++)
    {
@@ -1367,25 +1387,25 @@ static void preset_readPatternLength()
          {
             infoByte = (uint8_t)((trkNum&0x07)<<3);
             infoByte = (uint8_t)( (infoByte)|(patNum&0x07) );
-            frontPanel_sendByte(infoByte);
+            avrComms_sendByte(infoByte);
             
-            frontPanel_sendByte(length[patNum*NUM_TRACKS+trkNum]);
+            avrComms_sendByte(length[patNum*NUM_TRACKS+trkNum]);
            
          // wait to get ack from cortex
-            while(frontParser_sysexCallback!=LENGTH_CALLBACK)
+            while(avrCommsParser_sysexCallback!=LENGTH_CALLBACK)
             {
                uart_checkAndParse();
             }
-            frontParser_sysexCallback=NO_CALLBACK;
+            avrCommsParser_sysexCallback=NO_CALLBACK;
          }
             
       }         
    }
    
    // end sysex mode
-   frontParser_command.status = 0;
-   frontPanel_sendByte(SYSEX_END);
-   while(frontParser_command.status != SYSEX_END)
+   avrCommsParser_command.status = 0;
+   avrComms_sendByte(SYSEX_END);
+   while(avrCommsParser_command.status != SYSEX_END)
    {
       uart_checkAndParse();
    }
@@ -1461,7 +1481,7 @@ static void preset_readShuffle()
       
    }
    else
-      frontPanel_sendData(SEQ_CC,SEQ_SHUFFLE,parameter_values[PAR_SHUFFLE]);
+      avrComms_sendData(SEQ_CC,SEQ_SHUFFLE,parameter_values[PAR_SHUFFLE]);
 
    f_close((FIL*)&shuffread_File);  
 
@@ -1522,16 +1542,16 @@ static void preset_readPatternChain()
    uint8_t next[NUM_PATTERN];
    uint8_t repeat[NUM_PATTERN];
    
-   frontParser_command.status = 0;
-   frontPanel_sendByte(SYSEX_START);
-   while(frontParser_command.status != SYSEX_START)
+   avrCommsParser_command.status = 0;
+   avrComms_sendByte(SYSEX_START);
+   while(avrCommsParser_command.status != SYSEX_START)
    {
       uart_checkAndParse();
    }
    
-   frontPanel_sendByte(SYSEX_SEND_PAT_CHAIN_DATA);
-   frontPanel_sysexMode = SYSEX_SEND_PAT_CHAIN_DATA;
-   frontParser_sysexCallback=NO_CALLBACK;
+   avrComms_sendByte(SYSEX_SEND_PAT_CHAIN_DATA);
+   avrComms_sysexMode = SYSEX_SEND_PAT_CHAIN_DATA;
+   avrCommsParser_sysexCallback=NO_CALLBACK;
       
    for(i=0;i<(NUM_PATTERN);i++)
    {
@@ -1574,27 +1594,27 @@ static void preset_readPatternChain()
 
    for(i=0;i<(NUM_PATTERN);i++)
    { 
-      frontPanel_sendByte(next[i]);    
+      avrComms_sendByte(next[i]);    
       // wait to get ack from cortex  
-      while(frontParser_sysexCallback!=PATCHAIN_CALLBACK)
+      while(avrCommsParser_sysexCallback!=PATCHAIN_CALLBACK)
       {
          uart_checkAndParse();
       }
-      frontParser_sysexCallback=NO_CALLBACK;
+      avrCommsParser_sysexCallback=NO_CALLBACK;
       
-      frontPanel_sendByte(repeat[i]);    
+      avrComms_sendByte(repeat[i]);    
       // wait to get ack from cortex  
-      while(frontParser_sysexCallback!=PATCHAIN_CALLBACK)
+      while(avrCommsParser_sysexCallback!=PATCHAIN_CALLBACK)
       {
          uart_checkAndParse();
       }
-      frontParser_sysexCallback=NO_CALLBACK;
+      avrCommsParser_sysexCallback=NO_CALLBACK;
             
    }
    // end sysex mode
-   frontParser_command.status = 0;
-   frontPanel_sendByte(SYSEX_END);
-   while(frontParser_command.status != SYSEX_END)
+   avrCommsParser_command.status = 0;
+   avrComms_sendByte(SYSEX_END);
+   while(avrCommsParser_command.status != SYSEX_END)
    {
       uart_checkAndParse();
    }
@@ -1658,16 +1678,16 @@ static void preset_readPatternMainStep()
    
    uint16_t mainStep[NUM_PATTERN*NUM_TRACKS];
    
-   frontParser_command.status = 0;
-   frontPanel_sendByte(SYSEX_START);
-   while(frontParser_command.status != SYSEX_START)
+   avrCommsParser_command.status = 0;
+   avrComms_sendByte(SYSEX_START);
+   while(avrCommsParser_command.status != SYSEX_START)
    {
       uart_checkAndParse();
    }
    
-   frontPanel_sendByte(SYSEX_SEND_MAIN_STEP_DATA);
-   frontPanel_sysexMode = SYSEX_SEND_MAIN_STEP_DATA;
-   frontParser_sysexCallback=NO_CALLBACK;
+   avrComms_sendByte(SYSEX_SEND_MAIN_STEP_DATA);
+   avrComms_sysexMode = SYSEX_SEND_MAIN_STEP_DATA;
+   avrCommsParser_sysexCallback=NO_CALLBACK;
       
    for(patNum=0;patNum<NUM_PATTERN;patNum++)
    {
@@ -1702,25 +1722,25 @@ static void preset_readPatternMainStep()
          {
             infoByte = (uint8_t)((trkNum&0x07)<<3);
             infoByte = (uint8_t)( (infoByte)|(patNum&0x07) );
-            frontPanel_sendByte(infoByte);
+            avrComms_sendByte(infoByte);
          
-            frontPanel_sendByte(mainStep[patNum*NUM_TRACKS+trkNum] & 0x7f);
-            frontPanel_sendByte((mainStep[patNum*NUM_TRACKS+trkNum]>>7) & 0x7f);
-            frontPanel_sendByte((uint8_t)((mainStep[patNum*NUM_TRACKS+trkNum]>>14) & 0x7f));
+            avrComms_sendByte(mainStep[patNum*NUM_TRACKS+trkNum] & 0x7f);
+            avrComms_sendByte((mainStep[patNum*NUM_TRACKS+trkNum]>>7) & 0x7f);
+            avrComms_sendByte((uint8_t)((mainStep[patNum*NUM_TRACKS+trkNum]>>14) & 0x7f));
          // wait to get ack from cortex
-            while(frontParser_sysexCallback!=MAINSTEP_CALLBACK)
+            while(avrCommsParser_sysexCallback!=MAINSTEP_CALLBACK)
             {
                uart_checkAndParse();
             }
-            frontParser_sysexCallback=NO_CALLBACK;     
+            avrCommsParser_sysexCallback=NO_CALLBACK;     
          }
       }
    }
    
    // end sysex mode
-   frontParser_command.status = 0;
-   frontPanel_sendByte(SYSEX_END);
-   while(frontParser_command.status != SYSEX_END)
+   avrCommsParser_command.status = 0;
+   avrComms_sendByte(SYSEX_END);
+   while(avrCommsParser_command.status != SYSEX_END)
    {
       uart_checkAndParse();
    }
@@ -1788,16 +1808,16 @@ static void preset_readPatternStepData(uint8_t track, uint8_t pattern)
       while(1){;}
    }
    
-   frontParser_command.status = 0;
-   frontPanel_sendByte(SYSEX_START);
-   while(frontParser_command.status != SYSEX_START)
+   avrCommsParser_command.status = 0;
+   avrComms_sendByte(SYSEX_START);
+   while(avrCommsParser_command.status != SYSEX_START)
    {
       uart_checkAndParse();
    }
    
-   frontPanel_sendByte(SYSEX_BEGIN_PATTERN_TRANSMIT);
-   frontPanel_sysexMode = SYSEX_BEGIN_PATTERN_TRANSMIT;
-   frontParser_sysexCallback=NO_CALLBACK;
+   avrComms_sendByte(SYSEX_BEGIN_PATTERN_TRANSMIT);
+   avrComms_sysexMode = SYSEX_BEGIN_PATTERN_TRANSMIT;
+   avrCommsParser_sysexCallback=NO_CALLBACK;
    
    for(i=0;i<128;i++)
    {
@@ -1819,20 +1839,20 @@ static void preset_readPatternStepData(uint8_t track, uint8_t pattern)
       {
          uint8_t infoByte = (uint8_t)((track&0x07)<<3);
          infoByte = (uint8_t)( (infoByte)|(pattern&0x07) );
-         frontPanel_sendByte(infoByte);
+         avrComms_sendByte(infoByte);
       
-         frontPanel_sendByte(preset_stepData.volume	& 0x7f);
-         frontPanel_sendByte(preset_stepData.prob	& 0x7f);
-         frontPanel_sendByte(preset_stepData.note	& 0x7f);
+         avrComms_sendByte(preset_stepData.volume	& 0x7f);
+         avrComms_sendByte(preset_stepData.prob	& 0x7f);
+         avrComms_sendByte(preset_stepData.note	& 0x7f);
       
-         frontPanel_sendByte(preset_stepData.param1Nr	& 0x7f);
-         frontPanel_sendByte(preset_stepData.param1Val	& 0x7f);
+         avrComms_sendByte(preset_stepData.param1Nr	& 0x7f);
+         avrComms_sendByte(preset_stepData.param1Val	& 0x7f);
       
-         frontPanel_sendByte(preset_stepData.param2Nr	& 0x7f);
-         frontPanel_sendByte(preset_stepData.param2Val	& 0x7f);
+         avrComms_sendByte(preset_stepData.param2Nr	& 0x7f);
+         avrComms_sendByte(preset_stepData.param2Val	& 0x7f);
       
       //now the MSBs from all 7 values
-         frontPanel_sendByte((uint8_t)(
+         avrComms_sendByte((uint8_t)(
                      ((preset_stepData.volume 	& 0x80)>>7) |
             			((preset_stepData.prob	 	& 0x80)>>6) |
             			((preset_stepData.note	 	& 0x80)>>5) |
@@ -1844,8 +1864,8 @@ static void preset_readPatternStepData(uint8_t track, uint8_t pattern)
       }
       
       // must receive an ack from main before sending next step to avoid overflow
-      frontParser_sysexCallback=NO_CALLBACK;
-      while(frontParser_sysexCallback==NO_CALLBACK)
+      avrCommsParser_sysexCallback=NO_CALLBACK;
+      while(avrCommsParser_sysexCallback==NO_CALLBACK)
       {  
          uart_checkAndParse();
       }
@@ -1857,19 +1877,19 @@ static void preset_readPatternStepData(uint8_t track, uint8_t pattern)
    
    //menu_debug("WAIT STEP CALL", 14, track, pattern, 0);
    
-   while(frontParser_sysexCallback!=STEP_CALLBACK)
+   while(avrCommsParser_sysexCallback!=STEP_CALLBACK)
    {  
       uart_checkAndParse();
    }
-   frontParser_sysexCallback=NO_CALLBACK;
+   avrCommsParser_sysexCallback=NO_CALLBACK;
    
    // end sysex mode
-   frontParser_command.status = 0;
-   frontPanel_sendByte(SYSEX_END);
+   avrCommsParser_command.status = 0;
+   avrComms_sendByte(SYSEX_END);
    
    //menu_debug("WAIT SYSX", 9, track, pattern, 0);
    
-   while(frontParser_command.status != SYSEX_END)
+   while(avrCommsParser_command.status != SYSEX_END)
    {
       uart_checkAndParse();
    }
@@ -1886,7 +1906,7 @@ uint8_t preset_loadPattern(uint8_t presetNr, uint8_t voiceArray)
    uint8_t patNum;
 
    uart_clearRxFifo();
-   frontParser_rxDisable=1;
+   avrCommsParser_rxDisable=1;
    
    preset_workingPreset=presetNr;
    preset_workingType=WTYPE_PATTERN;
@@ -1913,8 +1933,8 @@ uint8_t preset_loadPattern(uint8_t presetNr, uint8_t voiceArray)
    lcd_home();
    lcd_string_F(PSTR("Loading Patrn"));
    
-   frontPanel_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PATTERN);
-   frontPanel_sendData(SEQ_CC,SEQ_EUKLID_RESET,0x01);
+   avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PATTERN);
+   avrComms_sendData(SEQ_CC,SEQ_EUKLID_RESET,0x01);
    
    // bc - NB: if enabled, this will lock the track
    preset_readPatternMainStep();
@@ -1963,13 +1983,13 @@ uint8_t preset_loadPattern(uint8_t presetNr, uint8_t voiceArray)
    }
 
 
-   frontPanel_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_PATTERN);
+   avrComms_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_PATTERN);
    
 	//force complete repaint
    menu_repaintAll();
 
 #else
-	frontPanel_sendData(PRESET,PRESET_LOAD,presetNr);
+	avrComms_sendData(PRESET,PRESET_LOAD,presetNr);
 #endif
 
 closeFile:
@@ -1977,7 +1997,7 @@ closeFile:
    f_close((FIL*)&preset_File);
    
    _delay_ms(50);
-   frontParser_rxDisable=0;
+   avrCommsParser_rxDisable=0;
    uart_clearRxFifo();
    
    return 0;
@@ -2004,7 +2024,7 @@ void preset_morph(uint8_t voiceArray, uint8_t morph)
    uint8_t i, k;
    uint8_t *parArray;
 
-   if(frontParser_isRestoreActive())
+   if(avrCommsParser_isRestoreActive())
       return;
 
    if (morph>=127)
@@ -2056,15 +2076,15 @@ void preset_morph(uint8_t voiceArray, uint8_t morph)
          val = interpolate(parameter_values[paramNumber],parameters2[paramNumber],morph);
          if(paramNumber<128) 
          {
-            frontPanel_sendData(MIDI_CC,(uint8_t)paramNumber,val);
+            avrComms_sendData(MIDI_CC,(uint8_t)paramNumber,val);
          } 
          else 
          {
-            frontPanel_sendData(CC_2,(uint8_t)(paramNumber-128),val);
+            avrComms_sendData(CC_2,(uint8_t)(paramNumber-128),val);
          }		
          	
          		
-         	//to omit front panel button/LED lag we have to process din dout and uart here
+         	//to omit AVR comms button/LED lag we have to process din dout and uart here
          	//read next button
          din_readNextInput();
          	//update LEDs
@@ -2224,10 +2244,10 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
    uint8_t menuEndpointsSaved=0;
 
    uart_clearRxFifo();
-   if(!frontPanel_flowBeginSession())
+   if(!avrComms_flowBeginSession())
       return 1;
    flowSessionStarted=1;
-   frontParser_rxDisable=1;
+   avrCommsParser_rxDisable=1;
    
    preset_workingPreset=presetNr;
    preset_workingType=WTYPE_ALL;
@@ -2238,8 +2258,8 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
    //open the file
    FRESULT res = f_open((FIL*)&preset_File,filename,FA_OPEN_EXISTING | FA_READ);
    if(res!=FR_OK) {
-      (void)frontPanel_flowEndSession();
-      frontParser_rxDisable=0;
+      (void)avrComms_flowEndSession();
+      avrCommsParser_rxDisable=0;
       uart_clearRxFifo();
       return 1; //file open error... maybe the file does not exist?
    }
@@ -2255,7 +2275,7 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
       goto closeFile;
    
    preset_workingVersion = version;
-   frontPanel_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_ALL);
+   avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_ALL);
    fileBeginSent=1;
 
    if(preset_shouldPreserveMenuEndpointsDuringFileLoad())
@@ -2291,7 +2311,7 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
    lcd_home();
    lcd_string_F(PSTR("Loading All"));
    
-   frontPanel_sendData(SEQ_CC,SEQ_EUKLID_RESET,0x01);
+   avrComms_sendData(SEQ_CC,SEQ_EUKLID_RESET,0x01);
    
    // bc - NB: if enabled, this will lock the track
    preset_readPatternMainStep();
@@ -2324,7 +2344,7 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
          
          if(trkNum<6)
          {
-            frontPanel_sendData(SEQ_CC,SEQ_LOAD_VOICE,trkNum); 
+            avrComms_sendData(SEQ_CC,SEQ_LOAD_VOICE,trkNum); 
             preset_readDrumVoice(trkNum, 1);
             preset_readDrumVoice(trkNum, 0);
          }
@@ -2333,13 +2353,13 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
          preset_readPatternStepData(trkNum,menu_playedPattern);
          
          if(trkNum<5)
-            frontPanel_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,trkNum);
+            avrComms_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,trkNum);
             
       }
       
    }
    
-   frontPanel_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,5); 
+   avrComms_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,5); 
    
    if( (voiceArray>=0x7f) || (voiceArray==0) )
    {
@@ -2370,14 +2390,14 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
       }
    }
 
-   frontPanel_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_ALL);
+   avrComms_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_ALL);
    fileDoneSent=1;
    
 	//force complete repaint
    menu_repaintAll();
 
 #else
-	frontPanel_sendData(PRESET,PRESET_LOAD,presetNr);
+	avrComms_sendData(PRESET,PRESET_LOAD,presetNr);
 #endif
 
 closeFile:
@@ -2391,12 +2411,12 @@ closeFile:
    f_close((FIL*)&preset_File);
 
    if(fileBeginSent && !fileDoneSent)
-      frontPanel_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_ALL);
+      avrComms_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_ALL);
    
    _delay_ms(50);
    if(flowSessionStarted)
-      flowSessionOk = frontPanel_flowEndSession();
-   frontParser_rxDisable=0;
+      flowSessionOk = avrComms_flowEndSession();
+   avrCommsParser_rxDisable=0;
    uart_clearRxFifo();
    
    return flowSessionOk ? 0 : 1;
@@ -2420,10 +2440,10 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
    uint8_t menuEndpointsSaved=0;
 
    uart_clearRxFifo();
-   if(!frontPanel_flowBeginSession())
+   if(!avrComms_flowBeginSession())
       return 1;
    flowSessionStarted=1;
-   frontParser_rxDisable=1;
+   avrCommsParser_rxDisable=1;
    
    preset_workingPreset=presetNr;
    preset_workingType=WTYPE_PERFORMANCE; // wtype is held until file load is done
@@ -2434,8 +2454,8 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
 	//open the file
    FRESULT res = f_open((FIL*)&preset_File,filename,FA_OPEN_EXISTING | FA_READ);
    if(res!=FR_OK) {
-      (void)frontPanel_flowEndSession();
-      frontParser_rxDisable=0;
+      (void)avrComms_flowEndSession();
+      avrCommsParser_rxDisable=0;
       uart_clearRxFifo();
       return 1; //file open error... maybe the file does not exist?
    }
@@ -2453,7 +2473,7 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
    preset_workingVersion = version;
    preset_showLoadingPerf();
 
-   frontPanel_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PERFORMANCE);
+   avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PERFORMANCE);
    fileBeginSent=1;
 
    if(preset_shouldPreserveMenuEndpointsDuringFileLoad())
@@ -2523,7 +2543,7 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
    
    preset_showLoadingPerf();
    
-   frontPanel_sendData(SEQ_CC,SEQ_EUKLID_RESET,0x01);
+   avrComms_sendData(SEQ_CC,SEQ_EUKLID_RESET,0x01);
    
    // bc - NB: if enabled, this will lock the track (bit reg. seq_tracksLocked)
    // 'locking' the track takes place only in the mainboard, in the case
@@ -2557,17 +2577,17 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
       {
          if(trkNum<6)
          {
-            frontPanel_sendData(SEQ_CC,SEQ_LOAD_VOICE,trkNum);
+            avrComms_sendData(SEQ_CC,SEQ_LOAD_VOICE,trkNum);
             preset_readDrumVoice(trkNum, 1);
             preset_readDrumVoice(trkNum, 0);
          }
 
          if(trkNum<5)
-            frontPanel_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,trkNum);
+            avrComms_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,trkNum);
       }
    }
 
-   frontPanel_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,5);
+   avrComms_sendData(SEQ_CC,SEQ_UNHOLD_VOICE,5);
    
    if( (voiceArray>=0x7f) || (voiceArray==0) )
    {
@@ -2598,11 +2618,11 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
       }
    }
    
-   frontPanel_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_PERFORMANCE);
+   avrComms_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_PERFORMANCE);
    fileDoneSent=1;
    
 #else
-	// frontPanel_sendData(PRESET,PRESET_LOAD,presetNr);
+	// avrComms_sendData(PRESET,PRESET_LOAD,presetNr);
 #endif
 
 closeFile:
@@ -2616,11 +2636,11 @@ closeFile:
    f_close((FIL*)&preset_File);
 
    if(fileBeginSent && !fileDoneSent)
-      frontPanel_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_PERFORMANCE);
+      avrComms_sendData(SEQ_CC,SEQ_FILE_DONE,WTYPE_PERFORMANCE);
    
    if(flowSessionStarted)
-      flowSessionOk = frontPanel_flowEndSession();
-   frontParser_rxDisable=0;
+      flowSessionOk = avrComms_flowEndSession();
+   avrCommsParser_rxDisable=0;
    uart_clearRxFifo();
    
    return flowSessionOk ? 0 : 1;

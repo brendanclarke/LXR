@@ -393,28 +393,12 @@ void preset_storeVelocityDestinationIngress(uint8_t voice, uint16_t destination)
    }
 }
 
-/* Stores a macro destination selector into the active automation target image
-   and mirrors it into the interpolated cache when the current ingress mode
-   keeps a second copy alive. This keeps macro routing coherent for both live
-   edits and restore traffic. */
+/* Session 025 deprecation note: macro destination storage is being frozen so
+   the remaining macro code can be removed safely after the test pass. */
 void preset_storeMacroDestinationIngress(uint8_t destinationNr, uint16_t destination)
 {
-   PresetAutomationTargets *target = preset_getIngressAutomationTarget();
-   PresetAutomationTargets *interpolatedTarget =
-      preset_getIngressInterpolatedAutomationTarget();
-
-   if(!target || destinationNr >= 4)
-      return;
-
-   target->macroDestination[destinationNr] = destination;
-   target->macroDestinationValid |= (uint8_t)(1 << destinationNr);
-
-   if(interpolatedTarget && interpolatedTarget != target)
-   {
-      interpolatedTarget->macroDestination[destinationNr] = destination;
-      interpolatedTarget->macroDestinationValid |=
-         (uint8_t)(1 << destinationNr);
-   }
+   (void)destinationNr;
+   (void)destination;
 }
 
 /* Applies a single parameter value to the DSP. */

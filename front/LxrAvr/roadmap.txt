@@ -38,7 +38,7 @@ represents a parameter directly
 Problem: some of the values are invalid mod targets.
 menu_cc2name is just a way to get a name index and a voice number given a parameter number. This name index is into valueNames array
 which itself is a reference to long names, short names and category names for everything. menu_cc2name is only used by automation target.
-frontParser_stepData is a struct in front that stores among other things, these two values. It seems that it's only used to 
+avrCommsParser_stepData is a struct in front that stores among other things, these two values. It seems that it's only used to 
 store values it requests from cortex so that it can save these to sd card and vice versa.
 
 Strategy for automation target fix: (search for **AUTOM in the code)
@@ -46,7 +46,7 @@ Strategy for automation target fix: (search for **AUTOM in the code)
 - store an index into a valid list which is sane and sorted by voice then page then value (store in PAR_P*_DEST)
 - any time we receive a value from cortex, we translate it to this value
 - any time we send the value to cortex we translate it to a param number
-- frontParser_stepData doesn't need to change because it's only used for transferring data between file and sequencer and vice versa
+- avrCommsParser_stepData doesn't need to change because it's only used for transferring data between file and sequencer and vice versa
 
 - Added midi note off when switching patterns
 - Added midi note off when changing midi channel

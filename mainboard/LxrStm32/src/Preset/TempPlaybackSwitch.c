@@ -21,7 +21,7 @@ PresetTempPlaybackSwitchState preset_tempPlaybackSwitchState = {0};
    and explicit. */
 uint8_t preset_trackPatternUsesTmp(uint8_t pattern)
 {
-   return seq_normalizePatternNumber(pattern) == SEQ_TMP_PATTERN;
+   return pat_normalizePatternNumber(pattern) == SEQ_TMP_PATTERN;
 }
 
 /* Resolves whether a voice should read from the temp image when pattern
