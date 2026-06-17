@@ -32,7 +32,7 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 
 #define FRONT_STEP_LED_STATUS_BYTE 		0xb1	// LED control/status message
 #define FRONT_SEQ_CC					      0xb2	// sequencer command/control message
-#define FRONT_CODEC_CONTROL				0xb3	// codec/audio-engine control message, currently unused
+//#define FRONT_CODEC_CONTROL				0xb3	// codec/audio-engine control message, currently unused
 #define VOICE_CC						      0xb4	// voice-specific control message
 #define BANK_CHANGE_CC                  0xad	// bank selection / bank change
 #define PARAM_CC                        0xae	// live parameter change, CC slot 1-127
@@ -54,13 +54,13 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define PRF_RESTORE_PARAM_CC2         0xc2	// restore a high-CC parameter value during PRF load
 #define PRF_RESTORE_MORPH_CC          0xc3	// restore a morph value during PRF load
 #define PRF_RESTORE_MORPH_CC2         0xc4	// restore a high-CC morph value during PRF load
-#define PRF_CACHE_STATUS              0xc5	// PRF cache handshake status response
+//#define PRF_CACHE_STATUS              0xc5	// PRF cache handshake status response
 #define PARAM_RESTORE_DONE            0xc6	// end of a parameter restore burst
 #define PARAM_RESTORE_BEGIN           0xc7	// begin a parameter restore burst
 #define PARAM_RESTORE_READY           0xc8	// ready/ack marker for parameter restore
 #define PARAM_RESTORE_ACK             0xc9	// acknowledge a parameter restore request
-#define PRF_CACHE_REJECTED            0x00	// PRF cache request rejected
-#define PRF_CACHE_ACCEPTED            0x01	// PRF cache request accepted
+//#define PRF_CACHE_REJECTED            0x00	// PRF cache request rejected
+//#define PRF_CACHE_ACCEPTED            0x01	// PRF cache request accepted
 #define FRONT_SAMPLE_START_UPLOAD 		0x01	// begin sample upload
 #define FRONT_SAMPLE_COUNT		 		   0x02	// sample count request/response
 
@@ -124,7 +124,7 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_SEQ_FLUX					   0x2b	// set flux amount
 #define FRONT_SEQ_SOM_FREQ				   0x2c	// set SOM frequency
 #define FRONT_SEQ_MIDI_CHAN				0x2d	// voiceNr (0xf0) + channel (0x0f). --AS voice 7=global channel
-#define FRONT_SEQ_MIDI_MODE				0x2e	// legacy MIDI mode selector, now unused
+//#define FRONT_SEQ_MIDI_MODE				0x2e	// legacy MIDI mode selector, now unused
 #define FRONT_SEQ_MIDI_ROUTING			0x2f	// MIDI routing selector
 #define FRONT_SEQ_MIDI_TX_FILTER		   0x30    // MIDI transmit filter
 #define FRONT_SEQ_MIDI_RX_FILTER		   0x31    // MIDI receive filter
@@ -168,13 +168,13 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_SEQ_FLOW_GRANT            0x5b	// grant credits / ack a flow-control step
 #define FRONT_SEQ_FLOW_END              0x5c	// end a flow-control channel
 #define FRONT_SEQ_FLOW_ABORT            0x5d	// abort a flow-control channel
-#define FRONT_SEQ_PRF_CACHE_BEGIN       0x5e	// begin the legacy PRF cache/session handshake
-#define FRONT_SEQ_PRF_PENDING_BEGIN     0x5f	// mark pending PRF snapshot begin
-#define FRONT_SEQ_PRF_PENDING_DONE      0x60	// mark pending PRF snapshot complete
-#define FRONT_SEQ_PRF_CACHE_ABORT       0x61	// abort the legacy PRF cache/session handshake
-#define FRONT_SEQ_PRF_AVR_SNAPSHOT_BEGIN 0x62	// begin AVR-side snapshot capture
-#define FRONT_SEQ_PRF_AVR_SNAPSHOT_END   0x63	// end AVR-side snapshot capture
-#define FRONT_SEQ_PRF_RESTORE_AVR_LIVE   0x64	// restore AVR live state after snapshot
+//#define FRONT_SEQ_PRF_CACHE_BEGIN       0x5e	// begin the legacy PRF cache/session handshake
+//#define FRONT_SEQ_PRF_PENDING_BEGIN     0x5f	// mark pending PRF snapshot begin
+//#define FRONT_SEQ_PRF_PENDING_DONE      0x60	// mark pending PRF snapshot complete
+//#define FRONT_SEQ_PRF_CACHE_ABORT       0x61	// abort the legacy PRF cache/session handshake
+//#define FRONT_SEQ_PRF_AVR_SNAPSHOT_BEGIN 0x62	// begin AVR-side snapshot capture
+//#define FRONT_SEQ_PRF_AVR_SNAPSHOT_END   0x63	// end AVR-side snapshot capture
+//#define FRONT_SEQ_PRF_RESTORE_AVR_LIVE   0x64	// restore AVR live state after snapshot
 #define FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN 0x65	// begin a temp-kit endpoint copy
 #define FRONT_SEQ_TMP_KIT_ENDPOINT_END   0x66	// end a temp-kit endpoint copy
 #define FRONT_SEQ_TMP_KIT_AUTOMATION_PHASE 0x67	// mark the automation phase of a temp-kit copy

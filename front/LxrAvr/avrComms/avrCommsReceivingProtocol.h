@@ -57,7 +57,7 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define PARAM_CC2       0xaf	// live parameter change, CC slot 128+
 #define LED_CC				0xb1	// LED control/status message
 #define SEQ_CC				0xb2	// sequencer command/control message
-#define CODEC_CC			0xb3	// codec/audio-engine control message, currently unused
+//#define CODEC_CC			0xb3	// codec/audio-engine control message, currently unused
 #define VOICE_CC			0xb4	// voice-specific control message
 #define SET_BPM				0xb5	// set tempo using a 14-bit value
 #define CC_2				0xb6		// second CC bank for parameters above 127
@@ -76,13 +76,13 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define PRF_RESTORE_PARAM_CC2 0xc2	// restore a high-CC parameter value during PRF load
 #define PRF_RESTORE_MORPH_CC  0xc3	// restore a morph value during PRF load
 #define PRF_RESTORE_MORPH_CC2 0xc4	// restore a high-CC morph value during PRF load
-#define PRF_CACHE_STATUS      0xc5	// PRF cache handshake status response
+//#define PRF_CACHE_STATUS      0xc5	// PRF cache handshake status response
 #define PARAM_RESTORE_DONE    0xc6	// end of a parameter restore burst
 #define PARAM_RESTORE_BEGIN   0xc7	// begin a parameter restore burst
 #define PARAM_RESTORE_READY   0xc8	// ready/ack marker for parameter restore
 #define PARAM_RESTORE_ACK     0xc9	// acknowledge a parameter restore request
-#define PRF_CACHE_REJECTED    0x00	// PRF cache request rejected
-#define PRF_CACHE_ACCEPTED    0x01	// PRF cache request accepted
+//#define PRF_CACHE_REJECTED    0x00	// PRF cache request rejected
+//#define PRF_CACHE_ACCEPTED    0x01	// PRF cache request accepted
 #define SAMPLE_START_UPLOAD 0x01	// begin sample upload
 #define SAMPLE_COUNT		0x02	// sample count request/response
 
@@ -93,8 +93,8 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 
 //preset
 #define PRESET_LOAD				0x01	// load a preset image
-#define PRESET_SAVE				0x02	// save a preset image
-#define PATTERN_LOAD			0x03	// load pattern data
+//#define PRESET_SAVE				0x02	// save a preset image
+//#define PATTERN_LOAD			0x03	// load pattern data
 
 
 
@@ -133,8 +133,8 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SEQ_UNMUTE_TRACK	0x0a	// unmute a track
 #define SEQ_CHANGE_PAT		0x0b	/**<requested a new pattern. the same message is send back to the front as ack that the new pattern is loaded (after the current patern finished)*/
 #define SEQ_CHANGE_TMP_PAT	0x0e	/**< request STM seq_tmpPattern as a temporary ninth performance pattern */
-#define SEQ_ROLL_ON			0x0c	/**< start roll for voice data2*/
-#define SEQ_ROLL_OFF		0x0d	/**< stop roll for voice data2*/
+//#define SEQ_ROLL_ON			0x0c	/**< start roll for voice data2*/
+//#define SEQ_ROLL_OFF		0x0d	/**< stop roll for voice data2*/
 //#define SEQ_GET_ACTIVE_PAT	0x0e	/**< get the active pattern number from the sequencer */
 #define SEQ_REQUEST_STEP_PARAMS 0x0f	// request the active step parameter set
 #define SEQ_ROLL_ON_OFF		0x10	/**< turn voice roll/flamm on/off. data 2 parameter is bit 0 to 3 = voice number, bit 4 is on/off flag*/
@@ -173,7 +173,7 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SEQ_FLUX			0x2b	// set flux amount
 #define SEQ_SOM_FREQ		0x2c	// set SOM frequency
 #define SEQ_MIDI_CHAN		0x2d	// voiceNr (0xf0) + channel (0x0f). --AS voice 7=global channel
-#define SEQ_MIDI_MODE		0x2e	// legacy MIDI mode selector, now unused
+//#define SEQ_MIDI_MODE		0x2e	// legacy MIDI mode selector, now unused
 #define SEQ_MIDI_ROUTING    0x2f	// MIDI routing selector
 #define SEQ_MIDI_FILT_TX	0x30	// MIDI transmit filter
 #define SEQ_MIDI_FILT_RX	0x31	// MIDI receive filter
@@ -213,13 +213,13 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SEQ_FLOW_GRANT            0x5b	// grant credits / ack a flow-control step
 #define SEQ_FLOW_END              0x5c	// end a flow-control channel
 #define SEQ_FLOW_ABORT            0x5d	// abort a flow-control channel
-#define SEQ_PRF_CACHE_BEGIN       0x5e	// begin the legacy PRF cache/session handshake
-#define SEQ_PRF_PENDING_BEGIN     0x5f	// mark pending PRF snapshot begin
-#define SEQ_PRF_PENDING_DONE      0x60	// mark pending PRF snapshot complete
-#define SEQ_PRF_CACHE_ABORT       0x61	// abort the legacy PRF cache/session handshake
-#define SEQ_PRF_AVR_SNAPSHOT_BEGIN 0x62	// begin AVR-side snapshot capture
-#define SEQ_PRF_AVR_SNAPSHOT_END   0x63	// end AVR-side snapshot capture
-#define SEQ_PRF_RESTORE_AVR_LIVE   0x64	// restore AVR live state after snapshot
+//#define SEQ_PRF_CACHE_BEGIN       0x5e	// begin the legacy PRF cache/session handshake
+//#define SEQ_PRF_PENDING_BEGIN     0x5f	// mark pending PRF snapshot begin
+//#define SEQ_PRF_PENDING_DONE      0x60	// mark pending PRF snapshot complete
+//#define SEQ_PRF_CACHE_ABORT       0x61	// abort the legacy PRF cache/session handshake
+//#define SEQ_PRF_AVR_SNAPSHOT_BEGIN 0x62	// begin AVR-side snapshot capture
+//#define SEQ_PRF_AVR_SNAPSHOT_END   0x63	// end AVR-side snapshot capture
+//#define SEQ_PRF_RESTORE_AVR_LIVE   0x64	// restore AVR live state after snapshot
 #define SEQ_TMP_KIT_ENDPOINT_BEGIN 0x65	// begin a temp-kit endpoint copy
 #define SEQ_TMP_KIT_ENDPOINT_END   0x66	// end a temp-kit endpoint copy
 #define SEQ_TMP_KIT_AUTOMATION_PHASE 0x67	// mark the automation phase of a temp-kit copy

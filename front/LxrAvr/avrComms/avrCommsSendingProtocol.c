@@ -20,8 +20,10 @@ static uint8_t comm_txCredits = 0;
 static uint8_t comm_flowAckPending = 0;
 static uint8_t comm_flowAckChannel = 0;
 static uint8_t comm_flowFailed = 0;
-static uint8_t comm_prfCacheStatusCommand = 0;
-static uint8_t comm_prfCacheStatusValue = PRF_CACHE_REJECTED;
+//#if 0
+//static uint8_t comm_prfCacheStatusCommand = 0;
+//static uint8_t comm_prfCacheStatusValue = PRF_CACHE_REJECTED;
+//#endif
 
 uint8_t avrCommsSending_isFlowCommand(uint8_t command)
 {
@@ -86,11 +88,13 @@ void avrCommsSending_handleFlowMessage(uint8_t command, uint8_t data)
    }
 }
 
-void avrCommsSending_handlePrfCacheStatus(uint8_t command, uint8_t status)
-{
-   comm_prfCacheStatusCommand = command;
-   comm_prfCacheStatusValue = status;
-}
+//#if 0
+//void avrCommsSending_handlePrfCacheStatus(uint8_t command, uint8_t status)
+//{
+//   comm_prfCacheStatusCommand = command;
+//   comm_prfCacheStatusValue = status;
+//}
+//#endif
 
 static uint8_t avrComms_waitForFlowAck(uint8_t channel)
 {
@@ -260,28 +264,30 @@ void avrComms_flowAbortSession(void)
    comm_flowFailed = 1;
 }
 //------------------------------------------------------------
-uint8_t avrComms_prfCacheBegin(uint8_t fileType)
-{
-   comm_prfCacheStatusCommand = 0;
-   comm_prfCacheStatusValue = PRF_CACHE_REJECTED;
-
-   if(!avrComms_prfCacheControl(SEQ_PRF_CACHE_BEGIN, fileType))
-      return PRF_CACHE_REJECTED;
-
-   if(comm_prfCacheStatusCommand != SEQ_PRF_CACHE_BEGIN)
-      return PRF_CACHE_REJECTED;
-
-   return comm_prfCacheStatusValue;
-}
+//#if 0
+//uint8_t avrComms_prfCacheBegin(uint8_t fileType)
+//{
+//   comm_prfCacheStatusCommand = 0;
+//   comm_prfCacheStatusValue = PRF_CACHE_REJECTED;
+//
+//   if(!avrComms_prfCacheControl(SEQ_PRF_CACHE_BEGIN, fileType))
+//      return PRF_CACHE_REJECTED;
+//
+//   if(comm_prfCacheStatusCommand != SEQ_PRF_CACHE_BEGIN)
+//      return PRF_CACHE_REJECTED;
+//
+//   return comm_prfCacheStatusValue;
+//}
 //------------------------------------------------------------
-uint8_t avrComms_prfCacheControl(uint8_t command, uint8_t fileType)
-{
-   comm_flowAckChannel = FLOW_CH_LOAD_SESSION;
-   comm_flowAckPending = 1;
-   avrComms_sendData(SEQ_CC, command, fileType);
-
-   return avrComms_waitForFlowAck(FLOW_CH_LOAD_SESSION);
-}
+//uint8_t avrComms_prfCacheControl(uint8_t command, uint8_t fileType)
+//{
+//   comm_flowAckChannel = FLOW_CH_LOAD_SESSION;
+//   comm_flowAckPending = 1;
+//   avrComms_sendData(SEQ_CC, command, fileType);
+//
+//   return avrComms_waitForFlowAck(FLOW_CH_LOAD_SESSION);
+//}
+//#endif
 //------------------------------------------------------------
 void avrComms_sendMidiMsg(MidiMsg msg)
 {

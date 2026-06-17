@@ -1159,15 +1159,19 @@ static void frontParser_sendFlowGrant(uint8_t channel, uint8_t credits)
    frontPanelSending_sendFlowGrant(channel, credits);
 }
 
-static void frontParser_sendFlowGrantWait(uint8_t channel, uint8_t credits)
-{
-   frontPanelSending_sendFlowGrantWait(channel, credits);
-}
+//#if 0
+//static void frontParser_sendFlowGrantWait(uint8_t channel, uint8_t credits)
+//{
+//   frontPanelSending_sendFlowGrantWait(channel, credits);
+//}
+//#endif
 
-static void frontParser_sendPrfCacheStatus(uint8_t command, uint8_t status)
-{
-   frontPanelSending_sendPrfCacheStatus(command, status);
-}
+//#if 0
+//static void frontParser_sendPrfCacheStatus(uint8_t command, uint8_t status)
+//{
+//   frontPanelSending_sendPrfCacheStatus(command, status);
+//}
+//#endif
 
 static void frontParser_suspendCreditFlowForSysex()
 {
@@ -2028,6 +2032,7 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_FLOW_GRANT:
          break;
 
+#if 0
       case FRONT_SEQ_PRF_CACHE_BEGIN:
          /* The PRF cache/background-load regime is deprecated. File loads now
             write directly to normal storage; AVR may keep probing this opcode
@@ -2060,6 +2065,7 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_PRF_RESTORE_AVR_LIVE:
          frontParser_sendFlowGrantWait(FLOW_CH_LOAD_SESSION, FLOW_ACK_CREDITS);
          break;
+#endif
 
       case FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN:
       {

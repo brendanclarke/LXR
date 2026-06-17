@@ -495,13 +495,15 @@ void frontPanelSending_sendFlowGrant(uint8_t channel, uint8_t credits)
    uart_sendFrontpanelPriorityByte(frontPanelSending_flowGrantByte(channel, credits));
 }
 
-void frontPanelSending_sendFlowGrantWait(uint8_t channel, uint8_t credits)
-{
-   /* Emit a blocking flow grant packet. */
-   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_CC);
-   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_FLOW_GRANT);
-   uart_sendFrontpanelPriorityByteWait(frontPanelSending_flowGrantByte(channel, credits));
-}
+//#if 0
+//void frontPanelSending_sendFlowGrantWait(uint8_t channel, uint8_t credits)
+//{
+//   /* Emit a blocking flow grant packet. */
+//   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_CC);
+//   uart_sendFrontpanelPriorityByteWait(FRONT_SEQ_FLOW_GRANT);
+//   uart_sendFrontpanelPriorityByteWait(frontPanelSending_flowGrantByte(channel, credits));
+//}
+//#endif
 
 void frontPanelSending_sendFlowAbort(uint8_t channel)
 {
@@ -511,10 +513,12 @@ void frontPanelSending_sendFlowAbort(uint8_t channel)
    uart_sendFrontpanelPriorityByte(channel);
 }
 
-void frontPanelSending_sendPrfCacheStatus(uint8_t command, uint8_t status)
-{
-   /* Report the current PRF cache command/status pair. */
-   uart_sendFrontpanelPriorityByte(PRF_CACHE_STATUS);
-   uart_sendFrontpanelPriorityByte(command);
-   uart_sendFrontpanelPriorityByte(status);
-}
+//#if 0
+//void frontPanelSending_sendPrfCacheStatus(uint8_t command, uint8_t status)
+//{
+//   /* Report the current PRF cache command/status pair. */
+//   uart_sendFrontpanelPriorityByte(PRF_CACHE_STATUS);
+//   uart_sendFrontpanelPriorityByte(command);
+//   uart_sendFrontpanelPriorityByte(status);
+//}
+//#endif

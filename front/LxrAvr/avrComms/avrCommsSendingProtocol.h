@@ -25,12 +25,16 @@ uint8_t avrComms_flowFailed(void);
 uint8_t avrComms_flowBeginSession(void);
 uint8_t avrComms_flowEndSession(void);
 void avrComms_flowAbortSession(void);
-uint8_t avrComms_prfCacheBegin(uint8_t fileType);
-uint8_t avrComms_prfCacheControl(uint8_t command, uint8_t fileType);
+//#if 0
+//uint8_t avrComms_prfCacheBegin(uint8_t fileType);
+//uint8_t avrComms_prfCacheControl(uint8_t command, uint8_t fileType);
+//#endif
 
 uint8_t avrCommsSending_isFlowCommand(uint8_t command);
 void avrCommsSending_handleFlowMessage(uint8_t command, uint8_t data);
-void avrCommsSending_handlePrfCacheStatus(uint8_t command, uint8_t status);
+//#if 0
+//void avrCommsSending_handlePrfCacheStatus(uint8_t command, uint8_t status);
+//#endif
 void avrCommsSending_handleCallbackAck(void);
 
 #endif /* AVRCOMMSSENDINGPROTOCOL_H_ */

@@ -1,7 +1,7 @@
 # TEMPORARY / PATTERN / PARAMETER LOAD SPEC
 
-Date: 2026-06-14
-Status: current storage and switching spec after Session 020 finalization and cleanup. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`.
+Date: 2026-06-17
+Status: current storage and switching spec after Session 024 opcode cleanup. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`. Session 024 also commented out the stale PRF/cache opcode surface without changing the live non-cache file-load path.
 
 Naming note: STM-side front-panel ownership stays under `mainboard/LxrStm32/src/uARTFrontSYX/` with `frontPanel*` names. AVR-side comms now live under `front/LxrAvr/avrComms/` with `avrComms*` names. Older AVR `frontPanel*` references are historical only.
 
@@ -252,3 +252,4 @@ second staging owner.
 - Do not let temp switching recopy storage when a simple source selection change is enough.
 - Do not allow file-transfer compatibility code to become a permanent second
   owner.
+- Do not reintroduce the old PRF cache opcode surface as an active staging model.

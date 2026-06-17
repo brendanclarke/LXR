@@ -32,6 +32,7 @@
 | 021 | 2026-06-15 | local repo, AVR comms rename and docs pass | Renamed the AVR comms layer to `avrComms*`, kept STM front-panel ownership under `uARTFrontSYX/`, and updated the knowledge files to make the split explicit |
 | 022 | 2026-06-16 | local repo, Pattern temp-copy cleanup and Sequencer docs pass | Made copy-to-temp use the per-track playing patterns, cleaned up the Pattern/Sequencer temp-boundary rules, documented the exported Sequencer API and state, and removed stale Sequencer declarations |
 | 023 | 2026-06-16 | local repo, AVR background-load menu rename and docs pass | Renamed the AVR file-load toggle to a 5-state background-load selector, kept the raw byte / `.cfg` compatibility intact, left STM behavior unchanged, and refreshed the comms and session docs |
+| 024 | 2026-06-17 | local repo, opcode audit comment-out closeout | Commented out stale AVR/STM opcode constants plus the thin cache helper surface, preserved the live non-cache file-load/session path, and folded the audit into the session log archive |
 
 ---
 
@@ -129,6 +130,10 @@ Session 022 finished the temp-copy cleanup pass so copy-to-temp now snapshots th
 Session 023 replaced the AVR-facing file-load toggle with a 5-state background-load selector named `PAR_FILE_LOAD_BACKGROUND`, updated the matching menu labels and text table to `TEXT_FILE_LOAD_BACKGROUND` / `backgroundLoadNames`, and renamed the AVR send opcode alias to `SEQ_LOAD_BACKGROUND` without changing the wire value or STM runtime behavior. The new selector uses the free packed menu slot `MENU_FILE_LOAD_BACKGROUND = 0`, which keeps the 4-bit menu-ID encoding intact, and the globals file continues to persist the same raw byte value directly in `glo.cfg` / `.cfg` storage. The session also updated the comms reference, session index, and MEMORY so the new background terminology is now the canonical planning language.
 - **Find here**: AVR menu rename, 5-state background-load selector, `MENU_FILE_LOAD_BACKGROUND = 0` packed-menu slot, raw byte `.cfg` compatibility, `SEQ_LOAD_BACKGROUND` alias, STM unchanged, comms/spec refresh, session log closeout
 
+### 024 — Opcode Audit Closeout + Session Handoff Archive (2026-06-17)
+Session 024 converted the opcode audit into code changes. The high-confidence stale opcodes in the AVR and STM receive headers were commented out, the cache-family suspects were commented out or wrapped in disabled blocks where they had thin helper bodies, and the live non-cache file-load/background-load path was left intact because it still serves normal `.ALL` / `.PRF` loading. Anything with `cache` in it was treated as a retirement candidate only when it did not belong to the active non-cache file-load/session path.
+- **Find here**: commented-out opcode constants, deprecated PRF cache helper stubs, cache-family suspect list, preserved non-cache file-load/session path, session-log handoff archive
+
 
 ---
 
@@ -172,6 +177,7 @@ Session 023 replaced the AVR-facing file-load toggle with a 5-state background-l
 | Copy-to-temp now snapshots the actually playing per-track pattern sources into temp storage, and the temp-pattern repeat rule is tied to `SEQ_TMP_PATTERN` instead of pending-pattern state | 022 |
 | Sequencer exported globals/functions in `sequencer.h` and `sequencer.c` now carry adjacent explanatory comments, and the stale `seq_consumeTmpBoundaryPatternSwitchAck()` declaration was removed from Sequencer | 022 |
 | AVR background-load menu control now uses `PAR_FILE_LOAD_BACKGROUND`, `TEXT_FILE_LOAD_BACKGROUND`, `backgroundLoadNames`, and `SEQ_LOAD_BACKGROUND` while keeping STM behavior and raw `.cfg` byte storage unchanged | 023 |
+| Legacy PRF/cache opcode surface is commented out; the live non-cache file-load/session path remains active | 024 |
 
 
 ---

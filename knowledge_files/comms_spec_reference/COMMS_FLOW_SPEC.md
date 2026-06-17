@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
-Date: 2026-06-14
-Status: current AVR<->STM comms reference after Session 020 finalization and cleanup. STM and AVR now both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, and the internal CC/CC2 parameter apply layer now belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`.
+Date: 2026-06-17
+Status: current AVR<->STM comms reference after Session 024 opcode-surface cleanup. STM and AVR now both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer now belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, and the old cache-only opcode helpers were commented out instead of kept as active code.
 
 ## Purpose
 
@@ -45,7 +45,7 @@ AVR protocol ownership mirrors this:
   state, and the AVR-side opcode namespace.
 - `front/LxrAvr/avrComms/avrCommsSendingProtocol.c/.h` owns AVR-to-STM packet
   construction, send-side flow-control state, LED/query sends, macro sends,
-  and deprecated PRF cache control compatibility sends.
+  and the now-commented-out PRF cache control compatibility stubs.
 
 The old STM `FrontPanelProtocol.h`, STM `frontPanelParser.h`, and AVR
 `frontPanelParser.h` shim headers were removed in the Session 020 wrap-up. The
@@ -223,24 +223,24 @@ Legacy wait primitives still exist:
 These are still narrow compatibility tools.
 They should not become a general mechanism for future protocol growth.
 
-## AVR-Side Initiators That Feed The Load Path
+## Historical AVR-Side Initiators That Fed The Load Path
 
-The AVR side does not own the canonical session state, but it does initiate the flows that currently feed the background-load machinery.
+The AVR side does not own the canonical session state. The names below are kept as historical reference only because Session 024 commented out the thin cache helper surface that used to feed the old background-load machinery.
 
 ### Front-panel protocol initiators
 
 In `front/LxrAvr/avrComms/avrCommsSendingProtocol.c`:
 
-- `avrComms_prfCacheBegin()`
-- `avrComms_prfCacheControl()`
+- `avrComms_prfCacheBegin()` (commented out in Session 024)
+- `avrComms_prfCacheControl()` (commented out in Session 024)
 - `avrComms_flowBeginSession()`
 - `avrComms_flowEndSession()`
 - `avrComms_flowAbortSession()`
-- `PRF_CACHE_STATUS` handling
+- `PRF_CACHE_STATUS` handling (commented out in Session 024)
 
-These are compatibility entry points for the existing file-transfer envelope.
-STM rejects/no-ops the obsolete cache behavior; do not treat these commands as
-a live background-load cache regime.
+These were compatibility entry points for the old file-transfer envelope.
+Session 024 commented out the obsolete cache behavior; do not treat these
+commands as a live background-load cache regime.
 
 ### AVR preset/file-load flows
 
@@ -303,9 +303,9 @@ The comms layer now has this split:
 The parser must not keep a second background-load model. It should route
 semantics into `Preset` and `Pattern`, then get out of the way.
 
-Deprecated PRF/cache initiators can stay thin or stubbed while old AVR
-file-transfer code still emits compatibility traffic. That is acceptable only
-as long as they do not reintroduce a cache-as-authority model.
+The old PRF/cache initiator names are now commented out rather than active.
+Keep their history in the log archive rather than reintroducing them in place,
+and do not bring back a cache-as-authority model under the same names.
 
 ## Guardrails
 

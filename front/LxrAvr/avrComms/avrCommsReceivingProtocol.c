@@ -350,7 +350,7 @@ void avrComms_parseData(uint8_t data)
       {
          if(!avrCommsParser_rxDisable
             || (avrCommsParser_command.status == SEQ_CC)
-            || (avrCommsParser_command.status == PRF_CACHE_STATUS)
+            //|| (avrCommsParser_command.status == PRF_CACHE_STATUS)
             || (avrCommsParser_command.status == PARAM_RESTORE_BEGIN)
             || (avrCommsParser_command.status == PARAM_RESTORE_DONE)
             || (avrCommsParser_command.status == PRF_RESTORE_PARAM_CC)
@@ -373,10 +373,14 @@ void avrComms_parseData(uint8_t data)
          {
             if((avrCommsParser_command.status == SEQ_CC) && avrCommsSending_isFlowCommand(avrCommsParser_command.data1))
                avrCommsSending_handleFlowMessage(avrCommsParser_command.data1, avrCommsParser_command.data2);
-            else if(avrCommsParser_command.status == PRF_CACHE_STATUS)
-            {
-               avrCommsSending_handlePrfCacheStatus(avrCommsParser_command.data1, avrCommsParser_command.data2);
-            }
+#if 0
+//#if 0
+            //else if(avrCommsParser_command.status == PRF_CACHE_STATUS)
+            //{
+            //   avrCommsSending_handlePrfCacheStatus(avrCommsParser_command.data1, avrCommsParser_command.data2);
+            //}
+//#endif
+#endif
             else if((avrCommsParser_command.status == PARAM_RESTORE_BEGIN)
                || (avrCommsParser_command.status == PARAM_RESTORE_DONE)
                || (avrCommsParser_command.status == PRF_RESTORE_PARAM_CC)
@@ -736,10 +740,10 @@ void avrComms_parseData(uint8_t data)
                // Inform STM we have finished and re-enabled normal operation.
                avrComms_sendData(PARAM_RESTORE_ACK, 0, 0);
             }
-            else if(avrCommsParser_command.status == PRF_CACHE_STATUS)
-            {
-               avrCommsSending_handlePrfCacheStatus(avrCommsParser_command.data1, avrCommsParser_command.data2);
-            }
+            //else if(avrCommsParser_command.status == PRF_CACHE_STATUS)
+            //{
+            //   avrCommsSending_handlePrfCacheStatus(avrCommsParser_command.data1, avrCommsParser_command.data2);
+            //}
             
             else if(avrCommsParser_command.status == BANK_CHANGE_CC)
             {

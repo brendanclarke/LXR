@@ -51,9 +51,12 @@ make firmware
 
 **Current status after Session 023 closeout (2026-06-16)**: The AVR load-page control was renamed to the 5-state background-load selector `PAR_FILE_LOAD_BACKGROUND`, with `TEXT_FILE_LOAD_BACKGROUND`, `backgroundLoadNames`, and `SEQ_LOAD_BACKGROUND` updated on the AVR side while STM runtime behavior stayed untouched. The packed menu-ID table used the free `MENU_FILE_LOAD_BACKGROUND = 0` slot because the existing dtype encoding only has four bits for the menu ID, and the globals file continues to round-trip the same raw byte without a serializer change. `make -C front/LxrAvr avr -j4`, `make -C mainboard/LxrStm32 -j4 stm32`, and `make firmware` all passed again after the rename. `TEMP_LOAD_MENU_AUDIT.md`, `knowledge_files/log_archive/000_SESSION_INDEX.md`, `knowledge_files/log_archive/023_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, and `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md` were updated to keep the new terminology canonical.
 
-**Current consolidation / protocol planning artifacts**: the durable finalization notes now live in `knowledge_files/log_archive/023_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, and `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`. Current encoder details live in `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` and supersede the temporary `ENCODER_AUDIT.md`. `TEMP_LOAD_MENU_AUDIT.md` was the temporary working doc for Session 023 and can be deleted after the closeout pass. `REFACTOR_FINALIZATION.md`, `REFACTOR_MY_MESS_CLEANUP.md`, `PRESET_CONSOLIDATION_AUDIT.md`, and `MIDI_UART_SPLIT_AUDIT_EDIT.md` were temporary working docs and may be deleted after Session 020.
+**Current status after Session 024 closeout (2026-06-17)**: The opcode audit closeout commented out the stale AVR and STM opcode constants plus the thin cache-only helper surface, while leaving the live non-cache file-load/session path untouched. `front/LxrAvr/avrComms/` and `mainboard/LxrStm32/src/uARTFrontSYX/` now keep the old cache handshake only as commented-out historical context, the durable audit details were folded into `knowledge_files/log_archive/024_SESSION_HANDOFF_LOG.md`, and `OPCODE_AUDIT.md` was removed as part of the handoff. This was a documentation and cleanup pass rather than a new firmware feature, so no new hardware behavior was introduced.
+
+**Current consolidation / protocol planning artifacts**: the durable finalization notes now live in `knowledge_files/log_archive/024_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/023_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, and `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`. Current encoder details live in `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` and supersede the temporary `ENCODER_AUDIT.md`. `TEMP_LOAD_MENU_AUDIT.md` was the temporary working doc for Session 023 and can be deleted after the closeout pass. `OPCODE_AUDIT.md` was the temporary working doc for Session 024 and was removed after the handoff. `REFACTOR_FINALIZATION.md`, `REFACTOR_MY_MESS_CLEANUP.md`, `PRESET_CONSOLIDATION_AUDIT.md`, and `MIDI_UART_SPLIT_AUDIT_EDIT.md` were temporary working docs and may be deleted after Session 020.
 
 Canonical current WIP docs:
+- `knowledge_files/log_archive/024_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/023_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/022_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`
@@ -184,7 +187,7 @@ User-referenced checkpoints:
 | Session 006 refactor planning details | `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md` |
 | Session 007 refactor Phase 1 details | `knowledge_files/log_archive/007_SESSION_HANDOFF_LOG.md` |
 | Current preset/morph refactor knowledge | `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md` |
-| Current comms/protocol knowledge | `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
+| Current comms/protocol knowledge | `knowledge_files/log_archive/024_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, `knowledge_files/hardware_archive/ATMEGA_STM32F4_COMMS_AUDIT.md` |
 
 ---
 
@@ -379,6 +382,7 @@ Sample flash map:
 ### High Priority
 
 - Current repository state is a functional post-morph temp/background-load baseline after Session 004.
+- Current repository state now also includes the Session 024 opcode-surface cleanup, where the stale PRF/cache handshake names were commented out instead of deleted.
 - Standard morph and normal/temp switching are STM-owned and hardware-verified for ordinary operation, including LFO target to voice morph.
 - Session 005 closed the remaining global morph menu-sync issue; the remaining small workflow items are tracked below and before the larger preset/morph refactor.
 - SEQ16 temp pattern observation bodge remains in place until after the future refactor.
