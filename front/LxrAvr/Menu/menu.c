@@ -218,18 +218,17 @@ const Name valueNames[NUM_NAMES] PROGMEM =
       {SHORT_SKIP_FIRST_ROLL, CAT_SEQUENCER, LONG_SKIP_FIRST_ROLL}, // TEXT_LOAD_PERF_ON_BANK      
       {SHORT_MORPH_VOICE, CAT_MORPH_VOICE, LONG_MORPH_VOICE}, // text for voice morph automation
       
-      {SHORT_MAC1, CAT_MACRO1, LONG_MAC1}, // text for macro 1 send amount
-      {SHORT_MAC1, CAT_MACRO2, LONG_MAC1}, // text for macro 2 send amount
-      
-      {SHORT_MAC1_DST1, CAT_MAC1D1, LONG_MAC1_DST1}, // text for macro 1 destination 1 assign
-      {SHORT_MAC1_DST1_AMT, CAT_MACRO1, LONG_MAC1_DST1_AMT}, // text for macro 1 destination 1 mod amount
-      {SHORT_MAC1_DST2, CAT_MAC1D2, LONG_MAC1_DST2}, // text for macro 1 destination 2 assign
-      {SHORT_MAC1_DST2_AMT, CAT_MACRO1, LONG_MAC1_DST2_AMT}, // text for macro 1 destination 2 mod amount
+      {SHORT_MORPH_DRUM1, CAT_MORPH_VOICE, LONG_MORPH_DRUM1}, 
+      {SHORT_MORPH_DRUM2, CAT_MORPH_VOICE, LONG_MORPH_DRUM2}, 
+      {SHORT_MORPH_DRUM3, CAT_MORPH_VOICE, LONG_MORPH_DRUM3}, 
+      {SHORT_MORPH_SNARE, CAT_MORPH_VOICE, LONG_MORPH_SNARE}, 
+      {SHORT_MORPH_CYM, CAT_MORPH_VOICE, LONG_MORPH_CYM}, 
+      {SHORT_MORPH_HIHAT, CAT_MORPH_VOICE, LONG_MORPH_HIHAT}, 
             
-      {SHORT_MAC2_DST1, CAT_MAC2D1, LONG_MAC2_DST1}, // text for macro 2 destination 1 assign
-      {SHORT_MAC2_DST1_AMT, CAT_MACRO2, LONG_MAC2_DST1_AMT}, // text for macro 2 destination 1 mod amount
-      {SHORT_MAC2_DST2, CAT_MAC2D2, LONG_MAC2_DST2}, // text for macro 2 destination 2 assign
-      {SHORT_MAC2_DST2_AMT, CAT_MACRO2, LONG_MAC2_DST2_AMT},  // text for macro 2 destination 2 mod amount
+      {SHORT_UNUSED1, CAT_UNUSED1, LONG_UNUSED1}, // text for macro 2 destination 1 assign
+      {SHORT_UNUSED2, CAT_UNUSED2, LONG_UNUSED2}, // text for macro 2 destination 1 mod amount
+      {SHORT_UNUSED3, CAT_UNUSED3, LONG_UNUSED3}, // text for macro 2 destination 2 assign
+      {SHORT_UNUSED4, CAT_UNUSED4, LONG_UNUSED4},  // text for macro 2 destination 2 mod amount
       
       {SHORT_ROLL_NOTE, CAT_PATTERN, LONG_ROLL_NOTE},  
       {SHORT_ROLL_VELOCITY, CAT_PATTERN, LONG_ROLL_VELOCITY},  

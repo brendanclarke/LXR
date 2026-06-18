@@ -53,10 +53,13 @@ make firmware
 
 **Current status after Session 024 closeout (2026-06-17)**: The opcode audit closeout commented out the stale AVR and STM opcode constants plus the thin cache-only helper surface, while leaving the live non-cache file-load/session path untouched. `front/LxrAvr/avrComms/` and `mainboard/LxrStm32/src/uARTFrontSYX/` now keep the old cache handshake only as commented-out historical context, the durable audit details were folded into `knowledge_files/log_archive/024_SESSION_HANDOFF_LOG.md`, and `OPCODE_AUDIT.md` was removed as part of the handoff. This was a documentation and cleanup pass rather than a new firmware feature, so no new hardware behavior was introduced.
 
+**Current status after Session 025 closeout (2026-06-17)**: The legacy macro path is intentionally disabled. AVR file loads zero the macro slots before the live arrays see them, the AVR performance-page macro send/apply branches are commented out, the STM front-panel macro receive/apply branches and CC2 macro-amount handler are disabled, and the Preset macro storage/replay helpers are inert stubs. The visible menu no longer shows the macro controls, the comms/spec docs now treat `MACRO_CC` as deprecated historical context, and the implementation audit was promoted into `knowledge_files/log_archive/025_SESSION_HANDOFF_LOG.md` so `AUDIT_MACRO_REMOVAL.md` can be deleted later.
+
 **Current consolidation / protocol planning artifacts**: the durable finalization notes now live in `knowledge_files/log_archive/024_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/023_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/020_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, and `knowledge_files/comms_spec_reference/TEMPORARY_PAT_PARAM_LOAD_SPEC.md`. Current encoder details live in `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` and supersede the temporary `ENCODER_AUDIT.md`. `TEMP_LOAD_MENU_AUDIT.md` was the temporary working doc for Session 023 and can be deleted after the closeout pass. `OPCODE_AUDIT.md` was the temporary working doc for Session 024 and was removed after the handoff. `REFACTOR_FINALIZATION.md`, `REFACTOR_MY_MESS_CLEANUP.md`, `PRESET_CONSOLIDATION_AUDIT.md`, and `MIDI_UART_SPLIT_AUDIT_EDIT.md` were temporary working docs and may be deleted after Session 020.
 
 Canonical current WIP docs:
 - `knowledge_files/log_archive/024_SESSION_HANDOFF_LOG.md`
+- `knowledge_files/log_archive/025_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/023_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/022_SESSION_HANDOFF_LOG.md`
 - `knowledge_files/log_archive/021_SESSION_HANDOFF_LOG.md`

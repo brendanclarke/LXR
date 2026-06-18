@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
 Date: 2026-06-17
-Status: current AVR<->STM comms reference after Session 024 opcode-surface cleanup. STM and AVR now both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer now belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, and the old cache-only opcode helpers were commented out instead of kept as active code.
+Status: current AVR<->STM comms reference after Session 025 macro-deprecation cleanup. STM and AVR now both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer now belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers were commented out instead of kept as active code, and `MACRO_CC` is now deprecated historical context rather than an active live-control path.
 
 ## Purpose
 
@@ -44,8 +44,9 @@ AVR protocol ownership mirrors this:
   parsing, SysEx receive state, restore handling, long-operation receive
   state, and the AVR-side opcode namespace.
 - `front/LxrAvr/avrComms/avrCommsSendingProtocol.c/.h` owns AVR-to-STM packet
-  construction, send-side flow-control state, LED/query sends, macro sends,
-  and the now-commented-out PRF cache control compatibility stubs.
+  construction, send-side flow-control state, LED/query sends, legacy macro
+  sends kept only as disabled compatibility context, and the now-commented-out
+  PRF cache control compatibility stubs.
 
 The old STM `FrontPanelProtocol.h`, STM `frontPanelParser.h`, and AVR
 `frontPanelParser.h` shim headers were removed in the Session 020 wrap-up. The
@@ -129,7 +130,7 @@ These are the ordinary single-message control paths:
 - `SEQ_CC`
 - `CC_LFO_TARGET`
 - `CC_VELO_TARGET`
-- `MACRO_CC`
+- `MACRO_CC` - deprecated legacy macro traffic; current firmware ignores it
 
 Raw endpoint bytes are routed into `Preset` ingress helpers such as:
 
@@ -137,7 +138,7 @@ Raw endpoint bytes are routed into `Preset` ingress helpers such as:
 - `preset_storeMorphParameterIngress()`
 - `preset_storeLfoDestinationIngress()`
 - `preset_storeVelocityDestinationIngress()`
-- `preset_storeMacroDestinationIngress()`
+- `preset_storeMacroDestinationIngress()` - legacy inert compatibility stub
 
 Important rule:
 

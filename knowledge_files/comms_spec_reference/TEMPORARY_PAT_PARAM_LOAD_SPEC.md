@@ -1,7 +1,7 @@
 # TEMPORARY / PATTERN / PARAMETER LOAD SPEC
 
 Date: 2026-06-17
-Status: current storage and switching spec after Session 024 opcode cleanup. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`. Session 024 also commented out the stale PRF/cache opcode surface without changing the live non-cache file-load path.
+Status: current storage and switching spec after Session 025 macro-deprecation cleanup. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`. Session 024 also commented out the stale PRF/cache opcode surface without changing the live non-cache file-load path, and Session 025 made the legacy macro slots zero-on-load plus inert on the apply/replay side.
 
 Naming note: STM-side front-panel ownership stays under `mainboard/LxrStm32/src/uARTFrontSYX/` with `frontPanel*` names. AVR-side comms now live under `front/LxrAvr/avrComms/` with `avrComms*` names. Older AVR `frontPanel*` references are historical only.
 
@@ -9,6 +9,10 @@ Session 023 note: the AVR load-page control is now the 5-state background-load
 selector `PAR_FILE_LOAD_BACKGROUND` / `TEXT_FILE_LOAD_BACKGROUND`, but it still
 persists and transmits the same raw byte value. STM behavior was intentionally
 left unchanged in that pass.
+
+Session 025 note: the legacy macro slots are now zeroed during AVR file import,
+and the remaining macro storage/replay helpers are inert. Treat the macro
+parameter slots as compatibility baggage only.
 
 ## Purpose
 
@@ -219,7 +223,7 @@ These functions matter for the current normal/temp model:
 - `preset_storeMorphParameterIngress()`
 - `preset_storeLfoDestinationIngress()`
 - `preset_storeVelocityDestinationIngress()`
-- `preset_storeMacroDestinationIngress()`
+- `preset_storeMacroDestinationIngress()` - legacy inert compatibility stub
 - `frontParser_applyParameterCommand()`
 - `seq_setTmpKitActive()`
 - `seq_updateVoiceSourcesForPatternChange()`

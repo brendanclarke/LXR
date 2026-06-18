@@ -367,18 +367,17 @@ const char shortNames[][4] PROGMEM  =
 
    // Legacy macro UI strings, kept as placeholders until the macro feature is
    // removed from the parameter/menu tables.
-   {"mac"}, // TEXT_MAC1,
-   {"mac"}, // TEXT_MAC2,
+   {"d1m"}, // TEXT_MORPH_DRUM1,
+   {"d2m"}, // TEXT_MORPH_DRUM2,
+   {"d3m"}, // TEXT_MORPH_DRUM3,
+   {"svm"}, // TEXT_MORPH_SNARE,
+   {"cvm"}, // TEXT_MORPH_CYM,
+   {"hvm"}, // TEXT_MORPH_HIHAT,
    
-   {"1d1"}, // TEXT_MAC1_DST1,
-   {"1a1"}, // TEXT_MAC1_DST1_AMT,
-   {"1d2"}, // TEXT_MAC1_DST2,
-   {"1a2"}, // TEXT_MAC1_DST2_AMT,
-   
-   {"2d1"}, // TEXT_MAC2_DST1,
-   {"2a1"}, // TEXT_MAC2_DST1_AMT,
-   {"2d2"}, // TEXT_MAC2_DST2,
-   {"2a2"}, // TEXT_MAC2_DST2_AMT,
+   {" "}, // TEXT_UNUSED1,
+   {" "}, // TEXT_UNUSED2,
+   {" "}, // TEXT_UNUSED3,
+   {" "}, // TEXT_UNUSED4,
    {"rln"}, // TEXT_ROLL_NOTE,
    {"rlv"}, // TEXT_ROLL_VELOCITY
    {"rol"}, // TEXT_ROLL_MODE
@@ -421,12 +420,12 @@ const char catNames[][16] PROGMEM =
 	{"MIDI"},
 	{"Trigger"},
    // Legacy macro long names retained for table stability during removal.
-   {"Macro 1"},
-   {"Macro 2"},
-   {"Mac1Dst1"},
-   {"Mac1Dst2"},
-   {"Mac2Dst1"},
-   {"Mac2Dst2"},
+   {" "},
+   {" "},
+   {" "},
+   {" "},
+   {" "},
+   {" "},
    {"Trnspos"},
    {"Individ"},
    {"File"},
@@ -515,18 +514,17 @@ const char longNames[][16] PROGMEM =
    {"MrphVoice" }, // individual voice morph
    // Legacy macro long text entries kept only until the macro menu/table code
    // can be deleted.
-   {"Amount"  }, // TEXT_MAC1,
-   {"Amount"  }, // TEXT_MAC2,
+   {"Drm1Mrph"  }, // TEXT_MORPH_DRUM1,
+   {"Drm2Mrph"  }, // TEXT_MORPH_DRUM2,
+   {"Drm3Mrph" }, // TEXT_MORPH_DRUM3,
+   {"SnreMrph" }, // TEXT_MORPH_SNARE
+   {"CymMrph" }, // TEXT_MORPH_CYM,
+   {"HHatMrph" }, // TEXT_MORPH_HIHAT,
    
-   {"Dest 1" }, // TEXT_MAC1_DST1,
-   {"Mod Amt 1" }, // TEXT_MAC1_DST1_AMT,
-   {"Dest 2" }, // TEXT_MAC1_DST2,
-   {"Mod Amt 2" }, // TEXT_MAC1_DST2_AMT,
-   
-   {"Dest 1" }, // TEXT_MAC2_DST1,
-   {"Mod Amt 2" }, // TEXT_MAC2_DST1_AMT,
-   {"Dest 2" }, // TEXT_MAC2_DST2,
-   {"Mod Amt 2" },  // TEXT_MAC2_DST2_AMT,  
+   {" " }, // TEXT_UNUSED1,
+   {" " }, // TEXT_UNUSED1,
+   {" " }, // TEXT_UNUSED1,
+   {" " },  // TEXT_UNUSED1,  
       
    {"RollNote" },  // TEXT_ROLL_NOTE,
    {"RollVelo" },  // TEXT_ROLL_VELOCITY,
