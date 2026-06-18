@@ -476,12 +476,12 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	    /*PARAM_UNUSED_01*/		DTYPE_0B127,
        /*PAR_KIT_VERSION*/    DTYPE_0B255,
        
-       /*PAR_MORPH_DRUM1*/		DTYPE_0B127,
-	    /*PAR_MORPH_DRUM2*/		DTYPE_0B127,
-	    /*PAR_MORPH_DRUM3*/		DTYPE_0B127,
-	    /*PAR_MORPH_SNARE*/		DTYPE_0B127,
-	    /*PAR_MORPH_CYM*/		DTYPE_0B127,
-	    /*PAR_MORPH_HIHAT*/		DTYPE_0B127,
+       /*PAR_MORPH_DRUM1*/		DTYPE_0B255,
+	    /*PAR_MORPH_DRUM2*/		DTYPE_0B255,
+	    /*PAR_MORPH_DRUM3*/		DTYPE_0B255,
+	    /*PAR_MORPH_SNARE*/		DTYPE_0B255,
+	    /*PAR_MORPH_CYM*/		DTYPE_0B255,
+	    /*PAR_MORPH_HIHAT*/		DTYPE_0B255,
        
        /*PAR_MAC1_DST1*/      DTYPE_AUTOM_TARGET,
        /*PAR_MAC1_DST1_AMT*/  DTYPE_PM63, 
@@ -2574,6 +2574,30 @@ static void menu_applyEncoderDeltaToByte(uint8_t *paramValue, int8_t inc)
 }
 
 //-----------------------------------------------------------------
+static uint8_t menu_isVoiceMorphAmountParam(uint16_t paramNr)
+{
+   return paramNr >= PAR_MORPH_DRUM1 && paramNr <= PAR_MORPH_HIHAT;
+}
+
+//-----------------------------------------------------------------
+static void menu_syncVoiceMorphDisplayValues(uint8_t value)
+{
+   uint8_t voice;
+
+   for(voice=0;voice<6;voice++)
+      parameter_values[PAR_MORPH_DRUM1 + voice] = value;
+}
+
+//-----------------------------------------------------------------
+static void menu_sendVoiceMorphAmount(uint16_t paramNr, uint8_t value)
+{
+   if(!menu_isVoiceMorphAmountParam(paramNr))
+      return;
+
+   avrComms_sendVoiceMorphValue((uint8_t)(paramNr - PAR_MORPH_DRUM1), value);
+}
+
+//-----------------------------------------------------------------
 // called when edit mode is active
 // encoder controls parameter value
 // given a delta, will apply that to the current parameter
@@ -2758,7 +2782,11 @@ static void menu_encoderChangeParameter(int8_t inc)
 
 	// --AS TODO this will also send MIDI_CC or CC_2 for the above items that have already been sent. is this desired?
 	//send parameter change to uart tx
-	if(paramNr < 128) // => Sound Parameter
+	if(!isMorphParam && menu_isVoiceMorphAmountParam(paramNr))
+   {
+      menu_sendVoiceMorphAmount(paramNr, *paramValue);
+   }
+	else if(paramNr < 128) // => Sound Parameter
    {
       if (!isMorphParam)
       {
@@ -3487,6 +3515,7 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 	{
 		//value += (value==127)*1;
       morphValue = value;
+      menu_syncVoiceMorphDisplayValues(value);
       /* Global morph is a control value now. STM caches it and copies it to all
          six per-voice morph amounts; STM performs the interpolation work.
          Send as two 7-bit-safe messages because raw values >= 128 look like
@@ -3946,7 +3975,9 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
    break;
 
 	default: // all other sound parameters are send as CC or CC2. anything else is handled specially
-		if(paramNr<128) // => Sound Parameter below 128
+      if(menu_isVoiceMorphAmountParam(paramNr))
+         menu_sendVoiceMorphAmount(paramNr, dtypeValue);
+		else if(paramNr<128) // => Sound Parameter below 128
 			avrComms_sendData(MIDI_CC,(uint8_t)paramNr,dtypeValue);
 		else if(paramNr>=128 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
 			avrComms_sendData(CC_2,(uint8_t)(paramNr-128),dtypeValue);

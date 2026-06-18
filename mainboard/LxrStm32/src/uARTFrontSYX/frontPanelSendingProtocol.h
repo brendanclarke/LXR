@@ -12,6 +12,7 @@
 #include <stdint.h>
 
 #include "frontPanelReceivingProtocol.h"
+#include "Preset/KitState.h"
 
 /* Raw STM->AVR byte wrappers. Only this send-side protocol module should call
    the front-panel UART primitives directly for command traffic. */
@@ -81,6 +82,13 @@ void frontPanelSending_sendRestoreParam(uint16_t param, uint8_t value);
 void frontPanelSending_sendRestoreMorphParam(uint16_t param, uint8_t value);
 /* Report global morph amount as low/high 7-bit FRONT_SEQ_CC commands. */
 void frontPanelSending_sendGlobalMorphReport(uint8_t amount);
+void frontPanelSending_sendGlobalMorphRuntimeReport(uint8_t amount);
+/* Report one or all current per-voice morph amounts as low/high packets. */
+void frontPanelSending_sendVoiceMorphReport(uint8_t voice, uint8_t amount);
+void frontPanelSending_sendVoiceMorphRuntimeReport(uint8_t voice, uint8_t amount);
+void frontPanelSending_sendVoiceMorphRuntimeReports(void);
+void frontPanelSending_sendVoiceMorphReports(void);
+void frontPanelSending_sendVoiceMorphReportsFromKit(const PresetKitState *kit);
 
 /* Runtime sequencer feedback commands for AVR UI state. */
 void frontPanelSending_sendPatternChange(uint8_t pattern);

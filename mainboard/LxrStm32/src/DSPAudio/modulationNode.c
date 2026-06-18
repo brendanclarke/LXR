@@ -41,6 +41,7 @@
 #include "HiHat.h"
 #include "Snare.h"
 #include "sequencer.h"
+#include "MorphEngine.h"
 
 INCCMZ ModulationNode velocityModulators[6];
 
@@ -59,6 +60,20 @@ static uint8_t modNode_isLfoModTarget(ModulationNode* vm)
        || vm == &snareVoice.lfo.modTarget
        || vm == &cymbalVoice.lfo.modTarget
        || vm == &hatVoice.lfo.modTarget;
+}
+
+//-----------------------------------------------------------------------
+static uint8_t modNode_isVelocityModTarget(ModulationNode* vm)
+{
+   uint8_t i;
+
+   for(i = 0; i < 6; i++)
+   {
+      if(vm == &velocityModulators[i])
+         return 1;
+   }
+
+   return 0;
 }
 
 	 //-----------------------------------------------------------------------
@@ -158,7 +173,17 @@ void modNode_reassignVeloMod()
 // The target's actual value needs to be preserved because it will be modulated.
 void modNode_setDestination(ModulationNode* vm, uint16_t dest)
 {
-   if(vm->destination < END_OF_SOUND_PARAMETERS
+   uint8_t isVelocityNode = modNode_isVelocityModTarget(vm);
+
+   if(isVelocityNode
+      && dest < END_OF_SOUND_PARAMETERS
+      && parameterArray[dest].type == TYPE_UINT8_VMORPH)
+   {
+      dest = PAR_NONE;
+   }
+
+   if(!isVelocityNode
+      && vm->destination < END_OF_SOUND_PARAMETERS
       && parameterArray[vm->destination].type == TYPE_UINT8_VMORPH)
    {
       modNode_vMorph(vm, 0.f);
@@ -204,7 +229,7 @@ void modNode_setDestination(ModulationNode* vm, uint16_t dest)
 			break;
 	}
 
-   if(p->type == TYPE_UINT8_VMORPH)
+   if(!isVelocityNode && p->type == TYPE_UINT8_VMORPH)
       modNode_vMorph(vm, vm->lastVal);
 }
 //-----------------------------------------------------------------------
@@ -221,7 +246,8 @@ void modNode_updateValue(ModulationNode* vm, float val)
       
   if ( (p->type)==TYPE_UINT8_VMORPH)
   {
-    modNode_vMorph(vm, val);
+    if(!modNode_isVelocityModTarget(vm))
+       modNode_vMorph(vm, val);
   }
   else if (vm->amount<0)
   {
@@ -300,28 +326,25 @@ void modNode_vMorph(ModulationNode* vm, float val)
    if(modNode_isLfoModTarget(vm))
       return;
 
-   /* Voice morph destinations are control inputs into the STM morph engine.
-      The modulation node does not write parameter storage; it asks sequencer.c
-      to apply a live overlay between interpolated baseline and morph endpoint. */
    switch(vm->destination)
    {
       case PAR_MORPH_DRUM1:
-         seq_modulateVoiceMorphAmount(0, vm->amount, val);
+	  	preset_modulateVoiceMorphAmount(0, vm->amount, val);
          break;
       case PAR_MORPH_DRUM2:
-         seq_modulateVoiceMorphAmount(1, vm->amount, val);
+	  	preset_modulateVoiceMorphAmount(1, vm->amount, val);
          break;
       case PAR_MORPH_DRUM3:
-         seq_modulateVoiceMorphAmount(2, vm->amount, val);
+	  	preset_modulateVoiceMorphAmount(2, vm->amount, val);
          break;
       case PAR_MORPH_SNARE:
-         seq_modulateVoiceMorphAmount(3, vm->amount, val);
+	  	preset_modulateVoiceMorphAmount(3, vm->amount, val);
          break;
       case PAR_MORPH_CYM:
-         seq_modulateVoiceMorphAmount(4, vm->amount, val);
+	  	preset_modulateVoiceMorphAmount(4, vm->amount, val);
          break;
       case PAR_MORPH_HIHAT:
-         seq_modulateVoiceMorphAmount(5, vm->amount, val);
+	  	preset_modulateVoiceMorphAmount(5, vm->amount, val);
          break;
       default:
          break;               

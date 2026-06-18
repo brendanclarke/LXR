@@ -432,7 +432,6 @@ void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
    
    stepData = seq_liveStepForTrack(voiceNr, seq_stepIndex[voiceNr]);
    seq_parseAutomationNodes(voiceNr, stepData);
-   preset_applyVelocityVoiceMorphOnTrigger(voiceNr, vol);
 
 	//turn the trigger off before sending the next one
    if(voiceNr>=5)

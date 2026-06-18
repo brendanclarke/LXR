@@ -20,6 +20,7 @@
 #include "DSPAudio/HiHat.h"
 #include "DSPAudio/Snare.h"
 #include "MIDI/MidiParser.h"
+#include "uARTFrontSYX/frontPanelSendingProtocol.h"
 #include <string.h>
 
 /* Trigger flag used to signal when a morph amount has changed. */
@@ -397,13 +398,11 @@ void preset_setGlobalMorphAmount(uint8_t morphAmount)
 /* Sets global morph amount from automation. */
 void preset_setGlobalMorphAutomationValue(uint8_t morphValue)
 {
-   uint8_t synthVoice;
    uint8_t morphAmount = preset_morphAutomationValueToAmount(morphValue);
 
-   for(synthVoice=0;synthVoice<PRESET_SYNTH_VOICES;synthVoice++)
-      preset_setVoiceMorphLiveAmount(synthVoice, morphAmount);
-
-   preset_vMorphAmount[0] = morphAmount;
+   preset_setGlobalMorphAmount(morphAmount);
+   frontPanelSending_sendGlobalMorphRuntimeReport(morphAmount);
+   frontPanelSending_sendVoiceMorphRuntimeReports();
 }
 
 /* Resets per-voice morph amounts to global. */
@@ -435,11 +434,29 @@ void preset_setVoiceMorphAmount(uint8_t synthVoice, uint8_t morphAmount)
    preset_vMorphAmount[synthVoice + 1] = morphAmount;
 }
 
+/* Reads morph amount for a specific voice. */
+uint8_t preset_getVoiceMorphAmount(uint8_t synthVoice)
+{
+   const PresetKitState *kit;
+
+   if(synthVoice >= PRESET_SYNTH_VOICES)
+      return 0;
+
+   kit = preset_getMorphKitForImage(preset_getMorphImageForVoice(synthVoice));
+   return kit->voiceMorphAmount[synthVoice];
+}
+
 /* Sets morph amount for a specific voice from automation. */
 void preset_setVoiceMorphAutomationValue(uint8_t synthVoice, uint8_t morphValue)
 {
-   preset_setVoiceMorphLiveAmount(synthVoice,
-                                  preset_morphAutomationValueToAmount(morphValue));
+   uint8_t morphAmount;
+
+   if(synthVoice >= PRESET_SYNTH_VOICES)
+      return;
+
+   morphAmount = preset_morphAutomationValueToAmount(morphValue);
+   preset_setVoiceMorphLiveAmount(synthVoice, morphAmount);
+   frontPanelSending_sendVoiceMorphRuntimeReport(synthVoice, morphAmount);
 }
 
 /* Sets morph amount for a mask of voices from automation. */
@@ -456,60 +473,6 @@ void preset_setVoiceMorphMaskAutomationValue(uint8_t voiceMask, uint8_t morphVal
 
    if(voiceMask & 0x40)
       preset_setVoiceMorphAutomationValue(5, morphValue);
-}
-
-/* Internal helper to convert trigger voice index. */
-static uint8_t preset_synthVoiceFromTriggerVoice(uint8_t voiceNr)
-{
-   if(voiceNr >= 5)
-      return 5;
-
-   return voiceNr;
-}
-
-/* Performs velocity-to-morph calculation on trigger. */
-void preset_applyVelocityVoiceMorphOnTrigger(uint8_t voiceNr, uint8_t velocity)
-{
-   uint8_t synthVoice = preset_synthVoiceFromTriggerVoice(voiceNr);
-   uint8_t targetVoice;
-   uint8_t morphAmount;
-   uint16_t destination;
-   float amount;
-   float scaled;
-   PresetKitState *kit;
-
-   if(!velocity)
-      return;
-
-   if(synthVoice >= PRESET_SYNTH_VOICES)
-      return;
-
-   kit = preset_getMorphKitForImage(preset_getMorphImageForVoice(synthVoice));
-   if(!(kit->frontPanelAutomationTargets.velocityDestinationValid &
-        (uint8_t)(1 << synthVoice)))
-   {
-      return;
-   }
-
-   destination = kit->frontPanelAutomationTargets.velocityDestination[synthVoice];
-   targetVoice = preset_morphVoiceForParam(destination);
-   if(targetVoice >= PRESET_SYNTH_VOICES)
-      return;
-
-   amount = velocityModulators[synthVoice].amount;
-   if(amount < 0.f)
-      amount = 0.f;
-   else if(amount > 1.f)
-      amount = 1.f;
-
-   scaled = ((float)velocity / 127.f) * amount;
-   if(scaled < 0.f)
-      scaled = 0.f;
-   else if(scaled > 1.f)
-      scaled = 1.f;
-
-   morphAmount = (uint8_t)((scaled * 255.f) + 0.5f);
-   preset_setVoiceMorphLiveAmount(targetVoice, morphAmount);
 }
 
 /* Applies morph modulation overlay. */

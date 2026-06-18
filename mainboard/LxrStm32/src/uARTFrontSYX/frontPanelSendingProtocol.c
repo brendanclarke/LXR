@@ -9,6 +9,7 @@
 #include "frontPanelSendingProtocol.h"
 
 #include "Uart.h"
+#include "Preset/MorphEngine.h"
 #include "SampleRom/SampleMemory.h"
 #include "Sequencer/sequencer.h"
 #include "Sequencer/Pattern/EuklidGenerator.h"
@@ -349,6 +350,72 @@ void frontPanelSending_sendGlobalMorphReport(uint8_t amount)
    frontPanelSending_sendPriorityByteWait(FRONT_SEQ_CC);
    frontPanelSending_sendPriorityByteWait(FRONT_SEQ_REPORT_GLOBAL_MORPH_MSB);
    frontPanelSending_sendPriorityByteWait((uint8_t)((amount >> 7) & 0x01));
+}
+
+void frontPanelSending_sendGlobalMorphRuntimeReport(uint8_t amount)
+{
+   frontPanelSending_sendByte(FRONT_SEQ_CC);
+   frontPanelSending_sendByte(FRONT_SEQ_REPORT_GLOBAL_MORPH_LSB);
+   frontPanelSending_sendByte((uint8_t)(amount & 0x7f));
+
+   frontPanelSending_sendByte(FRONT_SEQ_CC);
+   frontPanelSending_sendByte(FRONT_SEQ_REPORT_GLOBAL_MORPH_MSB);
+   frontPanelSending_sendByte((uint8_t)((amount >> 7) & 0x01));
+}
+
+void frontPanelSending_sendVoiceMorphReport(uint8_t voice, uint8_t amount)
+{
+   if(voice >= PRESET_SYNTH_VOICES)
+      return;
+
+   frontPanelSending_sendPriorityByteWait(FRONT_SEQ_VOICE_MORPH);
+   frontPanelSending_sendPriorityByteWait(voice);
+   frontPanelSending_sendPriorityByteWait((uint8_t)(amount & 0x7f));
+
+   frontPanelSending_sendPriorityByteWait(FRONT_SEQ_VOICE_MORPH);
+   frontPanelSending_sendPriorityByteWait((uint8_t)(voice + PRESET_SYNTH_VOICES));
+   frontPanelSending_sendPriorityByteWait((uint8_t)((amount >> 7) & 0x01));
+}
+
+void frontPanelSending_sendVoiceMorphRuntimeReport(uint8_t voice, uint8_t amount)
+{
+   if(voice >= PRESET_SYNTH_VOICES)
+      return;
+
+   frontPanelSending_sendByte(FRONT_SEQ_VOICE_MORPH);
+   frontPanelSending_sendByte(voice);
+   frontPanelSending_sendByte((uint8_t)(amount & 0x7f));
+
+   frontPanelSending_sendByte(FRONT_SEQ_VOICE_MORPH);
+   frontPanelSending_sendByte((uint8_t)(voice + PRESET_SYNTH_VOICES));
+   frontPanelSending_sendByte((uint8_t)((amount >> 7) & 0x01));
+}
+
+void frontPanelSending_sendVoiceMorphRuntimeReports(void)
+{
+   uint8_t voice;
+
+   for(voice=0;voice<PRESET_SYNTH_VOICES;voice++)
+      frontPanelSending_sendVoiceMorphRuntimeReport(voice, preset_getVoiceMorphAmount(voice));
+}
+
+void frontPanelSending_sendVoiceMorphReports(void)
+{
+   uint8_t voice;
+
+   for(voice=0;voice<PRESET_SYNTH_VOICES;voice++)
+      frontPanelSending_sendVoiceMorphReport(voice, preset_getVoiceMorphAmount(voice));
+}
+
+void frontPanelSending_sendVoiceMorphReportsFromKit(const PresetKitState *kit)
+{
+   uint8_t voice;
+
+   if(!kit)
+      return;
+
+   for(voice=0;voice<PRESET_SYNTH_VOICES;voice++)
+      frontPanelSending_sendVoiceMorphReport(voice, kit->voiceMorphAmount[voice]);
 }
 
 /* Runtime feedback helpers for the sequencer and transport LEDs. */
