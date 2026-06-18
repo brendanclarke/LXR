@@ -34,6 +34,7 @@
 | 023 | 2026-06-16 | local repo, AVR background-load menu rename and docs pass | Renamed the AVR file-load toggle to a 5-state background-load selector, kept the raw byte / `.cfg` compatibility intact, left STM behavior unchanged, and refreshed the comms and session docs |
 | 024 | 2026-06-17 | local repo, opcode audit comment-out closeout | Commented out stale AVR/STM opcode constants plus the thin cache helper surface, preserved the live non-cache file-load/session path, and folded the audit into the session log archive |
 | 025 | 2026-06-17 | local repo, macro deprecation cleanup and docs handoff | Zeroed legacy macro slots during file load, disabled the live AVR/STM macro send/apply paths, added deprecation breadcrumbs to the macro parameter/text sites, and refreshed the comms and memory docs |
+| 026 | 2026-06-18 | local repo, voice morph PERF controls plus encoder-list findings | Connected individual PERF voice morph controls to full-range AVR/STM traffic, synced global/voice/velocity morph display reports, preserved the LFO overlay model, and archived the unresolved encoder list mismatch |
 
 ---
 
@@ -139,6 +140,10 @@ Session 024 converted the opcode audit into code changes. The high-confidence st
 Session 025 disabled the remaining macro loading and application paths end-to-end. AVR file loads now force the legacy macro slots to zero before they reach live state, the AVR menu code keeps the old macro branches only as commented-out legacy context, the STM front-panel receive path ignores `MACRO_CC` and macro-amount traffic, and the remaining Preset macro storage/replay helpers are inert. The session also added breadcrumb comments at the AVR parameter/menu-text sites and the STM Preset storage sites, then promoted the implementation audit into a permanent handoff log so the temporary audit file can be deleted.
 - **Find here**: file-load macro zeroing, AVR menu macro send/apply disable blocks, STM macro receive/apply disable blocks, inert Preset macro storage/replay helpers, legacy parameter/menu-text breadcrumbs, comms spec refresh, MEMORY refresh, build verification
 
+### 026 — PERF Voice Morph Controls + Encoder List Findings (2026-06-18)
+Session 026 brought the existing PERF-page individual voice morph controls online for Drum 1-3, Snare, Cym, and Hihat. AVR edits now use full `0..255` values and dedicated low/high `VOICE_MORPH` traffic, STM applies those values as current per-voice morph state for the morph worker, global morph remains authoritative and syncs all six voice display slots, and MIDI CC1 plus trigger-time velocity voice morph updates now report full-range display values back to AVR. The LFO morph overlay model was preserved unchanged. The late encoder `DTYPE_MENU` list mismatch investigation did not produce a valid fix; the bad attempts were reverted and the useful findings were written to `ENC_LIST_MISMATCH_ERROR.md`.
+- **Find here**: PERF voice morph amount transport, per-voice morph display reports, global morph override display sync, MIDI CC1 morph display feedback, trigger-time velocity voice morph, generic velocity VMORPH guard, LFO overlay non-change, unresolved encoder list mismatch trace plan
+
 
 ---
 
@@ -184,6 +189,12 @@ Session 025 disabled the remaining macro loading and application paths end-to-en
 | AVR background-load menu control now uses `PAR_FILE_LOAD_BACKGROUND`, `TEXT_FILE_LOAD_BACKGROUND`, `backgroundLoadNames`, and `SEQ_LOAD_BACKGROUND` while keeping STM behavior and raw `.cfg` byte storage unchanged | 023 |
 | Legacy PRF/cache opcode surface is commented out; the live non-cache file-load/session path remains active | 024 |
 | Legacy macro file-load/apply path is intentionally disabled; file loads zero macro slots and macro traffic is deprecated/ignored | 025 |
+| PERF voice morph controls use full `0..255` dedicated `VOICE_MORPH` traffic; do not route these edits through generic `CC_2` or the 7-bit automation setter | 026 |
+| Global morph overrides all six per-voice morph values and must keep the six PERF voice morph display slots synchronized with the global amount | 026 |
+| MIDI CC1 morph paths remain 7-bit inputs internally but now report the resulting full `0..255` global/voice morph display values back to AVR | 026 |
+| Velocity target "Individual Voice Morph" is trigger-time only: keep `TYPE_UINT8_VMORPH` out of generic velocity modulation nodes and apply the computed current morph amount from `voiceControl_noteOn()` | 026 |
+| LFO-to-voice-morph remains an async morph-drain overlay from current target voice morph value to morph endpoint; do not rewrite it as a menu/base-value writer | 026 |
+| Encoder `DTYPE_MENU` list mismatch is unresolved; use `ENC_LIST_MISMATCH_ERROR.md` and instrument active parameter/value state before patching | 026 |
 
 
 ---

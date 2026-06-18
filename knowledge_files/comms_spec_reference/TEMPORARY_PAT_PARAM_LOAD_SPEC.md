@@ -1,7 +1,7 @@
 # TEMPORARY / PATTERN / PARAMETER LOAD SPEC
 
-Date: 2026-06-17
-Status: current storage and switching spec after Session 025 macro-deprecation cleanup. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`. Session 024 also commented out the stale PRF/cache opcode surface without changing the live non-cache file-load path, and Session 025 made the legacy macro slots zero-on-load plus inert on the apply/replay side.
+Date: 2026-06-18
+Status: current storage and switching spec after Session 026 PERF voice-morph control work. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`. Session 024 commented out the stale PRF/cache opcode surface without changing the live non-cache file-load path, Session 025 made the legacy macro slots zero-on-load plus inert on the apply/replay side, and Session 026 connected per-voice morph display/control values to the active kit image via dedicated voice-morph traffic.
 
 Naming note: STM-side front-panel ownership stays under `mainboard/LxrStm32/src/uARTFrontSYX/` with `frontPanel*` names. AVR-side comms now live under `front/LxrAvr/avrComms/` with `avrComms*` names. Older AVR `frontPanel*` references are historical only.
 
@@ -13,6 +13,12 @@ left unchanged in that pass.
 Session 025 note: the legacy macro slots are now zeroed during AVR file import,
 and the remaining macro storage/replay helpers are inert. Treat the macro
 parameter slots as compatibility baggage only.
+
+Session 026 note: individual voice morph values are now live PERF controls and
+part of display sync. Global morph remains authoritative and overwrites all six
+voice morph values; endpoint restore reports both global morph and the six
+per-voice morph display values. Velocity-to-voice-morph is a trigger-time
+current morph write, not a generic velocity modulation-node destination.
 
 ## Purpose
 
@@ -219,6 +225,10 @@ These functions matter for the current normal/temp model:
 - `preset_setTmpKitActive()`
 - `preset_getCurrentImageKitState()`
 - `preset_getMorphKitForImage()`
+- `preset_setGlobalMorphAmount()`
+- `preset_setVoiceMorphAmount()`
+- `preset_setVoiceMorphLiveAmount()`
+- `preset_getVoiceMorphAmount()`
 - `preset_storeParameterIngress()`
 - `preset_storeMorphParameterIngress()`
 - `preset_storeLfoDestinationIngress()`

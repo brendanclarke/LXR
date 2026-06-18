@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
-Date: 2026-06-17
-Status: current AVR<->STM comms reference after Session 025 macro-deprecation cleanup. STM and AVR now both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer now belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers were commented out instead of kept as active code, and `MACRO_CC` is now deprecated historical context rather than an active live-control path.
+Date: 2026-06-18
+Status: current AVR<->STM comms reference after Session 026 PERF voice-morph control work. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, and individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`.
 
 ## Purpose
 
@@ -130,6 +130,7 @@ These are the ordinary single-message control paths:
 - `SEQ_CC`
 - `CC_LFO_TARGET`
 - `CC_VELO_TARGET`
+- `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` - full-range `0..255` per-voice morph amount traffic, encoded as low/high 7-bit-safe packet pairs
 - `MACRO_CC` - deprecated legacy macro traffic; current firmware ignores it
 
 Raw endpoint bytes are routed into `Preset` ingress helpers such as:
@@ -145,6 +146,19 @@ Important rule:
 - Raw endpoint storage uses raw AVR/menu parameter indices.
 - The low-CC `+1` conversion only applies when the value is being applied as an ordinary live CC to DSP/front-panel parameter apply logic.
 - Do not apply that conversion to endpoint restore traffic.
+- PERF individual voice morph amount edits are not ordinary `CC_2` parameter ingress. They use `VOICE_MORPH` low/high packets and land in the direct full-range Preset voice morph setter.
+- MIDI CC1 morph remains a 7-bit input path; its resulting full-range global/voice morph amount may be reported back to AVR for display sync.
+
+Per-voice morph packet shape:
+
+```text
+status = VOICE_MORPH / FRONT_SEQ_VOICE_MORPH
+data1  = 0..5   for low 7 bits of Drum1, Drum2, Drum3, Snare, Cym, Hihat
+data1  = 6..11  for high bit of the same six voices
+data2  = 7-bit payload
+```
+
+The receiver caches the low packet and commits the full `0..255` value on the high packet.
 
 ### 2. Endpoint Restore and Display Sync
 
@@ -159,12 +173,15 @@ These messages push authoritative preset bytes back to the AVR so the menu match
 - `SEQ_TMP_KIT_AUTOMATION_PHASE`
 - `SEQ_REPORT_GLOBAL_MORPH_LSB`
 - `SEQ_REPORT_GLOBAL_MORPH_MSB`
+- `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` per-voice morph reports
 
 The boundary restore path is still needed so the AVR menu stays coherent when the audible image changes.
 
-The global morph report is display-only:
+The global morph and per-voice morph reports are display-only:
 
 - it updates the AVR view of the selected kit image;
+- global morph reports also synchronize all six individual voice morph display slots because global morph overrides the per-voice current values;
+- individual voice morph reports update only the displayed per-voice amount;
 - it must not feed back into DSP state as if it were a new file-load payload.
 
 ### 3. Flow-Control Session Mode
