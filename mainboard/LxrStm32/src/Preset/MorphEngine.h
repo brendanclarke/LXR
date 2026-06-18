@@ -92,6 +92,9 @@ void preset_setVoiceMorphAutomationValue(uint8_t synthVoice, uint8_t morphValue)
 /* Sets the morph amount for a mask of voices from an automation value. */
 void preset_setVoiceMorphMaskAutomationValue(uint8_t voiceMask, uint8_t morphValue);
 
+/* Applies velocity-to-voice-morph as a trigger-time current morph write. */
+void preset_applyVelocityVoiceMorphOnTrigger(uint8_t voiceNr, uint8_t velocity);
+
 /* Applies morph modulation to a voice without writing to the stored
    interpolation baseline. */
 void preset_modulateVoiceMorphAmount(uint8_t synthVoice, float amount, float value);

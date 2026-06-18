@@ -649,3 +649,41 @@ Verification after fourth-pass fix:
 - `make -C mainboard/LxrStm32 -j4 stm32` passes. Existing warning set remains.
 - `make firmware` passes and regenerates `firmware image/FIRMWARE.BIN`.
 - `make -C front/LxrAvr avr -j4` reports nothing to be done.
+
+## Sixth-Pass Fix Notes: Restore Velocity Voice-Morph Correctly
+
+After verifying the LFO morph path, velocity-to-voice-morph was restored as a
+trigger-time current morph write.
+
+Applied STM correction:
+
+- Reintroduced `preset_applyVelocityVoiceMorphOnTrigger()` in `MorphEngine.c`.
+- The helper reads the triggering/source voice's stored velocity destination
+  from `frontPanelAutomationTargets.velocityDestination[]`.
+- If the destination is `PAR_MORPH_DRUM1..PAR_MORPH_HIHAT`, it resolves the
+  target morph voice with `preset_morphVoiceForParam()`.
+- It computes full-range `0..255` morph amount using:
+  `(velocity / 127) * (mod depth / 127) * 255`.
+- It writes only the target voice's current voice morph amount with
+  `preset_setVoiceMorphLiveAmount()`.
+- It reports the resulting `0..255` target voice morph amount to the AVR PERF
+  menu with `frontPanelSending_sendVoiceMorphRuntimeReport()`.
+- The helper is called from `voiceControl_noteOn()`, which covers sequencer and
+  external MIDI note-on paths without double-applying sequencer notes.
+
+Still intentionally unchanged:
+
+- `velocityModulators[]` are still prevented from holding/applying
+  `TYPE_UINT8_VMORPH` in the generic modulation-node path.
+- `FRONT_CC_VELO_TARGET` still stores `PAR_MORPH_*` as a selector but assigns
+  `PAR_NONE` to the live generic velocity node.
+- LFO morph modulation remains a separate async overlay from the current voice
+  morph value to the morph endpoint.
+
+Verification after sixth-pass fix:
+
+- `rg` confirms a single `preset_applyVelocityVoiceMorphOnTrigger()` call site
+  in `voiceControl_noteOn()`.
+- `make -C mainboard/LxrStm32 -j4 stm32` passes. Existing warning set remains.
+- `make firmware` passes and regenerates `firmware image/FIRMWARE.BIN`.
+- `make -C front/LxrAvr avr -j4` reports nothing to be done.

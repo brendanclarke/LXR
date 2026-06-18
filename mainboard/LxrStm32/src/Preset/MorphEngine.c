@@ -475,6 +475,69 @@ void preset_setVoiceMorphMaskAutomationValue(uint8_t voiceMask, uint8_t morphVal
       preset_setVoiceMorphAutomationValue(5, morphValue);
 }
 
+/* Internal helper to convert trigger track voice index. */
+static uint8_t preset_synthVoiceFromTriggerVoice(uint8_t voiceNr)
+{
+   if(voiceNr >= 5)
+      return 5;
+
+   return voiceNr;
+}
+
+/* Applies velocity-to-voice-morph once per trigger.
+   This updates only the current voice morph amount for the selected target
+   voice. It does not use the generic velocity mod node VMORPH path and does
+   not touch the LFO morph overlay. */
+void preset_applyVelocityVoiceMorphOnTrigger(uint8_t voiceNr, uint8_t velocity)
+{
+   uint8_t synthVoice = preset_synthVoiceFromTriggerVoice(voiceNr);
+   uint8_t targetVoice;
+   uint8_t velocityAmount;
+   uint8_t morphAmount;
+   uint16_t depth;
+   uint16_t destination;
+   uint32_t scaled;
+   float amount;
+   PresetKitState *kit;
+
+   if(!velocity)
+      return;
+
+   if(synthVoice >= PRESET_SYNTH_VOICES)
+      return;
+
+   kit = preset_getMorphKitForImage(preset_getMorphImageForVoice(synthVoice));
+   if(!(kit->frontPanelAutomationTargets.velocityDestinationValid &
+        (uint8_t)(1 << synthVoice)))
+   {
+      return;
+   }
+
+   destination = kit->frontPanelAutomationTargets.velocityDestination[synthVoice];
+   targetVoice = preset_morphVoiceForParam(destination);
+   if(targetVoice >= PRESET_SYNTH_VOICES)
+      return;
+
+   velocityAmount = velocity;
+   if(velocityAmount > 127)
+      velocityAmount = 127;
+
+   amount = velocityModulators[synthVoice].amount;
+   if(amount < 0.f)
+      amount = 0.f;
+   else if(amount > 1.f)
+      amount = 1.f;
+
+   depth = (uint16_t)((amount * 127.f) + 0.5f);
+   if(depth > 127)
+      depth = 127;
+
+   scaled = ((uint32_t)velocityAmount * depth * 255u) + ((127u * 127u) / 2u);
+   morphAmount = (uint8_t)(scaled / (127u * 127u));
+   preset_setVoiceMorphLiveAmount(targetVoice, morphAmount);
+   frontPanelSending_sendVoiceMorphRuntimeReport(targetVoice, morphAmount);
+}
+
 /* Applies morph modulation overlay. */
 void preset_modulateVoiceMorphAmount(uint8_t synthVoice, float amount, float value)
 {
