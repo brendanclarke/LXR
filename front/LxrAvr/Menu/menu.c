@@ -2525,7 +2525,18 @@ void menu_parseEncoder(int8_t inc, uint8_t button)
 
 		} else if(editModeActive) {
 			// edit mode is active so change the value of the current parameter
-         inc = menu_applyEncoderAcceleration(inc);
+			{
+				/* -bc- 027: DTYPE_MENU parameters are list indices.
+				   Acceleration should skip entries one at a time,
+				   so bypass the multiplier for text-list types. */
+				const uint8_t activeParameter = menuIndex & MASK_PARAMETER;
+				const uint8_t activePage      = (menuIndex & MASK_PAGE) >> PAGE_SHIFT;
+				const uint16_t parNr = pgm_read_word(
+					&menuPages[menu_activePage][activePage].bot1 + activeParameter);
+				const uint8_t dtype = pgm_read_byte(&parameter_dtypes[parNr]) & 0x0F;
+				if (dtype != DTYPE_MENU)
+					inc = menu_applyEncoderAcceleration(inc);
+			}
          if (buttonHandler_getShift())
             menu_encoderChangeShiftParameter(inc);
          else

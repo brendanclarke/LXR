@@ -1839,23 +1839,17 @@ void frontParser_handleMidiMessage(void)
    
       case FRONT_SET_P1_DEST: 
          { // frontParser_command.status
-         // --AS **AUTOM add 1 to the value as our cortex parameters are off by 1 for the lower 127 params
             uint8_t hi = frontParser_command.data1;
             uint8_t lo = frontParser_command.data2;
             uint8_t val = (hi<<7)|lo;
-            if(val && val < 128 )
-               val++;
             pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, seq_selectedStep)->param1Nr = val;
          }
          break;
       case FRONT_SET_P2_DEST: 
          { // frontParser_command.status
-         //--AS **AUTOM same here
             uint8_t hi = frontParser_command.data1;
             uint8_t lo = frontParser_command.data2;
             uint8_t val = (hi<<7)|lo;
-            if(val && val < 128 )
-               val++;
             pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, seq_selectedStep)->param2Nr = val;
          }
          break;

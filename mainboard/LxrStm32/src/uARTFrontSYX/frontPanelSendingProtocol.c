@@ -224,8 +224,6 @@ void frontPanelSending_sendStepParamsReply(uint8_t patternNr, uint8_t trackNr, u
    frontPanelSending_sendByte(step->prob);
 
    dest = step->param1Nr;
-   if(dest < 128 && dest)
-      dest--;
    hi = (uint8_t)(dest >> 7);
    lo = (uint8_t)(dest & 0x7f);
    frontPanelSending_sendByte(FRONT_SET_P1_DEST);
@@ -239,8 +237,6 @@ void frontPanelSending_sendStepParamsReply(uint8_t patternNr, uint8_t trackNr, u
    frontPanelSending_sendByte(lo);
 
    dest = step->param2Nr;
-   if(dest < 128 && dest)
-      dest--;
    hi = (uint8_t)(dest >> 7);
    lo = (uint8_t)(dest & 0x7f);
    frontPanelSending_sendByte(FRONT_SET_P2_DEST);
