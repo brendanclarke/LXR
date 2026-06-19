@@ -1,7 +1,7 @@
 # TEMPORARY / PATTERN / PARAMETER LOAD SPEC
 
-Date: 2026-06-17
-Status: current storage and switching spec after Session 024 opcode cleanup. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`. Session 024 also commented out the stale PRF/cache opcode surface without changing the live non-cache file-load path.
+Date: 2026-06-19
+Status: current storage and switching spec after Session 027 live-record automation and encoder menu-value fixes. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`. Session 024 commented out the stale PRF/cache opcode surface without changing the live non-cache file-load path, Session 025 made the legacy macro slots zero-on-load plus inert on the apply/replay side, Session 026 connected per-voice morph display/control values to the active kit image via dedicated voice-morph traffic, and Session 027 made step automation destinations raw AVR/menu `PAR_*` ids in pattern storage.
 
 Naming note: STM-side front-panel ownership stays under `mainboard/LxrStm32/src/uARTFrontSYX/` with `frontPanel*` names. AVR-side comms now live under `front/LxrAvr/avrComms/` with `avrComms*` names. Older AVR `frontPanel*` references are historical only.
 
@@ -9,6 +9,24 @@ Session 023 note: the AVR load-page control is now the 5-state background-load
 selector `PAR_FILE_LOAD_BACKGROUND` / `TEXT_FILE_LOAD_BACKGROUND`, but it still
 persists and transmits the same raw byte value. STM behavior was intentionally
 left unchanged in that pass.
+
+Session 025 note: the legacy macro slots are now zeroed during AVR file import,
+and the remaining macro storage/replay helpers are inert. Treat the macro
+parameter slots as compatibility baggage only.
+
+Session 026 note: individual voice morph values are now live PERF controls and
+part of display sync. Global morph remains authoritative and overwrites all six
+voice morph values; endpoint restore reports both global morph and the six
+per-voice morph display values. Velocity-to-voice-morph is a trigger-time
+current morph write, not a generic velocity modulation-node destination.
+
+Session 027 note: `Step.param1Nr` and `Step.param2Nr` now store raw AVR/menu
+`PAR_*` automation destinations. Front-panel live recording and manual step
+destination edits both write raw ids; automation playback converts raw low
+destinations to apply-domain low `MIDI_CC` ids immediately before
+`frontParser_applyParameterCommand()`. External MIDI recording uses
+`seq_recordAutomationMidiDestination()` to convert MIDI-domain ids back to raw
+step storage.
 
 ## Purpose
 
@@ -53,6 +71,11 @@ names did.
 
 Pattern storage is separate from parameter storage.
 Copying one does not automatically mean the other changed, unless the caller explicitly says so.
+
+Step automation lanes are part of pattern storage. Their destination fields
+(`param1Nr` / `param2Nr`) use raw AVR/menu `PAR_*` ids; playback and external
+MIDI recording perform the necessary low-bank conversion at their respective
+boundaries instead of storing mixed apply-domain ids in the pattern.
 
 ### Source selection
 
@@ -215,11 +238,15 @@ These functions matter for the current normal/temp model:
 - `preset_setTmpKitActive()`
 - `preset_getCurrentImageKitState()`
 - `preset_getMorphKitForImage()`
+- `preset_setGlobalMorphAmount()`
+- `preset_setVoiceMorphAmount()`
+- `preset_setVoiceMorphLiveAmount()`
+- `preset_getVoiceMorphAmount()`
 - `preset_storeParameterIngress()`
 - `preset_storeMorphParameterIngress()`
 - `preset_storeLfoDestinationIngress()`
 - `preset_storeVelocityDestinationIngress()`
-- `preset_storeMacroDestinationIngress()`
+- `preset_storeMacroDestinationIngress()` - legacy inert compatibility stub
 - `frontParser_applyParameterCommand()`
 - `seq_setTmpKitActive()`
 - `seq_updateVoiceSourcesForPatternChange()`

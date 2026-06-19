@@ -432,7 +432,6 @@ void seq_triggerVoice(uint8_t voiceNr, uint8_t vol, uint8_t note)
    
    stepData = seq_liveStepForTrack(voiceNr, seq_stepIndex[voiceNr]);
    seq_parseAutomationNodes(voiceNr, stepData);
-   preset_applyVelocityVoiceMorphOnTrigger(voiceNr, vol);
 
 	//turn the trigger off before sending the next one
    if(voiceNr>=5)
@@ -1633,6 +1632,20 @@ void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value)
          step->param2Val = value;
       }
    }
+}
+//------------------------------------------------------------------------
+void seq_recordAutomationMidiDestination(uint8_t voice, uint16_t dest, uint8_t value)
+{
+   uint8_t rawDest;
+
+   if(dest == NO_AUTOMATION)
+      rawDest = NO_AUTOMATION;
+   else if(dest > 0 && dest < 128)
+      rawDest = (uint8_t)(dest - 1);
+   else
+      rawDest = (uint8_t)dest;
+
+   seq_recordAutomation(voice, rawDest, value);
 }
 //------------------------------------------------------------------------
 void seq_addNote(uint8_t trackNr,uint8_t vel, uint8_t note)

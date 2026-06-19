@@ -32,11 +32,42 @@ volatile uint8_t avrCommsParser_restoreActive = 0; // RESTORE: True during a can
 static uint16_t avrCommsParser_restoreCount = 0;
 static uint16_t avrCommsParser_restoreMorphCount = 0;
 static uint8_t avrCommsParser_reportGlobalMorphLsb = 0;
+static uint8_t avrCommsParser_reportVoiceMorphLsb[6] = {0};
 // DEBUG
 
 uint8_t avrCommsParser_isRestoreActive(void)
 {
    return avrCommsParser_restoreActive;
+}
+
+static void avrCommsParser_syncVoiceMorphDisplayValues(uint8_t amount)
+{
+   uint8_t voice;
+
+   for(voice=0;voice<6;voice++)
+      parameter_values[PAR_MORPH_DRUM1 + voice] = amount;
+}
+
+static void avrCommsParser_handleVoiceMorphReport(uint8_t slot, uint8_t payload)
+{
+   uint8_t voice;
+
+   if(slot < 6)
+   {
+      avrCommsParser_reportVoiceMorphLsb[slot] = (uint8_t)(payload & 0x7f);
+      return;
+   }
+
+   if(slot < 12)
+   {
+      uint8_t amount;
+
+      voice = (uint8_t)(slot - 6);
+      amount = (uint8_t)(avrCommsParser_reportVoiceMorphLsb[voice]
+         | ((payload & 0x01) << 7));
+      parameter_values[PAR_MORPH_DRUM1 + voice] = amount;
+      menu_repaint();
+   }
 }
 
 uint8_t avrComms_sysexMode = 0;
@@ -474,6 +505,7 @@ void avrComms_parseData(uint8_t data)
                            | ((avrCommsParser_command.data2 & 0x01) << 7));
                      parameter_values[PAR_MORPH] = amount;
                      morphValue = amount;
+                     avrCommsParser_syncVoiceMorphDisplayValues(amount);
                      menu_repaint();
                      break;
                   }
@@ -777,7 +809,14 @@ void avrComms_parseData(uint8_t data)
             
             
             // morph operation
-            else if( (avrCommsParser_command.status == MORPH_CC)||(avrCommsParser_command.status == VOICE_MORPH) )
+            else if(avrCommsParser_command.status == VOICE_MORPH)
+            {
+               /* Display-only STM report for full-range per-voice morph
+                  amounts. Do not echo this back into STM sound state. */
+               avrCommsParser_handleVoiceMorphReport(avrCommsParser_command.data1,
+                                                     avrCommsParser_command.data2);
+            }
+            else if(avrCommsParser_command.status == MORPH_CC)
             {  
                /* STM owns live morph computation. Keep these legacy opcodes
                   inert so they cannot trigger AVR-side preset_morph(). */

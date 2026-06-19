@@ -289,7 +289,10 @@ void preset_serviceEndpointRestore(void)
 
          preset_tmpKitHandshakeAck = 0;
          if(preset_endpointRestoreCurrent.reportGlobalMorph)
+         {
             frontPanelSending_sendGlobalMorphReport(preset_endpointRestoreCurrent.kit->globalMorphAmount);
+            frontPanelSending_sendVoiceMorphReportsFromKit(preset_endpointRestoreCurrent.kit);
+         }
          frontPanelSending_sendRestoreDone();
          preset_endpointRestoreWaitCounter = 0;
          preset_endpointRestorePhase = PRESET_ENDPOINT_RESTORE_PHASE_WAIT_ACK;

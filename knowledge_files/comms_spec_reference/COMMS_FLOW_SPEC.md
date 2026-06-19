@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
-Date: 2026-06-17
-Status: current AVR<->STM comms reference after Session 024 opcode-surface cleanup. STM and AVR now both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer now belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, and the old cache-only opcode helpers were commented out instead of kept as active code.
+Date: 2026-06-19
+Status: current AVR<->STM comms reference after Session 027 live-record automation and encoder menu-value fixes. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, and step automation destinations are stored as raw AVR/menu `PAR_*` ids.
 
 ## Purpose
 
@@ -44,8 +44,9 @@ AVR protocol ownership mirrors this:
   parsing, SysEx receive state, restore handling, long-operation receive
   state, and the AVR-side opcode namespace.
 - `front/LxrAvr/avrComms/avrCommsSendingProtocol.c/.h` owns AVR-to-STM packet
-  construction, send-side flow-control state, LED/query sends, macro sends,
-  and the now-commented-out PRF cache control compatibility stubs.
+  construction, send-side flow-control state, LED/query sends, legacy macro
+  sends kept only as disabled compatibility context, and the now-commented-out
+  PRF cache control compatibility stubs.
 
 The old STM `FrontPanelProtocol.h`, STM `frontPanelParser.h`, and AVR
 `frontPanelParser.h` shim headers were removed in the Session 020 wrap-up. The
@@ -129,7 +130,8 @@ These are the ordinary single-message control paths:
 - `SEQ_CC`
 - `CC_LFO_TARGET`
 - `CC_VELO_TARGET`
-- `MACRO_CC`
+- `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` - full-range `0..255` per-voice morph amount traffic, encoded as low/high 7-bit-safe packet pairs
+- `MACRO_CC` - deprecated legacy macro traffic; current firmware ignores it
 
 Raw endpoint bytes are routed into `Preset` ingress helpers such as:
 
@@ -137,13 +139,29 @@ Raw endpoint bytes are routed into `Preset` ingress helpers such as:
 - `preset_storeMorphParameterIngress()`
 - `preset_storeLfoDestinationIngress()`
 - `preset_storeVelocityDestinationIngress()`
-- `preset_storeMacroDestinationIngress()`
+- `preset_storeMacroDestinationIngress()` - legacy inert compatibility stub
 
 Important rule:
 
 - Raw endpoint storage uses raw AVR/menu parameter indices.
 - The low-CC `+1` conversion only applies when the value is being applied as an ordinary live CC to DSP/front-panel parameter apply logic.
 - Do not apply that conversion to endpoint restore traffic.
+- Step automation destination storage also uses raw AVR/menu parameter indices. Front-panel live recording and manual step-destination editing write raw ids to `Step.param1Nr` / `Step.param2Nr`; automation playback converts raw low destinations to `MIDI_CC data1 = destination + 1` immediately before calling `frontParser_applyParameterCommand()`.
+- External DIN/USB MIDI automation recording starts from the MIDI-domain/apply-domain id. Those call sites must use `seq_recordAutomationMidiDestination()` so low MIDI-domain destinations are converted back to raw step storage.
+- STM-to-AVR step-parameter replies send raw stored destinations unchanged. This is different from `frontPanelSending_sendParameterEcho()`, which still subtracts one for low parameters because its MIDI parser callers pass apply-domain ids.
+- PERF individual voice morph amount edits are not ordinary `CC_2` parameter ingress. They use `VOICE_MORPH` low/high packets and land in the direct full-range Preset voice morph setter.
+- MIDI CC1 morph remains a 7-bit input path; its resulting full-range global/voice morph amount may be reported back to AVR for display sync.
+
+Per-voice morph packet shape:
+
+```text
+status = VOICE_MORPH / FRONT_SEQ_VOICE_MORPH
+data1  = 0..5   for low 7 bits of Drum1, Drum2, Drum3, Snare, Cym, Hihat
+data1  = 6..11  for high bit of the same six voices
+data2  = 7-bit payload
+```
+
+The receiver caches the low packet and commits the full `0..255` value on the high packet.
 
 ### 2. Endpoint Restore and Display Sync
 
@@ -158,12 +176,15 @@ These messages push authoritative preset bytes back to the AVR so the menu match
 - `SEQ_TMP_KIT_AUTOMATION_PHASE`
 - `SEQ_REPORT_GLOBAL_MORPH_LSB`
 - `SEQ_REPORT_GLOBAL_MORPH_MSB`
+- `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` per-voice morph reports
 
 The boundary restore path is still needed so the AVR menu stays coherent when the audible image changes.
 
-The global morph report is display-only:
+The global morph and per-voice morph reports are display-only:
 
 - it updates the AVR view of the selected kit image;
+- global morph reports also synchronize all six individual voice morph display slots because global morph overrides the per-voice current values;
+- individual voice morph reports update only the displayed per-voice amount;
 - it must not feed back into DSP state as if it were a new file-load payload.
 
 ### 3. Flow-Control Session Mode

@@ -19,6 +19,7 @@ void avrComms_updatePatternLeds(void);
 void avrComms_updateActiveStepLeds(void);
 void avrComms_updateSubstepLeds(void);
 void avrComms_sendMacro(uint8_t whichMacro,uint8_t value);
+void avrComms_sendVoiceMorphValue(uint8_t voice, uint8_t amount);
 uint8_t avrComms_flowBegin(uint8_t channel);
 uint8_t avrComms_flowEnd(uint8_t channel);
 uint8_t avrComms_flowFailed(void);

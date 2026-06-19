@@ -83,17 +83,20 @@ void preset_resetVoiceMorphAmountsToGlobal(void);
 /* Sets the morph amount for a specific voice. */
 void preset_setVoiceMorphAmount(uint8_t synthVoice, uint8_t morphAmount);
 
+/* Reads the current morph amount for a specific voice. */
+uint8_t preset_getVoiceMorphAmount(uint8_t synthVoice);
+
 /* Sets the morph amount for a specific voice from an automation value. */
 void preset_setVoiceMorphAutomationValue(uint8_t synthVoice, uint8_t morphValue);
 
 /* Sets the morph amount for a mask of voices from an automation value. */
 void preset_setVoiceMorphMaskAutomationValue(uint8_t voiceMask, uint8_t morphValue);
 
-/* Performs a one-shot velocity-to-morph calculation on note trigger. */
+/* Applies velocity-to-voice-morph as a trigger-time current morph write. */
 void preset_applyVelocityVoiceMorphOnTrigger(uint8_t voiceNr, uint8_t velocity);
 
-/* Applies morph modulation to a voice (e.g. from an LFO or velocity) without
-   writing to the stored interpolation baseline. */
+/* Applies morph modulation to a voice without writing to the stored
+   interpolation baseline. */
 void preset_modulateVoiceMorphAmount(uint8_t synthVoice, float amount, float value);
 
 /* Background morph worker: exactly one interpolation unit (either phase 0

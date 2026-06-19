@@ -173,6 +173,15 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
    }
 }
 //------------------------------------------------------------
+void avrComms_sendVoiceMorphValue(uint8_t voice, uint8_t amount)
+{
+   if(voice >= 6)
+      return;
+
+   avrComms_sendData(VOICE_MORPH, voice, (uint8_t)(amount & 0x7f));
+   avrComms_sendData(VOICE_MORPH, (uint8_t)(voice + 6), (uint8_t)((amount >> 7) & 0x01));
+}
+//------------------------------------------------------------
 void avrComms_updatePatternLeds(void)
 {
    uint8_t trackNr = menu_getActiveVoice(); //max 6 => 0x6 = 0b110

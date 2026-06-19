@@ -48,6 +48,8 @@ static void menu_encoderChangeParameter(int8_t inc);
 static void menu_encoderChangeShiftParameter(int8_t inc);
 static int8_t menu_applyEncoderAcceleration(int8_t inc);
 static void menu_applyEncoderDeltaToByte(uint8_t *paramValue, int8_t inc);
+static uint8_t menu_getDtypeMenuEntryCount(uint16_t paramNr);
+static void menu_normalizeDtypeMenuEncoderValue(uint16_t paramNr, uint8_t *paramValue);
 
 #define ARROW_SIGN '>'
 
@@ -218,18 +220,17 @@ const Name valueNames[NUM_NAMES] PROGMEM =
       {SHORT_SKIP_FIRST_ROLL, CAT_SEQUENCER, LONG_SKIP_FIRST_ROLL}, // TEXT_LOAD_PERF_ON_BANK      
       {SHORT_MORPH_VOICE, CAT_MORPH_VOICE, LONG_MORPH_VOICE}, // text for voice morph automation
       
-      {SHORT_MAC1, CAT_MACRO1, LONG_MAC1}, // text for macro 1 send amount
-      {SHORT_MAC1, CAT_MACRO2, LONG_MAC1}, // text for macro 2 send amount
-      
-      {SHORT_MAC1_DST1, CAT_MAC1D1, LONG_MAC1_DST1}, // text for macro 1 destination 1 assign
-      {SHORT_MAC1_DST1_AMT, CAT_MACRO1, LONG_MAC1_DST1_AMT}, // text for macro 1 destination 1 mod amount
-      {SHORT_MAC1_DST2, CAT_MAC1D2, LONG_MAC1_DST2}, // text for macro 1 destination 2 assign
-      {SHORT_MAC1_DST2_AMT, CAT_MACRO1, LONG_MAC1_DST2_AMT}, // text for macro 1 destination 2 mod amount
+      {SHORT_MORPH_DRUM1, CAT_MORPH_VOICE, LONG_MORPH_DRUM1}, 
+      {SHORT_MORPH_DRUM2, CAT_MORPH_VOICE, LONG_MORPH_DRUM2}, 
+      {SHORT_MORPH_DRUM3, CAT_MORPH_VOICE, LONG_MORPH_DRUM3}, 
+      {SHORT_MORPH_SNARE, CAT_MORPH_VOICE, LONG_MORPH_SNARE}, 
+      {SHORT_MORPH_CYM, CAT_MORPH_VOICE, LONG_MORPH_CYM}, 
+      {SHORT_MORPH_HIHAT, CAT_MORPH_VOICE, LONG_MORPH_HIHAT}, 
             
-      {SHORT_MAC2_DST1, CAT_MAC2D1, LONG_MAC2_DST1}, // text for macro 2 destination 1 assign
-      {SHORT_MAC2_DST1_AMT, CAT_MACRO2, LONG_MAC2_DST1_AMT}, // text for macro 2 destination 1 mod amount
-      {SHORT_MAC2_DST2, CAT_MAC2D2, LONG_MAC2_DST2}, // text for macro 2 destination 2 assign
-      {SHORT_MAC2_DST2_AMT, CAT_MACRO2, LONG_MAC2_DST2_AMT},  // text for macro 2 destination 2 mod amount
+      {SHORT_UNUSED1, CAT_UNUSED1, LONG_UNUSED1}, // text for macro 2 destination 1 assign
+      {SHORT_UNUSED2, CAT_UNUSED2, LONG_UNUSED2}, // text for macro 2 destination 1 mod amount
+      {SHORT_UNUSED3, CAT_UNUSED3, LONG_UNUSED3}, // text for macro 2 destination 2 assign
+      {SHORT_UNUSED4, CAT_UNUSED4, LONG_UNUSED4},  // text for macro 2 destination 2 mod amount
       
       {SHORT_ROLL_NOTE, CAT_PATTERN, LONG_ROLL_NOTE},  
       {SHORT_ROLL_VELOCITY, CAT_PATTERN, LONG_ROLL_VELOCITY},  
@@ -477,12 +478,12 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	    /*PARAM_UNUSED_01*/		DTYPE_0B127,
        /*PAR_KIT_VERSION*/    DTYPE_0B255,
        
-       /*PAR_MORPH_DRUM1*/		DTYPE_0B127,
-	    /*PAR_MORPH_DRUM2*/		DTYPE_0B127,
-	    /*PAR_MORPH_DRUM3*/		DTYPE_0B127,
-	    /*PAR_MORPH_SNARE*/		DTYPE_0B127,
-	    /*PAR_MORPH_CYM*/		DTYPE_0B127,
-	    /*PAR_MORPH_HIHAT*/		DTYPE_0B127,
+       /*PAR_MORPH_DRUM1*/		DTYPE_0B255,
+	    /*PAR_MORPH_DRUM2*/		DTYPE_0B255,
+	    /*PAR_MORPH_DRUM3*/		DTYPE_0B255,
+	    /*PAR_MORPH_SNARE*/		DTYPE_0B255,
+	    /*PAR_MORPH_CYM*/		DTYPE_0B255,
+	    /*PAR_MORPH_HIHAT*/		DTYPE_0B255,
        
        /*PAR_MAC1_DST1*/      DTYPE_AUTOM_TARGET,
        /*PAR_MAC1_DST1_AMT*/  DTYPE_PM63, 
@@ -2485,6 +2486,12 @@ void menu_parseEncoder(int8_t inc, uint8_t button)
 	if(button != lastEncoderButton) { // was the button clicked?
 		btnClicked=button;
       screensaver_touch();
+      if(btnClicked && copyClear_isClearModeActive())
+      {
+         lastEncoderButton = button;
+         copyClear_executeClear();
+         return;
+      }
 		if(btnClicked) // toggle edit mode
 			editModeActive = (uint8_t)(1-editModeActive);
 		lastEncoderButton = button;
@@ -2526,7 +2533,18 @@ void menu_parseEncoder(int8_t inc, uint8_t button)
 
 		} else if(editModeActive) {
 			// edit mode is active so change the value of the current parameter
-         inc = menu_applyEncoderAcceleration(inc);
+			{
+				/* -bc- 027: DTYPE_MENU parameters are list indices.
+				   Acceleration should skip entries one at a time,
+				   so bypass the multiplier for text-list types. */
+				const uint8_t activeParameter = menuIndex & MASK_PARAMETER;
+				const uint8_t activePage      = (menuIndex & MASK_PAGE) >> PAGE_SHIFT;
+				const uint16_t parNr = pgm_read_word(
+					&menuPages[menu_activePage][activePage].bot1 + activeParameter);
+				const uint8_t dtype = pgm_read_byte(&parameter_dtypes[parNr]) & 0x0F;
+				if (dtype != DTYPE_MENU)
+					inc = menu_applyEncoderAcceleration(inc);
+			}
          if (buttonHandler_getShift())
             menu_encoderChangeShiftParameter(inc);
          else
@@ -2574,6 +2592,53 @@ static void menu_applyEncoderDeltaToByte(uint8_t *paramValue, int8_t inc)
    *paramValue = (uint8_t)value;
 }
 
+static uint8_t menu_getDtypeMenuEntryCount(uint16_t paramNr)
+{
+   const uint8_t menuId = pgm_read_byte(&parameter_dtypes[paramNr]) >> 4;
+   return getMaxEntriesForMenu(menuId);
+}
+
+
+static void menu_normalizeDtypeMenuEncoderValue(uint16_t paramNr, uint8_t *paramValue)
+{
+   const uint8_t numEntries = menu_getDtypeMenuEntryCount(paramNr);
+
+   if(numEntries == 0)
+   {
+      *paramValue = 0;
+      return;
+   }
+
+   if(*paramValue < numEntries)
+      return;
+
+   *paramValue = (uint8_t)(((uint16_t)(*paramValue) * (uint16_t)(numEntries - 1)) / 255);
+}
+
+//-----------------------------------------------------------------
+static uint8_t menu_isVoiceMorphAmountParam(uint16_t paramNr)
+{
+   return paramNr >= PAR_MORPH_DRUM1 && paramNr <= PAR_MORPH_HIHAT;
+}
+
+//-----------------------------------------------------------------
+static void menu_syncVoiceMorphDisplayValues(uint8_t value)
+{
+   uint8_t voice;
+
+   for(voice=0;voice<6;voice++)
+      parameter_values[PAR_MORPH_DRUM1 + voice] = value;
+}
+
+//-----------------------------------------------------------------
+static void menu_sendVoiceMorphAmount(uint16_t paramNr, uint8_t value)
+{
+   if(!menu_isVoiceMorphAmountParam(paramNr))
+      return;
+
+   avrComms_sendVoiceMorphValue((uint8_t)(paramNr - PAR_MORPH_DRUM1), value);
+}
+
 //-----------------------------------------------------------------
 // called when edit mode is active
 // encoder controls parameter value
@@ -2588,15 +2653,19 @@ static void menu_encoderChangeParameter(int8_t inc)
 	uint16_t paramNr		= pgm_read_word(&menuPages[menu_activePage][activePage].bot1 + activeParameter);
 	uint8_t *paramValue = &parameter_values[paramNr];
    uint8_t isMorphParam = (paramNr<END_OF_SOUND_PARAMETERS&&buttonHandler_getShift());
+   const uint8_t dtype = pgm_read_byte(&parameter_dtypes[paramNr]) & 0x0F;
    
    if (isMorphParam&&(menu_activePage<=VOICE7_PAGE))
    {
       paramValue = &parameters2[paramNr];
    }
 
+   if(dtype == DTYPE_MENU)
+      menu_normalizeDtypeMenuEncoderValue(paramNr, paramValue);
+
 		menu_applyEncoderDeltaToByte(paramValue, inc);
 
-	switch(pgm_read_byte(&parameter_dtypes[paramNr]) & 0x0F)
+	switch(dtype)
 	{
 	case DTYPE_TARGET_SELECTION_VELO: //parameter_dtypes[paramNr] & 0x0F
 	{
@@ -2739,11 +2808,11 @@ static void menu_encoderChangeParameter(int8_t inc)
 
 	case DTYPE_MENU://parameter_dtypes[paramNr] & 0x0F
 	{
-		//get the used menu (upper 4 bit)
-		const uint8_t menuId = pgm_read_byte(&parameter_dtypes[paramNr]) >> 4;
 		//get the number of entries
-		uint8_t numEntries = getMaxEntriesForMenu(menuId);
-		if(*paramValue >= numEntries)
+		uint8_t numEntries = menu_getDtypeMenuEntryCount(paramNr);
+      if(numEntries == 0)
+         *paramValue = 0;
+		else if(*paramValue >= numEntries)
 			*paramValue = (uint8_t)(numEntries-1);
 
 	} // parameter_dtypes[paramNr] & 0x0F case DTYPE_MENU
@@ -2759,7 +2828,11 @@ static void menu_encoderChangeParameter(int8_t inc)
 
 	// --AS TODO this will also send MIDI_CC or CC_2 for the above items that have already been sent. is this desired?
 	//send parameter change to uart tx
-	if(paramNr < 128) // => Sound Parameter
+	if(!isMorphParam && menu_isVoiceMorphAmountParam(paramNr))
+   {
+      menu_sendVoiceMorphAmount(paramNr, *paramValue);
+   }
+	else if(paramNr < 128) // => Sound Parameter
    {
       if (!isMorphParam)
       {
@@ -2806,6 +2879,7 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 	uint16_t paramNr		= pgm_read_word(&menuPages[menu_activePage][activePage].bot1 + activeParameter);
    uint8_t *paramValue;
    uint8_t isMorphParam = (paramNr < END_OF_SOUND_PARAMETERS);
+   const uint8_t dtype = pgm_read_byte(&parameter_dtypes[paramNr]) & 0x0F;
       
    if (isMorphParam)
    {
@@ -2816,9 +2890,12 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
       paramValue = &parameter_values[paramNr];
    }
    
+   if(dtype == DTYPE_MENU)
+      menu_normalizeDtypeMenuEncoderValue(paramNr, paramValue);
+
 		menu_applyEncoderDeltaToByte(paramValue, inc);
 
-	switch(pgm_read_byte(&parameter_dtypes[paramNr]) & 0x0F)
+	switch(dtype)
 	{
 	case DTYPE_TARGET_SELECTION_VELO: //parameter_dtypes[paramNr] & 0x0F
 	{
@@ -2953,11 +3030,11 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 
 	case DTYPE_MENU://parameter_dtypes[paramNr] & 0x0F
 	{
-		//get the used menu (upper 4 bit)
-		const uint8_t menuId = pgm_read_byte(&parameter_dtypes[paramNr]) >> 4;
 		//get the number of entries
-		uint8_t numEntries = getMaxEntriesForMenu(menuId);
-		if(*paramValue >= numEntries)
+		uint8_t numEntries = menu_getDtypeMenuEntryCount(paramNr);
+      if(numEntries == 0)
+         *paramValue = 0;
+		else if(*paramValue >= numEntries)
 			*paramValue = (uint8_t)(numEntries-1);
 
 	} // parameter_dtypes[paramNr] & 0x0F case DTYPE_MENU
@@ -3488,6 +3565,7 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 	{
 		//value += (value==127)*1;
       morphValue = value;
+      menu_syncVoiceMorphDisplayValues(value);
       /* Global morph is a control value now. STM caches it and copies it to all
          six per-voice morph amounts; STM performs the interpolation work.
          Send as two 7-bit-safe messages because raw values >= 128 look like
@@ -3947,7 +4025,9 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
    break;
 
 	default: // all other sound parameters are send as CC or CC2. anything else is handled specially
-		if(paramNr<128) // => Sound Parameter below 128
+      if(menu_isVoiceMorphAmountParam(paramNr))
+         menu_sendVoiceMorphAmount(paramNr, dtypeValue);
+		else if(paramNr<128) // => Sound Parameter below 128
 			avrComms_sendData(MIDI_CC,(uint8_t)paramNr,dtypeValue);
 		else if(paramNr>=128 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
 			avrComms_sendData(CC_2,(uint8_t)(paramNr-128),dtypeValue);

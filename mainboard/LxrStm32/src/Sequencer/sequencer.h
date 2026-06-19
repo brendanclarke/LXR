@@ -538,9 +538,12 @@ void seq_setErasingMode(uint8_t active);
 void seq_setActiveAutomationTrack(uint8_t trackNr);
 /* Record an automation value into the active pattern source.
    voice: track whose active pattern source receives the update.
-   dest: automation destination parameter.
+   dest: raw automation destination parameter.
    value: automation value to store. */
 void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value);
+/* Record an automation value whose destination came from the MIDI CC enum.
+   Low MIDI-domain ids are converted back to raw pattern parameter ids. */
+void seq_recordAutomationMidiDestination(uint8_t voice, uint16_t dest, uint8_t value);
 /* Apply transpose values to the active per-track source patterns.
    This mutates the currently selected source patterns in place, then resets
    the stored transpose offsets back to their neutral value. */

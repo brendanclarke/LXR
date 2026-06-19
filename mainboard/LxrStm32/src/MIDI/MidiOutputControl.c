@@ -46,6 +46,7 @@
 #include "uARTFrontSYX/Uart.h"
 #include "ChannelMidiParser.h"
 #include "TriggerOut.h"
+#include "Preset/MorphEngine.h"
 #include "usb_manager.h"
 //#include "LCD_driver.h"
 
@@ -82,6 +83,7 @@ void voiceControl_noteOn(uint8_t voice, uint8_t note, uint8_t vel)
 {
    /* Trigger the voice engine and mirror the LED pulse to the front panel. */
    active_voices |= (1<<voice);
+   preset_applyVelocityVoiceMorphOnTrigger(voice, vel);
 
    if(voice < 3)
       Drum_trigger(voice, vel, note);

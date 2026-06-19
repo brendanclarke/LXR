@@ -67,6 +67,7 @@
 void frontParser_handleMidiMessage(void);
 static void frontParser_handleSysexData(unsigned char data);
 static void frontParser_handleSeqCC();
+static void frontParser_handleVoiceMorph(uint8_t slot, uint8_t payload);
 
 #define FLOW_INITIAL_GRANT 4
 #define FLOW_ACK_CREDITS 1
@@ -1218,6 +1219,7 @@ uint8_t frontParser_sysexActive=0;
 /* Two 7-bit bytes assembled into one 14-bit value. */
 uint16_t frontParser_twoByteData=0;
 static uint8_t frontParser_globalMorphLsb = 0;
+static uint8_t frontParser_voiceMorphLsb[6] = {0};
 
 uint8_t frontParser_sysexBuffer[16];
 
@@ -1584,6 +1586,27 @@ static void frontParser_handleSysexData(unsigned char data)
          break;
    }
 }
+static void frontParser_handleVoiceMorph(uint8_t slot, uint8_t payload)
+{
+   uint8_t voice;
+
+   if(slot < 6)
+   {
+      frontParser_voiceMorphLsb[slot] = (uint8_t)(payload & 0x7f);
+      return;
+   }
+
+   if(slot < 12)
+   {
+      uint8_t morphAmount;
+
+      voice = (uint8_t)(slot - 6);
+      morphAmount = (uint8_t)(frontParser_voiceMorphLsb[voice]
+         | ((payload & 0x01) << 7));
+      seq_setVoiceMorphAmount(voice, morphAmount);
+   }
+}
+
 /* Handle a fully assembled front-panel message after byte decoding. */
 void frontParser_handleMidiMessage(void)
 {
@@ -1639,6 +1662,11 @@ void frontParser_handleMidiMessage(void)
                }
             }
          }
+         break;
+
+      case FRONT_SEQ_VOICE_MORPH:
+         frontParser_handleVoiceMorph(frontParser_command.data1,
+                                      frontParser_command.data2);
          break;
 
       case FRONT_CC_MACRO_TARGET: //frontParser_command.status
@@ -1811,23 +1839,17 @@ void frontParser_handleMidiMessage(void)
    
       case FRONT_SET_P1_DEST: 
          { // frontParser_command.status
-         // --AS **AUTOM add 1 to the value as our cortex parameters are off by 1 for the lower 127 params
             uint8_t hi = frontParser_command.data1;
             uint8_t lo = frontParser_command.data2;
             uint8_t val = (hi<<7)|lo;
-            if(val && val < 128 )
-               val++;
             pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, seq_selectedStep)->param1Nr = val;
          }
          break;
       case FRONT_SET_P2_DEST: 
          { // frontParser_command.status
-         //--AS **AUTOM same here
             uint8_t hi = frontParser_command.data1;
             uint8_t lo = frontParser_command.data2;
             uint8_t val = (hi<<7)|lo;
-            if(val && val < 128 )
-               val++;
             pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, seq_selectedStep)->param2Nr = val;
          }
          break;
@@ -1917,8 +1939,8 @@ void frontParser_handleMidiMessage(void)
             }
             else
             {
-               /* Velocity-to-VMORPH is applied once at trigger time by the
-                  sequencer; keep PAR_MORPH_* out of the generic velocity node. */
+               /* Voice morph is not a live velocity modulation target; keep
+                  PAR_MORPH_* out of the generic velocity node. */
                if(value >= PAR_MORPH_DRUM1 && value <= PAR_MORPH_HIHAT)
                   modNode_setDestination(&velocityModulators[velModNr], PAR_NONE);
                else

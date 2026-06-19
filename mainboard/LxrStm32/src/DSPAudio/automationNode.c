@@ -35,6 +35,22 @@
 
 #include "automationNode.h"
 
+static uint8_t autoNode_makeParameterMessage(uint16_t destination, MidiMsg* msg)
+{
+	if(destination == 0 || destination == NO_AUTOMATION)
+		return 0;
+
+	if(destination > 127) {
+		msg->status = MIDI_CC2;
+		msg->data1 = destination - 128;
+	} else {
+		msg->status = MIDI_CC;
+		msg->data1 = (uint8_t)((destination + 1) & 0x7f);
+	}
+
+	return 1;
+}
+
 //-------------------------------------------------------------
 void autoNode_init(AutomationNode* node)
 {
@@ -48,19 +64,15 @@ void autoNode_setDestination(AutomationNode* node, uint16_t dest)
 	{
 		MidiMsg msg;
 
-		if(node->destination > 127) {
-			msg.status = MIDI_CC2;
-			msg.data1 = node->destination - 127 -1;
-		} else {
-			msg.status = MIDI_CC;
-			msg.data1 = node->destination;
+		if(autoNode_makeParameterMessage(node->destination, &msg))
+		{
+			msg.data2 = frontParser_originalCcValues[node->destination];
+			frontParser_applyParameterCommand(msg,0);
 		}
-		msg.data2 = frontParser_originalCcValues[node->destination];
-		frontParser_applyParameterCommand(msg,0);
 	}
 
 	//set new destination
-	node->destination = dest;
+	node->destination = (dest == 0) ? NO_AUTOMATION : dest;
 }
 //-------------------------------------------------------------
 void autoNode_updateValue(AutomationNode* node, uint8_t val)
@@ -68,15 +80,11 @@ void autoNode_updateValue(AutomationNode* node, uint8_t val)
 	if(node->destination != NO_AUTOMATION) {
 		MidiMsg msg;
 
-		if(node->destination > 127) {
-			msg.status = MIDI_CC2;
-			msg.data1 = node->destination - 127 -1; //todo why +1 offset?
-		} else {
-			msg.status = MIDI_CC;
-			msg.data1 = node->destination;
+		if(autoNode_makeParameterMessage(node->destination, &msg))
+		{
+			msg.data2 = val;
+			frontParser_applyParameterCommand(msg,0);
 		}
-		msg.data2 = val;
-		frontParser_applyParameterCommand(msg,0);
 	}
 }
 //-------------------------------------------------------------

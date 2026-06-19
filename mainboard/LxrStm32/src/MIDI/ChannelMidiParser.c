@@ -466,7 +466,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                if(seq_recordActive)
                {
                //record automation if record is turned on
-                  seq_recordAutomation(frontParser_activeTrack, LXRparamNr, msg.data2);
+                  seq_recordAutomationMidiDestination(frontParser_activeTrack, LXRparamNr, msg.data2);
                }
                
                else{
@@ -713,7 +713,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                if(seq_recordActive)
                {
                //record automation if record is turned on
-                  seq_recordAutomation(frontParser_activeTrack, LXRparamNr, msg.data2);
+                  seq_recordAutomationMidiDestination(frontParser_activeTrack, LXRparamNr, msg.data2);
                }
                
                else{
@@ -961,7 +961,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                if(seq_recordActive)
                {
                //record automation if record is turned on
-                  seq_recordAutomation(frontParser_activeTrack, LXRparamNr, msg.data2);
+                  seq_recordAutomationMidiDestination(frontParser_activeTrack, LXRparamNr, msg.data2);
                }
                
                else{
@@ -1210,7 +1210,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                if(seq_recordActive)
                {
                //record automation if record is turned on
-                  seq_recordAutomation(frontParser_activeTrack, LXRparamNr, msg.data2);
+                  seq_recordAutomationMidiDestination(frontParser_activeTrack, LXRparamNr, msg.data2);
                }
                
                else{
@@ -1460,7 +1460,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                if(seq_recordActive)
                {
                //record automation if record is turned on
-                  seq_recordAutomation(frontParser_activeTrack, LXRparamNr, msg.data2);
+                  seq_recordAutomationMidiDestination(frontParser_activeTrack, LXRparamNr, msg.data2);
                }
                
                else{
@@ -1705,7 +1705,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                if(seq_recordActive)
                {
                //record automation if record is turned on
-                  seq_recordAutomation(frontParser_activeTrack, LXRparamNr, msg.data2);
+                  seq_recordAutomationMidiDestination(frontParser_activeTrack, LXRparamNr, msg.data2);
                }
                
                else{
@@ -1950,7 +1950,7 @@ void channelMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
                if(seq_recordActive)
                {
                //record automation if record is turned on
-                  seq_recordAutomation(frontParser_activeTrack, LXRparamNr, msg.data2);
+                  seq_recordAutomationMidiDestination(frontParser_activeTrack, LXRparamNr, msg.data2);
                }
                
                else{
