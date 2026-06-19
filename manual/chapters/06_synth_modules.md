@@ -1,0 +1,253 @@
+# Synth Modules
+
+A closer look at the synthesis modules used across the different voices.
+
+## Oscillator
+
+The oscillators provide 6 different waveforms:
+
+- Sine
+- Triangle
+- Saw
+- Rectangle
+- Noise
+- Crash
+
+The first 5 are classical analogue waveforms realised using bandlimited wavetable oscillators.
+The 6th is a TR-909-style crash sample — included as a bonus, since a realistic crash is nearly
+impossible to synthesise using the available voice structure.
+
+## Filter
+
+The filter is a 2-pole (12 dB) state variable filter (SVF) realised as a non-linear
+zero-delay-feedback model. It shapes the harmonic content of the sound — for example, a hihat
+needs a highpass filter to remove low frequencies, while a bandpass is useful for a clap.
+
+There are 3 parameters that control the filter response: frequency, resonance, and drive.
+
+### Frequency
+
+The frequency determines the operating point of the filter in the spectrum. A lowpass filter cuts
+all frequencies above the set cutoff frequency.
+
+### Resonance
+
+The resonance controls the feedback path of the filter. Higher resonance settings amplify the
+frequencies around the operating point (i.e. the cutoff frequency) more and more.
+
+### Drive
+
+Controls how hard the filter is driven. More drive yields more distortion. At drive 0 the filter is
+clean and nearly linear. With higher levels, a soft clipper and the slew-rate limit of the integrators
+engage. Low settings only affect resonance peaks; high settings distort the whole signal. Because
+the soft clipper scales down excessive peaks, audible resonance is reduced at high drive settings.
+
+### Filter Types
+
+There are several filter types, each with its own characteristics. The plots below show each filter
+with 3 resonance settings (low = red, medium = green, high = blue). The cutoff frequency is
+identical in every plot, marked by a vertical dashed line.
+
+**Lowpass** — Removes high frequencies. All frequencies above the cutoff are reduced gradually.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\linewidth]{filter_lowpass.png}
+  \caption{Lowpass filter response.}
+\end{figure}
+
+**Highpass** — Removes low frequencies. All frequencies below the cutoff are reduced gradually.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\linewidth]{filter_highpass.png}
+  \caption{Highpass filter response.}
+\end{figure}
+
+**Bandpass** — Removes frequencies both above and below the cutoff.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\linewidth]{filter_bandpass.png}
+  \caption{Bandpass filter response.}
+\end{figure}
+
+**Unit Gain Bandpass** — A scaled bandpass where gain is always adjusted to a maximum of 0 dB.
+Unlike the normal bandpass, resonance controls the width of the passband rather than the peak
+amplitude.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\linewidth]{filter_unitgain_bandpass.png}
+  \caption{Unit gain bandpass filter response.}
+\end{figure}
+
+**Notch** — Removes frequencies around the cutoff. Resonance controls the width of the stopband.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\linewidth]{filter_notch.png}
+  \caption{Notch filter response.}
+\end{figure}
+
+**Peak** — Amplifies frequencies around the cutoff; other frequencies pass nearly unaltered.
+Resonance controls the amount of amplification.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\linewidth]{filter_peak.png}
+  \caption{Peak filter response.}
+\end{figure}
+
+## Envelopes
+
+Envelopes generate a varying control signal to modulate other synthesis parameters. Whenever a
+voice is triggered, the envelope restarts. The signal rises at the speed set by attack, reaches
+maximum amplitude, then falls back to zero at the speed set by decay.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\linewidth]{envelope_linear.png}
+  \caption{Linear envelope curve (slope = 63).}
+\end{figure}
+
+### Attack / Decay Times
+
+These 2 parameters control the duration of each stage. Higher values = longer times. If attack is
+set to zero, the envelope starts directly in the decay stage.
+
+### Slope
+
+The slope parameter controls the curve shape. A value of 63 gives a linear envelope. Lower values
+produce an exponential curve; higher values produce a logarithmic curve.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\linewidth]{envelope_exponential.jpeg}
+  \caption{Low slope setting — exponential decay stage.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\linewidth]{envelope_logarithmic.jpeg}
+  \caption{High slope setting — logarithmic decay stage.}
+\end{figure}
+
+### Repeat
+
+The repeat feature simulates clap and other sounds with a fuzzy or rattling attack. When the
+repeat count is set above zero, the slow attack stage is replaced by a repeat stage in which the
+envelope retriggered rapidly. The attack parameter controls the duration of the complete repeat
+phase.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\linewidth]{envelope_repeat.png}
+  \caption{Envelope in repeat mode (count = 3). Blue = repeat phase, red = decay phase.}
+\end{figure}
+
+## Transient Generator
+
+The transient generator shapes the very beginning of a sound. Because the first few milliseconds
+heavily influence how a sound is perceived, this is a powerful tool for varying the attack character.
+
+### Snappy Mode (`Snp`)
+
+An additional fast pitch envelope modulates the oscillator pitch, producing a snap or click. The
+\param{vol} parameter controls modulation depth; \param{frq} controls the decay time.
+
+### Offset Mode (`Off`)
+
+Adjusts the oscillator start phase. At volume 0, oscillators reset to a zero crossing on each
+trigger. At maximum volume, the waveform starts at its highest amplitude, generating a loud pop.
+
+### Sample Mode
+
+A short (~50 ms) 8-bit ROM sample is mixed into the voice output whenever it is triggered.
+Samples are hardcoded into the firmware and cannot be changed by the user.
+
+Available transient samples:
+
+\begin{paramtable}
+Snp & Snappy Mode     & (Pitch envelope — see above.) \\
+Off & Offset Mode     & (Phase offset — see above.) \\
+Clk & Click           & Short click transient. \\
+Ck2 & Click 2         & Alternate click. \\
+Tik & Tick            & A tick-style transient. \\
+Kik & Acoustic kick   & An acoustic kick drum sample. \\
+Rim & Rim shot        & A rim shot sample. \\
+Drp & Drip            & A dripping sound. \\
+Hat & Hat             & Sampled hi-hat. \\
+Clp & Clap            & 808-style clap. \\
+Ki2 & Kick 2          & Second kick sample. \\
+Sna & Snare           & A snare sample. \\
+Tom & Tom             & A tom sample. \\
+Sp2 & Snap            & A finger snap. \\
+\end{paramtable}
+
+## Sample Rate Reduction
+
+The sample rate reducer gradually reduces the sample rate from 44 kHz downward. Reducing the
+rate gives a lo-fi character. The further it is reduced, the more odd harmonics are added as
+overtones fold down at the Nyquist frequency — until the sound is completely destroyed.
+
+## Distortion
+
+The distortion unit on the mixer page is a variable waveshaper. It ranges from no distortion
+through soft saturation up to hard clipping.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\linewidth]{distortion_curve.jpeg}
+  \caption{Distortion waveshaper transfer curves: low (blue), mid (green), max (red).}
+\end{figure}
+
+## LFO
+
+Each voice has a low frequency oscillator. LFOs are identical to the audio oscillators but run at a
+lower maximum rate. They are not audible directly — they modulate other parameter values over
+time.
+
+Example: use a sine LFO to slowly open and close a voice's filter cutoff.
+
+### Setting Up Modulations
+
+The modulation target is selected on the second page of the LFO menu:
+
+\oled{rtg \quad off \quad voi \quad Dst <}{off \hspace{1.5em} 0 \hspace{2.2em} 1 \hspace{2.5em} coa}
+
+The target is specified by 2 parameters: **Voice** and **Destination**. Changing the voice parameter
+updates the destination list to show all available parameters of the selected voice.
+
+\attention{The LFO modulation scheme differs from most synthesisers. The destination value is
+\emph{multiplied} by the LFO value, meaning it is always modulated between its current value and
+zero. It can never exceed the original parameter value. \textbf{Modulating a parameter set to
+zero has no effect.}}
+
+The LFO can be synced to the sequencer clock — at $\frac{1}{4}$ note sync, the LFO cycles exactly
+4 times per bar. When sync is active, the frequency parameter is ignored.
+
+\tip{You can use the LFO as an additional envelope by enabling the retrigger feature. Set the
+retrigger source to the same voice as the modulation destination — the LFO will restart on every
+played note. Set the LFO frequency so one full cycle is slightly longer than the amplitude
+envelope, to prevent it retriggering while the note is still sounding.}
+
+## Velocity Modulation
+
+Note-on velocity is an important modulation source for bringing life to static patches. Velocity
+can modulate 2 destinations:
+
+- The voice volume.
+- Any single voice parameter.
+
+\tip{By default, velocity modulates the voice volume. This hard-wired connection can be turned
+off with the \param{vol} on/off parameter in the modulation menu. Disabling volume modulation
+frees velocity for use as a third automation track.}
+
+## Output Routing
+
+Each voice can be freely routed to any of the 4 output jacks. The jacks operate either as 4
+individual mono outputs (pan parameter has no effect) or as 2 stereo pairs.
+
+\tip{The synth detects whether a cable is inserted in each jack. If a voice is routed to an
+unconnected output, it automatically plays on the nearest connected output instead.}

@@ -1,0 +1,309 @@
+# Operation Modes
+
+The synth provides different operation modes, each optimised for a different task. The active mode
+changes the function of the user interface controls.
+
+## Voice Edit Mode
+
+The voice edit mode is used to modify sound parameters and to do basic pattern editing.
+
+- **Display (1):** parameters of the selected synthesis page.
+- **Knobs (2):** edit the visible parameters.
+- **Sequencer buttons (5):** set and remove the 16 main steps of the current track.
+- **Select buttons (7):** select the active synthesis page (oscillator, envelope, mixer, etc.)
+- **Voice buttons (9):** select the voice and sequencer track to edit; with shift, mute single voices.
+
+### Pattern Editing
+
+The 16 sequencer buttons set and remove steps in the selected pattern. Each button is a
+$\frac{1}{16}$th note from a 4/4 bar. A lit LED above the button indicates the step is set.
+
+### Step Parameter Editing
+
+1. Press and hold the shift button.
+2. The display shows the step parameter page of the selected step.
+3. Use the knobs and encoder to change parameters.
+4. A flashing LED indicates the selected step.
+5. Select a different step using the 16 sequencer buttons.
+
+### Sub Step Editing
+
+Sub steps can be set and removed in voice edit mode:
+
+1. Press and hold the shift button.
+2. Use the 16 sequencer buttons to select the main step whose sub steps you want to edit.
+3. A flashing LED indicates the selected step.
+4. The sub step pattern is shown on the 8 select button LEDs.
+5. Set and remove sub steps using the 8 select buttons.
+
+\attention{The step parameter menu always shows the parameters of the last-tweaked step.
+Setting or removing a sub step causes the display to show that sub step's parameters. For more
+ergonomic step parameter editing, use Step (Edit) mode.}
+
+### Sound Editing
+
+- The 7 voice buttons select the active voice (lit LED indicates selection).
+- Voice parameters are divided into pages selectable with the 8 select buttons.
+- Each voice type has its own parameter set, but the overall page structure is the same.
+- Parameters shown in the display are edited with the 4 knobs.
+
+**Example — changing the filter frequency of voice 3:**
+
+1. Press Voice Button 3 to select the voice.
+2. Press Select Button 6 to show the filter page.
+3. Use the first knob to adjust the \param{frq} parameter.
+
+## Performance Mode
+
+This mode is designed for playing songs live. You can chain and change patterns on the fly,
+trigger manual rolls for each voice, and access the morph and global sample rate effects. Voice
+editing is not available in this mode.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{performance_mode_panel.jpeg}
+  \caption{LXR front panel in performance mode.}
+\end{figure}
+
+- **Display (1):** performance parameters.
+- **Knobs (2):** change the performance parameters.
+- **Sequencer buttons 1–7 (5):** trigger a manual roll for each corresponding voice.
+- **Select buttons (7):** change the playing pattern.
+- **Voice buttons (9):** mute/unmute voices without holding shift.
+
+### Basic Performance Menu
+
+\begin{paramtable}
+rol & Manual roll rate  & Trigger rate for the manual roll function of sequencer buttons 1–7. \\
+mrp & Morph amount      & Ratio between the original sound and the morph target. \\
+sr  & Global sample rate & A global sample rate reduction effect. \\
+shu & Shuffle amount    & Sets the amount of global shuffle. \\
+\end{paramtable}
+
+### Manual Roll
+
+The first 7 sequencer buttons trigger a manual roll for each corresponding voice. The roll rate is
+set with the \param{rol} parameter. Rolls are recorded to the pattern when recording mode is active.
+
+### Morph
+
+The morph feature transitions from one preset sound to another. Load any preset from the SD card
+as a morph target. The \param{mrp} parameter controls the ratio between the original and target
+sound. As morph increases, the current sound is gradually transformed into the morph target.
+
+For loading a morph target, see the Load and Save Mode section.
+
+### Shuffle
+
+The shuffle function shifts the position of every other $\frac{1}{16}$th note.
+
+Original timing: `| X x x x X x x x X x x x X x x x |`
+
+With shuffle applied: `| X xx xX xx xX xx xX xx x |`
+
+### Change Pattern
+
+The 8 select buttons change the playing pattern, selecting from the 8 patterns of the loaded
+pattern set. Pattern changes occur only at the end of a bar (track 1 is the reference track when
+different track lengths are used).
+
+### Chain Patterns
+
+To build longer pattern chains, go to the pattern options screen:
+
+1. Press and hold shift.
+2. A flashing LED indicates the selected pattern.
+3. The display shows pattern options.
+
+\oled{Rpt \quad nxt}{1 \hspace{2.5em} p2}
+
+For each pattern you can specify the **next pattern** to play and the **repeat/change measure**.
+
+**Change Measure / Repeat (rpt):** The change measure is relative to the absolute song position in
+bars. This ensures pattern chains stay in sync regardless of when you manually switch patterns.
+
+**Next Pattern (nxt):** Values p1–p8 select a specific pattern. Values r2–r8 select a random pattern
+between pattern 1 and the selected value (e.g. r4 randomly selects from patterns 1–4).
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{pattern_chain_example1.png}
+  \caption{Pattern chain example: pattern 1 plays 3 times, then pattern 2 plays once.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{pattern_chain_example2.jpeg}
+  \caption{Pattern chain with manual switch: the break always lands on bar 4.}
+\end{figure}
+
+\tip{When editing multiple chained patterns, set the pattern follow (\param{flw}) parameter in the
+settings menu to `Off`. This lets you edit a pattern without it jumping to follow playback.}
+
+### Follow Mode and Viewed Pattern
+
+The follow mode setting is in the global settings menu (on by default).
+
+When follow mode is active, the viewed pattern always matches the playing pattern — all LEDs and
+display values update automatically on every pattern change.
+
+When follow mode is off, the user must manually select the viewed pattern. This allows editing a
+different pattern from the one currently playing.
+
+**Selecting the viewed pattern (performance mode only):**
+
+1. The currently viewed pattern blinks; the playing pattern shows a solid LED.
+2. Hold shift.
+3. Use the 8 select buttons to pick the pattern to view/edit.
+4. Release shift.
+
+## Step (Edit) Mode
+
+Step edit mode is for editing step parameters more efficiently. Think of it as an inverted voice
+edit mode with respect to the sequencer.
+
+The display always shows the step parameter page. The sequencer and select buttons are only used
+to select steps — you can edit step parameters without holding shift.
+
+The 16 sequencer buttons select a main step and show its 8 sub steps on the select button LEDs.
+The selected step is indicated by a blinking LED.
+
+### Setting and Removing Steps
+
+To set or remove steps from the pattern, hold the shift button while pressing the sequencer buttons.
+
+## Load and Save Mode
+
+The 4th mode button opens the load/save page. Pressing it again toggles between load and save.
+
+A push on the Load/Save button brings up the load page:
+
+\oled{Load: Sound}{[ \quad 1] Name}
+
+Pressing the button again shows the save page:
+
+\oled{Save: Sound}{[ \quad 1] Name \hfill ok}
+
+### Display Description
+
+- **Row 1:** active mode (Load or Save) and the selected data type (Sound, Pattern, Morph Sound,
+  Settings).
+- **Row 2:** active preset number and the name of the selected preset.
+- Pages with an `ok` button only execute when you navigate to `ok` and push the encoder.
+- Pages without an `ok` button execute as soon as a change occurs.
+
+### Menu Navigation
+
+Use the encoder to navigate and change entries. Square brackets `[ ]` show the field that will be
+changed by the encoder (edit mode). Pushing the encoder switches to selection mode (shows `>`).
+
+\tip{For the data type field (Sound, Pattern, Morph Sound, Settings), use the first knob to select
+directly without clicking through encoder modes.}
+
+### Sound Presets
+
+Sound presets contain all synthesis parameters for the 6 voices.
+
+**Loading:** sounds load automatically when the preset number changes.
+
+**Saving:**
+
+1. Select the preset number.
+2. Navigate to the name letters.
+3. Push the encoder and turn it to change each letter.
+4. Navigate to `ok` and push the encoder to save.
+
+**Quick naming:** while the cursor is in the name area, knob 1 moves the cursor, knob 2 toggles
+case, and knob 3 scrolls through ASCII characters.
+
+### Morph Presets
+
+A morph preset is a normal preset loaded as a morph target.
+
+**Loading:**
+
+1. Select `MorphSnd` as the data type.
+2. Change the preset number — the morph sound loads automatically.
+3. Note: no audible change occurs if the \param{mrp} (morph amount) parameter is set to zero.
+
+**Saving morph results:** select `MorphSnd` on the save screen to save the current blended sound
+to a new preset slot.
+
+### Pattern Sets
+
+Pattern sets are collections of 8 patterns stored in one file.
+
+**Loading:** navigate to `OK` on the display and push the encoder to start loading (required because
+loading takes 4–5 seconds). The pattern loads in the background — **the loaded pattern does not
+play until you press one of the pattern change buttons in performance mode.**
+
+**Saving:** same procedure as saving a sound preset.
+
+### Settings
+
+The settings file contains all parameters from the settings menu. It is automatically loaded at
+boot. To save current settings, go to save mode, select `Globals`, navigate to `Ok`, and push the
+encoder.
+
+## Pattern Generator Mode
+
+The pattern generator creates polyrhythms automatically using the Euclidean algorithm.
+
+### Accessing the Pattern Generator
+
+1. Press and hold shift.
+2. Press Mode Button 2 (Perf/Pattern).
+3. A flashing mode 2 LED indicates the pattern generator is active.
+
+### Pattern Generator Menu
+
+\begin{paramtable}
+len & Track Length   & Length of the track in $\frac{1}{16}$ notes. Each track can have a
+                       different length. \\
+stp & Number of Steps & The number of active steps to distribute in the pattern. \\
+\end{paramtable}
+
+### Generating Patterns
+
+- The generator modifies a single track at a time. Select the track with the 7 voice buttons.
+- Changing either \param{len} or \param{stp} immediately generates a new pattern on the active
+  track.
+
+\attention{Existing pattern data is overwritten and there is no undo.}
+
+## Global Settings Menu
+
+### Accessing the Settings Menu
+
+1. Press and hold shift.
+2. Press Mode Button 4 (Load/Save).
+3. A flashing mode 4 LED indicates the settings menu is active.
+
+### Menu Options
+
+\begin{paramtable}
+bpm & Tempo in BPM    & Internal clock tempo. Set to 0 to sync to incoming MIDI clock. \\
+fet & Parameter fetch & When active, you must `fetch' the displayed value with the knob
+                        before it changes — prevents value jumps on page switches. \\
+flw & Pattern follow  & When active, the viewed pattern always matches the playing pattern. \\
+qnt & Sequencer Quantisation & Sets the quantisation grid for recorded data. \\
+ss  & Screensaver     & Turns the screensaver on or off. \\
+\end{paramtable}
+
+### Follow Mode
+
+When follow mode is active, all viewed pattern data (step LEDs, display values) updates
+automatically on every pattern change. When off, the user selects the viewed pattern manually —
+allowing editing of a pattern other than the one playing. The chaselight is only visible when the
+playing pattern is viewed.
+
+### Screensaver
+
+The display is an OLED. To extend its lifetime and prevent burn-in, a screensaver activates after
+a few minutes of inactivity. Any control touch dismisses it. The screensaver can be disabled in
+the settings menu.
+
+### Loading and Saving Global Settings
+
+Settings are loaded automatically on power-up. To save current settings, go to the save menu,
+select `Globals`, navigate to `Ok`, and push the encoder.

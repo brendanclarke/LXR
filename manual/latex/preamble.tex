@@ -1,0 +1,233 @@
+% ============================================================
+%  LXR Owners Manual — Preamble
+%  Packages, colours, custom commands, page geometry & style.
+%  Edit \manualversion below when releasing a new version.
+% ============================================================
+
+% ----- Version string (update per release) -----
+\newcommand{\manualversion}{Fork v1.0 (based on LXR firmware v0.91)}
+
+% ----- Page geometry -----
+\usepackage[
+  a4paper,
+  top=25mm, bottom=25mm,
+  left=22mm, right=22mm,
+  headheight=14pt
+]{geometry}
+
+% ----- Core packages -----
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{parskip}          % Space between paragraphs, no indent
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Pandoc generates \tightlist inside itemize/enumerate; define it here
+% so the compiled .tex files work without modification.
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{2pt}\setlength{\parskip}{0pt}}
+\usepackage{caption}
+\usepackage[scaled=0.85]{beramono}  % Monospace font for OLED displays
+\usepackage[hidelinks, colorlinks=true, linkcolor=lxrblue,
+            urlcolor=lxrblue, citecolor=lxrblue]{hyperref}
+\usepackage{xurl}             % Allow URLs to break at any character, not just /
+
+% ----- Colour palette -----
+\definecolor{lxrorange}{RGB}{255, 140,  0}   % Section headings, callout borders
+\definecolor{lxrblue}  {RGB}{ 30,  90, 180}  % Hyperlinks
+\definecolor{lxrdark}  {RGB}{ 26,  26, 26}   % Panel backgrounds
+\definecolor{lxrgreen} {RGB}{  0, 255, 68}   % OLED text colour
+\definecolor{lxrgrey}  {RGB}{100, 100,100}   % Secondary text
+\definecolor{attentionbg}{RGB}{255, 248, 235} % Attention box background
+\definecolor{tipbg}      {RGB}{235, 248, 255} % Tip box background
+\definecolor{oledframe}  {RGB}{ 50,  50, 50}  % OLED display frame
+
+% ----- Section heading styles -----
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{lxrorange}}
+  {\thesection}{1em}{}[\titlerule]
+
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{lxrorange}}
+  {\thesubsection}{1em}{}
+
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries}
+  {\thesubsubsection}{1em}{}
+
+% ----- Header / footer -----
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{lxrgrey}{LXR Owners Manual}}
+\fancyhead[R]{\small\textcolor{lxrgrey}{\leftmark}}
+\fancyfoot[C]{\small\textcolor{lxrgrey}{\thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% ----- TOC styling -----
+\renewcommand{\cftsecfont}{\bfseries}
+\renewcommand{\cftsecpagefont}{\bfseries}
+\setlength{\cftbeforesecskip}{4pt}
+
+% ----- Caption styling -----
+\captionsetup{font=small, labelfont=bf, labelsep=period}
+
+% ============================================================
+%  CUSTOM COMMANDS
+% ============================================================
+
+% Inline parameter name — e.g. \param{frq}
+\newcommand{\param}[1]{\texttt{\textbf{#1}}}
+
+% Inline menu path — e.g. \menu{OSC > Waveform}
+\newcommand{\menu}[1]{\texttt{#1}}
+
+% OLED display mockup — simulates the green-on-black display
+% Usage: \oled{line1}{line2}
+\newcommand{\oled}[2]{%
+  \begin{center}
+  \fboxsep=6pt
+  \colorbox{lxrdark}{%
+    \parbox{6cm}{%
+      \ttfamily\small\color{lxrgreen}
+      \hspace*{2pt}#1\\[2pt]
+      \hspace*{2pt}#2
+    }%
+  }
+  \end{center}%
+}
+
+% Single-line OLED display
+\newcommand{\oledsingle}[1]{%
+  \begin{center}
+  \colorbox{lxrdark}{%
+    \parbox{6cm}{%
+      \ttfamily\small\color{lxrgreen}
+      \hspace*{2pt}#1
+    }%
+  }
+  \end{center}%
+}
+
+% Attention box (replaces the warning flask icon)
+% Usage: \attention{text}
+\newmdenv[
+  backgroundcolor=attentionbg,
+  linecolor=lxrorange,
+  linewidth=2pt,
+  leftline=true, rightline=false, topline=false, bottomline=false,
+  innerleftmargin=10pt, innerrightmargin=8pt,
+  innertopmargin=6pt, innerbottommargin=6pt,
+  skipabove=8pt, skipbelow=8pt
+]{attentionframe}
+
+\newcommand{\attention}[1]{%
+  \begin{attentionframe}
+  \textbf{\textcolor{lxrorange}{Attention!}}\quad #1
+  \end{attentionframe}%
+}
+
+% Tip / "Did you know?" box
+% Usage: \tip{text}
+\newmdenv[
+  backgroundcolor=tipbg,
+  linecolor=lxrblue,
+  linewidth=2pt,
+  leftline=true, rightline=false, topline=false, bottomline=false,
+  innerleftmargin=10pt, innerrightmargin=8pt,
+  innertopmargin=6pt, innerbottommargin=6pt,
+  skipabove=8pt, skipbelow=8pt
+]{tipframe}
+
+\newcommand{\tip}[1]{%
+  \begin{tipframe}
+  \textbf{Did you know?}\quad #1
+  \end{tipframe}%
+}
+
+% Parameter table environment — 3-col: Displayed name | Full name | Description
+% Usage: wrap rows in \begin{paramtable}...\end{paramtable}
+\newenvironment{paramtable}{%
+  \begin{center}
+  \small
+  \begin{tabular}{>{\ttfamily}l  l  p{8cm}}
+  \toprule
+  \normalfont\textbf{Display} & \textbf{Name} & \textbf{Description} \\
+  \midrule
+}{%
+  \bottomrule
+  \end{tabular}
+  \end{center}
+}
+
+% MIDI table environment — used in midi_tables.tex (longtable, paginates)
+\newenvironment{miditableCC}{%
+  \begin{longtable}{c  l  c}
+  \toprule
+  \textbf{CC} & \textbf{Function} & \textbf{Voice} \\
+  \midrule
+  \endfirsthead
+  \toprule
+  \textbf{CC} & \textbf{Function} & \textbf{Voice} \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+}{%
+  \end{longtable}
+}
+
+\newenvironment{miditableNRPN}{%
+  \begin{longtable}{c  l  c}
+  \toprule
+  \textbf{NRPN Nr.} & \textbf{Function} & \textbf{Voice} \\
+  \midrule
+  \endfirsthead
+  \toprule
+  \textbf{NRPN Nr.} & \textbf{Function} & \textbf{Voice} \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+}{%
+  \end{longtable}
+}
+
+% Voice note default table
+\newenvironment{voicemiditbl}{%
+  \begin{center}\small
+  \begin{tabular}{cc}
+  \toprule
+  \textbf{Voice} & \textbf{MIDI note no.} \\
+  \midrule
+}{%
+  \bottomrule
+  \end{tabular}
+  \end{center}
+}
+
+% Inline code / display name shorthand
+\newcommand{\dname}[1]{\texttt{#1}}
+
+% Step/pattern label in monospace box
+\newcommand{\seqlabel}[1]{%
+  \colorbox{lxrdark}{\textcolor{lxrgreen}{\ttfamily\small\ #1\ }}%
+}
+
+% Horizontal rule for section breaks
+\newcommand{\sectionrule}{%
+  \vspace{4pt}\noindent\textcolor{lxrorange}{\rule{\linewidth}{0.6pt}}\vspace{4pt}%
+}

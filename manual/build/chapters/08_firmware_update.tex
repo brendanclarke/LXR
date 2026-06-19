@@ -1,0 +1,61 @@
+\section{Firmware Update}\label{firmware-update}
+
+Firmware for both the front AVR and the Cortex-M4 can be updated using
+the SD card.
+
+\subsection{Update Procedure}\label{update-procedure}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Make sure your SD card is using FAT32. The bootloader can only read
+  FAT32 filesystems.
+\item
+  Copy the \texttt{FIRMWARE.BIN} file to the root directory of the SD
+  card.
+\item
+  Insert the card into the powered-off LXR.
+\item
+  Push and hold the encoder, then turn on the synthesizer.
+\end{enumerate}
+
+The synth boots in firmware update mode. The display shows:
+
+\oledsingle{Bootloader v1.1}
+
+If a firmware image is found on the SD card, the front AVR firmware is
+updated first:
+
+\oledsingle{updating... (1/2)}
+
+Followed by the mainboard firmware:
+
+\oledsingle{updating... (2/2)}
+
+During the update, the 16 step LEDs show a binary pattern indicating the
+synth is busy. When the update is complete, the display shows:
+
+\oled{success!}{please reboot...}
+
+Power the device off and on again. The new firmware version is shown on
+the normal boot screen.
+
+\subsection{Bootloader Error Codes}\label{bootloader-error-codes}
+
+If problems occur, the bootloader will show one of the following error
+messages:
+
+\textbf{Firmware Error} --- The bootloader could not find the
+\texttt{FIRMWARE.BIN} file. It is either missing from the SD card or the
+card is not FAT32.
+
+\textbf{Header error} --- The \texttt{FIRMWARE.BIN} file on the SD card
+is corrupt or not a valid firmware file. Try downloading the file again.
+
+\textbf{EOF error} --- The end of the firmware file was reached before
+the update finished. The \texttt{FIRMWARE.BIN} file is probably
+corrupted. Try downloading it again.
+
+\textbf{Mainboard error} --- The mainboard does not answer. Check that a
+working mainboard is connected to the front panel.

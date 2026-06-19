@@ -1,0 +1,73 @@
+\section{Specifications}\label{specifications}
+
+\subsection{Overview}\label{overview}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}ll@{}}
+\toprule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Instruments & 6 \\
+Sequencer tracks & 7 \\
+Buttons & 39 \\
+LEDs & 39 \\
+Encoder + switch & 1 \\
+Knobs & 4 \\
+Display & 1 × 16×2 OLED \\
+Audio jacks & 4 × 6.3 mm \\
+MIDI jacks & 2 (In/Out) \\
+USB & 1 × USB-B \\
+Memory card slot & 1 \\
+\end{longtable}
+}
+
+\subsection{Sequencer}\label{sequencer}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}ll@{}}
+\toprule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Steps per track & 128 (16 main × 8 sub) \\
+Tracks per pattern & 7 \\
+Patterns per pattern set & 8 (loaded simultaneously into memory) \\
+Per-step data & Probability, note, velocity \\
+Automation slots per step & 2 parameter changes \\
+Live editing & All actions possible without stopping the sequencer \\
+\end{longtable}
+}
+
+\subsection{Audio}\label{audio}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}ll@{}}
+\toprule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Sample rate & 44 kHz \\
+Bit depth & 16 \\
+Channels & 4 × mono \\
+\end{longtable}
+}
+
+\subsection{Hardware}\label{hardware}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}ll@{}}
+\toprule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Audio and Sequencer CPU & ARM Cortex-M4 @ 168 MHz \\
+Front panel CPU & Atmega644 @ 20 MHz \\
+Audio codec & 2 × CS4344 stereo codec \\
+\end{longtable}
+}
+
+\subsection{Power}\label{power}
+
+\textbf{7--9V DC} power jack, \textbf{centre pin positive, at least 600
+mA.}

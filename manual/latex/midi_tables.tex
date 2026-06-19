@@ -1,0 +1,243 @@
+% ============================================================
+%  LXR MIDI Tables
+%  Maintained by hand — update rows here when adding or
+%  changing CC/NRPN mappings in the firmware.
+%
+%  Uses the miditableCC and miditableNRPN environments
+%  defined in preamble.tex. Both use longtable and paginate
+%  automatically.
+%
+%  Row format:
+%    CC / NRPN Nr. & Function description & Voice number (or --) \\
+% ============================================================
+
+\subsection*{MIDI CC Table}
+
+\begin{miditableCC}
+0   &                          & -- \\
+1   & Mod wheel                & -- \\
+2   & Waveform Osc 1           & 1  \\
+3   & Waveform Osc 1           & 2  \\
+4   & Waveform Osc 1           & 3  \\
+5   & Waveform Osc 1           & 4  \\
+6   & NRPN data entry          & -- \\
+7   & Waveform Osc 1           & 5  \\
+8   & Waveform Osc 1           & 6  \\
+9   & Coarse tune Osc 1        & 1  \\
+10  & Fine tune Osc 1          & 1  \\
+11  & Coarse tune Osc 1        & 2  \\
+12  & Fine tune Osc 1          & 2  \\
+13  & Coarse tune Osc 1        & 3  \\
+14  & Fine tune Osc 1          & 3  \\
+15  & Coarse tune Osc 1        & 4  \\
+16  & Fine tune Osc 1          & 4  \\
+17  & Coarse tune Osc 1        & 5  \\
+18  & Fine tune Osc 1          & 5  \\
+19  & Coarse tune Osc 1        & 6  \\
+20  & Fine tune Osc 1          & 6  \\
+21  & Waveform mod. OSC        & 1  \\
+22  & Waveform mod. OSC        & 2  \\
+23  & Waveform mod. OSC        & 3  \\
+24  & Waveform mod. Osc 1      & 5  \\
+25  & Waveform mod. Osc 2      & 5  \\
+26  & Waveform mod. Osc 1      & 6  \\
+27  & Waveform mod. Osc 2      & 6  \\
+28  & Noise frequency          & 4  \\
+29  & Mix osc/noise            & 4  \\
+30  & Coarse tune mod. Osc 1   & 5  \\
+31  & Coarse tune mod. Osc 2   & 5  \\
+32  & Gain mod. Osc 1          & 5  \\
+33  & Gain mod. Osc 2          & 5  \\
+34  & Coarse tune mod. Osc 1   & 6  \\
+35  & Coarse tune mod. Osc 2   & 6  \\
+36  & Gain mod. Osc 1          & 6  \\
+37  & Gain mod. Osc 2          & 6  \\
+38  & Filter frequency         & 1  \\
+39  & Filter frequency         & 2  \\
+40  & Filter frequency         & 3  \\
+41  & Filter frequency         & 4  \\
+42  & Filter frequency         & 5  \\
+43  & Filter frequency         & 6  \\
+44  & Filter resonance         & 1  \\
+45  & Filter resonance         & 2  \\
+46  & Filter resonance         & 3  \\
+47  & Filter resonance         & 4  \\
+48  & Filter resonance         & 5  \\
+49  & Filter resonance         & 6  \\
+50  & Volume envelope attack   & 1  \\
+51  & Volume envelope decay    & 1  \\
+52  & Volume envelope attack   & 2  \\
+53  & Volume envelope decay    & 2  \\
+54  & Volume envelope attack   & 3  \\
+55  & Volume envelope decay    & 3  \\
+56  & Volume envelope attack   & 4  \\
+57  & Volume envelope decay    & 4  \\
+58  & Volume envelope attack   & 5  \\
+59  & Volume envelope decay    & 5  \\
+60  & Volume envelope attack   & 6  \\
+61  & Closed hihat decay time  & 6  \\
+62  & Open hihat decay time    & 6  \\
+63  & Volume envelope slope    & 1  \\
+64  & Volume envelope slope    & 2  \\
+65  & Volume envelope slope    & 3  \\
+66  & Volume EG slope          & 4  \\
+67  & Volume EG slope          & 5  \\
+68  & Volume EG slope          & 6  \\
+69  & Volume EG repeat count   & 4  \\
+70  & Volume EG repeat count   & 5  \\
+71  & Mod. envelope decay      & 1  \\
+72  & Mod. envelope decay      & 2  \\
+73  & Mod. envelope decay      & 3  \\
+74  & Mod. envelope decay      & 4  \\
+75  & Envelope mod. amount     & 1  \\
+76  & Envelope mod. amount     & 2  \\
+77  & Envelope mod. amount     & 3  \\
+78  & Envelope mod. amount     & 4  \\
+79  & Mod. envelope slope      & 1  \\
+80  & Mod. envelope slope      & 2  \\
+81  & Mod. envelope slope      & 3  \\
+82  & Mod. envelope slope      & 4  \\
+83  & FM amount                & 1  \\
+84  & FM frequency             & 1  \\
+85  & FM amount                & 2  \\
+86  & FM frequency             & 2  \\
+87  & FM amount                & 3  \\
+88  & FM frequency             & 3  \\
+89  & Voice volume             & 1  \\
+90  & Voice volume             & 2  \\
+91  & Voice volume             & 3  \\
+92  & Voice volume             & 4  \\
+93  & Voice volume             & 5  \\
+94  & Voice volume             & 6  \\
+95  & Voice pan                & 1  \\
+96  & Voice pan                & 2  \\
+97  & Voice pan                & 3  \\
+98  & NRPN fine                & -- \\
+99  & NRPN coarse              & -- \\
+100 & Voice pan                & 4  \\
+101 & Voice pan                & 5  \\
+102 & Voice pan                & 6  \\
+103 & Distortion               & 1  \\
+104 & Distortion               & 2  \\
+105 & Distortion               & 3  \\
+106 & Distortion               & 4  \\
+107 & Distortion               & 5  \\
+108 & Distortion               & 6  \\
+109 & Decimation               & 1  \\
+110 & Decimation               & 2  \\
+111 & Decimation               & 3  \\
+112 & Decimation               & 4  \\
+113 & Decimation               & 5  \\
+114 & Decimation               & 6  \\
+115 & Decimation               & all \\
+116 & LFO freq                 & 1  \\
+117 & LFO freq                 & 2  \\
+118 & LFO freq                 & 3  \\
+119 & LFO freq                 & 4  \\
+120 & LFO freq                 & 5  \\
+121 & LFO freq                 & 6  \\
+122 & LFO amount               & 1  \\
+123 & LFO amount               & 2  \\
+124 & LFO amount               & 3  \\
+125 & LFO amount               & 4  \\
+126 & LFO amount               & 5  \\
+127 & LFO amount               & 6  \\
+\end{miditableCC}
+
+\subsection*{MIDI NRPN Table}
+
+\begin{miditableNRPN}
+0   & Filter drive               & 1 \\
+1   & Filter drive               & 2 \\
+2   & Filter drive               & 3 \\
+3   & Filter drive               & 4 \\
+4   & Filter drive               & 5 \\
+5   & Filter drive               & 6 \\
+6   & Mix/Mod select             & 1 \\
+7   & Mix/Mod select             & 2 \\
+8   & Mix/Mod select             & 3 \\
+9   & Velocity volume mod. on/off & 1 \\
+10  & Velocity volume mod. on/off & 2 \\
+11  & Velocity volume mod. on/off & 3 \\
+12  & Velocity volume mod. on/off & 4 \\
+13  & Velocity volume mod. on/off & 5 \\
+14  & Velocity volume mod. on/off & 6 \\
+15  & Velocity mod. amount       & 1 \\
+16  & Velocity mod. amount       & 2 \\
+17  & Velocity mod. amount       & 3 \\
+18  & Velocity mod. amount       & 4 \\
+19  & Velocity mod. amount       & 5 \\
+20  & Velocity mod. amount       & 6 \\
+21  & Velocity mod. destination  & 1 \\
+22  & Velocity mod. destination  & 2 \\
+23  & Velocity mod. destination  & 3 \\
+24  & Velocity mod. destination  & 4 \\
+25  & Velocity mod. destination  & 5 \\
+26  & Velocity mod. destination  & 6 \\
+27  & LFO waveform               & 1 \\
+28  & LFO waveform               & 2 \\
+29  & LFO waveform               & 3 \\
+30  & LFO waveform               & 4 \\
+31  & LFO waveform               & 5 \\
+32  & LFO waveform               & 6 \\
+33  & LFO target voice           & 1 \\
+34  & LFO target voice           & 2 \\
+35  & LFO target voice           & 3 \\
+36  & LFO target voice           & 4 \\
+37  & LFO target voice           & 5 \\
+38  & LFO target voice           & 6 \\
+39  & LFO target                 & 1 \\
+40  & LFO target                 & 2 \\
+41  & LFO target                 & 3 \\
+42  & LFO target                 & 4 \\
+43  & LFO target                 & 5 \\
+44  & LFO target                 & 6 \\
+45  & LFO retrigger              & 1 \\
+46  & LFO retrigger              & 2 \\
+47  & LFO retrigger              & 3 \\
+48  & LFO retrigger              & 4 \\
+49  & LFO retrigger              & 5 \\
+50  & LFO retrigger              & 6 \\
+51  & LFO sync                   & 1 \\
+52  & LFO sync                   & 2 \\
+53  & LFO sync                   & 3 \\
+54  & LFO sync                   & 4 \\
+55  & LFO sync                   & 5 \\
+56  & LFO sync                   & 6 \\
+57  & LFO offset                 & 1 \\
+58  & LFO offset                 & 2 \\
+59  & LFO offset                 & 3 \\
+60  & LFO offset                 & 4 \\
+61  & LFO offset                 & 5 \\
+62  & LFO offset                 & 6 \\
+63  & Filter type                & 1 \\
+64  & Filter type                & 2 \\
+65  & Filter type                & 3 \\
+66  & Filter type                & 4 \\
+67  & Filter type                & 5 \\
+68  & Filter type                & 6 \\
+69  & Transient generator volume & 1 \\
+70  & Transient generator volume & 2 \\
+71  & Transient generator volume & 3 \\
+72  & Transient generator volume & 4 \\
+73  & Transient generator volume & 5 \\
+74  & Transient generator volume & 6 \\
+75  & Transient generator waveform & 1 \\
+76  & Transient generator waveform & 2 \\
+77  & Transient generator waveform & 3 \\
+78  & Transient generator waveform & 4 \\
+79  & Transient generator waveform & 5 \\
+80  & Transient generator waveform & 6 \\
+81  & Transient generator frequency & 1 \\
+82  & Transient generator frequency & 2 \\
+83  & Transient generator frequency & 3 \\
+84  & Transient generator frequency & 4 \\
+85  & Transient generator frequency & 5 \\
+86  & Transient generator frequency & 6 \\
+87  & Audio output routing       & 1 \\
+88  & Audio output routing       & 2 \\
+89  & Audio output routing       & 3 \\
+90  & Audio output routing       & 4 \\
+91  & Audio output routing       & 5 \\
+92  & Audio output routing       & 6 \\
+\end{miditableNRPN}

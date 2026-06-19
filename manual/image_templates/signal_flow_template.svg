@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LXR Signal Flow Diagram Template
+  Usage: Copy this file, rename boxes and arrows to match the target voice.
+  Edit freely in Inkscape or GIMP.
+  Box size: 110x40. Arrow spacing: 30px. Font: sans-serif 12px.
+  Colour palette:
+    Box fill:   #ffffff  Border: #222222
+    Arrow:      #222222
+    Label text: #222222
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 280" width="700" height="280">
+  <defs>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#222222"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box       { fill:#ffffff; stroke:#222222; stroke-width:1.5; }
+    .box-label { font-family:sans-serif; font-size:12px; fill:#222222;
+                 text-anchor:middle; dominant-baseline:middle; }
+    .arrow     { stroke:#222222; stroke-width:1.5; fill:none;
+                 marker-end:url(#arrowhead); }
+    .anno      { font-family:sans-serif; font-size:10px; fill:#555555;
+                 text-anchor:middle; }
+  </style>
+
+  <!-- ============================================================
+       EXAMPLE: Drum Voice 1-3 signal flow
+       Modify box labels, positions and arrows for other voices.
+       ============================================================ -->
+
+  <!-- Row 1: Oscillator (top, feeds down to Amp) -->
+  <rect class="box" x="280" y="20"  width="110" height="40" rx="4"/>
+  <text class="box-label" x="335" y="40">Oscillator</text>
+
+  <!-- Row 2: Pitch EG  |  Amp (mix point)  |  Vol EG -->
+  <rect class="box" x="30"  y="100" width="110" height="40" rx="4"/>
+  <text class="box-label" x="85"  y="120">Pitch EG</text>
+
+  <rect class="box" x="185" y="100" width="110" height="40" rx="4"/>
+  <text class="box-label" x="240" y="120">Amp</text>
+  <text class="anno"       x="215" y="92" >FM mode</text>
+  <text class="anno"       x="275" y="92" >Mix mode</text>
+
+  <rect class="box" x="460" y="100" width="110" height="40" rx="4"/>
+  <text class="box-label" x="515" y="120">Vol EG</text>
+
+  <!-- Row 3: (Pitch EG feeds) Oscillator  |  Filter  |  Amp  |  Distortion  |  Sample Rate Reducer -->
+  <rect class="box" x="30"  y="180" width="110" height="40" rx="4"/>
+  <text class="box-label" x="85"  y="200">Oscillator</text>
+
+  <rect class="box" x="185" y="180" width="110" height="40" rx="4"/>
+  <text class="box-label" x="240" y="200">Filter</text>
+
+  <rect class="box" x="340" y="180" width="110" height="40" rx="4"/>
+  <text class="box-label" x="395" y="200">Amp</text>
+
+  <rect class="box" x="460" y="180" width="110" height="40" rx="4"/>
+  <text class="box-label" x="515" y="200">Distortion</text>
+
+  <rect class="box" x="580" y="180" width="110" height="40" rx="4"/>
+  <text class="box-label" x="635" y="200">Sample Rate&#10;Reducer</text>
+
+  <!-- Transient Generator feeds Amp row 3 -->
+  <rect class="box" x="340" y="260" width="110" height="40" rx="4"/>
+  <text class="box-label" x="395" y="275">Transient</text>
+  <text class="box-label" x="395" y="291">Generator</text>
+
+  <!-- ARROWS -->
+  <!-- Oscillator (top) -> Amp (row2) -->
+  <line class="arrow" x1="335" y1="60"  x2="270" y2="98"/>
+  <!-- Vol EG -> Amp (row3) -->
+  <line class="arrow" x1="515" y1="140" x2="425" y2="178"/>
+  <!-- Pitch EG -> Oscillator (row3) -->
+  <line class="arrow" x1="85"  y1="140" x2="85"  y2="178"/>
+  <!-- Amp (row2) FM arrow -> Oscillator (row3) -->
+  <line class="arrow" x1="200" y1="130" x2="140" y2="178"/>
+  <!-- Amp (row2) Mix arrow -> Filter -->
+  <line class="arrow" x1="240" y1="140" x2="240" y2="178"/>
+  <!-- Oscillator (row3) -> Filter -->
+  <line class="arrow" x1="140" y1="200" x2="183" y2="200"/>
+  <!-- Filter -> Amp (row3) -->
+  <line class="arrow" x1="295" y1="200" x2="338" y2="200"/>
+  <!-- Amp (row3) -> Distortion -->
+  <line class="arrow" x1="450" y1="200" x2="458" y2="200"/>
+  <!-- Distortion -> SRR -->
+  <line class="arrow" x1="570" y1="200" x2="578" y2="200"/>
+  <!-- Transient Gen -> Amp (row3) -->
+  <line class="arrow" x1="395" y1="260" x2="395" y2="222"/>
+</svg>

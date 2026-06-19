@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LXR Substep Diagram Template
+  Shows 8 sub-steps within each of 8 main steps = 64 positions shown.
+  Top row: sub-step buttons (8 per main step).
+  Bottom row: main step buttons (16 total, 8 shown here).
+  Time labels shown above each column.
+  Edit circle fill for active/inactive states.
+  active:   fill="#ff8c00"  (orange — active step)
+  inactive: fill="#3a3a3a"  (dark grey — inactive)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 260" width="760" height="260">
+  <style>
+    .bg      { fill:#1a1a1a; }
+    .btn-act { fill:#cc6600; stroke:#ff8c00; stroke-width:1.5; }
+    .btn-off { fill:#2e2e2e; stroke:#555; stroke-width:1; }
+    .led-act { fill:#ff8c00; r:5; }
+    .led-off { fill:#444; r:5; }
+    .lbl     { font-family:monospace; font-size:9px; fill:#aaa; text-anchor:middle; }
+    .section { fill:none; stroke:#ff8c00; stroke-width:1.5; rx:6; }
+    .section-lbl { font-family:sans-serif; font-size:11px; font-weight:bold;
+                   fill:#ff8c00; text-anchor:start; }
+  </style>
+
+  <rect class="bg" x="0" y="0" width="760" height="260" rx="6"/>
+
+  <!-- Section label -->
+  <text class="section-lbl" x="16" y="22">Substeps per step</text>
+
+  <!-- Time labels for sub-steps (row 1, 8 sub-steps) -->
+  <!-- Format: sub_index/128 -->
+  <text class="lbl" x="55"  y="40">0/32</text>
+  <text class="lbl" x="55"  y="50">0/64</text>
+  <text class="lbl" x="55"  y="60">0/128</text>
+  <text class="lbl" x="130" y="50">1/128</text>
+  <text class="lbl" x="205" y="42">1/32</text>
+  <text class="lbl" x="205" y="52">2/64</text>
+  <text class="lbl" x="205" y="62">2/128</text>
+  <!-- ... continue for all 8 positions ... -->
+
+  <!-- Sub-step buttons (top row, 8 circles) -->
+  <circle class="btn-act" cx="55"  cy="105" r="28"/>
+  <circle class="btn-off" cx="130" cy="105" r="28"/>
+  <circle class="btn-off" cx="205" cy="105" r="28"/>
+  <circle class="btn-off" cx="280" cy="105" r="28"/>
+  <circle class="btn-act" cx="355" cy="105" r="28"/>
+  <circle class="btn-off" cx="430" cy="105" r="28"/>
+  <circle class="btn-off" cx="505" cy="105" r="28"/>
+  <circle class="btn-off" cx="580" cy="105" r="28"/>
+
+  <!-- Main step LEDs (small dots above main buttons) -->
+  <circle class="led-act" cx="55"  cy="162"/>
+  <circle class="led-act" cx="130" cy="162"/>
+  <circle class="led-act" cx="205" cy="162"/>
+  <circle class="led-act" cx="280" cy="162"/>
+  <circle class="led-off" cx="355" cy="162"/>
+  <circle class="led-off" cx="430" cy="162"/>
+  <circle class="led-off" cx="505" cy="162"/>
+  <circle class="led-off" cx="580" cy="162"/>
+
+  <!-- Main step time labels -->
+  <text class="lbl" x="55"  y="180">0/16</text>
+  <text class="lbl" x="130" y="180">1/16</text>
+  <text class="lbl" x="205" y="180">2/16</text>
+  <text class="lbl" x="280" y="180">3/16</text>
+  <text class="lbl" x="355" y="180">4/16</text>
+  <text class="lbl" x="430" y="180">5/16</text>
+  <text class="lbl" x="505" y="180">6/16</text>
+  <text class="lbl" x="580" y="180">7/16</text>
+
+  <!-- Main step buttons (bottom row) -->
+  <circle class="btn-off" cx="55"  cy="215" r="28"/>
+  <circle class="btn-off" cx="130" cy="215" r="28"/>
+  <circle class="btn-off" cx="205" cy="215" r="28"/>
+  <circle class="btn-act" cx="280" cy="215" r="28"/>
+  <circle class="btn-act" cx="355" cy="215" r="28"/>
+  <circle class="btn-off" cx="430" cy="215" r="28"/>
+  <circle class="btn-off" cx="505" cy="215" r="28"/>
+  <circle class="btn-off" cx="580" cy="215" r="28"/>
+
+  <!-- Section outline box -->
+  <rect class="section" x="10" y="10" width="740" height="240" rx="6"/>
+</svg>

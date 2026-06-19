@@ -1,0 +1,81 @@
+% ============================================================
+%  LXR Owners Manual — Master Document
+%
+%  Build with:
+%    pdflatex -output-directory=../build main.tex
+%  Or use the build script:
+%    python ../build_manual.py
+%
+%  To add a new chapter:
+%    1. Create docs/manual/chapters/NN_chapter_name.md
+%    2. Add a \input{} line below in the correct position.
+%       The build script converts .md -> .tex into build/chapters/
+%       so reference the build path as shown.
+% ============================================================
+
+\documentclass[11pt, a4paper]{article}
+
+% Preamble (packages, colours, commands)
+\input{../latex/preamble.tex}
+
+% Image search path — all images live in ../images/
+\graphicspath{{../images/}}
+
+\begin{document}
+
+% ----- Title page -----
+\input{../latex/title_page.tex}
+
+% ----- Table of contents -----
+\tableofcontents
+\newpage
+
+% ============================================================
+%  CHAPTERS
+%  Each .md file is converted to .tex by build_manual.py and
+%  placed in build/chapters/. The \input paths below reflect
+%  that location (pdflatex is run from build/).
+%  Do not edit the generated .tex files directly — edit the .md.
+% ============================================================
+
+\input{chapters/01_overview.tex}
+\newpage
+
+\input{chapters/02_quickstart.tex}
+\newpage
+
+\input{chapters/03_voices.tex}
+\newpage
+
+\input{chapters/04_sequencer.tex}
+\newpage
+
+\input{chapters/05_operation_modes.tex}
+\newpage
+
+\input{chapters/06_synth_modules.tex}
+\newpage
+
+% MIDI chapter includes the hand-maintained MIDI tables
+\input{chapters/07_midi.tex}
+\input{../latex/midi_tables.tex}
+\newpage
+
+\input{chapters/08_firmware_update.tex}
+\newpage
+
+\input{chapters/09_drum_synthesis_intro.tex}
+\newpage
+
+\input{chapters/10_specifications.tex}
+\newpage
+
+\input{chapters/99_appendix.tex}
+
+% ============================================================
+%  ADD NEW CHAPTERS HERE
+%  Example:
+%    \input{chapters/11_new_feature.tex}
+% ============================================================
+
+\end{document}

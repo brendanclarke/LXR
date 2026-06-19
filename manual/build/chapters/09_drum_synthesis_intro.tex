@@ -1,0 +1,238 @@
+\section{Introduction to Drum
+Synthesis}\label{introduction-to-drum-synthesis}
+
+This chapter introduces the basics of drum synthesis, focused on the
+classic analogue sounds as a starting point for further exploration.
+
+\subsection{Kicks}\label{kicks}
+
+The basis of nearly every kick sound is an oscillator combined with a
+decaying envelope modulating its pitch. Voices 1--3 are ideal for this.
+
+\subsubsection{Oscillator}\label{oscillator}
+
+A good starting point is a sine oscillator with a pitch around 30--35.
+
+\subsubsection{Amplitude Envelope}\label{amplitude-envelope}
+
+A kick starts at maximum amplitude, so set attack to zero. The decay
+controls the length of the kick --- a decay in the range 20--30 with a
+slope around 25 (exponential) gives a nice average kick. For booming
+808-style kicks, increase the decay further.
+
+\subsubsection{Pitch Envelope}\label{pitch-envelope}
+
+Set a decay and slope similar to the amplitude envelope as a starting
+point. All three parameters --- decay, slope, and modulation amount ---
+have a large impact on the character of the kick.
+
+\subsubsection{Click}\label{click}
+
+The attack transient is an important part of a kick sound. Try different
+transient generator settings for various clicks and pops, or slightly
+increase the amplitude attack for softer bass drums.
+
+\subsubsection{Tips and Tricks}\label{tips-and-tricks}
+
+\begin{itemize}
+\tightlist
+\item
+  You can further shape the attack using the FM oscillator.
+\item
+  For additional click in the attack, enhance it with a peak filter.
+\end{itemize}
+
+\subsection{Snare}\label{snare}
+
+The snare is a 2-component sound: the tonal body and the noisy rattle.
+Voice 4 is designed with both parts in mind --- an oscillator for the
+tonal part and a noise generator with filter for the noise part. Only
+the noise is routed through the filter, since in most cases you want
+highpass-filtered noise with an unfiltered drum body.
+
+For most snare sounds the noise should be louder than the tonal part ---
+try setting the oscillator page mix parameter to around 100.
+
+\subsubsection{Tonal Part}\label{tonal-part}
+
+Similar to a kick but less pronounced. A snare does not need a loud
+click or deep pitch modulation, and its oscillator frequency should be
+higher than a kick since it represents a smaller drum.
+
+\subsubsection{Noise Part}\label{noise-part}
+
+Highpass-filtered noise with a moderate resonance setting is sufficient
+for good results.
+
+\subsubsection{Amplitude Envelope}\label{amplitude-envelope-1}
+
+Set attack to zero. For the decay:
+
+\begin{itemize}
+\tightlist
+\item
+  Longer decay times with a very exponential slope (as low as 5--10)
+  produce a short hit with a nicely decaying noise tail --- the tail
+  acts like a room reverb, giving a more natural result.
+\item
+  Shorter decay times with a linear or exponential slope give a very
+  dry, direct snare.
+\end{itemize}
+
+\subsubsection{Tips and Tricks}\label{tips-and-tricks-1}
+
+\begin{itemize}
+\tightlist
+\item
+  Not every snare needs both tone and noise. Try using only the tonal
+  part with a high pitch modulation envelope to get the classic
+  Kraftwerk electronic zap.
+\end{itemize}
+
+\subsection{Clap}\label{clap}
+
+A clap sound is noise with a characteristically fuzzy attack ---
+simulating multiple hands clapping with slight timing variations.
+
+\subsubsection{Amplitude Envelope}\label{amplitude-envelope-2}
+
+Use the repeat feature to simulate this behaviour. 3--4 repeats works
+well for a classic clap. The timing differences between claps are very
+small, so use a short repeat time (attack value below 10). This produces
+a short burst at the start. For the decay, use an exponential slope with
+a value below 10.
+
+\subsubsection{Oscillator}\label{oscillator-1}
+
+A single white noise oscillator set to its maximum frequency.
+
+\subsubsection{Filter}\label{filter}
+
+A bandpass filter with cutoff 60--80 and high resonance gives good
+results.
+
+\subsection{Hihat}\label{hihat}
+
+\subsubsection{Oscillator}\label{oscillator-2}
+
+Hihats need a complex metallic noise spectrum. Use all 3 oscillators
+with high frequencies and modulation amounts to build a spectrum you
+like. A simple white noise oscillator can also work well.
+
+\subsubsection{Amplitude Envelope}\label{amplitude-envelope-3}
+
+Set 2 decay times --- one for the closed hat, one for the open hat. Both
+should be short, but the open hihat decay should be longer than the
+closed. Use a very exponential slope (below 10).
+
+\subsubsection{Filter}\label{filter-1}
+
+Use a highpass filter to remove all low frequencies. A high cutoff
+around 120 works well.
+
+\subsection{Cymbal Ride}\label{cymbal-ride}
+
+Cymbals are similar to hihats --- the difference is in the envelope and
+filter settings.
+
+\subsubsection{Oscillator}\label{oscillator-3}
+
+Oscillator settings can be similar to those of the hihat.
+
+\subsubsection{Amplitude Envelope}\label{amplitude-envelope-4}
+
+The only real difference from the hihat is a much longer decay time. Use
+a strong exponential slope. Also consider lowering the voice volume, as
+cymbal sounds can be very loud.
+
+\subsubsection{Filter}\label{filter-2}
+
+A bandpass filter with high resonance and a cutoff above 110 gives good
+results.
+
+\subsubsection{LFO}\label{lfo}
+
+Cymbals benefit greatly from LFO modulation on the filter frequency. Use
+a low modulation frequency and a sine wave with a gentle modulation
+depth --- this ensures successive strikes do not sound identical and the
+frequency spectrum shifts slightly over time.
+
+\subsection{Bells}\label{bells}
+
+\subsubsection{Realistic Bells}\label{realistic-bells}
+
+Realistic bells are best achieved with FM oscillators. A complex
+metallic spectrum combined with an exponential decay amplitude envelope
+and a bandpass filter produces different bell types. The sample rate
+reducer is very useful for adding a more metallic character.
+
+\subsubsection{808-Style Cowbell}\label{style-cowbell}
+
+The 808 cowbell uses 2 detuned rectangle oscillators through a bandpass
+filter.
+
+\textbf{Recommended voice:} Drum voice 1--3
+
+\textbf{FM Page:}
+
+\begin{itemize}
+\tightlist
+\item
+  Set mode to Mix (main and FM oscillators are mixed).
+\item
+  Set amount to 63 (50/50 mix ratio).
+\item
+  Select rectangle waveform.
+\item
+  Set frequency to approximately 78.
+\end{itemize}
+
+\textbf{OSC Page:}
+
+\begin{itemize}
+\tightlist
+\item
+  Select rectangle wave.
+\item
+  Set frequency to 71.
+\end{itemize}
+
+\textbf{Amplitude Envelope:}
+
+\begin{itemize}
+\tightlist
+\item
+  Attack: 0
+\item
+  Slope: very exponential (around 2--5).
+\item
+  Decay: 25--50 depending on slope setting.
+\end{itemize}
+
+\textbf{Filter:}
+
+\begin{itemize}
+\tightlist
+\item
+  Bandpass filter.
+\item
+  Medium resonance around 70.
+\item
+  Cutoff frequency around 92.
+\end{itemize}
+
+\subsection{More Information About Drum Sound
+Design}\label{more-information-about-drum-sound-design}
+
+Two highly recommended resources:
+
+\begin{itemize}
+\item
+  The \emph{Sound on Sound} Synth Secrets series contains excellent
+  articles on different drum sounds:
+  \url{http://www.soundonsound.com/search?url=\%2Fsearch&Keyword=\%22synth+secrets\%22}
+\item
+  The Waldorf Attack synthesizer owners manual contains detailed how-tos
+  on drum synthesis:
+  \url{http://waldorf.electro-music.com/attack/docs/attackdrumsounds.pdf}
+\end{itemize}

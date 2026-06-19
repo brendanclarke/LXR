@@ -1,0 +1,8 @@
+# LXR Manual build dependencies
+# Install with: pip install -r requirements.txt
+
+# Pandoc Python wrapper (used by build_manual.py to invoke pandoc)
+pypandoc>=1.11
+
+# Optional: file-change watching for --watch mode
+watchdog>=3.0

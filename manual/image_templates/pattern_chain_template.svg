@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LXR Pattern Chain Diagram Template
+  Shows bars on X axis (0,1,2,...) and pattern numbers in coloured blocks.
+  Arrow arcs show automatic and manual pattern changes.
+  Edit:
+    - Bar count: extend X axis
+    - Pattern blocks: adjust x,width,fill,label per segment
+    - Arrows: update x1/y1/x2/y2 of <path> arcs
+  Colours:
+    Pattern 1 block: #cc2222 (red)
+    Pattern 2 block: #2244cc (blue)
+    Other pattern:   #888888 (grey)
+    Arrow:           #333333
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 220" width="720" height="220">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#333"/>
+    </marker>
+  </defs>
+  <style>
+    .axis      { stroke:#333; stroke-width:1.5; fill:none; }
+    .bar-tick  { stroke:#333; stroke-width:1; fill:none; }
+    .bar-lbl   { font-family:sans-serif; font-size:13px; fill:#333; text-anchor:middle; }
+    .pat-p1    { fill:#cc2222; }
+    .pat-p2    { fill:#2244cc; }
+    .pat-other { fill:#888888; }
+    .pat-lbl   { font-family:sans-serif; font-size:22px; font-weight:bold;
+                 fill:#ffffff; text-anchor:middle; dominant-baseline:middle; }
+    .arrow     { stroke:#333; stroke-width:1.5; fill:none; marker-end:url(#arr); }
+    .anno      { font-family:sans-serif; font-size:11px; fill:#333; text-anchor:middle; }
+  </style>
+
+  <!-- Bar axis -->
+  <line class="axis" x1="40" y1="80" x2="680" y2="80"/>
+
+  <!-- Bar positions: 0 1 2 3 4 (each 130px wide) -->
+  <line class="bar-tick" x1="40"  y1="75" x2="40"  y2="85"/>
+  <line class="bar-tick" x1="170" y1="75" x2="170" y2="85"/>
+  <line class="bar-tick" x1="300" y1="75" x2="300" y2="85"/>
+  <line class="bar-tick" x1="430" y1="75" x2="430" y2="85"/>
+  <line class="bar-tick" x1="560" y1="75" x2="560" y2="85"/>
+  <line class="bar-tick" x1="680" y1="75" x2="680" y2="85"/>
+
+  <text class="bar-lbl" x="40"  y="70">0</text>
+  <text class="bar-lbl" x="170" y="70">1</text>
+  <text class="bar-lbl" x="300" y="70">2</text>
+  <text class="bar-lbl" x="430" y="70">3</text>
+  <text class="bar-lbl" x="560" y="70">4</text>
+
+  <!-- Pattern blocks (bottom row) -->
+  <!-- Pattern 1: bars 0-3 (3 repeats) -->
+  <rect class="pat-p1" x="40"  y="110" width="390" height="60" rx="3"/>
+  <!-- Pattern 2: bar 3-4 (1 play) -->
+  <rect class="pat-p2" x="430" y="110" width="130" height="60" rx="3"/>
+
+  <!-- Pattern labels -->
+  <text class="pat-lbl" x="235" y="140">1</text>
+  <text class="pat-lbl" x="235" y="140">1</text>
+  <text class="pat-lbl" x="495" y="140">2</text>
+
+  <!-- Change arrows -->
+  <!-- Auto change to pattern 2 at bar 3 -->
+  <path class="arrow" d="M 560,105 Q 595,40 630,80"/>
+  <text class="anno"  x="610" y="32">Automatic change to pattern 2</text>
+
+  <!-- Auto change back to pattern 1 -->
+  <path class="arrow" d="M 430,105 Q 250,30 170,78"/>
+  <text class="anno"  x="300" y="22">Automatic change to pattern 1</text>
+
+  <!-- Edit annotation: describe the block labels -->
+  <text class="anno" x="235" y="185" fill="#eee" font-size="10">Pattern 1 is repeated 3 Times</text>
+  <text class="anno" x="495" y="185" fill="#eee" font-size="10">Pattern 2 only once</text>
+</svg>

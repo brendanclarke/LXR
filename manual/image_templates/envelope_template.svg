@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LXR Envelope Curve Template
+  X axis: Time. Y axis: Amplitude.
+  Attack phase ends at x=300, Decay phase runs 300->680.
+  Modify path data to represent different slope settings.
+  Slope variants:
+    Linear (slope=63):       straight lines  -> use L commands
+    Exponential (slope<63):  fast rise, slow fall -> use Q/C curves
+    Logarithmic (slope>63):  slow rise, fast fall -> use Q/C curves
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 380" width="750" height="380">
+  <style>
+    .axis      { stroke:#333; stroke-width:1.5; fill:none;
+                 marker-end:url(#arr); }
+    .divider   { stroke:#aaa; stroke-width:1; stroke-dasharray:5,4; fill:none; }
+    .curve     { stroke:#111; stroke-width:2.5; fill:none; }
+    .label     { font-family:sans-serif; font-size:13px; fill:#333; text-anchor:middle; }
+    .label-ax  { font-family:sans-serif; font-size:13px; fill:#333; }
+    .phase-lbl { font-family:sans-serif; font-size:12px; fill:#555; text-anchor:middle; }
+    .dot-line  { stroke:#bbb; stroke-width:1; stroke-dasharray:4,4; fill:none; }
+  </style>
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#333"/>
+    </marker>
+  </defs>
+
+  <!-- Axes -->
+  <line class="axis" x1="60" y1="300" x2="720" y2="300"/>  <!-- Time -->
+  <line class="axis" x1="60" y1="300" x2="60"  y2="30"/>   <!-- Amplitude -->
+
+  <!-- Axis labels -->
+  <text class="label-ax" x="730" y="304" font-size="14" font-weight="bold">Time</text>
+  <text class="label-ax" x="20"  y="26"  font-size="14" font-weight="bold"
+        transform="rotate(-90,20,26)" text-anchor="middle">Amplitude</text>
+
+  <!-- Phase divider at attack/decay boundary -->
+  <line class="divider" x1="300" y1="30" x2="300" y2="300"/>
+
+  <!-- Dotted horizontal at peak amplitude -->
+  <line class="dot-line" x1="60" y1="60" x2="300" y2="60"/>
+
+  <!-- Phase labels -->
+  <text class="phase-lbl" x="180" y="22">Attack</text>
+  <text class="phase-lbl" x="500" y="22">Decay</text>
+
+  <!-- ENVELOPE CURVE — replace path data for each slope type -->
+  <!-- Example: Linear (straight lines) -->
+  <path class="curve" d="M60,300 L300,60 L680,300"/>
+
+  <!-- Title -->
+  <text class="label" x="380" y="345" font-size="13" font-weight="bold">
+    Linear envelope (slope = 63) — edit path for exponential/logarithmic
+  </text>
+</svg>
