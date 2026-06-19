@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
-Date: 2026-06-18
-Status: current AVR<->STM comms reference after Session 026 PERF voice-morph control work. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, and individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`.
+Date: 2026-06-19
+Status: current AVR<->STM comms reference after Session 027 live-record automation and encoder menu-value fixes. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, and step automation destinations are stored as raw AVR/menu `PAR_*` ids.
 
 ## Purpose
 
@@ -146,6 +146,9 @@ Important rule:
 - Raw endpoint storage uses raw AVR/menu parameter indices.
 - The low-CC `+1` conversion only applies when the value is being applied as an ordinary live CC to DSP/front-panel parameter apply logic.
 - Do not apply that conversion to endpoint restore traffic.
+- Step automation destination storage also uses raw AVR/menu parameter indices. Front-panel live recording and manual step-destination editing write raw ids to `Step.param1Nr` / `Step.param2Nr`; automation playback converts raw low destinations to `MIDI_CC data1 = destination + 1` immediately before calling `frontParser_applyParameterCommand()`.
+- External DIN/USB MIDI automation recording starts from the MIDI-domain/apply-domain id. Those call sites must use `seq_recordAutomationMidiDestination()` so low MIDI-domain destinations are converted back to raw step storage.
+- STM-to-AVR step-parameter replies send raw stored destinations unchanged. This is different from `frontPanelSending_sendParameterEcho()`, which still subtracts one for low parameters because its MIDI parser callers pass apply-domain ids.
 - PERF individual voice morph amount edits are not ordinary `CC_2` parameter ingress. They use `VOICE_MORPH` low/high packets and land in the direct full-range Preset voice morph setter.
 - MIDI CC1 morph remains a 7-bit input path; its resulting full-range global/voice morph amount may be reported back to AVR for display sync.
 

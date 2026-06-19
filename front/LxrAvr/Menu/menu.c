@@ -48,6 +48,8 @@ static void menu_encoderChangeParameter(int8_t inc);
 static void menu_encoderChangeShiftParameter(int8_t inc);
 static int8_t menu_applyEncoderAcceleration(int8_t inc);
 static void menu_applyEncoderDeltaToByte(uint8_t *paramValue, int8_t inc);
+static uint8_t menu_getDtypeMenuEntryCount(uint16_t paramNr);
+static void menu_normalizeDtypeMenuEncoderValue(uint16_t paramNr, uint8_t *paramValue);
 
 #define ARROW_SIGN '>'
 
@@ -2484,6 +2486,12 @@ void menu_parseEncoder(int8_t inc, uint8_t button)
 	if(button != lastEncoderButton) { // was the button clicked?
 		btnClicked=button;
       screensaver_touch();
+      if(btnClicked && copyClear_isClearModeActive())
+      {
+         lastEncoderButton = button;
+         copyClear_executeClear();
+         return;
+      }
 		if(btnClicked) // toggle edit mode
 			editModeActive = (uint8_t)(1-editModeActive);
 		lastEncoderButton = button;
@@ -2584,6 +2592,29 @@ static void menu_applyEncoderDeltaToByte(uint8_t *paramValue, int8_t inc)
    *paramValue = (uint8_t)value;
 }
 
+static uint8_t menu_getDtypeMenuEntryCount(uint16_t paramNr)
+{
+   const uint8_t menuId = pgm_read_byte(&parameter_dtypes[paramNr]) >> 4;
+   return getMaxEntriesForMenu(menuId);
+}
+
+
+static void menu_normalizeDtypeMenuEncoderValue(uint16_t paramNr, uint8_t *paramValue)
+{
+   const uint8_t numEntries = menu_getDtypeMenuEntryCount(paramNr);
+
+   if(numEntries == 0)
+   {
+      *paramValue = 0;
+      return;
+   }
+
+   if(*paramValue < numEntries)
+      return;
+
+   *paramValue = (uint8_t)(((uint16_t)(*paramValue) * (uint16_t)(numEntries - 1)) / 255);
+}
+
 //-----------------------------------------------------------------
 static uint8_t menu_isVoiceMorphAmountParam(uint16_t paramNr)
 {
@@ -2622,15 +2653,19 @@ static void menu_encoderChangeParameter(int8_t inc)
 	uint16_t paramNr		= pgm_read_word(&menuPages[menu_activePage][activePage].bot1 + activeParameter);
 	uint8_t *paramValue = &parameter_values[paramNr];
    uint8_t isMorphParam = (paramNr<END_OF_SOUND_PARAMETERS&&buttonHandler_getShift());
+   const uint8_t dtype = pgm_read_byte(&parameter_dtypes[paramNr]) & 0x0F;
    
    if (isMorphParam&&(menu_activePage<=VOICE7_PAGE))
    {
       paramValue = &parameters2[paramNr];
    }
 
+   if(dtype == DTYPE_MENU)
+      menu_normalizeDtypeMenuEncoderValue(paramNr, paramValue);
+
 		menu_applyEncoderDeltaToByte(paramValue, inc);
 
-	switch(pgm_read_byte(&parameter_dtypes[paramNr]) & 0x0F)
+	switch(dtype)
 	{
 	case DTYPE_TARGET_SELECTION_VELO: //parameter_dtypes[paramNr] & 0x0F
 	{
@@ -2773,11 +2808,11 @@ static void menu_encoderChangeParameter(int8_t inc)
 
 	case DTYPE_MENU://parameter_dtypes[paramNr] & 0x0F
 	{
-		//get the used menu (upper 4 bit)
-		const uint8_t menuId = pgm_read_byte(&parameter_dtypes[paramNr]) >> 4;
 		//get the number of entries
-		uint8_t numEntries = getMaxEntriesForMenu(menuId);
-		if(*paramValue >= numEntries)
+		uint8_t numEntries = menu_getDtypeMenuEntryCount(paramNr);
+      if(numEntries == 0)
+         *paramValue = 0;
+		else if(*paramValue >= numEntries)
 			*paramValue = (uint8_t)(numEntries-1);
 
 	} // parameter_dtypes[paramNr] & 0x0F case DTYPE_MENU
@@ -2844,6 +2879,7 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 	uint16_t paramNr		= pgm_read_word(&menuPages[menu_activePage][activePage].bot1 + activeParameter);
    uint8_t *paramValue;
    uint8_t isMorphParam = (paramNr < END_OF_SOUND_PARAMETERS);
+   const uint8_t dtype = pgm_read_byte(&parameter_dtypes[paramNr]) & 0x0F;
       
    if (isMorphParam)
    {
@@ -2854,9 +2890,12 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
       paramValue = &parameter_values[paramNr];
    }
    
+   if(dtype == DTYPE_MENU)
+      menu_normalizeDtypeMenuEncoderValue(paramNr, paramValue);
+
 		menu_applyEncoderDeltaToByte(paramValue, inc);
 
-	switch(pgm_read_byte(&parameter_dtypes[paramNr]) & 0x0F)
+	switch(dtype)
 	{
 	case DTYPE_TARGET_SELECTION_VELO: //parameter_dtypes[paramNr] & 0x0F
 	{
@@ -2991,11 +3030,11 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 
 	case DTYPE_MENU://parameter_dtypes[paramNr] & 0x0F
 	{
-		//get the used menu (upper 4 bit)
-		const uint8_t menuId = pgm_read_byte(&parameter_dtypes[paramNr]) >> 4;
 		//get the number of entries
-		uint8_t numEntries = getMaxEntriesForMenu(menuId);
-		if(*paramValue >= numEntries)
+		uint8_t numEntries = menu_getDtypeMenuEntryCount(paramNr);
+      if(numEntries == 0)
+         *paramValue = 0;
+		else if(*paramValue >= numEntries)
 			*paramValue = (uint8_t)(numEntries-1);
 
 	} // parameter_dtypes[paramNr] & 0x0F case DTYPE_MENU

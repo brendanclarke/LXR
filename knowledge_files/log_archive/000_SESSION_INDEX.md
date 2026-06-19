@@ -35,6 +35,7 @@
 | 024 | 2026-06-17 | local repo, opcode audit comment-out closeout | Commented out stale AVR/STM opcode constants plus the thin cache helper surface, preserved the live non-cache file-load/session path, and folded the audit into the session log archive |
 | 025 | 2026-06-17 | local repo, macro deprecation cleanup and docs handoff | Zeroed legacy macro slots during file load, disabled the live AVR/STM macro send/apply paths, added deprecation breadcrumbs to the macro parameter/text sites, and refreshed the comms and memory docs |
 | 026 | 2026-06-18 | local repo, voice morph PERF controls plus encoder-list findings | Connected individual PERF voice morph controls to full-range AVR/STM traffic, synced global/voice/velocity morph display reports, preserved the LFO overlay model, and archived the unresolved encoder list mismatch |
+| 027 | 2026-06-19 | local branch `dev-vmorph-front`, live-record automation + encoder menu fix | Fixed front-panel live-record automation destination storage by making step automation destinations raw `PAR_*` ids, preserved external MIDI recording with a MIDI-domain helper, fixed encoder `DTYPE_MENU` value normalization, and restored encoder-press execution on the clear menu |
 
 ---
 
@@ -144,6 +145,10 @@ Session 025 disabled the remaining macro loading and application paths end-to-en
 Session 026 brought the existing PERF-page individual voice morph controls online for Drum 1-3, Snare, Cym, and Hihat. AVR edits now use full `0..255` values and dedicated low/high `VOICE_MORPH` traffic, STM applies those values as current per-voice morph state for the morph worker, global morph remains authoritative and syncs all six voice display slots, and MIDI CC1 plus trigger-time velocity voice morph updates now report full-range display values back to AVR. The LFO morph overlay model was preserved unchanged. The late encoder `DTYPE_MENU` list mismatch investigation did not produce a valid fix; the bad attempts were reverted and the useful findings were written to `ENC_LIST_MISMATCH_ERROR.md`.
 - **Find here**: PERF voice morph amount transport, per-voice morph display reports, global morph override display sync, MIDI CC1 morph display feedback, trigger-time velocity voice morph, generic velocity VMORPH guard, LFO overlay non-change, unresolved encoder list mismatch trace plan
 
+### 027 — Live-Record Automation Destination + Encoder DTYPE_MENU Fix (2026-06-19)
+Session 027 fixed the live-record wrong-parameter bug by making `Step.param1Nr` / `param2Nr` consistently store raw AVR/menu `PAR_*` destinations. Front-panel live recording and manual step-destination edits now both write raw ids, automation playback converts raw ids to the `MIDI_CC` / `CC_2` message shape expected by `frontParser_applyParameterCommand()`, and external MIDI recording uses `seq_recordAutomationMidiDestination()` to convert MIDI-domain ids back to raw storage. The session also resolved the clarified encoder `DTYPE_MENU` issue: encoder edit mode was selecting the correct parameter but clamping menu values to the last item when the stored value was a raw byte, so both encoder edit paths now normalize out-of-range `DTYPE_MENU` values into compact list-index range before applying the encoder delta. A final small patch made encoder press on the SHIFT+COPY clear menu execute the selected clear target instead of falling through to the generic shifted encoder press behavior. The automation and `DTYPE_MENU` fixes were hardware-confirmed by the user.
+- **Find here**: raw step automation destination convention, live-record Drum 2 volume fix, automation playback conversion boundary, external MIDI automation helper, step editor raw round-trip, `frontPanelSending_sendParameterEcho()` audit, encoder `DTYPE_MENU` value-domain diagnosis, encoder menu-value normalization, clear menu encoder-press carveout, hardware verification
+
 
 ---
 
@@ -194,7 +199,8 @@ Session 026 brought the existing PERF-page individual voice morph controls onlin
 | MIDI CC1 morph paths remain 7-bit inputs internally but now report the resulting full `0..255` global/voice morph display values back to AVR | 026 |
 | Velocity target "Individual Voice Morph" is trigger-time only: keep `TYPE_UINT8_VMORPH` out of generic velocity modulation nodes and apply the computed current morph amount from `voiceControl_noteOn()` | 026 |
 | LFO-to-voice-morph remains an async morph-drain overlay from current target voice morph value to morph endpoint; do not rewrite it as a menu/base-value writer | 026 |
-| Encoder `DTYPE_MENU` list mismatch is unresolved; use `ENC_LIST_MISMATCH_ERROR.md` and instrument active parameter/value state before patching | 026 |
+| Step automation destinations in `Step.param1Nr` / `param2Nr` are raw AVR/menu `PAR_*` ids; low `+1` conversion belongs at automation playback/application boundaries, and external MIDI recording must use `seq_recordAutomationMidiDestination()` | 027 |
+| Encoder `DTYPE_MENU` edits normalize out-of-range raw byte values into compact menu-list indices before applying encoder delta; do not treat that symptom as a parameter-index mismatch | 027 |
 
 
 ---
