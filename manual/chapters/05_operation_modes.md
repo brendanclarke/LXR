@@ -133,7 +133,7 @@ between pattern 1 and the selected value (e.g. r4 randomly selects from patterns
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth]{pattern_chain_example2.jpeg}
+  \includegraphics[width=\linewidth]{pattern_chain_example2.png}
   \caption{Pattern chain with manual switch: the break always lands on bar 4.}
 \end{figure}
 
