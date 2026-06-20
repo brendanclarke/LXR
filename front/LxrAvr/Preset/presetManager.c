@@ -183,7 +183,7 @@ void preset_backgroundSwapDoneFromStm(uint8_t fileType)
       preset_backgroundSwapDone = 1;
 }
 
-static uint8_t preset_performBackgroundSwapWait(uint8_t fileType)
+static void preset_performBackgroundSwapWait(uint8_t fileType)
 {
    uint16_t start;
 
@@ -201,10 +201,10 @@ static uint8_t preset_performBackgroundSwapWait(uint8_t fileType)
    {
       uart_checkAndParse();
       if((uint16_t)(preset_backgroundSwapNow() - start) > BACKGROUND_SWAP_TIMEOUT_TICKS)
-         return 0;
+         return;
    }
 
-   return 1;
+   return;
 }
 
 //----------------------------------------------------
@@ -2001,7 +2001,7 @@ uint8_t preset_loadPattern(uint8_t presetNr, uint8_t voiceArray)
    f_close((FIL*)&preset_File);
 
    if(preset_backgroundSwapNeeded(preset_workingType))
-      (void)preset_performBackgroundSwapWait(preset_workingType);
+      preset_performBackgroundSwapWait(preset_workingType);
    
    // always show loading screen
    lcd_clear();
@@ -2351,7 +2351,11 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
    
    preset_workingVersion = version;
    if(preset_backgroundSwapNeeded(preset_workingType))
-      (void)preset_performBackgroundSwapWait(preset_workingType);
+      preset_performBackgroundSwapWait(preset_workingType);
+
+   lcd_clear();
+   lcd_home();
+   lcd_string_F(PSTR("Loading Perf"));
 
    avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_ALL);
    fileBeginSent=1;
@@ -2551,7 +2555,7 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
    
    preset_workingVersion = version;
    if(preset_backgroundSwapNeeded(preset_workingType))
-      (void)preset_performBackgroundSwapWait(preset_workingType);
+      preset_performBackgroundSwapWait(preset_workingType);
 
    lcd_clear();
    lcd_home();

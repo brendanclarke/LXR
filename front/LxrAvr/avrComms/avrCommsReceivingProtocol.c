@@ -777,7 +777,10 @@ void avrComms_parseData(uint8_t data)
                // lcd_string(text);
 
                avrCommsParser_restoreActive = 0;
-               menu_repaintAll();
+
+               // don't repaint during sessions that hold the panel state like file loads
+               if(!avrCommsParser_rxDisable)
+                  menu_repaintAll();
                // Inform STM we have finished and re-enabled normal operation.
                avrComms_sendData(PARAM_RESTORE_ACK, 0, 0);
             }

@@ -2026,7 +2026,7 @@ void menu_handleLoadMenu(int8_t inc, uint8_t btnClicked)
                //preset_loadAll(menu_currentPresetNr[SAVE_TYPE_ALL],0,0,menu_voiceArray);//last 0 is don't release kit lock
                preset_loadPerf(menu_currentPresetNr[SAVE_TYPE_PERFORMANCE],menu_voiceArray);//last 0 is don't release kit lock
                menu_resetSaveParameters();
-            buttonHandler_handleModeButtons(SELECT_MODE_PERF);
+               // buttonHandler_handleModeButtons(SELECT_MODE_PERF);
                break;
             
             case SAVE_TYPE_ALL:

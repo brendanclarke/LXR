@@ -67,7 +67,7 @@ void buttonHandler_handleShift(uint8_t shift);
 
 #define ARM_AUTOMATION		0x40
 #define DISARM_AUTOMATION	0x00
-#define TMP_PATTERN_SEQ_BUTTON 15
+// #define TMP_PATTERN_SEQ_BUTTON 15
 
 static uint8_t buttonHandler_patternLed(uint8_t patternNr)
 {
@@ -84,34 +84,34 @@ static void buttonHandler_queryShownPattern()
    avrComms_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS, menu_activePage);
 }
 
-static void buttonHandler_selectTmpPatternForEdit()
-{
-   menu_setShownPattern(SEQ_TMP_PATTERN);
-   led_clearSelectLeds();
-   led_clearAllBlinkLeds();
-   led_setBlinkLed(LED_STEP16, 1);
-   buttonHandler_queryShownPattern();
-}
+// static void buttonHandler_selectTmpPatternForEdit()
+// {
+//    menu_setShownPattern(SEQ_TMP_PATTERN);
+//    led_clearSelectLeds();
+//    led_clearAllBlinkLeds();
+//    led_setBlinkLed(LED_STEP16, 1);
+//    buttonHandler_queryShownPattern();
+// }
 
-static void buttonHandler_changeTmpPattern()
-{
-   if(buttonHandler_heldVoiceButtons)
-   {
-      uint8_t i;
-      for(i=0;i<7;i++)
-      {
-         if(buttonHandler_heldVoiceButtons&(0x01<<i))
-            avrComms_sendData(SEQ_CC, SEQ_CHANGE_TMP_PAT, (uint8_t)(i<<3));
-      }
-      buttonHandler_muteTag=0;
-   }
-   else
-   {
-      avrComms_sendData(SEQ_CC, SEQ_CHANGE_TMP_PAT, 0x78);
-      led_clearAllBlinkLeds();
-      led_setBlinkLed(LED_STEP16, 1);
-   }
-}
+// static void buttonHandler_changeTmpPattern()
+// {
+//    if(buttonHandler_heldVoiceButtons)
+//    {
+//       uint8_t i;
+//       for(i=0;i<7;i++)
+//       {
+//          if(buttonHandler_heldVoiceButtons&(0x01<<i))
+//             avrComms_sendData(SEQ_CC, SEQ_CHANGE_TMP_PAT, (uint8_t)(i<<3));
+//       }
+//       buttonHandler_muteTag=0;
+//    }
+//    else
+//    {
+//       avrComms_sendData(SEQ_CC, SEQ_CHANGE_TMP_PAT, 0x78);
+//       led_clearAllBlinkLeds();
+//       led_setBlinkLed(LED_STEP16, 1);
+//    }
+// }
 
 
 //--------------------------------------------------------
@@ -776,11 +776,11 @@ static void buttonHandler_seqButtonPressed(uint8_t seqButtonPressed)
             avrComms_updateSubstepLeds();
             break;
          case SELECT_MODE_PERF: // **PATROT shift is held while in perf mode and a seq button is pressed
-            if(seqButtonPressed == TMP_PATTERN_SEQ_BUTTON)
-            {
-               buttonHandler_selectTmpPatternForEdit();
-               break;
-            }
+            // if(seqButtonPressed == TMP_PATTERN_SEQ_BUTTON)
+            // {
+            //    buttonHandler_selectTmpPatternForEdit();
+            //    break;
+            // }
             buttonHandler_setTrackRotation(seqButtonPressed);
             break;
          default:
@@ -810,11 +810,11 @@ static void buttonHandler_seqButtonPressed(uint8_t seqButtonPressed)
             led_setBlinkLed(LED_PART_SELECT1, 1);
             break;
          case SELECT_MODE_PERF: //--- buttons 1-8 initiate a manual roll
-            if(seqButtonPressed == TMP_PATTERN_SEQ_BUTTON)
-            {
-               buttonHandler_changeTmpPattern();
-               break;
-            }
+            // if(seqButtonPressed == TMP_PATTERN_SEQ_BUTTON)
+            // {
+            //    buttonHandler_changeTmpPattern();
+            //    break;
+            // }
             if (seqButtonPressed < 8) 
             {
             //turn roll on
@@ -875,13 +875,13 @@ static void buttonHandler_seqButtonReleased(uint8_t seqButtonPressed)
 {
    uint8_t ledNr = (uint8_t) (seqButtonPressed + LED_STEP1);
 
-   if ((buttonHandler_stateMemory.selectButtonMode == SELECT_MODE_PERF)
-      && (seqButtonPressed == TMP_PATTERN_SEQ_BUTTON)
-      && ((copyClear_Mode == MODE_COPY_PATTERN) || (copyClear_Mode == MODE_COPY_TRACK)))
-   {
-      buttonHandler_copyPatternButton(SEQ_TMP_PATTERN);
-      return;
-   }
+   // if ((buttonHandler_stateMemory.selectButtonMode == SELECT_MODE_PERF)
+   //    && (seqButtonPressed == TMP_PATTERN_SEQ_BUTTON)
+   //    && ((copyClear_Mode == MODE_COPY_PATTERN) || (copyClear_Mode == MODE_COPY_TRACK)))
+   // {
+   //    buttonHandler_copyPatternButton(SEQ_TMP_PATTERN);
+   //    return;
+   // }
 
    if (buttonHandler_getShift()) // shift click is fully handled in "pressed"
       return;
@@ -948,10 +948,10 @@ static void buttonHandler_seqButtonReleased(uint8_t seqButtonPressed)
       
          break;
       case SELECT_MODE_PERF:
-         if (seqButtonPressed == TMP_PATTERN_SEQ_BUTTON)
-         {
-            return;
-         }
+         // if (seqButtonPressed == TMP_PATTERN_SEQ_BUTTON)
+         // {
+         //    return;
+         // }
          if (seqButtonPressed < 8) 
          {
          //turn roll off
