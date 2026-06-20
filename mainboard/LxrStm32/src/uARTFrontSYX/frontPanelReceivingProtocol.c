@@ -74,7 +74,7 @@ static void frontParser_handleVoiceMorph(uint8_t slot, uint8_t payload);
 #define FLOW_ACK_CREDITS 1
 #define FRONT_FILE_DONE_TYPE_PERFORMANCE 8
 #define FRONT_FILE_DONE_TYPE_ALL 9
-#define FRONT_BACKGROUND_SWAP_DELAY_TICKS 8000U
+#define FRONT_BACKGROUND_SWAP_ACK_DELAY_TICKS 400U
 
 static uint8_t comm_loadSessionActive = 0;
 static uint8_t comm_quietUi = 0;
@@ -83,6 +83,7 @@ static uint8_t comm_flowChannel = 0;
 static uint8_t comm_flowBudgetRemaining = 0;
 static uint8_t frontParser_backgroundSwapPending = 0;
 static uint8_t frontParser_backgroundSwapFileType = 0;
+static uint8_t frontParser_backgroundSwapAckDelayActive = 0;
 static uint32_t frontParser_backgroundSwapStartTick = 0;
 static uint8_t frontParser_fileLoadIngressActive = 0;
 static uint8_t frontParser_fileLoadBracketActive = 0;
@@ -1210,15 +1211,42 @@ uint8_t frontParser_isQuietUi()
    return comm_quietUi;
 }
 
+static uint8_t frontParser_backgroundSwapTempPlaybackReady(void)
+{
+   uint8_t track;
+
+   if(seq_activePattern != SEQ_TMP_PATTERN)
+      return 0;
+
+   for(track=0; track<NUM_TRACKS; track++)
+   {
+      if(seq_perTrackActivePattern[track] != SEQ_TMP_PATTERN)
+         return 0;
+   }
+
+   return preset_allVoiceSourcesUseTmp();
+}
+
 void frontParser_serviceBackgroundSwapAck(void)
 {
    if(!frontParser_backgroundSwapPending)
       return;
 
-   if((uint32_t)(systick_ticks - frontParser_backgroundSwapStartTick) < FRONT_BACKGROUND_SWAP_DELAY_TICKS)
+   if(!frontParser_backgroundSwapAckDelayActive)
+   {
+      if(!frontParser_backgroundSwapTempPlaybackReady())
+         return;
+
+      frontParser_backgroundSwapAckDelayActive = 1;
+      frontParser_backgroundSwapStartTick = systick_ticks;
+      return;
+   }
+
+   if((uint32_t)(systick_ticks - frontParser_backgroundSwapStartTick) < FRONT_BACKGROUND_SWAP_ACK_DELAY_TICKS)
       return;
 
    frontParser_backgroundSwapPending = 0;
+   frontParser_backgroundSwapAckDelayActive = 0;
    frontPanelSending_sendPriorityTriplet(FRONT_SEQ_CC,
                                          FRONT_SEQ_BACKGROUND_SWAP_DONE,
                                          frontParser_backgroundSwapFileType);
@@ -2612,9 +2640,12 @@ static void frontParser_handleSeqCC()
          seq_loadFastMode=frontParser_command.data2;
          break;
       case FRONT_SEQ_BACKGROUND_SWAP_BEGIN:
+         pat_copyToTmpPattern(seq_activePattern);
+         seq_setNextPattern(SEQ_TMP_PATTERN, 0x0f);
+         preset_tempPlaybackSwitchState.forceInstantSwitch = 1;
          frontParser_backgroundSwapPending = 1;
          frontParser_backgroundSwapFileType = frontParser_command.data2;
-         frontParser_backgroundSwapStartTick = systick_ticks;
+         frontParser_backgroundSwapAckDelayActive = 0;
          break;
       case FRONT_SEQ_FILE_BEGIN:
          frontParser_beginFileLoadIngress(1);

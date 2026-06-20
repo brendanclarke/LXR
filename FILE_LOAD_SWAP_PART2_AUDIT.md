@@ -2,7 +2,28 @@
 
 ## Status
 
-Planning only. No code changes made in this pass.
+Implemented in code; build verified.
+
+Implementation notes:
+
+- AVR `preset_backgroundSwapNeeded()` now returns false when
+  `menu_sequencerRunning` is false, so stopped loads do not send
+  `SEQ_BACKGROUND_SWAP_BEGIN` or wait for `SEQ_BACKGROUND_SWAP_DONE`.
+- AVR `preset_backgroundSwapNeeded()` also returns false while
+  `menu_playedPattern == SEQ_TMP_PATTERN`, following the review callout below
+  so an active temp kit is not overwritten by a redundant normal-to-temp copy.
+- AVR `.PAT`, `.ALL`, and `.PRF` loading-screen draws are now skipped while
+  stopped. The file transfer itself still proceeds normally.
+- STM `FRONT_SEQ_BACKGROUND_SWAP_BEGIN` now calls
+  `pat_copyToTmpPattern(seq_activePattern)` before recording
+  `frontParser_backgroundSwapStartTick`, so the ACK timer starts after the
+  existing normal-to-temp pattern/kit copy completes.
+
+Verification run after implementation:
+
+- `make -C front/LxrAvr avr -j4` passed.
+- `make -C mainboard/LxrStm32 -j4 stm32` passed.
+- `make firmware` passed and rebuilt `firmware image/FIRMWARE.BIN`.
 
 ## Goal
 

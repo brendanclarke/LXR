@@ -155,6 +155,12 @@ static uint8_t preset_backgroundSwapNeeded(uint8_t fileType)
 {
    uint8_t bgMode = parameter_values[PAR_FILE_LOAD_BACKGROUND];
 
+   if(!menu_sequencerRunning)
+      return 0;
+
+   if(menu_playedPattern == SEQ_TMP_PATTERN)
+      return 0;
+
    if(bgMode == BACKGROUND_PAT)
       return fileType == WTYPE_PATTERN;
    if(bgMode == BACKGROUND_PRF)
@@ -199,13 +205,6 @@ static uint8_t preset_performBackgroundSwapWait(uint8_t fileType)
    }
 
    return 1;
-}
-
-static void preset_showLoadingPerf()
-{
-   lcd_clear();
-   lcd_home();
-   lcd_string_F(PSTR("Loading Perf"));
 }
 
 //----------------------------------------------------
@@ -2004,6 +2003,7 @@ uint8_t preset_loadPattern(uint8_t presetNr, uint8_t voiceArray)
    if(preset_backgroundSwapNeeded(preset_workingType))
       (void)preset_performBackgroundSwapWait(preset_workingType);
    
+   // always show loading screen
    lcd_clear();
    lcd_home();
    lcd_string_F(PSTR("Loading Patrn"));
@@ -2385,6 +2385,7 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
  //close the file handle
    f_close((FIL*)&preset_File);
    
+   // always show loading screen
    lcd_clear();
    lcd_home();
    lcd_string_F(PSTR("Loading All"));
@@ -2552,7 +2553,9 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
    if(preset_backgroundSwapNeeded(preset_workingType))
       (void)preset_performBackgroundSwapWait(preset_workingType);
 
-   preset_showLoadingPerf();
+   lcd_clear();
+   lcd_home();
+   lcd_string_F(PSTR("Loading Perf"));
 
    avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PERFORMANCE);
    fileBeginSent=1;
@@ -2622,7 +2625,9 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
 	//close the file handle
    f_close((FIL*)&preset_File);
    
-   preset_showLoadingPerf();
+   lcd_clear();
+   lcd_home();
+   lcd_string_F(PSTR("Loading Perf"));
    
    avrComms_sendData(SEQ_CC,SEQ_EUKLID_RESET,0x01);
    

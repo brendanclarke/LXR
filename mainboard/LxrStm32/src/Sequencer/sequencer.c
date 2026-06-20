@@ -638,7 +638,10 @@ static void seq_nextStep()
    }
    
 	//-------- check if a pattern switch is necessary --------//
-   if( (!masterStepPos)||(switchOnNextStep && preset_tempPlaybackSwitchState.loadSeqNow))
+   uint8_t forceInstantSwitch =
+      (switchOnNextStep || preset_tempPlaybackSwitchState.forceInstantSwitch)
+      && preset_tempPlaybackSwitchState.loadSeqNow;
+   if( (!masterStepPos)||forceInstantSwitch)
    {
       if((seq_activePattern != preset_tempPlaybackSwitchState.pendingPattern) || preset_tempPlaybackSwitchState.loadPendingFlag)
       {
@@ -715,6 +718,7 @@ static void seq_nextStep()
                seq_barCounter = -1; // -bc- bar counter needs to be -1 to get set to 0 on first bar change
                                     // after 'instant' switch
          }
+         preset_tempPlaybackSwitchState.forceInstantSwitch = 0;
          
       	// --AS send a pattern change message to midi/usb out
          seq_sendProgChg(seq_activePattern);

@@ -29,6 +29,7 @@ typedef struct PresetTempPlaybackSwitchStateStruct
    uint8_t newPatternExecuted;
    uint8_t loadPendingFlag;
    uint8_t loadSeqNow;
+   uint8_t forceInstantSwitch;
    uint8_t tmpBoundaryPatternSwitchAck;
 } PresetTempPlaybackSwitchState;
 
