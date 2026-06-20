@@ -1,475 +1,517 @@
-# TEMP_LOAD_ACK_AUDIT.md — Background File Load STM Handshake
+# TEMP_LOAD_ACK_AUDIT.md - Background File Load Acknowledge Loop
 
-**Session**: 026 planning pass  
-**Status**: Plan only — no code changes made yet
+**Session**: 028 planning pass  
+**Status**: Implemented in code; build verified  
+**Scope**: First handshake step only. The STM will acknowledge after a dummy async delay. The later preset/pattern snapshot into temporary storage is intentionally out of scope for this pass.
+
+## Implementation Notes
+
+- Implemented the first-step acknowledge loop in the targeted AVR/STM files listed below.
+- The STM done reply uses `frontPanelSending_sendPriorityTriplet()` rather than ordinary `frontPanelSending_sendTriplet()`. This is required because `.ALL` and `.PRF` handshakes happen inside the load-session quiet UI bracket, and ordinary front-panel sends are suppressed while `frontParser_isQuietUi()` is true.
+- No Preset or Pattern temp snapshot logic was added in this pass.
+- Verification passed with `make -C front/LxrAvr avr -j4`, `make -C mainboard/LxrStm32 -j4 stm32`, and `make firmware`.
 
 ## Goal
 
-When a user selects a file load whose type matches the `PAR_FILE_LOAD_BACKGROUND` global setting, the AVR must pause before sending the usual `SEQ_FILE_BEGIN`/kit/pattern/endpoint traffic. It sends a new "background swap begin" opcode to the STM, waits for the STM to reply "done" (after a 2-second async timer), and only then proceeds with the normal file load. While waiting, the AVR displays "Bckgrnd Swap..." on the LCD. If the file type does not match `PAR_FILE_LOAD_BACKGROUND`, file loads proceed exactly as they do today — no pause, no new handshake.
+When the AVR starts a file load whose type matches the global `PAR_FILE_LOAD_BACKGROUND` mode, it must pause before sending the normal file-transfer envelope. The AVR sends a new background-swap begin command, shows `Bckgrnd Swap...`, polls the receive parser, and proceeds only after the STM sends a matching done reply or the AVR timeout expires.
+
+For this first step, the STM does not yet swap/copy preset or pattern data. It records the requested file type, waits for a dummy 2-second async timer in the main loop, then replies done. This creates the protocol shape needed for the next dev step, where the dummy timer body can become "copy the current audible preset parameters and pattern data into temp storage."
+
+## Current Code Facts This Plan Uses
+
+- AVR file-load initiators live in `front/LxrAvr/Preset/presetManager.c`.
+- The file type enum is local to `presetManager.c` near the top:
+  - `WTYPE_PATTERN = 7`
+  - `WTYPE_PERFORMANCE = 8`
+  - `WTYPE_ALL = 9`
+  - `WTYPE_KIT = 0`
+- `.PAT`, `.ALL`, and `.PRF` loads all send `SEQ_FILE_BEGIN` only after the file opens and header/name data is read.
+- `.ALL` and `.PRF` already call `avrComms_flowBeginSession()` before they open/read the file, then set `avrCommsParser_rxDisable = 1`. The new done reply therefore must be explicitly allowed through the AVR receive parser while `rxDisable` is active.
+- `.PAT` does not use the load-session flow bracket, but it also sets `avrCommsParser_rxDisable = 1`.
+- STM front-panel receive/session state is already owned by `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c`.
+- STM front-panel send helpers already include ordinary and priority triplet helpers. The done reply must use priority output so it can bypass quiet UI during `.ALL/.PRF` load-session flow.
+- STM `systick_ticks` increments at 4 kHz because `main.c` configures `SysTick_Config(RCC_Clocks.HCLK_Frequency / 4000)`.
+- AVR `time_sysTick` is a 16-bit tick with 16.384 ms units.
 
 ## Background-Load Type Matching
 
-The AVR global `PAR_FILE_LOAD_BACKGROUND` (Session 023) is a 5-state selector:
+`PAR_FILE_LOAD_BACKGROUND` is the 5-state load-page selector from Session 023:
 
-| Value | Display | Type enum                | Matching file kind |
-|-------|---------|--------------------------|--------------------|
-| 0     | off     | `BACKGROUND_OFF`         | (none)             |
-| 1     | pat     | `BACKGROUND_PAT`         | `.PAT` only        |
-| 2     | prf     | `BACKGROUND_PRF`         | `.PRF` only        |
-| 3     | all     | `BACKGROUND_ALL`         | `.ALL` only        |
-| 4     | tot     | `BACKGROUND_TOT`         | `.ALL` + `.PRF`    |
+| Value | Display | Meaning |
+|-------|---------|---------|
+| 0 | `off` | no background handshakes |
+| 1 | `pat` | `.PAT` only |
+| 2 | `prf` | `.PRF` / performance only |
+| 3 | `all` | `.ALL` only |
+| 4 | `tot` | `.PAT`, `.PRF`, and `.ALL` |
 
-The match function `preset_backgroundSwapNeeded(uint8_t fileType)` on AVR returns true when:
+The first implementation should add AVR-local aliases in `presetManager.c`:
 
-- `BACKGROUND_OFF` → always false
-- `BACKGROUND_PAT` → fileType == `WTYPE_PATTERN`
-- `BACKGROUND_PRF` → fileType == `WTYPE_PERFORMANCE`
-- `BACKGROUND_ALL` → fileType == `WTYPE_ALL`
-- `BACKGROUND_TOT` → fileType == `WTYPE_ALL` or `WTYPE_PERFORMANCE`
+```c
+#define BACKGROUND_OFF 0
+#define BACKGROUND_PAT 1
+#define BACKGROUND_PRF 2
+#define BACKGROUND_ALL 3
+#define BACKGROUND_TOT 4
+```
 
-Note: `.SND` (kit/drumset) loads are never background-swapped in the current design (matching none of pat/prf/all/tot).
+`preset_backgroundSwapNeeded(uint8_t fileType)` should return true for:
+
+- `BACKGROUND_PAT`: `fileType == WTYPE_PATTERN`
+- `BACKGROUND_PRF`: `fileType == WTYPE_PERFORMANCE`
+- `BACKGROUND_ALL`: `fileType == WTYPE_ALL`
+- `BACKGROUND_TOT`: `fileType == WTYPE_PATTERN || fileType == WTYPE_PERFORMANCE || fileType == WTYPE_ALL`
+
+`.SND` / kit loads (`WTYPE_KIT`) do not match any mode in this first pass.
 
 ## New Protocol Messages
 
-### AVR → STM: Background Swap Begin
+### AVR to STM: Background Swap Begin
 
-```
-Status:  SEQ_CC (0xb2)
-Data1:   SEQ_BACKGROUND_SWAP_BEGIN (new, value 0x6d)
-Data2:   file type (WTYPE_ALL=9, WTYPE_PERFORMANCE=8, WTYPE_PATTERN=4)
-```
-
-Sent by the AVR after the file is successfully opened and the name read, but **before** `SEQ_FILE_BEGIN`. The AVR then enters a blocking wait that polls `uart_checkAndParse()` until it receives the matching STM reply or a timeout.
-
-### STM → AVR: Background Swap Done
-
-```
-Status:  SEQ_CC (0xb2)
-Data1:   SEQ_BACKGROUND_SWAP_DONE (new, value 0x6e)
-Data2:   echo of the file type the STM processed
+```text
+status = SEQ_CC / FRONT_SEQ_CC = 0xb2
+data1  = SEQ_BACKGROUND_SWAP_BEGIN / FRONT_SEQ_BACKGROUND_SWAP_BEGIN = 0x6d
+data2  = file type: WTYPE_PATTERN=7, WTYPE_PERFORMANCE=8, WTYPE_ALL=9
 ```
 
-Sent by the STM after its 2-second async timer fires. The echoed file type lets the AVR confirm this is the reply for the request it sent.
+Sent after the load file has been opened and validated, but before `SEQ_FILE_BEGIN`.
 
-### STM → AVR: Background Swap Abort (optional, future)
+### STM to AVR: Background Swap Done
 
+```text
+status = SEQ_CC / FRONT_SEQ_CC = 0xb2
+data1  = SEQ_BACKGROUND_SWAP_DONE / FRONT_SEQ_BACKGROUND_SWAP_DONE = 0x6e
+data2  = echoed file type
 ```
-Status:  SEQ_CC (0xb2)
-Data1:   SEQ_BACKGROUND_SWAP_ABORT (new, value 0x6f)
-Data2:   0
-```
 
-Reserved for a future timeout/error path. Not implemented in the first pass.
+The AVR should only treat the reply as complete if the echoed type matches the type it is waiting for.
 
-## Opcode Value Assignment
+## Opcode Definitions
 
-Free opcode slots near the existing block (0x5a–0x6c are flow/tmp-kit/morph). Looking at the current AVR opcodes (`avrCommsReceivingProtocol.h`) and STM opcodes (`frontPanelReceivingProtocol.h`):
+`0x6d` and `0x6e` are free immediately after the current global morph report opcodes.
 
-| Constant                        | Value | Direction  |
-|--------------------------------|-------|------------|
-| `SEQ_BACKGROUND_SWAP_BEGIN`    | 0x6d  | AVR → STM  |
-| `SEQ_BACKGROUND_SWAP_DONE`     | 0x6e  | STM → AVR  |
-| `SEQ_BACKGROUND_SWAP_ABORT`    | 0x6f  | STM → AVR  |
+### AVR opcode header
 
-0x6d–0x6f are currently unused in both the AVR and STM opcode tables. The AVR defines go in `front/LxrAvr/avrComms/avrCommsReceivingProtocol.h`; the STM defines go in `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.h`.
+File: `front/LxrAvr/avrComms/avrCommsReceivingProtocol.h`
 
-## Detailed Code Changes
-
-### 1. AVR — New opcode definitions
-
-**File**: `front/LxrAvr/avrComms/avrCommsReceivingProtocol.h`
-
-Add after the existing `SEQ_REPORT_GLOBAL_MORPH_MSB` block:
+Current nearby block:
 
 ```c
-#define SEQ_BACKGROUND_SWAP_BEGIN  0x6d  // AVR->STM: request background-swap pause before file load
-#define SEQ_BACKGROUND_SWAP_DONE   0x6e  // STM->AVR: background-swap 2s timer completed, proceed with load
-#define SEQ_BACKGROUND_SWAP_ABORT  0x6f  // STM->AVR: background-swap aborted (reserved)
+#define SEQ_REPORT_GLOBAL_MORPH_LSB 0x6b
+#define SEQ_REPORT_GLOBAL_MORPH_MSB 0x6c
 ```
 
-### 2. STM — New opcode definitions
-
-**File**: `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.h`
-
-Add after the existing `FRONT_SEQ_REPORT_GLOBAL_MORPH_MSB` block:
+Add directly after it:
 
 ```c
-#define FRONT_SEQ_BACKGROUND_SWAP_BEGIN  0x6d  // AVR->STM: request background-swap pause before file load
-#define FRONT_SEQ_BACKGROUND_SWAP_DONE   0x6e  // STM->AVR: background-swap 2s timer completed, proceed with load
-#define FRONT_SEQ_BACKGROUND_SWAP_ABORT  0x6f  // STM->AVR: background-swap aborted (reserved)
+#define SEQ_BACKGROUND_SWAP_BEGIN 0x6d
+#define SEQ_BACKGROUND_SWAP_DONE  0x6e
 ```
 
-### 3. AVR — Background-swap type-match helper and handshake state
+### STM opcode header
 
-**File**: `front/LxrAvr/Preset/presetManager.c`
+File: `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.h`
 
-New defines and helper function near the top (before `preset_loadDrumset`), near the existing `VOICE_PARAM_LENGTH` / `NUM_TRACKS` defines (~line 64):
+Current nearby block:
 
 ```c
-// Value aliases for the PAR_FILE_LOAD_BACKGROUND menu state.
-#define BACKGROUND_OFF  0
-#define BACKGROUND_PAT  1
-#define BACKGROUND_PRF  2
-#define BACKGROUND_ALL  3
-#define BACKGROUND_TOT  4
+#define FRONT_SEQ_REPORT_GLOBAL_MORPH_LSB 0x6b
+#define FRONT_SEQ_REPORT_GLOBAL_MORPH_MSB 0x6c
 ```
 
-New static state variable near other static declarations (~line 89):
+Add directly after it:
 
 ```c
-// Handshake flag: set by the AVR receiving parser when the STM replies
-// with SEQ_BACKGROUND_SWAP_DONE.  Polled by preset_performBackgroundSwapWait().
-uint8_t preset_backgroundSwapDone = 0;
+#define FRONT_SEQ_BACKGROUND_SWAP_BEGIN 0x6d
+#define FRONT_SEQ_BACKGROUND_SWAP_DONE  0x6e
 ```
 
-New match function:
+Do not change `SEQ_LOAD_BACKGROUND` / `FRONT_SEQ_LOAD_FAST` at `0x50` in this first pass. That is the existing background-load setting byte path, not the new wait/done handshake.
+
+## AVR Changes
+
+### 1. Add helper state and functions
+
+File: `front/LxrAvr/Preset/presetManager.c`
+
+Add near the current file-local defines after `FEXT_PERF`:
 
 ```c
-// Return 1 if the given file type requires a background-swap handshake
-// before the normal file-load sequence begins.
+#define BACKGROUND_OFF 0
+#define BACKGROUND_PAT 1
+#define BACKGROUND_PRF 2
+#define BACKGROUND_ALL 3
+#define BACKGROUND_TOT 4
+
+#define BACKGROUND_SWAP_TIMEOUT_TICKS 305
+```
+
+`305` ticks is approximately 5 seconds at the AVR `time_sysTick` rate (`5 / 0.016384 = 305.17`). Keep this as a named constant rather than introducing a floating expression.
+
+Add file-local wait state near the existing globals/static arrays:
+
+```c
+static volatile uint8_t preset_backgroundSwapDone = 0;
+static uint8_t preset_backgroundSwapExpectedType = 0;
+```
+
+Add a small tick reader because `time_sysTick` is 16-bit on AVR:
+
+```c
+static uint16_t preset_backgroundSwapNow(void)
+{
+   uint16_t now;
+   ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+   {
+      now = time_sysTick;
+   }
+   return now;
+}
+```
+
+Add the match helper:
+
+```c
 static uint8_t preset_backgroundSwapNeeded(uint8_t fileType)
 {
    uint8_t bgMode = parameter_values[PAR_FILE_LOAD_BACKGROUND];
-   if(bgMode == BACKGROUND_OFF)
-      return 0;
-   if(bgMode == BACKGROUND_PAT && fileType == WTYPE_PATTERN)
-      return 1;
-   if(bgMode == BACKGROUND_PRF && fileType == WTYPE_PERFORMANCE)
-      return 1;
-   if(bgMode == BACKGROUND_ALL && fileType == WTYPE_ALL)
-      return 1;
-   if(bgMode == BACKGROUND_TOT &&
-      (fileType == WTYPE_ALL || fileType == WTYPE_PERFORMANCE))
-      return 1;
+
+   if(bgMode == BACKGROUND_PAT)
+      return fileType == WTYPE_PATTERN;
+   if(bgMode == BACKGROUND_PRF)
+      return fileType == WTYPE_PERFORMANCE;
+   if(bgMode == BACKGROUND_ALL)
+      return fileType == WTYPE_ALL;
+   if(bgMode == BACKGROUND_TOT)
+   {
+      return (fileType == WTYPE_PATTERN)
+          || (fileType == WTYPE_PERFORMANCE)
+          || (fileType == WTYPE_ALL);
+   }
+
    return 0;
 }
 ```
 
-New handshake function:
+Add the parser callback function:
 
 ```c
-// Block until the STM responds with SEQ_BACKGROUND_SWAP_DONE or a timeout
-// (~5 seconds).  Displays "Bckgrnd Swap..." on LCD while waiting.
-// Returns 1 on success, 0 on timeout/abort.
+void preset_backgroundSwapDoneFromStm(uint8_t fileType)
+{
+   if(fileType == preset_backgroundSwapExpectedType)
+      preset_backgroundSwapDone = 1;
+}
+```
+
+Add the wait/send helper:
+
+```c
 static uint8_t preset_performBackgroundSwapWait(uint8_t fileType)
 {
-   uint16_t start = time_sysTick;
-   preset_backgroundSwapDone = 0;
+   uint16_t start;
 
-   // Show the waiting message on LCD
+   preset_backgroundSwapDone = 0;
+   preset_backgroundSwapExpectedType = fileType;
+
    lcd_clear();
    lcd_home();
    lcd_string_F(PSTR("Bckgrnd Swap..."));
 
-   // Send the begin-request to STM
    avrComms_sendData(SEQ_CC, SEQ_BACKGROUND_SWAP_BEGIN, fileType);
+   start = preset_backgroundSwapNow();
 
-   // Poll until done or timeout (~5 s)
    while(!preset_backgroundSwapDone)
    {
       uart_checkAndParse();
-      if((uint16_t)(time_sysTick - start) > (uint16_t)(5 * 1000 / TIMER_TICK_MS))
-      {
-         // Timeout: proceed anyway rather than locking up
+      if((uint16_t)(preset_backgroundSwapNow() - start) > BACKGROUND_SWAP_TIMEOUT_TICKS)
          return 0;
-      }
    }
+
    return 1;
 }
 ```
 
-Note: `preset_backgroundSwapDone` is file-global (not static) so the receiving parser in `avrCommsReceivingProtocol.c` can set it via an extern declaration.
+The return value is diagnostic only for this first pass. Callers should proceed with the file load even on timeout so the UI cannot lock permanently.
 
-### 4. AVR — Handler for the STM reply in the receive parser
+### 2. Expose only the parser callback
 
-**File**: `front/LxrAvr/avrComms/avrCommsReceivingProtocol.c`
+File: `front/LxrAvr/Preset/PresetManager.h`
 
-In the `avrCommsParser_handleSeqCC()` function (or equivalent central `SEQ_CC` dispatch), add a case for the new opcode:
+Add near the other preset load declarations:
+
+```c
+void preset_backgroundSwapDoneFromStm(uint8_t fileType);
+```
+
+Do not expose `preset_backgroundSwapDone` as a mutable extern. The AVR receive parser already includes `Preset/PresetManager.h`, so a function callback keeps the handshake state owned by `presetManager.c`.
+
+### 3. Accept done while receive-disable is active
+
+File: `front/LxrAvr/avrComms/avrCommsReceivingProtocol.c`
+
+The parser currently allows all `SEQ_CC` messages to collect `data1` while `avrCommsParser_rxDisable` is set, but after `data2` it only permits flow messages or restore messages through. In the block beginning:
+
+```c
+if(avrCommsParser_rxDisable)
+{
+   if((avrCommsParser_command.status == SEQ_CC) && avrCommsSending_isFlowCommand(...))
+      ...
+   else if(...)
+   {
+      /* RESTORE ... */
+   }
+   else
+   {
+      return;
+   }
+}
+```
+
+add a pass-through branch for the new done opcode:
+
+```c
+else if((avrCommsParser_command.status == SEQ_CC)
+        && (avrCommsParser_command.data1 == SEQ_BACKGROUND_SWAP_DONE))
+{
+   /* Background-load acknowledge: allow processing while file-load rxDisable is active. */
+}
+```
+
+Then in the existing `SEQ_CC` switch, near the flow and morph-report cases, add:
 
 ```c
 case SEQ_BACKGROUND_SWAP_DONE:
-   preset_backgroundSwapDone = 1;
+   preset_backgroundSwapDoneFromStm(avrCommsParser_command.data2);
    break;
 ```
 
-**File**: `front/LxrAvr/Preset/PresetManager.h`
+### 4. Insert the wait before `SEQ_FILE_BEGIN`
 
-Add extern declaration so the receiving protocol can see the flag:
+File: `front/LxrAvr/Preset/presetManager.c`
+
+#### `preset_loadPattern()`
+
+Current location: after the name read and `preset_workingVersion = 0`, the code closes the file, prints `Loading Patrn`, and sends:
 
 ```c
-extern uint8_t preset_backgroundSwapDone;
+avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PATTERN);
 ```
 
-### 5. AVR — Wire the handshake into each file-load function
-
-Each load function needs the check and handshake inserted **after** the file is opened/name is read and **before** `SEQ_FILE_BEGIN` is sent. The insertion pattern is:
+Insert the wait after `f_close((FIL*)&preset_File);` and before the `Loading Patrn` LCD message:
 
 ```c
 if(preset_backgroundSwapNeeded(preset_workingType))
+   (void)preset_performBackgroundSwapWait(preset_workingType);
+```
+
+This is the correct location because `preset_loadPattern()` closes the header read early and its sub-readers reopen the file later.
+
+#### `preset_loadAll()`
+
+Current location: after version validation:
+
+```c
+preset_workingVersion = version;
+avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_ALL);
+fileBeginSent=1;
+```
+
+Insert the wait between `preset_workingVersion = version;` and `SEQ_FILE_BEGIN`.
+
+#### `preset_loadPerf()`
+
+Current location: after version validation:
+
+```c
+preset_workingVersion = version;
+preset_showLoadingPerf();
+
+avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PERFORMANCE);
+fileBeginSent=1;
+```
+
+Insert the wait between `preset_workingVersion = version;` and `preset_showLoadingPerf();`. The final order should be:
+
+```c
+preset_workingVersion = version;
+if(preset_backgroundSwapNeeded(preset_workingType))
+   (void)preset_performBackgroundSwapWait(preset_workingType);
+preset_showLoadingPerf();
+
+avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PERFORMANCE);
+```
+
+#### `preset_loadDrumset()`
+
+No change. `.SND` / kit load is not a background-swap match in this first pass.
+
+## STM Changes
+
+### 1. Add protocol-owned dummy delay state
+
+File: `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c`
+
+Add `globals.h` to the includes if it is not already visible from this file:
+
+```c
+#include "globals.h"
+```
+
+Add near the existing receive/session state:
+
+```c
+#define FRONT_BACKGROUND_SWAP_DELAY_TICKS 8000U
+
+static uint8_t frontParser_backgroundSwapPending = 0;
+static uint8_t frontParser_backgroundSwapFileType = 0;
+static uint32_t frontParser_backgroundSwapStartTick = 0;
+```
+
+`8000` ticks is a 2-second dummy wait at the STM's 4 kHz SysTick rate.
+
+### 2. Add service entry point
+
+File: `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c`
+
+Add:
+
+```c
+void frontParser_serviceBackgroundSwapAck(void)
 {
-   preset_performBackgroundSwapWait(preset_workingType);
+   if(!frontParser_backgroundSwapPending)
+      return;
+
+   if((uint32_t)(systick_ticks - frontParser_backgroundSwapStartTick) < FRONT_BACKGROUND_SWAP_DELAY_TICKS)
+      return;
+
+   frontParser_backgroundSwapPending = 0;
+   frontPanelSending_sendPriorityTriplet(FRONT_SEQ_CC,
+                                         FRONT_SEQ_BACKGROUND_SWAP_DONE,
+                                         frontParser_backgroundSwapFileType);
 }
 ```
 
-**Specific insertion points:**
+File: `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.h`
 
-#### `preset_loadPerf()` (currently ~line 2473–2476)
+Add the declaration next to the parser entry points:
 
-Current:
 ```c
-   preset_workingVersion = version;
-   preset_showLoadingPerf();                            // shows "Loading Perf"
-
-   avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PERFORMANCE);
-```
-Change to:
-```c
-   preset_workingVersion = version;
-
-   if(preset_backgroundSwapNeeded(preset_workingType))
-   {
-      preset_performBackgroundSwapWait(preset_workingType);
-   }
-
-   preset_showLoadingPerf();                            // still shows "Loading Perf" after handshake
-
-   avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PERFORMANCE);
+void frontParser_serviceBackgroundSwapAck(void);
 ```
 
-#### `preset_loadAll()` (currently ~line 2277–2278)
+### 3. Start the dummy delay from the receive handler
 
-Current:
-```c
-   preset_workingVersion = version;
-   avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_ALL);
-```
-Change to:
-```c
-   preset_workingVersion = version;
-   if(preset_backgroundSwapNeeded(preset_workingType))
-   {
-      preset_performBackgroundSwapWait(preset_workingType);
-   }
-   avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_ALL);
-```
+File: `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c`
 
-#### `preset_loadPattern()` (currently ~line 1928–1936)
-
-Current:
-```c
-   preset_workingVersion = 0;
-
-   f_close((FIL*)&preset_File);
-
-   lcd_clear();
-   lcd_home();
-   lcd_string_F(PSTR("Loading Patrn"));
-
-   avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PATTERN);
-```
-Change to:
-```c
-   preset_workingVersion = 0;
-
-   f_close((FIL*)&preset_File);
-
-   if(preset_backgroundSwapNeeded(preset_workingType))
-   {
-      preset_performBackgroundSwapWait(preset_workingType);
-   }
-
-   lcd_clear();
-   lcd_home();
-   lcd_string_F(PSTR("Loading Patrn"));
-
-   avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PATTERN);
-```
-
-Note: `preset_loadPattern()` calls `f_close()` early (before `SEQ_FILE_BEGIN`) and then individual sub-readers re-open the file. The handshake must slot between the name-read/close and the `SEQ_FILE_BEGIN` send.
-
-#### `preset_loadDrumset()` (kit load) — NO CHANGE
-
-Kit loads (`.SND`) are never matched by `preset_backgroundSwapNeeded()`, so no handshake insertion is needed. The existing flow is preserved.
-
-### 6. STM — Receive handler for Background Swap Begin
-
-**File**: `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c`
-
-In the `frontParser_handleSeqCC()` (or equivalent `SEQ_CC` dispatch), add a case:
+In `frontParser_handleSeqCC()`, add a case near the existing load/session cases, before `FRONT_SEQ_FILE_BEGIN` handling:
 
 ```c
 case FRONT_SEQ_BACKGROUND_SWAP_BEGIN:
-   {
-      // Start a 2-second async timer that will fire the done reply.
-      // fileType is in frontParser_command.data2.
-      seq_startBackgroundSwapTimer(frontParser_command.data2);
-   }
+   frontParser_backgroundSwapPending = 1;
+   frontParser_backgroundSwapFileType = frontParser_command.data2;
+   frontParser_backgroundSwapStartTick = systick_ticks;
    break;
 ```
 
-### 7. STM — Background-swap timer logic in Sequencer
+This case should not call any Preset or Pattern copy function yet. The later dev step will replace or extend this body with the actual temp snapshot operation.
 
-**File**: `mainboard/LxrStm32/src/Sequencer/sequencer.c`
+### 4. Service the dummy delay from the main loop
 
-Add near the timer/tick area (near existing timer-oriented functions):
+File: `mainboard/LxrStm32/src/main.c`
 
-```c
-// --- Background-swap handshake timer ---
-static uint8_t  seq_bgSwapActive = 0;
-static uint8_t  seq_bgSwapFileType = 0;
-static uint32_t seq_bgSwapTimeout = 0;
-#define BG_SWAP_WAIT_MS 2000
-```
-
-New function to start the timer:
+Add the receive-protocol header:
 
 ```c
-/* Start a 2-second background-swap timer.  When the timer fires in
-   seq_serviceBackgroundSwap(), a FRONT_SEQ_BACKGROUND_SWAP_DONE reply
-   is sent back to the AVR so the file load can proceed. */
-void seq_startBackgroundSwapTimer(uint8_t fileType)
-{
-   seq_bgSwapActive   = 1;
-   seq_bgSwapFileType = fileType;
-   seq_bgSwapTimeout  = HAL_GetTick() + BG_SWAP_WAIT_MS;
-}
+#include "uARTFrontSYX/frontPanelReceivingProtocol.h"
 ```
 
-Service function called from the main loop:
+In the main loop, after `uart_processFront();` is the most direct location:
 
 ```c
-/* Check whether the background-swap timer has elapsed and send the
-   completion reply.  Call once per main loop iteration. */
-void seq_serviceBackgroundSwap(void)
-{
-   if(!seq_bgSwapActive)
-      return;
-   if(HAL_GetTick() >= seq_bgSwapTimeout)
-   {
-      seq_bgSwapActive = 0;
-      // Send the "done" reply: SEQ_CC / SEQ_BACKGROUND_SWAP_DONE / fileType
-      frontPanelSending_sendTriplet(FRONT_SEQ_CC,
-                                    FRONT_SEQ_BACKGROUND_SWAP_DONE,
-                                    seq_bgSwapFileType);
-   }
-}
+uart_processFront();
+frontParser_serviceBackgroundSwapAck();
 ```
 
-**File**: `mainboard/LxrStm32/src/Sequencer/sequencer.h`
+This keeps the 2-second wait non-blocking on STM. Audio, MIDI, front-panel receive, morph interpolation, endpoint restore, and sequencer tick continue to run normally while the AVR is waiting.
 
-Declare the new public functions:
+## Files Changed Summary For The Implementation Pass
 
-```c
-/* Background-swap handshake — 2-second async timer before file load */
-void seq_startBackgroundSwapTimer(uint8_t fileType);
-void seq_serviceBackgroundSwap(void);
+| File | Planned change |
+|------|----------------|
+| `front/LxrAvr/avrComms/avrCommsReceivingProtocol.h` | Add `SEQ_BACKGROUND_SWAP_BEGIN` and `SEQ_BACKGROUND_SWAP_DONE` at `0x6d/0x6e` |
+| `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.h` | Add `FRONT_SEQ_BACKGROUND_SWAP_BEGIN/DONE` plus `frontParser_serviceBackgroundSwapAck()` declaration |
+| `front/LxrAvr/Preset/presetManager.c` | Add background mode aliases, wait state, type-match helper, parser callback, wait loop, and insert wait before `.PAT/.ALL/.PRF` `SEQ_FILE_BEGIN` |
+| `front/LxrAvr/Preset/PresetManager.h` | Declare `preset_backgroundSwapDoneFromStm(uint8_t fileType)` |
+| `front/LxrAvr/avrComms/avrCommsReceivingProtocol.c` | Let `SEQ_BACKGROUND_SWAP_DONE` pass while `rxDisable` is set and dispatch it to the preset callback |
+| `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c` | Add dummy async pending state, begin handler, and service function that sends done via priority triplet |
+| `mainboard/LxrStm32/src/main.c` | Include receive protocol header and call `frontParser_serviceBackgroundSwapAck()` each main-loop pass |
+
+## Files Intentionally Not Changed In This First Step
+
+- `mainboard/LxrStm32/src/Preset/*`: no temp parameter snapshot yet.
+- `mainboard/LxrStm32/src/Sequencer/Pattern/*`: no temp pattern staging yet.
+- `mainboard/LxrStm32/src/Sequencer/sequencer.c/.h`: no new handshake state; this first step belongs to front-panel protocol/load-session plumbing.
+- `front/LxrAvr/IO/uart.c/.h` and `mainboard/LxrStm32/src/uARTFrontSYX/Uart.c/.h`: transport stays byte-only.
+- `front/LxrAvr/Menu/*`: the background selector already exists.
+- `SEQ_LOAD_BACKGROUND` / `FRONT_SEQ_LOAD_FAST` at `0x50`: existing setting-byte path remains untouched.
+
+## Execution Flow
+
+### Non-matching file type
+
+```text
+User selects file
+-> preset_loadPattern/loadAll/loadPerf()
+-> preset_backgroundSwapNeeded() returns 0
+-> existing load path sends SEQ_FILE_BEGIN immediately
+-> file data transfers as today
 ```
 
-### 8. STM — Wire the service call into the main loop
+### Matching file type
 
-**File**: `mainboard/LxrStm32/src/main.c`
-
-In the main loop, after `seq_service()` or at an appropriate non-blocking tick point, add:
-
-```c
-seq_serviceBackgroundSwap();
-```
-
-Since the timer is non-blocking (just checks `HAL_GetTick()`), this must be called regularly — once per main loop iteration is sufficient. The 2-second wait is not precise; it is a guard to let the STM finish any in-flight parameter applications before the file data starts arriving.
-
-### 9. AVR — Declare `preset_backgroundSwapDone` extern
-
-**File**: `front/LxrAvr/Preset/PresetManager.h`
-
-Add after the existing extern declarations:
-
-```c
-extern uint8_t preset_backgroundSwapDone;
-```
-
-So the receiving protocol parser in `avrCommsReceivingProtocol.c` can set it.
-
-### 10. Files NOT changed
-
-- `front/LxrAvr/IO/uart.c` / `uart.h` — no UART changes; the handshake uses the existing packet path
-- `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelSendingProtocol.c` — the `frontPanelSending_sendTriplet()` helper already handles `FRONT_SEQ_CC` triples
-- `mainboard/LxrStm32/src/MIDI/` — no MIDI changes
-- `mainboard/LxrStm32/src/Preset/` — no Preset module changes; the timer lives in Sequencer as a simple sleep gate
-- AVR menu/lcd files — the "Bckgrnd Swap..." message is inline in `preset_performBackgroundSwapWait()`, no menu system changes
-
-## Execution Flow Summary
-
-### Path A: File type does NOT match background setting
-```
-User selects file → button handler calls preset_loadXxx()
-  → preset_backgroundSwapNeeded() returns 0
-  → proceeds directly to SEQ_FILE_BEGIN → kit load → pattern load → SEQ_FILE_DONE
-  → (no LCD pause, no new handshake)
-```
-
-### Path B: File type matches background setting
-```
-User selects file → button handler calls preset_loadXxx()
-  → preset_backgroundSwapNeeded() returns 1
-  → preset_performBackgroundSwapWait(fileType):
-      LCD shows "Bckgrnd Swap..."
-      AVR sends SEQ_BACKGROUND_SWAP_BEGIN + fileType to STM
-      AVR polls uart_checkAndParse() in a loop
-  → STM receives SEQ_BACKGROUND_SWAP_BEGIN
-      → seq_startBackgroundSwapTimer(fileType): sets 2s timer
-  → STM main loop: seq_serviceBackgroundSwap() checks timer
-      → when elapsed: sends SEQ_BACKGROUND_SWAP_DONE + fileType back
-  → AVR uart parser receives SEQ_BACKGROUND_SWAP_DONE
-      → sets preset_backgroundSwapDone = 1
-  → AVR exits poll loop
-  → proceeds with normal file load: SEQ_FILE_BEGIN → kit → pattern → SEQ_FILE_DONE
+```text
+User selects file
+-> AVR opens/validates file header
+-> AVR sends SEQ_BACKGROUND_SWAP_BEGIN + fileType
+-> AVR displays "Bckgrnd Swap..." and polls uart_checkAndParse()
+-> STM receives FRONT_SEQ_BACKGROUND_SWAP_BEGIN
+-> STM records fileType and start tick
+-> STM main loop continues running
+-> after 2 seconds, STM sends FRONT_SEQ_BACKGROUND_SWAP_DONE + fileType
+-> AVR parser accepts done despite rxDisable
+-> AVR callback marks the matching wait complete
+-> AVR sends the normal SEQ_FILE_BEGIN and file payload
 ```
 
 ### Timeout path
-```
-If STM never replies within 5 seconds:
-  → preset_performBackgroundSwapWait() returns 0
-  → File load still proceeds (no lock-up)
-```
 
-## Files Changed Summary
+If no matching done reply arrives within roughly 5 seconds, the AVR wait helper returns false and the load continues anyway. This prevents a permanent front-panel lockup while still making the failure visible during testing because the 2-second pause will be absent/extended to timeout.
 
-| File | Change |
-|------|--------|
-| `front/LxrAvr/avrComms/avrCommsReceivingProtocol.h` | 3 new opcode `#define`s (0x6d–0x6f) |
-| `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.h` | 3 new opcode `#define`s (`FRONT_SEQ_` prefix) |
-| `front/LxrAvr/Preset/presetManager.c` | `BACKGROUND_*` defines + `preset_backgroundSwapDone` variable + `preset_backgroundSwapNeeded()` + `preset_performBackgroundSwapWait()` + handshake insertion in `preset_loadPerf()`, `preset_loadAll()`, `preset_loadPattern()` |
-| `front/LxrAvr/Preset/PresetManager.h` | `extern uint8_t preset_backgroundSwapDone` |
-| `front/LxrAvr/avrComms/avrCommsReceivingProtocol.c` | `case SEQ_BACKGROUND_SWAP_DONE` handler |
-| `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c` | `case FRONT_SEQ_BACKGROUND_SWAP_BEGIN` handler |
-| `mainboard/LxrStm32/src/Sequencer/sequencer.c` | `seq_bgSwap*` state + `seq_startBackgroundSwapTimer()` + `seq_serviceBackgroundSwap()` |
-| `mainboard/LxrStm32/src/Sequencer/sequencer.h` | Declarations for the two new functions |
-| `mainboard/LxrStm32/src/main.c` | `seq_serviceBackgroundSwap()` call in main loop |
+## Verification After Implementation
 
-## Verification
-
-After implementation:
+Build checks:
 
 ```bash
-make -C front/LxrAvr clean && make -C front/LxrAvr avr -j4
+make -C front/LxrAvr avr -j4
 make -C mainboard/LxrStm32 -j4 stm32
 make firmware
 ```
 
-Functional test:
-1. Set `PAR_FILE_LOAD_BACKGROUND` to `off` (0) → load any `.ALL` → no pause, immediate load
-2. Set to `all` (3) → load an `.ALL` → "Bckgrnd Swap..." shows for ~2s, then load proceeds
-3. Set to `all` (3) → load a `.PRF` → no pause, immediate load
-4. Set to `tot` (4) → load a `.ALL` → pause
-5. Set to `tot` (4) → load a `.PRF` → pause
-6. Set to `tot` (4) → load a `.PAT` → no pause
+Functional checks:
 
-## Open Questions / Future Work
+1. Set background load to `off`; load `.ALL`, `.PRF`, and `.PAT`; no `Bckgrnd Swap...` pause should occur.
+2. Set to `all`; load `.ALL`; the message should show for about 2 seconds, then normal loading should begin.
+3. Set to `all`; load `.PRF` and `.PAT`; no pause.
+4. Set to `prf`; load `.PRF`; pause, then normal load.
+5. Set to `pat`; load `.PAT`; pause, then normal load.
+6. Set to `tot`; load `.ALL`, `.PRF`, and `.PAT`; all three pause, then load.
+7. Load `.SND`; no pause in any mode.
 
-1. **What meaningful work should the STM do during the 2-second wait?** Currently the timer is a dummy pause. In a future pass, the STM could snapshot the playing kit into temp storage during this window so the background-loaded file does not interrupt playback. The 2-second guard ensures any in-flight parameter applies settle before file data arrives.
+## Follow-Up Step
 
-2. **Should `.PAT` loads get background treatment too?** Currently `BACKGROUND_PAT = 1` exists as a menu option but `.PAT` background behavior would need its own pattern-swap staging logic — out of scope for this pass.
+After this acknowledge loop is proven on hardware, replace the STM dummy delay body with the actual pre-load snapshot:
 
-3. **Should the 2-second timer be replaced with an "all clear" signal from the STM after it finishes any snapshot?** This would be more precise but requires more STM-side state tracking. The 2-second fixed delay is simple and safe for the first implementation.
-
-4. **Timeout recovery**: The 5-second AVR timeout means the file load proceeds even if the STM is unresponsive. This prevents permanent lock-up but skips the intended guard delay. A future pass could add retry logic.
+- copy the currently audible preset parameter image into `preset_tmpKitState`;
+- copy the currently audible/playing pattern data into pattern-owned temp storage;
+- keep `.PAT` pattern-only behavior separate from parameter temp switching;
+- send `FRONT_SEQ_BACKGROUND_SWAP_DONE` only after that copy/swap prep is complete.

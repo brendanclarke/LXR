@@ -70,6 +70,14 @@
 #define FEXT_ALL 	2
 #define FEXT_PERF 	3
 
+#define BACKGROUND_OFF 0
+#define BACKGROUND_PAT 1
+#define BACKGROUND_PRF 2
+#define BACKGROUND_ALL 3
+#define BACKGROUND_TOT 4
+
+#define BACKGROUND_SWAP_TIMEOUT_TICKS 305
+
 // fill buffer (length 9 total) with a filename. type is one of above
 // eg p001.snd
 
@@ -115,6 +123,8 @@ uint8_t parameter_values_fileLoadSnapshot[END_OF_SOUND_PARAMETERS];
 uint8_t parameters2_fileLoadSnapshot[END_OF_SOUND_PARAMETERS];
 static uint8_t preset_savedParameterValues[END_OF_SOUND_PARAMETERS];
 static uint8_t preset_savedParameters2[END_OF_SOUND_PARAMETERS];
+static volatile uint8_t preset_backgroundSwapDone = 0;
+static uint8_t preset_backgroundSwapExpectedType = 0;
 
 static uint8_t voice1presetMask[VOICE_PARAM_LENGTH]={1,8,9,20,      37,43,49,50,   62,70,74,78,  82,83,88,94,   102,108,115,121,     128,134,137,143,    149,155,161,167,    173,179,185,191,    197,203,209,215}; 
 static uint8_t voice2presetMask[VOICE_PARAM_LENGTH]={2,10,11,21,    38,44,51,52,   63,71,75,79,  84,85,89,95,   103,109,116,122,     129,135,138,144,    150,156,162,168,    174,180,186,192,    198,204,210,216}; 
@@ -128,6 +138,68 @@ static void preset_dumpEndpointsToStm(uint8_t endpointMode);
 static uint8_t preset_shouldPreserveMenuEndpointsDuringFileLoad(void);
 static void preset_saveMenuEndpointsDuringFileLoad(void);
 static void preset_restoreMenuEndpointsDuringFileLoad(void);
+
+static uint16_t preset_backgroundSwapNow(void)
+{
+   uint16_t now;
+
+   ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+   {
+      now = time_sysTick;
+   }
+
+   return now;
+}
+
+static uint8_t preset_backgroundSwapNeeded(uint8_t fileType)
+{
+   uint8_t bgMode = parameter_values[PAR_FILE_LOAD_BACKGROUND];
+
+   if(bgMode == BACKGROUND_PAT)
+      return fileType == WTYPE_PATTERN;
+   if(bgMode == BACKGROUND_PRF)
+      return fileType == WTYPE_PERFORMANCE;
+   if(bgMode == BACKGROUND_ALL)
+      return fileType == WTYPE_ALL;
+   if(bgMode == BACKGROUND_TOT)
+   {
+      return (fileType == WTYPE_PATTERN)
+          || (fileType == WTYPE_PERFORMANCE)
+          || (fileType == WTYPE_ALL);
+   }
+
+   return 0;
+}
+
+void preset_backgroundSwapDoneFromStm(uint8_t fileType)
+{
+   if(fileType == preset_backgroundSwapExpectedType)
+      preset_backgroundSwapDone = 1;
+}
+
+static uint8_t preset_performBackgroundSwapWait(uint8_t fileType)
+{
+   uint16_t start;
+
+   preset_backgroundSwapDone = 0;
+   preset_backgroundSwapExpectedType = fileType;
+
+   lcd_clear();
+   lcd_home();
+   lcd_string_F(PSTR("Bckgrnd Swap..."));
+
+   avrComms_sendData(SEQ_CC, SEQ_BACKGROUND_SWAP_BEGIN, fileType);
+   start = preset_backgroundSwapNow();
+
+   while(!preset_backgroundSwapDone)
+   {
+      uart_checkAndParse();
+      if((uint16_t)(preset_backgroundSwapNow() - start) > BACKGROUND_SWAP_TIMEOUT_TICKS)
+         return 0;
+   }
+
+   return 1;
+}
 
 static void preset_showLoadingPerf()
 {
@@ -1928,6 +2000,9 @@ uint8_t preset_loadPattern(uint8_t presetNr, uint8_t voiceArray)
    preset_workingVersion = 0;
    
    f_close((FIL*)&preset_File);
+
+   if(preset_backgroundSwapNeeded(preset_workingType))
+      (void)preset_performBackgroundSwapWait(preset_workingType);
    
    lcd_clear();
    lcd_home();
@@ -2275,6 +2350,9 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
       goto closeFile;
    
    preset_workingVersion = version;
+   if(preset_backgroundSwapNeeded(preset_workingType))
+      (void)preset_performBackgroundSwapWait(preset_workingType);
+
    avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_ALL);
    fileBeginSent=1;
 
@@ -2471,6 +2549,9 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
       goto closeFile;
    
    preset_workingVersion = version;
+   if(preset_backgroundSwapNeeded(preset_workingType))
+      (void)preset_performBackgroundSwapWait(preset_workingType);
+
    preset_showLoadingPerf();
 
    avrComms_sendData(SEQ_CC,SEQ_FILE_BEGIN,WTYPE_PERFORMANCE);

@@ -421,6 +421,11 @@ void avrComms_parseData(uint8_t data)
             {
                /* RESTORE: Allow these messages to fall through to the processor even when rxDisable is true. */
             }
+            else if((avrCommsParser_command.status == SEQ_CC)
+               && (avrCommsParser_command.data1 == SEQ_BACKGROUND_SWAP_DONE))
+            {
+               /* Background-load acknowledge: allow processing while file-load rxDisable is true. */
+            }
             else
             {
                return;
@@ -491,6 +496,10 @@ void avrComms_parseData(uint8_t data)
                   case SEQ_FLOW_END:
                   case SEQ_FLOW_ABORT:
                      avrCommsSending_handleFlowMessage(avrCommsParser_command.data1, avrCommsParser_command.data2);
+                     break;
+
+                  case SEQ_BACKGROUND_SWAP_DONE:
+                     preset_backgroundSwapDoneFromStm(avrCommsParser_command.data2);
                      break;
 
                   case SEQ_REPORT_GLOBAL_MORPH_LSB:

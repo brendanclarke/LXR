@@ -228,6 +228,8 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SEQ_SET_GLOBAL_MORPH_MSB   0x6a	// set/report the high bit of global morph
 #define SEQ_REPORT_GLOBAL_MORPH_LSB 0x6b	// report the low 7 bits of global morph back to AVR
 #define SEQ_REPORT_GLOBAL_MORPH_MSB 0x6c	// report the high bit of global morph back to AVR
+#define SEQ_BACKGROUND_SWAP_BEGIN  0x6d	// request STM background-swap prep before file load
+#define SEQ_BACKGROUND_SWAP_DONE   0x6e	// STM background-swap prep complete
 
 #define SEQ_TMP_KIT_AUTOMATION_NONE 0x00	// no automation sideband in the temp-kit copy
 #define SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT 0x01	// temp-kit front-endpoint automation sideband

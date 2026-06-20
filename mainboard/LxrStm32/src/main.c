@@ -49,6 +49,7 @@
 
 #include "mixer.h"
 #include "uARTFrontSYX/Uart.h"
+#include "uARTFrontSYX/frontPanelReceivingProtocol.h"
 #include "FIFO.h"
 #include "DrumVoice.h"
 #include "CymbalVoice.h"
@@ -275,6 +276,7 @@ int main(void)
 
 		//process incoming frontpanel data
 		uart_processFront();
+		frontParser_serviceBackgroundSwapAck();
 
 		//check if we have some usb midi messages and process them
 		MidiMsg msg;
