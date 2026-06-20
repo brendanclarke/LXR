@@ -667,10 +667,14 @@ static void seq_nextStep()
          uint8_t oldActivePattern = seq_activePattern;
          uint8_t newActivePattern = pat_normalizePatternNumber(preset_tempPlaybackSwitchState.pendingPattern);
          uint8_t activePatternChanged = (oldActivePattern != newActivePattern);
+         uint8_t patternOnlyTempPlayback =
+            preset_tempPlaybackSwitchState.patternOnlyTempPlayback
+            && (newActivePattern == SEQ_TMP_PATTERN);
          uint8_t tmpBoundaryPatternChanged = 0;
          
          seq_activePattern = newActivePattern;
-         preset_setTempPlaybackActive(seq_activePattern == SEQ_TMP_PATTERN);
+         if(!patternOnlyTempPlayback)
+            preset_setTempPlaybackActive(seq_activePattern == SEQ_TMP_PATTERN);
          preset_tempPlaybackSwitchState.newPatternExecuted=1;
          if (preset_tempPlaybackSwitchState.loadPendingFlag)
          {
@@ -693,7 +697,8 @@ static void seq_nextStep()
          
          }
 
-         preset_updateVoiceSourcesForPatternChange(oldTrackPattern, !activePatternChanged);
+         if(!patternOnlyTempPlayback)
+            preset_updateVoiceSourcesForPatternChange(oldTrackPattern, !activePatternChanged);
          tmpBoundaryPatternChanged =
             (preset_trackPatternUsesTmp(oldActivePattern)
              != preset_trackPatternUsesTmp(newActivePattern));

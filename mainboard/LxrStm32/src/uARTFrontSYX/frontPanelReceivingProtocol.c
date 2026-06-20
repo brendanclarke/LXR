@@ -72,6 +72,7 @@ static void frontParser_handleVoiceMorph(uint8_t slot, uint8_t payload);
 
 #define FLOW_INITIAL_GRANT 4
 #define FLOW_ACK_CREDITS 1
+#define FRONT_FILE_DONE_TYPE_PATTERN 7
 #define FRONT_FILE_DONE_TYPE_PERFORMANCE 8
 #define FRONT_FILE_DONE_TYPE_ALL 9
 #define FRONT_BACKGROUND_SWAP_ACK_DELAY_TICKS 400U
@@ -1223,6 +1224,9 @@ static uint8_t frontParser_backgroundSwapTempPlaybackReady(void)
       if(seq_perTrackActivePattern[track] != SEQ_TMP_PATTERN)
          return 0;
    }
+
+   if(preset_tempPlaybackSwitchState.patternOnlyTempPlayback)
+      return preset_allVoiceSourcesUseNormal();
 
    return preset_allVoiceSourcesUseTmp();
 }
@@ -2643,6 +2647,8 @@ static void frontParser_handleSeqCC()
          pat_copyToTmpPattern(seq_activePattern);
          seq_setNextPattern(SEQ_TMP_PATTERN, 0x0f);
          preset_tempPlaybackSwitchState.forceInstantSwitch = 1;
+         preset_tempPlaybackSwitchState.patternOnlyTempPlayback =
+            (frontParser_command.data2 == FRONT_FILE_DONE_TYPE_PATTERN);
          frontParser_backgroundSwapPending = 1;
          frontParser_backgroundSwapFileType = frontParser_command.data2;
          frontParser_backgroundSwapAckDelayActive = 0;
