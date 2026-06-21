@@ -1361,7 +1361,8 @@ void seq_rollChange(uint8_t voice, uint8_t onOff) // a message about changing ro
    else 
    { // onOff is zero, turn roll off for this voice
       seq_rollTriggered &= ~(1<<voice);
-      seq_rollCounter[voice] = seq_rollRate;
+      if(seq_rollRate != 0xff) // one-shot doesn't need counter
+         seq_rollCounter[voice] = seq_rollRate;
    }
 }
 //-------------------------------------------------------------------------------
@@ -1383,11 +1384,11 @@ uint8_t seq_setRoll(uint8_t voice, uint8_t onOff)// called processing step if ro
       seq_rollPlayedEarly &= ~(1<<voice);
       return triggered;  
    }
-   if(seq_rollRate == 0xff) // deal with one-shots
+   if(seq_rollRate == 0xff) // one-shot: trigger once and record
    {
-      triggered = seq_rollTrig(voice); // trig the voice
-      seq_rollCounter[voice] = 15; // set this to default 1/16 so user can change roll OTF
-      seq_rollState |= (1<<voice); // we've dealt with this, let seq know we shouldn't repeat every step
+      triggered = seq_rollTrig(voice); // trig the voice and record
+      seq_rollTriggered &= ~(1<<voice); // clear trigger so we don't re-trigger
+      seq_rollPlayedEarly &= ~(1<<voice);
       return triggered;
    }
    
