@@ -505,6 +505,7 @@ void avrComms_parseData(uint8_t data)
 
                   case SEQ_BACKGROUND_SWAP_DONE:
                      preset_backgroundSwapDoneFromStm(avrCommsParser_command.data2);
+                     buttonHandler_refreshTempPlaybackLedHint();
                      break;
 
                   case SEQ_REPORT_GLOBAL_MORPH_LSB:
@@ -663,6 +664,8 @@ void avrComms_parseData(uint8_t data)
                         led_initPerformanceLeds();
                      	//led_setValue(1,LED_PART_SELECT1+avrCommsParser_command.data2);
                      }
+
+                     buttonHandler_refreshTempPlaybackLedHint();
                      
                      break;
                   case SEQ_RUN_STOP:

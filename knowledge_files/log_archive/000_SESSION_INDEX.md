@@ -149,6 +149,10 @@ Session 026 brought the existing PERF-page individual voice morph controls onlin
 Session 027 fixed the live-record wrong-parameter bug by making `Step.param1Nr` / `param2Nr` consistently store raw AVR/menu `PAR_*` destinations. Front-panel live recording and manual step-destination edits now both write raw ids, automation playback converts raw ids to the `MIDI_CC` / `CC_2` message shape expected by `frontParser_applyParameterCommand()`, and external MIDI recording uses `seq_recordAutomationMidiDestination()` to convert MIDI-domain ids back to raw storage. The session also resolved the clarified encoder `DTYPE_MENU` issue: encoder edit mode was selecting the correct parameter but clamping menu values to the last item when the stored value was a raw byte, so both encoder edit paths now normalize out-of-range `DTYPE_MENU` values into compact list-index range before applying the encoder delta. A final small patch made encoder press on the SHIFT+COPY clear menu execute the selected clear target instead of falling through to the generic shifted encoder press behavior. The automation and `DTYPE_MENU` fixes were hardware-confirmed by the user.
 - **Find here**: raw step automation destination convention, live-record Drum 2 volume fix, automation playback conversion boundary, external MIDI automation helper, step editor raw round-trip, `frontPanelSending_sendParameterEcho()` audit, encoder `DTYPE_MENU` value-domain diagnosis, encoder menu-value normalization, clear menu encoder-press carveout, hardware verification
 
+### 028 — Background File Loading Via Temporary Data Complete (2026-06-21)
+Session 028 completed background loading through the existing normal/temporary Pattern and Preset storage model. AVR `.pat` / `.prf` / `.all` loads now optionally start a `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) based on the 5-state `PAR_FILE_LOAD_BACKGROUND` selector, STM copies the currently audible pattern/kit state to temp, forces an immediate switch to `SEQ_TMP_PATTERN`, waits for temp-readiness plus the ACK delay, then lets the ordinary file load write normal storage while temp playback continues. `.pat` background loading is pattern-only and keeps preset parameters normal, current global/per-voice morph amounts survive all file loads, `.prf` / `.all` no longer zero the AVR per-voice morph menu values, repeated loads while already playing temp skip another copy-to-temp, and the AVR UI now hints temp playback with PERF/SELECT LED flashing while disabling `SHIFT+PERF`.
+- **Find here**: completed background-load handshake, `0x6d/0x6e` swap ACK, `PAR_FILE_LOAD_BACKGROUND` policy, STM normal-to-temp copy, force instant temp switch, `.pat` pattern-only temp playback, morph preservation, `END_OF_KIT_PARAMETERS`, repeated-load temp guard, temp-playback LED hint, deprecated load-fast/cache cleanup notes, hardware verification
+
 
 ---
 
@@ -201,6 +205,11 @@ Session 027 fixed the live-record wrong-parameter bug by making `Step.param1Nr` 
 | LFO-to-voice-morph remains an async morph-drain overlay from current target voice morph value to morph endpoint; do not rewrite it as a menu/base-value writer | 026 |
 | Step automation destinations in `Step.param1Nr` / `param2Nr` are raw AVR/menu `PAR_*` ids; low `+1` conversion belongs at automation playback/application boundaries, and external MIDI recording must use `seq_recordAutomationMidiDestination()` | 027 |
 | Encoder `DTYPE_MENU` edits normalize out-of-range raw byte values into compact menu-list indices before applying encoder delta; do not treat that symptom as a parameter-index mismatch | 027 |
+| Background `.pat` / `.prf` / `.all` loading now uses the active `0x6d/0x6e` background-swap handshake plus existing normal/temp Pattern and Preset storage; do not revive the old cache/load-fast model | 028 |
+| `.pat` background loading is pattern-only: pattern playback may move to `SEQ_TMP_PATTERN`, but preset parameter source remains normal | 028 |
+| File loads must not reset current global morph or per-voice morph amounts; `.prf` / `.all` refresh loaded endpoints through normal storage and live morph apply-cache invalidation | 028 |
+| Use `END_OF_KIT_PARAMETERS` for saved kit bytes/dumps; keep `PAR_MORPH_DRUM1..PAR_MORPH_HIHAT` inside `END_OF_SOUND_PARAMETERS` for runtime automation/modulation domains | 028 |
+| AVR tracks `preset_backgroundTempPlaybackActive`; while active, PERF LED flashes outside PERF mode, all SELECT LEDs flash in PERF, and `SHIFT+PERF` is disabled | 028 |
 
 
 ---

@@ -58,6 +58,7 @@ volatile struct {
 static uint8_t buttonHandler_mutedVoices = 0;
 // static uint8_t buttonHandler_mutesFromSolo = 0;
 static int8_t buttonHandler_armedAutomationStep = NO_STEP_SELECTED;
+static uint8_t buttonHandler_tempPlaybackPerfBlink = 0;
 
 void buttonHandler_copySubStep(uint8_t selectButtonPressed);
 void buttonHandler_copyStep(uint8_t seqButtonPressed);
@@ -72,6 +73,55 @@ void buttonHandler_handleShift(uint8_t shift);
 static uint8_t buttonHandler_patternLed(uint8_t patternNr)
 {
    return (uint8_t)((patternNr == SEQ_TMP_PATTERN) ? LED_STEP16 : (LED_PART_SELECT1 + patternNr));
+}
+
+static void buttonHandler_setAllSelectBlink(uint8_t onOff)
+{
+   uint8_t i;
+
+   for(i = 0; i < 8; i++)
+      led_setBlinkLed((uint8_t)(LED_PART_SELECT1 + i), onOff);
+}
+
+void buttonHandler_refreshTempPlaybackLedHint(void)
+{
+   uint8_t tempActive = preset_isBackgroundTempPlaybackActive();
+   uint8_t mode = buttonHandler_stateMemory.selectButtonMode;
+
+   if(mode == SELECT_MODE_PERF)
+   {
+      if(buttonHandler_tempPlaybackPerfBlink)
+      {
+         led_setBlinkLed(LED_MODE2, 0);
+         buttonHandler_tempPlaybackPerfBlink = 0;
+      }
+
+      led_clearSelectBlinkLeds();
+      if(tempActive)
+         buttonHandler_setAllSelectBlink(1);
+      else
+         led_initPerformanceLeds();
+      return;
+   }
+
+   if(mode == SELECT_MODE_PAT_GEN)
+   {
+      buttonHandler_tempPlaybackPerfBlink = 0;
+      if(tempActive)
+         led_setBlinkLed(LED_MODE2, 1);
+      return;
+   }
+
+   if(!tempActive)
+   {
+      if(buttonHandler_tempPlaybackPerfBlink)
+         led_setBlinkLed(LED_MODE2, 0);
+      buttonHandler_tempPlaybackPerfBlink = 0;
+      return;
+   }
+
+   led_setBlinkLed(LED_MODE2, 1);
+   buttonHandler_tempPlaybackPerfBlink = 1;
 }
 
 static void buttonHandler_queryShownPattern()
@@ -323,6 +373,14 @@ uint8_t buttonHandler_getShift() {
 void buttonHandler_handleModeButtons(uint8_t mode) {
    buttonHandler_heldVoiceButtons = 0;// this is here for individ. pattern switch - if the mode
    buttonHandler_muteTag=0;           // is changed, clear any held buttons
+
+   if(preset_isBackgroundTempPlaybackActive()
+      && buttonHandler_getShift()
+      && ((mode & 0x07) == SELECT_MODE_PERF))
+   {
+      buttonHandler_refreshTempPlaybackLedHint();
+      return;
+   }
    
    if (buttonHandler_getShift()) 
    {
@@ -388,6 +446,8 @@ void buttonHandler_handleModeButtons(uint8_t mode) {
       default:
          break;
    }
+
+   buttonHandler_refreshTempPlaybackLedHint();
 }
 //--------------------------------------------------------
 void buttonHandler_muteVoice(uint8_t voice, uint8_t isMuted) {

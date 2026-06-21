@@ -17,7 +17,7 @@
 #define LED_PULSE_TIME_MS 50		/**<time a pulsed LED stays on in [ms]*/
 #define LED_PULSE_TIME ((uint16_t)(LED_PULSE_TIME_MS/16.384f))
 
-#define NUM_OF_BLINKABLE_LEDS 6
+#define NUM_OF_BLINKABLE_LEDS 8
 #define LED_BLINK_TIME_MS 200
 #define LED_BLINK_TIME ((uint16_t)(LED_BLINK_TIME_MS/16.384f))
 

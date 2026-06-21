@@ -199,6 +199,11 @@ void preset_backgroundSwapDoneFromStm(uint8_t fileType)
    }
 }
 
+uint8_t preset_isBackgroundTempPlaybackActive(void)
+{
+   return preset_backgroundTempPlaybackActive;
+}
+
 void preset_notePlayedPatternChanged(uint8_t playedPattern)
 {
    if(playedPattern != SEQ_TMP_PATTERN)

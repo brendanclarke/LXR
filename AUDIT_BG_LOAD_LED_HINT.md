@@ -379,3 +379,40 @@ Hardware retest:
 5. Switch playback back to a normal pattern. Confirm the temp-playback hint
    stops and normal PERF pattern LEDs return.
 
+## Implementation Notes
+
+Implemented the AVR-side code changes.
+
+Files changed:
+
+- `front/LxrAvr/Preset/PresetManager.h`
+- `front/LxrAvr/Preset/presetManager.c`
+- `front/LxrAvr/buttonHandler.h`
+- `front/LxrAvr/buttonHandler.c`
+- `front/LxrAvr/avrComms/avrCommsReceivingProtocol.c`
+- `front/LxrAvr/ledHandler.c`
+
+Details:
+
+- added `preset_isBackgroundTempPlaybackActive()` as the public getter for the
+  existing private `preset_backgroundTempPlaybackActive` flag;
+- added `buttonHandler_refreshTempPlaybackLedHint()` so comms and mode handling
+  can re-apply the UI hint after normal LED redraws;
+- added a small `buttonHandler_tempPlaybackPerfBlink` ownership flag so the
+  temp hint only clears `LED_MODE2` when the temp hint created that blink;
+- preserved existing shifted-mode blink behavior, especially `SELECT_MODE_PAT_GEN`,
+  instead of unconditionally clearing `LED_MODE2`;
+- added the `SHIFT+PERF` guard in `buttonHandler_handleModeButtons()` while temp
+  playback is active;
+- refreshed the hint after `SEQ_BACKGROUND_SWAP_DONE`;
+- refreshed the hint at the end of `SEQ_CHANGE_PAT` after the existing PERF /
+  PAT_GEN LED redraw block, because that block clears blink LEDs;
+- increased `NUM_OF_BLINKABLE_LEDS` from `6` to `8` so all SELECT LEDs can
+  blink simultaneously in PERF mode.
+
+Build verification:
+
+- `make -C front/LxrAvr -j4 avr` passed;
+- `make firmware` passed and rebuilt `firmware image/FIRMWARE.BIN`;
+- observed warnings were existing AVR warnings in SD/port access, switch
+  fallthrough, and unused variables/functions.

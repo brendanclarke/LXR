@@ -1,7 +1,7 @@
 # TEMPORARY / PATTERN / PARAMETER LOAD SPEC
 
-Date: 2026-06-19
-Status: current storage and switching spec after Session 027 live-record automation and encoder menu-value fixes. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`. Session 024 commented out the stale PRF/cache opcode surface without changing the live non-cache file-load path, Session 025 made the legacy macro slots zero-on-load plus inert on the apply/replay side, Session 026 connected per-voice morph display/control values to the active kit image via dedicated voice-morph traffic, and Session 027 made step automation destinations raw AVR/menu `PAR_*` ids in pattern storage.
+Date: 2026-06-21
+Status: current storage and switching spec after Session 028 completed background file loading through temporary Pattern/Preset storage. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`. Session 024 commented out the stale PRF/cache opcode surface without changing the live non-cache file-load path, Session 025 made the legacy macro slots zero-on-load plus inert on the apply/replay side, Session 026 connected per-voice morph display/control values to the active kit image via dedicated voice-morph traffic, Session 027 made step automation destinations raw AVR/menu `PAR_*` ids in pattern storage, and Session 028 finished the `0x6d/0x6e` background-swap handshake so `.pat`, `.prf`, and `.all` loads can write normal storage while playback continues from temp.
 
 Naming note: STM-side front-panel ownership stays under `mainboard/LxrStm32/src/uARTFrontSYX/` with `frontPanel*` names. AVR-side comms now live under `front/LxrAvr/avrComms/` with `avrComms*` names. Older AVR `frontPanel*` references are historical only.
 
@@ -27,6 +27,15 @@ destinations to apply-domain low `MIDI_CC` ids immediately before
 `frontParser_applyParameterCommand()`. External MIDI recording uses
 `seq_recordAutomationMidiDestination()` to convert MIDI-domain ids back to raw
 step storage.
+
+Session 028 note: active background loading is the
+`SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d` /
+`0x6e`). STM copies the currently audible Pattern/Preset state into temporary
+storage, forces an immediate switch to `SEQ_TMP_PATTERN`, waits until temp
+playback readiness is true plus the final ACK delay, and then ACKs the AVR so
+the ordinary file load can write normal storage. `.pat` background loading is
+pattern-only: it uses temp pattern playback but keeps preset parameters normal.
+File loads do not reset current global or per-voice morph amounts.
 
 ## Purpose
 
@@ -86,6 +95,8 @@ The important state is:
 - `preset_tmpKitActive`
 - `preset_voiceSourceState[]`
 - the boundary-switch flags that tell the sequencer when a source change is pending or committed
+- `preset_tempPlaybackSwitchState.forceInstantSwitch`
+- `preset_tempPlaybackSwitchState.patternOnlyTempPlayback`
 
 That module answers the question, "which image is active?"
 It does not own a second copy of the storage model itself.
@@ -103,9 +114,28 @@ file-load ingress bracket that forces parameter ingress to normal-kit endpoint
 mode while the file envelope is active. That bracket is not a cache and must not
 grow into one.
 
-The long-term plan is still for file-load-while-temp-active behavior to use the
-existing temp parameter/pattern copy and playback mechanisms, not a separate
-load-cache authority.
+File-load-while-playing behavior now uses the existing temp parameter/pattern
+copy and playback mechanisms, not a separate load-cache authority. The active
+entry point is `FRONT_SEQ_BACKGROUND_SWAP_BEGIN` in
+`frontPanelReceivingProtocol.c`; the non-blocking service point is
+`frontParser_serviceBackgroundSwapAck()` from the STM main loop.
+
+Current background-swap preparation:
+
+- `pat_copyToTmpPattern(seq_activePattern)` snapshots the currently audible
+  pattern state. If the sequencer is running, it copies each track from
+  `seq_perTrackActivePattern[track]`; if stopped, it uses the selected source
+  pattern.
+- `pat_copyToTmpPattern()` also calls `preset_captureTmpKitState()`, copying
+  the normal kit image into `preset_tmpKitState`.
+- `seq_setNextPattern(SEQ_TMP_PATTERN, 0x0f)` requests temp pattern playback
+  for all tracks.
+- `preset_tempPlaybackSwitchState.forceInstantSwitch = 1` makes the switch
+  immediate after the copy completes, independent of the user instant-switch
+  global.
+- `preset_tempPlaybackSwitchState.patternOnlyTempPlayback` is set for `.pat`
+  loads so the sequencer switches pattern playback to temp without moving
+  preset parameter ownership to temp.
 
 The same receive/protocol file owns live internal parameter application through
 `frontParser_applyParameterCommand()`. AVR/front-panel parameter commands,
@@ -118,14 +148,17 @@ than calling back into `MidiParser.c`.
 
 ### 1. Copy-to-temp clones normal into temp
 
-When the user explicitly asks for copy-to-temp:
+When the user explicitly asks for copy-to-temp, or when the background-swap
+prelude needs to protect currently audible playback:
 
-- copy the current normal pattern into `seq_tmpPattern`;
+- copy the current normal/audible pattern into `seq_tmpPattern`;
 - copy the current normal kit image into `preset_tmpKitState`;
 - copy endpoint bytes, interpolated bytes, automation targets, and morph values as part of that image copy;
 - mark the temp image valid only after the full copy is complete.
 
-Copy-to-temp is a storage operation, not a transport operation.
+Copy-to-temp is a storage operation, not a transport operation. For background
+loads, the transport only requests the operation; Pattern and Preset own the
+actual storage copy.
 
 ### 2. Temp switching changes source only
 
@@ -140,18 +173,19 @@ That distinction matters because the active image and the stored image are not t
 
 ### 3. Background file loads write normal storage
 
-`.prf` / `.all` style loads refresh the normal storage images while temp playback can keep running.
+`.pat`, `.prf`, and `.all` loads refresh the normal storage images while temp playback can keep running.
 
-The current target rule is:
+The current rule is:
 
 - load normal parameter storage;
 - load normal pattern storage;
-- keep temp playback isolated unless the user explicitly requests a temp switch or copy-to-temp;
+- keep temp playback isolated unless the background-swap prelude or the user
+  explicitly requests a temp switch/copy-to-temp;
 - never create a second sound-authority cache just because a file is being loaded.
 - never stage through `PresetLoadCache` or a replacement cache.
-
-Future file-load-while-temp-active behavior should use the existing
-normal/temp copy/playback model, not a revived cache.
+- when temp playback is already active, a later `.pat`, `.prf`, or `.all` load
+  skips another copy-to-temp and proceeds directly as an ordinary normal-storage
+  file load.
 
 Implementation reminder:
 
@@ -160,6 +194,8 @@ Implementation reminder:
 - the temp/background storage rules are about where bytes land, not about
   changing which module owns the storage model;
 - `TempPlaybackSwitch` still owns the audible-image selection state.
+- current global/per-voice morph amounts are live performance state and must
+  not be reset by any file load.
 
 ### 4. Pattern and parameter temp ownership stay separate
 
@@ -183,7 +219,8 @@ For `.pat` background loads:
 - pattern data may be staged in pattern-owned temp structures;
 - parameter ingress must remain on normal storage;
 - no parameter temp switch should be implied by pattern background loading;
-- if the loader needs to distinguish this case, it should use an explicit load-kind discriminator or mode bit.
+- the loader distinguishes this case with
+  `preset_tempPlaybackSwitchState.patternOnlyTempPlayback`.
 
 This rule is easy to violate if the code only knows "background load" and does not know "pattern-only background load."
 
@@ -191,16 +228,27 @@ This rule is easy to violate if the code only knows "background load" and does n
 
 ### Copy-to-temp
 
-The intended current flow is:
+The current copy flow is:
 
 1. User requests temp capture.
-2. `Preset` copies normal pattern and parameter images into temp storage.
-3. Temp image is marked valid.
-4. The active source can then switch to temp when the boundary logic says so.
+2. Pattern code copies normal/audible pattern images into `seq_tmpPattern`.
+3. Preset code copies normal parameter images into `preset_tmpKitState`.
+4. Temp image is marked valid.
+5. The active source can then switch to temp when the boundary logic says so.
+
+For background swap, STM reaches this same copy model through
+`FRONT_SEQ_BACKGROUND_SWAP_BEGIN`:
+
+```text
+pat_copyToTmpPattern(seq_activePattern)
+-> running sequencer: copy each track from seq_perTrackActivePattern[track]
+-> copy current pattern settings and temp hold settings
+-> preset_captureTmpKitState()
+```
 
 ### Normal/temp boundary switch
 
-The intended boundary switch is:
+The current boundary switch is:
 
 1. Sequencer/pattern logic decides the next pattern source.
 2. `TempPlaybackSwitch` updates the active source selection.
@@ -211,24 +259,86 @@ Switching should never be confused with copying.
 
 ### Background `.prf` / `.all` load
 
-The intended background-load flow is:
+The current background-load flow is:
 
-1. File-load initiator asks for a background load.
-2. The loader routes parameter ingress to normal storage.
-3. Pattern data and endpoint data are written to the normal images.
-4. Temp playback continues from the temp image if it was already active.
-5. On completion, the current active image selection does not need a second cache promotion.
+1. AVR validates the file header and checks `preset_backgroundSwapNeeded()`.
+2. If background swap is needed, AVR sends `SEQ_BACKGROUND_SWAP_BEGIN`.
+3. STM copies current normal/audible Pattern and Preset state into temp.
+4. STM sets `forceInstantSwitch` and requests `SEQ_TMP_PATTERN`.
+5. Sequencer immediately switches playback to temp after copy, preserving the
+   current sequencer position through the existing instant switch path.
+6. STM waits until `seq_activePattern`, all `seq_perTrackActivePattern[]`, and
+   all preset voice sources report the expected temp state, then waits the
+   final ACK delay and sends `SEQ_BACKGROUND_SWAP_DONE`.
+7. AVR continues the ordinary `.prf` / `.all` file load into normal storage.
+8. Temp playback continues from the copied temp image while normal storage is
+   overwritten by the new file.
+9. On completion, no cache promotion occurs. Normal storage now contains the
+   newly loaded file; temp storage remains the audible protected image until
+   the user switches away from temp.
 
 ### Background `.pat` load
 
-The intended background-load flow for `.pat` is narrower:
+The current background-load flow for `.pat` is narrower:
 
-1. Pattern data is staged.
-2. Parameter storage remains normal.
-3. Temp pattern ownership stays separate from parameter ownership.
-4. The load completes without switching parameter read/write away from normal storage.
+1. AVR validates the file header and checks `preset_backgroundSwapNeeded()`.
+2. If background swap is needed, AVR sends `SEQ_BACKGROUND_SWAP_BEGIN`.
+3. STM copies current audible pattern data to `seq_tmpPattern`.
+4. STM sets `patternOnlyTempPlayback = 1`.
+5. Sequencer switches pattern playback to `SEQ_TMP_PATTERN` but skips
+   `preset_setTempPlaybackActive()` and skips
+   `preset_updateVoiceSourcesForPatternChange()`.
+6. Parameter storage/source remains normal.
+7. STM ACK readiness requires pattern playback on temp and all preset voice
+   sources still normal.
+8. AVR continues the ordinary `.pat` file load into normal pattern storage.
+9. The load completes without switching parameter read/write away from normal storage.
 
-This flow is why the future load API may need an explicit file-kind or load-kind discriminator.
+This flow is why `patternOnlyTempPlayback` must remain separate from the broad
+"currently playing temp pattern" state.
+
+### Repeated File Load While Temp Playback Is Active
+
+The AVR tracks successful background swaps with
+`preset_backgroundTempPlaybackActive`.
+
+Current behavior:
+
+1. First matching `.pat`, `.prf`, or `.all` load while playing normal may send
+   `SEQ_BACKGROUND_SWAP_BEGIN`.
+2. After STM sends `SEQ_BACKGROUND_SWAP_DONE`, AVR sets
+   `preset_backgroundTempPlaybackActive = 1`.
+3. Any later `.pat`, `.prf`, or `.all` load before returning to a normal played
+   pattern skips `SEQ_BACKGROUND_SWAP_BEGIN`.
+4. That later load proceeds as an ordinary file load into normal storage while
+   temp playback remains audible.
+5. `SEQ_CHANGE_PAT` with a non-`SEQ_TMP_PATTERN` played pattern clears the AVR
+   temp-playback flag.
+
+This prevents a second background load from copying partially overwritten
+normal storage back into the still-audible temp image.
+
+### Morph Amount Preservation During File Loads
+
+Current global morph and per-voice morph amounts are performance state. They
+are not file-backed kit bytes and must not be reset by file load begin/done.
+
+Current behavior:
+
+- `.pat` load begin has no morph side effect.
+- `.prf` / `.all` load begin may invalidate the live morph apply cache so
+  loaded endpoints are recomputed from the existing morph amounts.
+- `.prf` / `.all` load begin must not reset global morph or per-voice morph
+  amounts.
+- User edits to global or per-voice morph while temp is active mirror into
+  normal storage too, so returning to normal does not resurrect stale morph
+  amounts.
+- AVR file-backed kit loops and endpoint dumps use `END_OF_KIT_PARAMETERS`.
+- `PAR_MORPH_DRUM1..PAR_MORPH_HIHAT` remain before
+  `END_OF_SOUND_PARAMETERS` so runtime automation/modulation domains still see
+  those parameters.
+- AVR `rxDisable` guards prevent protected file-load restore traffic from
+  zeroing the per-voice morph display slots.
 
 ## Current Functions
 
@@ -248,8 +358,16 @@ These functions matter for the current normal/temp model:
 - `preset_storeVelocityDestinationIngress()`
 - `preset_storeMacroDestinationIngress()` - legacy inert compatibility stub
 - `frontParser_applyParameterCommand()`
-- `seq_setTmpKitActive()`
-- `seq_updateVoiceSourcesForPatternChange()`
+- `preset_updateVoiceSourcesForPatternChange()`
+- `preset_allVoiceSourcesUseTmp()`
+- `preset_allVoiceSourcesUseNormal()`
+- `pat_copyToTmpPattern()`
+- `frontParser_serviceBackgroundSwapAck()`
+- `preset_backgroundSwapNeeded()`
+- `preset_performBackgroundSwapWait()`
+- `preset_backgroundSwapDoneFromStm()`
+- `preset_notePlayedPatternChanged()`
+- `buttonHandler_refreshTempPlaybackLedHint()`
 
 `presetLoad_*` is not a current ownership surface. Do not add new callers or
 recreate those APIs.
@@ -280,3 +398,12 @@ second staging owner.
 - Do not allow file-transfer compatibility code to become a permanent second
   owner.
 - Do not reintroduce the old PRF cache opcode surface as an active staging model.
+- Do not treat `SEQ_LOAD_BACKGROUND` / `FRONT_SEQ_LOAD_FAST` at `0x50` as the
+  active background-load mechanism; active background swap is `0x6d/0x6e`.
+- Do not reset current global morph or per-voice morph amounts from any file
+  load.
+- Do not copy normal storage into temp again while AVR temp playback state is
+  already active.
+- Do not use `END_OF_SOUND_PARAMETERS` for file-backed kit bytes if the loop is
+  meant to exclude non-file-backed live morph amount controls; use
+  `END_OF_KIT_PARAMETERS`.
