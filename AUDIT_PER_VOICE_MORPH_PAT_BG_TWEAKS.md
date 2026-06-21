@@ -898,3 +898,81 @@ Open question before implementation:
 - `PAR_MORPH` itself is outside `END_OF_SOUND_PARAMETERS`, so it is not touched
   by this meta-copy path. That matches the observation that global morph display
   remains valid.
+
+## Follow-up Attempt: END_OF_KIT Boundary Plus STM Restore Guard
+
+Retest showed the first `END_OF_KIT_PARAMETERS` changes were not sufficient:
+after `.all`/`.prf` load, the six AVR individual voice morph menu values still
+displayed zero.
+
+### Re-checked AVR Boundary Uses
+
+The `END_OF_SOUND_PARAMETERS` uses in `front/LxrAvr/Menu/menu.c`,
+`front/LxrAvr/buttonHandler.c`, AVR `parameters2[]`, `paramToModTarget[]`, and
+the file-load temp/save arrays should stay as `END_OF_SOUND_PARAMETERS`. Those
+paths are runtime/morph/automation parameter domains, and the per-voice morph
+amount params must remain inside them.
+
+The suspicious remaining file-load path was
+`front/LxrAvr/Preset/presetManager.c::preset_dumpEndpointsToStm()`:
+
+```c
+for (i = 0; i < END_OF_SOUND_PARAMETERS; i++)
+   avrComms_sendData(PRF_RESTORE_PARAM_CC/CC2, ..., parameter_values[i]);
+
+for (i = 0; i < END_OF_SOUND_PARAMETERS; i++)
+   avrComms_sendData(PRF_RESTORE_MORPH_CC/CC2, ..., parameters2[i]);
+```
+
+Even after the file read/meta-copy path uses `END_OF_KIT_PARAMETERS`, this dump
+still crossed into `PAR_MORPH_DRUM1..PAR_MORPH_HIHAT`. During `.all`/`.prf`
+loads it forwards loaded endpoint state to STM, so it should use the same
+file-backed kit boundary and not transmit non-file-backed morph amount display
+params as if they were loaded kit bytes.
+
+Changed both endpoint dump loops to:
+
+```c
+for (i = 0; i < END_OF_KIT_PARAMETERS; i++)
+```
+
+This keeps the per-voice morph amount params available for runtime automation
+and modulation-node handling, but excludes them from file-backed kit endpoint
+dumps.
+
+### Re-added AVR rxDisable Guard
+
+Also re-added the AVR receive guard in
+`front/LxrAvr/avrComms/avrCommsReceivingProtocol.c` in case STM endpoint restore
+traffic is also writing the AVR menu values during file-load protection.
+
+Added:
+
+```c
+static uint8_t avrCommsParser_isVoiceMorphDisplayParam(uint16_t paramNr)
+{
+   return paramNr >= PAR_MORPH_DRUM1 && paramNr <= PAR_MORPH_HIHAT;
+}
+```
+
+Then guarded `PRF_RESTORE_PARAM_CC` and `PRF_RESTORE_PARAM_CC2` writes:
+
+```c
+if(!avrCommsParser_rxDisable
+   || !avrCommsParser_isVoiceMorphDisplayParam(paramNr))
+   parameter_values[paramNr] = value;
+```
+
+The guard only blocks protected file-load receive from overwriting the AVR menu
+voice morph display values. It does not change normal runtime `VOICE_MORPH`
+reports and does not request any new refresh from STM.
+
+### Retest Result
+
+Confirmed fixed.
+
+With the endpoint dump loops changed to `END_OF_KIT_PARAMETERS` and the AVR
+`rxDisable` guard restored for `PRF_RESTORE_PARAM_CC/CC2`, `.all` and `.prf`
+loads no longer reset the six individual voice morph values shown in the PERF
+menu. The individual voice morph display values now remain aligned with the
+unchanged STM morph/audio state through the file load.

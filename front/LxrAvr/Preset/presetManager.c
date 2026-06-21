@@ -125,6 +125,7 @@ static uint8_t preset_savedParameterValues[END_OF_SOUND_PARAMETERS];
 static uint8_t preset_savedParameters2[END_OF_SOUND_PARAMETERS];
 static volatile uint8_t preset_backgroundSwapDone = 0;
 static uint8_t preset_backgroundSwapExpectedType = 0;
+static uint8_t preset_backgroundTempPlaybackActive = 0;
 
 static uint8_t voice1presetMask[VOICE_PARAM_LENGTH]={1,8,9,20,      37,43,49,50,   62,70,74,78,  82,83,88,94,   102,108,115,121,     128,134,137,143,    149,155,161,167,    173,179,185,191,    197,203,209,215}; 
 static uint8_t voice2presetMask[VOICE_PARAM_LENGTH]={2,10,11,21,    38,44,51,52,   63,71,75,79,  84,85,89,95,   103,109,116,122,     129,135,138,144,    150,156,162,168,    174,180,186,192,    198,204,210,216}; 
@@ -151,11 +152,22 @@ static uint16_t preset_backgroundSwapNow(void)
    return now;
 }
 
+static uint8_t preset_fileTypeCanBackgroundSwap(uint8_t fileType)
+{
+   return (fileType == WTYPE_PATTERN)
+       || (fileType == WTYPE_PERFORMANCE)
+       || (fileType == WTYPE_ALL);
+}
+
 static uint8_t preset_backgroundSwapNeeded(uint8_t fileType)
 {
    uint8_t bgMode = parameter_values[PAR_FILE_LOAD_BACKGROUND];
 
    if(!menu_sequencerRunning)
+      return 0;
+
+   if(preset_backgroundTempPlaybackActive
+      && preset_fileTypeCanBackgroundSwap(fileType))
       return 0;
 
    if(menu_playedPattern == SEQ_TMP_PATTERN)
@@ -180,7 +192,17 @@ static uint8_t preset_backgroundSwapNeeded(uint8_t fileType)
 void preset_backgroundSwapDoneFromStm(uint8_t fileType)
 {
    if(fileType == preset_backgroundSwapExpectedType)
+   {
       preset_backgroundSwapDone = 1;
+      if(preset_fileTypeCanBackgroundSwap(fileType))
+         preset_backgroundTempPlaybackActive = 1;
+   }
+}
+
+void preset_notePlayedPatternChanged(uint8_t playedPattern)
+{
+   if(playedPattern != SEQ_TMP_PATTERN)
+      preset_backgroundTempPlaybackActive = 0;
 }
 
 static void preset_performBackgroundSwapWait(uint8_t fileType)
@@ -759,7 +781,7 @@ static void preset_dumpEndpointsToStm(uint8_t endpointMode)
    if(endpointMode != SEQ_TMP_KIT_ENDPOINT_MORPH_ONLY)
    {
       // 1. Send parameter_values[] (Original/Front Panel endpoints)
-      for (i = 0; i < END_OF_SOUND_PARAMETERS; i++)
+      for (i = 0; i < END_OF_KIT_PARAMETERS; i++)
       {
          if (i < 128)
             avrComms_sendData(PRF_RESTORE_PARAM_CC, (uint8_t)i, parameter_values[i]);
@@ -776,7 +798,7 @@ static void preset_dumpEndpointsToStm(uint8_t endpointMode)
    if(endpointMode != SEQ_TMP_KIT_ENDPOINT_FRONT_ONLY)
    {
       // 2. Send parameters2[] (Morph parameter endpoints)
-      for (i = 0; i < END_OF_SOUND_PARAMETERS; i++)
+      for (i = 0; i < END_OF_KIT_PARAMETERS; i++)
       {
          if (i < 128)
             avrComms_sendData(PRF_RESTORE_MORPH_CC, (uint8_t)i, parameters2[i]);

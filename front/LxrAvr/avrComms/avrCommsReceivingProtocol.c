@@ -48,6 +48,11 @@ static void avrCommsParser_syncVoiceMorphDisplayValues(uint8_t amount)
       parameter_values[PAR_MORPH_DRUM1 + voice] = amount;
 }
 
+static uint8_t avrCommsParser_isVoiceMorphDisplayParam(uint16_t paramNr)
+{
+   return paramNr >= PAR_MORPH_DRUM1 && paramNr <= PAR_MORPH_HIHAT;
+}
+
 static void avrCommsParser_handleVoiceMorphReport(uint8_t slot, uint8_t payload)
 {
    uint8_t voice;
@@ -624,6 +629,7 @@ void avrComms_parseData(uint8_t data)
                      led_setBlinkLed((uint8_t)((patMsg == SEQ_TMP_PATTERN) ? LED_STEP16 : (LED_PART_SELECT1+patMsg)),0);
                   	//clear last pattern led
                      menu_playedPattern = patMsg;
+                     preset_notePlayedPatternChanged(patMsg);
                   	
                      if(parameter_values[PAR_FOLLOW] || tempBoundaryAck) {
                      	
@@ -735,7 +741,9 @@ void avrComms_parseData(uint8_t data)
             {
                // RESTORE: Update main parameters only. Do not touch parameters2 (morph parameter endpoint)
                // to avoid corrupting morph state during a display-only synchronization.
-               parameter_values[avrCommsParser_command.data1]=avrCommsParser_command.data2;
+               if(!avrCommsParser_rxDisable
+                  || !avrCommsParser_isVoiceMorphDisplayParam(avrCommsParser_command.data1))
+                  parameter_values[avrCommsParser_command.data1]=avrCommsParser_command.data2;
                avrCommsParser_restoreCount++;
             }
             else if(avrCommsParser_command.status == PRF_RESTORE_PARAM_CC2)
@@ -743,7 +751,9 @@ void avrComms_parseData(uint8_t data)
                uint16_t paramNr = (uint16_t)(avrCommsParser_command.data1+128);
                if(paramNr < NUM_PARAMS)
                {
-                  parameter_values[paramNr]=avrCommsParser_command.data2;
+                  if(!avrCommsParser_rxDisable
+                     || !avrCommsParser_isVoiceMorphDisplayParam(paramNr))
+                     parameter_values[paramNr]=avrCommsParser_command.data2;
                   avrCommsParser_restoreCount++;
                   // RESTORE: Parameters2 mirroring explicitly removed for restore dumps.
                }

@@ -308,7 +308,9 @@ enum ParamEnums
 	//all parameters in this section are only there to be referenced from the menu
 	//they are not saved anywhere
 
-	END_OF_KIT_PARAMETERS,
+	END_OF_KIT_PARAMETERS,  // We want to retain individ. voice morph in the menu, it's not from kits
+						    // But it does get modulated, so it needs a special section
+							
 	PARAM_UNUSED_02 = END_OF_KIT_PARAMETERS,
 
 	/*bc: individ. morph per voice params*/
