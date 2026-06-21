@@ -476,24 +476,23 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	    /*PAR_ENVELOPE_POSITION_5*/		DTYPE_0B127,
 	    /*PAR_ENVELOPE_POSITION_6*/		DTYPE_0B127,
 	    /*PARAM_UNUSED_01*/		DTYPE_0B127,
-       /*PAR_KIT_VERSION*/    DTYPE_0B255,
-       
-       /*PAR_MORPH_DRUM1*/		DTYPE_0B255,
+        /*PAR_KIT_VERSION*/     DTYPE_0B255,
+	    /*PARAM_UNUSED_02*/		DTYPE_0B127,
+
+        /*PAR_MORPH_DRUM1*/		DTYPE_0B255,
 	    /*PAR_MORPH_DRUM2*/		DTYPE_0B255,
 	    /*PAR_MORPH_DRUM3*/		DTYPE_0B255,
 	    /*PAR_MORPH_SNARE*/		DTYPE_0B255,
 	    /*PAR_MORPH_CYM*/		DTYPE_0B255,
 	    /*PAR_MORPH_HIHAT*/		DTYPE_0B255,
        
-       /*PAR_MAC1_DST1*/      DTYPE_AUTOM_TARGET,
-       /*PAR_MAC1_DST1_AMT*/  DTYPE_PM63, 
-       /*PAR_MAC1_DST2*/      DTYPE_AUTOM_TARGET,
-       /*PAR_MAC1_DST2_AMT*/  DTYPE_PM63,
-   
-       /*PAR_MAC2_DST1*/      DTYPE_AUTOM_TARGET,
-       /*PAR_MAC2_DST1_AMT*/  DTYPE_PM63,
-       /*PAR_MAC2_DST2*/      DTYPE_AUTOM_TARGET,
-       /*PAR_MAC2_DST2_AMT*/  DTYPE_PM63,
+       /*PARAM_UNUSED_03*/		DTYPE_0B127,
+       /*PARAM_UNUSED_04*/		DTYPE_0B127, 
+       /*PARAM_UNUSED_05*/		DTYPE_0B127,
+       /*PARAM_UNUSED_06*/		DTYPE_0B127,
+       /*PARAM_UNUSED_07*/		DTYPE_0B127,
+       /*PARAM_UNUSED_08*/		DTYPE_0B127,
+       /*PARAM_UNUSED_09*/		DTYPE_0B127,
 
 	    /*PAR_ROLL*/ 			DTYPE_MENU | (MENU_ROLL_RATES<<4),
 	    /*PAR_MORPH*/ 			DTYPE_0B255,
@@ -645,8 +644,8 @@ void menu_init()
 	parameter_values[PAR_EUKLID_STEPS] = 16;
 	parameter_values[PAR_EUKLID_ROTATION] = 0;
    
-   parameter_values[PAR_MAC1] = 0;
-   parameter_values[PAR_MAC2] = 0;
+   // parameter_values[PAR_MAC1] = 0;
+   // parameter_values[PAR_MAC2] = 0;
 
 	//initialize the roll value
 	parameter_values[PAR_ROLL] = 10;

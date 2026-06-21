@@ -246,7 +246,7 @@ static void preset_writeDrumsetData(uint8_t isMorph)
 	
    if(isMorph>0)
    {
-      for(i=0;i<END_OF_SOUND_PARAMETERS;i++)
+      for(i=0;i<END_OF_KIT_PARAMETERS;i++)
       {
          uint8_t value;
       	//Mod targets are not morphed!!!
@@ -273,7 +273,7 @@ static void preset_writeDrumsetData(uint8_t isMorph)
       }
    } 
    else {
-      for(i=0;i<END_OF_SOUND_PARAMETERS;i++)
+      for(i=0;i<END_OF_KIT_PARAMETERS;i++)
       {
          f_write((FIL*)&preset_File,&parameter_values[i],1,&bytesWritten);
       }
@@ -481,7 +481,7 @@ void preset_readKitToTemp(uint8_t isMorph)
       while(1){;}
    }
    
-   res=f_read((FIL*)&kitRead_File, para,END_OF_SOUND_PARAMETERS, &bytesRead);
+   res=f_read((FIL*)&kitRead_File, para,END_OF_KIT_PARAMETERS, &bytesRead);
    if(res)
    {
       //print received data on LCD
@@ -500,18 +500,18 @@ void preset_readKitToTemp(uint8_t isMorph)
    /* Session 025 deprecation step: force every legacy macro slot to neutral
       values before the loaded snapshot is copied into live parameter storage.
       This keeps file loading intact while macro assignments are phased out. */
-   para[PAR_MAC1_DST1] = 0;
-   para[PAR_MAC1_DST1_AMT] = 0;
-   para[PAR_MAC1_DST2] = 0;
-   para[PAR_MAC1_DST2_AMT] = 0;
-   para[PAR_MAC2_DST1] = 0;
-   para[PAR_MAC2_DST1_AMT] = 0;
-   para[PAR_MAC2_DST2] = 0;
-   para[PAR_MAC2_DST2_AMT] = 0;
+   // para[PAR_MAC1_DST1] = 0;
+   // para[PAR_MAC1_DST1_AMT] = 0;
+   // para[PAR_MAC1_DST2] = 0;
+   // para[PAR_MAC1_DST2_AMT] = 0;
+   // para[PAR_MAC2_DST1] = 0;
+   // para[PAR_MAC2_DST1_AMT] = 0;
+   // para[PAR_MAC2_DST2] = 0;
+   // para[PAR_MAC2_DST2_AMT] = 0;
    
    // set to 0 for any that were not read from the file
-   if(END_OF_SOUND_PARAMETERS-bytesRead)
-      memset(para+bytesRead,0,END_OF_SOUND_PARAMETERS-bytesRead);
+   if(END_OF_KIT_PARAMETERS-bytesRead)
+      memset(para+bytesRead,0,END_OF_KIT_PARAMETERS-bytesRead);
    	
  //special case mod targets. normalize.
    const uint8_t nmt=getNumModTargets();
@@ -642,7 +642,7 @@ void preset_readDrumsetMeta(uint8_t isMorph)
    {
       /* FILE LOAD: Keep the morph parameter endpoint image complete. This is
          endpoint storage only; it does not change live morph destination behavior. */
-      for (i=0;i<END_OF_SOUND_PARAMETERS-END_OF_INDIVIDUAL_VOICE_PARAMS;i++)
+      for (i=0;i<END_OF_KIT_PARAMETERS-END_OF_INDIVIDUAL_VOICE_PARAMS;i++)
       {
          parameters2[END_OF_INDIVIDUAL_VOICE_PARAMS+i]=
             parameters2_fileLoadSnapshot[END_OF_INDIVIDUAL_VOICE_PARAMS+i];
@@ -657,7 +657,7 @@ void preset_readDrumsetMeta(uint8_t isMorph)
 
    // copy values from temp to where they are supposed to be - normal params or morph
     
-      for (i=0;i<END_OF_SOUND_PARAMETERS-END_OF_INDIVIDUAL_VOICE_PARAMS;i++)
+      for (i=0;i<END_OF_KIT_PARAMETERS-END_OF_INDIVIDUAL_VOICE_PARAMS;i++)
       {
          parameter_values[END_OF_INDIVIDUAL_VOICE_PARAMS+i]=
             parameter_values_fileLoadSnapshot[END_OF_INDIVIDUAL_VOICE_PARAMS+i];
@@ -666,10 +666,10 @@ void preset_readDrumsetMeta(uint8_t isMorph)
       /* Session 025 deprecation step: the top-level macro amount params are
          not file-backed, so they are cleared in the live arrays rather than in
          the file snapshot. */
-      parameter_values[PAR_MAC1] = 0;
-      parameter_values[PAR_MAC2] = 0;
-      parameters2[PAR_MAC1] = 0;
-      parameters2[PAR_MAC2] = 0;
+      // parameter_values[PAR_MAC1] = 0;
+      // parameter_values[PAR_MAC2] = 0;
+      // parameters2[PAR_MAC1] = 0;
+      // parameters2[PAR_MAC2] = 0;
    
    // bc: special case macro targets - re-send targets on kit load
    /* MACRO_CC message structure
@@ -683,25 +683,25 @@ void preset_readDrumsetMeta(uint8_t isMorph)
                                  
    byte3, data2 byte: xbbb bbbb : b=macro mod target value lower 7 bits or top level value full
    */
-      for(i=0;i<7; i=(uint8_t)(i+2) ) // 0,2,4,6
-      {
-         value =  (uint8_t)pgm_read_word(&modTargets[parameter_values[PAR_MAC1_DST1+i]].param); // the value of the mod target
-         uint8_t lower = value&0x7f;
-         uint8_t upper = (uint8_t)
-                      ( ( ( ( i ) //  MAC1_DST1=0, M1D2=2, M2D1=4, M2D2=6
-                           >>1 )  //  MAC1_DST1=0, M1D2=1, M2D1=2, M2D2=3
-                           <<2 )  //  shift over 2 to make room for upper mod target bit
-                           |(value>>7) );
+   //    for(i=0;i<7; i=(uint8_t)(i+2) ) // 0,2,4,6
+   //    {
+   //       value =  (uint8_t)pgm_read_word(&modTargets[parameter_values[PAR_MAC1_DST1+i]].param); // the value of the mod target
+   //       uint8_t lower = value&0x7f;
+   //       uint8_t upper = (uint8_t)
+   //                    ( ( ( ( i ) //  MAC1_DST1=0, M1D2=2, M2D1=4, M2D2=6
+   //                         >>1 )  //  MAC1_DST1=0, M1D2=1, M2D1=2, M2D2=3
+   //                         <<2 )  //  shift over 2 to make room for upper mod target bit
+   //                         |(value>>7) );
                            
-         avrComms_sendData(MACRO_CC,upper,lower);
-      }
+   //       avrComms_sendData(MACRO_CC,upper,lower);
+   //    }
    
          
-   // send macro amounts as special cases
-      avrComms_sendData(CC_2,(uint8_t)(PAR_MAC1_DST1_AMT-128),parameter_values[PAR_MAC1_DST1_AMT]);
-      avrComms_sendData(CC_2,(uint8_t)(PAR_MAC1_DST2_AMT-128),parameter_values[PAR_MAC1_DST2_AMT]);
-      avrComms_sendData(CC_2,(uint8_t)(PAR_MAC2_DST1_AMT-128),parameter_values[PAR_MAC2_DST1_AMT]);
-      avrComms_sendData(CC_2,(uint8_t)(PAR_MAC2_DST2_AMT-128),parameter_values[PAR_MAC2_DST2_AMT]);
+   // // send macro amounts as special cases
+   //    avrComms_sendData(CC_2,(uint8_t)(PAR_MAC1_DST1_AMT-128),parameter_values[PAR_MAC1_DST1_AMT]);
+   //    avrComms_sendData(CC_2,(uint8_t)(PAR_MAC1_DST2_AMT-128),parameter_values[PAR_MAC1_DST2_AMT]);
+   //    avrComms_sendData(CC_2,(uint8_t)(PAR_MAC2_DST1_AMT-128),parameter_values[PAR_MAC2_DST1_AMT]);
+   //    avrComms_sendData(CC_2,(uint8_t)(PAR_MAC2_DST2_AMT-128),parameter_values[PAR_MAC2_DST2_AMT]);
 
       if(!avrComms_flowFailed())
          (void)avrComms_flowEnd(FLOW_CH_DRUM_META);
@@ -731,13 +731,13 @@ static void preset_dumpAutomationTargetsToStm(const uint8_t *params)
       avrComms_sendData(CC_LFO_TARGET, upper, lower);
    }
 
-   for (i = 0; i < 7; i = (uint8_t)(i + 2)) // 0, 2, 4, 6
-   {
-      value = (uint8_t)pgm_read_word(&modTargets[params[PAR_MAC1_DST1 + i]].param);
-      lower = value & 0x7f;
-      upper = (uint8_t)((((i) >> 1) << 2) | (value >> 7));
-      avrComms_sendData(MACRO_CC, upper, lower);
-   }
+   // for (i = 0; i < 7; i = (uint8_t)(i + 2)) // 0, 2, 4, 6
+   // {
+   //    value = (uint8_t)pgm_read_word(&modTargets[params[PAR_MAC1_DST1 + i]].param);
+   //    lower = value & 0x7f;
+   //    upper = (uint8_t)((((i) >> 1) << 2) | (value >> 7));
+   //    avrComms_sendData(MACRO_CC, upper, lower);
+   // }
 }
 
 //----------------------------------------------------
@@ -2256,7 +2256,7 @@ void preset_saveAll(uint8_t presetNr, uint8_t isAll)
    preset_writeDrumsetData(0);
 
    // check remain from drumkit data
-   remain = 512 - (END_OF_SOUND_PARAMETERS);
+   remain = 512 - (END_OF_KIT_PARAMETERS);
    
    // write some more padding (we'll allocate 512 bytes for kit data. This should be more than
 	// we'll ever need. Right now we use about 228 bytes for kit plus morph params).
@@ -2274,7 +2274,7 @@ void preset_saveAll(uint8_t presetNr, uint8_t isAll)
    preset_writeDrumsetData(2);
 
    // check remain from drumkit data
-   remain = 512 - (END_OF_SOUND_PARAMETERS);
+   remain = 512 - (END_OF_KIT_PARAMETERS);
    
    // write some more padding (we'll allocate 512 bytes for kit data. This should be more than
 	// we'll ever need. Right now we use about 228 bytes for kit plus morph params).

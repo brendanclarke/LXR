@@ -328,75 +328,95 @@ enum ParamEnums
    PAR_ENVELOPE_POSITION_5,
    PAR_ENVELOPE_POSITION_6,
 
-	PAR_UNUSED01,      // 110 - beware going over 127, can't fit into midi data, will need another msg
+   PAR_UNUSED01,      // 110 - beware going over 127, can't fit into midi data, will need another msg
    PAR_KIT_VERSION,
-   
-   PAR_MORPH_DRUM1,     // bc: adding these for individual voice morph
-   PAR_MORPH_DRUM2,
-   PAR_MORPH_DRUM3,
-   PAR_MORPH_SNARE,
-   PAR_MORPH_CYM,
-   PAR_MORPH_HIHAT,
-   
-   PAR_MAC1_DST1,
-   PAR_MAC1_DST1_AMT,
-   PAR_MAC1_DST2,
-   PAR_MAC1_DST2_AMT,
-   
-   PAR_MAC2_DST1,
-   PAR_MAC2_DST1_AMT,
-   PAR_MAC2_DST2,
-   PAR_MAC2_DST2_AMT,
-   
-   END_OF_SOUND_PARAMETERS,
-	//#########################################
-	//######## End of sound Parameters ########
-	//#########################################
-/*
-	//all parameters in this section are only there to be referenced from the menu
-	//they are not saved anywhere
 
-	PAR_ROLL= END_OF_SOUND_PARAMETERS,
+   END_OF_KIT_PARAMETERS,
+
+    PARAM_UNUSED_02 = END_OF_KIT_PARAMETERS,
+
+    // bc: individ. morph per voice params
+	PAR_MORPH_DRUM1,
+	PAR_MORPH_DRUM2,			// 230
+	PAR_MORPH_DRUM3,
+	PAR_MORPH_SNARE,
+	PAR_MORPH_CYM,
+	PAR_MORPH_HIHAT,
+    END_OF_SOUND_PARAMETERS,
+//#########################################
+//######## End of sound Parameters ########
+//#########################################
+//all parameters in this section are only there to be referenced from the menu
+//they are not saved anywhere
+/*
+	//  Legacy performance-macro destination slots, kept as placeholders while
+	//    file-load and protocol paths are being retired. 
+
+	PARAM_UNUSED_03 = END_OF_SOUND_PARAMETERS,
+
+
+	PARAM_UNUSED_04,
+	PARAM_UNUSED_05,
+	PARAM_UNUSED_06,
+	PARAM_UNUSED_07,			// 240
+	PARAM_UNUSED_08,
+	PARAM_UNUSED_09,
+
+	PAR_ROLL,
 	PAR_MORPH,
 
-	PAR_ACTIVE_STEP,
+	PAR_ACTIVE_STEP, 					
 	PAR_STEP_VOLUME,
 	PAR_STEP_PROB,
 	PAR_STEP_NOTE,
 
 	PAR_EUKLID_LENGTH,
 	PAR_EUKLID_STEPS,
+	PAR_EUKLID_ROTATION,             	// 250
+	PAR_EUKLID_SUBSTEP_ROTATION,
 
 	PAR_AUTOM_TRACK,
 
+	// --AS these are now indices into modTargets --BC: todo: this causes pitch fine autom. to adjust coarse instead
 	PAR_P1_DEST,
 	PAR_P2_DEST,
 
-	PAR_P1_VAL,
+	PAR_P1_VAL,				// 256
 	PAR_P2_VAL,
 
 	PAR_SHUFFLE,
 
 	PAR_PATTERN_BEAT,
-	PAR_PATTERN_NEXT,
+	PAR_PATTERN_NEXT,			// 260
+
 	PAR_TRACK_LENGTH,
-   PAR_TRACK_SCALE,
+	PAR_TRACK_SCALE,
 
+	PAR_POS_X,
+	PAR_POS_Y,
+	PAR_FLUX,
+	PAR_SOM_FREQ,
+	PAR_TRACK_ROTATION,			// --AS **PATROT
 
-   PAR_MORPH_DRUM1,               // bc: individ. voice morph
-   PAR_MORPH_DRUM2,
-   PAR_MORPH_DRUM3,
-   PAR_MORPH_SNARE,
-   PAR_MORPH_CYM,
-   PAR_MORPH_HIHAT,
+	//    Session 025 legacy macro parameters: kept only while the remaining
+	//    file-load and protocol cleanup work is in flight. 
+	PAR_UNUSED_10,
+	PAR_UNUSED_11,
+
+	PAR_ROLL_NOTE,                   	// 270
+	PAR_ROLL_VELOCITY,
+	PAR_ROLL_MODE,
+	PAR_TRANSPOSE,
+	PAR_TRANSPOSE_ON_OFF,
+
 
 	//#########################################
 	//######## Global Parameters ##############
 	//#########################################
-	PAR_BEGINNING_OF_GLOBALS, //a placeholder to mark the beginning of the global var space not present in morph and not needed in the seq
-	//global params
+	PAR_BEGINNING_OF_GLOBALS,
+	
 	PAR_BPM = PAR_BEGINNING_OF_GLOBALS,
-
+	
 	PAR_MIDI_CHAN_1,
 	PAR_MIDI_CHAN_2,
 	PAR_MIDI_CHAN_3,

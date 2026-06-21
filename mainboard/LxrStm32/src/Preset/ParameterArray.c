@@ -682,23 +682,23 @@ void parameterArray_init()
    
    /* Legacy macro destination bindings, kept while the macro path is
       deprecated and can be removed after the test pass. */
-   parameterArray[PAR_MAC1_DST1].ptr 		= &macroModulators[0].destination;
-	parameterArray[PAR_MAC1_DST1].type		= TYPE_UINT8;
-	parameterArray[PAR_MAC1_DST1_AMT].ptr 	= &macroModulators[0].amount;
-	parameterArray[PAR_MAC1_DST1_AMT].type = TYPE_FLT;
-	parameterArray[PAR_MAC1_DST2].ptr 		= &macroModulators[1].destination;
-	parameterArray[PAR_MAC1_DST2].type 	   = TYPE_UINT8;
-	parameterArray[PAR_MAC1_DST2_AMT].ptr 	= &macroModulators[1].amount;
-	parameterArray[PAR_MAC1_DST2_AMT].type = TYPE_FLT;
+//  parameterArray[PAR_MAC1_DST1].ptr 		= &macroModulators[0].destination;
+// 	parameterArray[PAR_MAC1_DST1].type		= TYPE_UINT8;
+// 	parameterArray[PAR_MAC1_DST1_AMT].ptr 	= &macroModulators[0].amount;
+// 	parameterArray[PAR_MAC1_DST1_AMT].type = TYPE_FLT;
+// 	parameterArray[PAR_MAC1_DST2].ptr 		= &macroModulators[1].destination;
+// 	parameterArray[PAR_MAC1_DST2].type 	   = TYPE_UINT8;
+// 	parameterArray[PAR_MAC1_DST2_AMT].ptr 	= &macroModulators[1].amount;
+// 	parameterArray[PAR_MAC1_DST2_AMT].type = TYPE_FLT;
    
-   parameterArray[PAR_MAC2_DST1].ptr 		= &macroModulators[2].destination;
-	parameterArray[PAR_MAC2_DST1].type		= TYPE_UINT8;
-	parameterArray[PAR_MAC2_DST1_AMT].ptr 	= &macroModulators[2].amount;
-	parameterArray[PAR_MAC2_DST1_AMT].type = TYPE_FLT;
-	parameterArray[PAR_MAC2_DST2].ptr 		= &macroModulators[3].destination;
-	parameterArray[PAR_MAC2_DST2].type 	   = TYPE_UINT8;
-	parameterArray[PAR_MAC2_DST2_AMT].ptr 	= &macroModulators[3].amount;
-   parameterArray[PAR_MAC2_DST2_AMT].type = TYPE_FLT;
+//    parameterArray[PAR_MAC2_DST1].ptr 		= &macroModulators[2].destination;
+// 	parameterArray[PAR_MAC2_DST1].type		= TYPE_UINT8;
+// 	parameterArray[PAR_MAC2_DST1_AMT].ptr 	= &macroModulators[2].amount;
+// 	parameterArray[PAR_MAC2_DST1_AMT].type = TYPE_FLT;
+// 	parameterArray[PAR_MAC2_DST2].ptr 		= &macroModulators[3].destination;
+// 	parameterArray[PAR_MAC2_DST2].type 	   = TYPE_UINT8;
+// 	parameterArray[PAR_MAC2_DST2_AMT].ptr 	= &macroModulators[3].amount;
+//    parameterArray[PAR_MAC2_DST2_AMT].type = TYPE_FLT;
 
    
 	//#########################################
