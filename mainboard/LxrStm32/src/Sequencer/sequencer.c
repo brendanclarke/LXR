@@ -638,7 +638,10 @@ static void seq_nextStep()
    }
    
 	//-------- check if a pattern switch is necessary --------//
-   if( (!masterStepPos)||(switchOnNextStep && preset_tempPlaybackSwitchState.loadSeqNow))
+   uint8_t forceInstantSwitch =
+      (switchOnNextStep || preset_tempPlaybackSwitchState.forceInstantSwitch)
+      && preset_tempPlaybackSwitchState.loadSeqNow;
+   if( (!masterStepPos)||forceInstantSwitch)
    {
       if((seq_activePattern != preset_tempPlaybackSwitchState.pendingPattern) || preset_tempPlaybackSwitchState.loadPendingFlag)
       {
@@ -664,10 +667,14 @@ static void seq_nextStep()
          uint8_t oldActivePattern = seq_activePattern;
          uint8_t newActivePattern = pat_normalizePatternNumber(preset_tempPlaybackSwitchState.pendingPattern);
          uint8_t activePatternChanged = (oldActivePattern != newActivePattern);
+         uint8_t patternOnlyTempPlayback =
+            preset_tempPlaybackSwitchState.patternOnlyTempPlayback
+            && (newActivePattern == SEQ_TMP_PATTERN);
          uint8_t tmpBoundaryPatternChanged = 0;
          
          seq_activePattern = newActivePattern;
-         preset_setTempPlaybackActive(seq_activePattern == SEQ_TMP_PATTERN);
+         if(!patternOnlyTempPlayback)
+            preset_setTempPlaybackActive(seq_activePattern == SEQ_TMP_PATTERN);
          preset_tempPlaybackSwitchState.newPatternExecuted=1;
          if (preset_tempPlaybackSwitchState.loadPendingFlag)
          {
@@ -690,7 +697,8 @@ static void seq_nextStep()
          
          }
 
-         preset_updateVoiceSourcesForPatternChange(oldTrackPattern, !activePatternChanged);
+         if(!patternOnlyTempPlayback)
+            preset_updateVoiceSourcesForPatternChange(oldTrackPattern, !activePatternChanged);
          tmpBoundaryPatternChanged =
             (preset_trackPatternUsesTmp(oldActivePattern)
              != preset_trackPatternUsesTmp(newActivePattern));
@@ -715,6 +723,7 @@ static void seq_nextStep()
                seq_barCounter = -1; // -bc- bar counter needs to be -1 to get set to 0 on first bar change
                                     // after 'instant' switch
          }
+         preset_tempPlaybackSwitchState.forceInstantSwitch = 0;
          
       	// --AS send a pattern change message to midi/usb out
          seq_sendProgChg(seq_activePattern);
@@ -1352,7 +1361,8 @@ void seq_rollChange(uint8_t voice, uint8_t onOff) // a message about changing ro
    else 
    { // onOff is zero, turn roll off for this voice
       seq_rollTriggered &= ~(1<<voice);
-      seq_rollCounter[voice] = seq_rollRate;
+      if(seq_rollRate != 0xff) // one-shot doesn't need counter
+         seq_rollCounter[voice] = seq_rollRate;
    }
 }
 //-------------------------------------------------------------------------------
@@ -1374,11 +1384,11 @@ uint8_t seq_setRoll(uint8_t voice, uint8_t onOff)// called processing step if ro
       seq_rollPlayedEarly &= ~(1<<voice);
       return triggered;  
    }
-   if(seq_rollRate == 0xff) // deal with one-shots
+   if(seq_rollRate == 0xff) // one-shot: trigger once and record
    {
-      triggered = seq_rollTrig(voice); // trig the voice
-      seq_rollCounter[voice] = 15; // set this to default 1/16 so user can change roll OTF
-      seq_rollState |= (1<<voice); // we've dealt with this, let seq know we shouldn't repeat every step
+      triggered = seq_rollTrig(voice); // trig the voice and record
+      seq_rollTriggered &= ~(1<<voice); // clear trigger so we don't re-trigger
+      seq_rollPlayedEarly &= ~(1<<voice);
       return triggered;
    }
    

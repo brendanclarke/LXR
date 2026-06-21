@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
-Date: 2026-06-19
-Status: current AVR<->STM comms reference after Session 027 live-record automation and encoder menu-value fixes. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, and step automation destinations are stored as raw AVR/menu `PAR_*` ids.
+Date: 2026-06-21
+Status: current AVR<->STM comms reference after Session 028 completed background file loading through temporary Pattern/Preset storage. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading now uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
 
 ## Purpose
 
@@ -213,12 +213,29 @@ These messages tell STM that the incoming traffic belongs to a file load or back
 - `SEQ_FILE_BEGIN`
 - `SEQ_FILE_DONE`
 - `SEQ_LOAD_VOICE`
-- `SEQ_LOAD_BACKGROUND`
+- `SEQ_LOAD_BACKGROUND` - legacy/background-setting byte at `0x50`, currently
+  still sent when the AVR global menu value changes and still received on STM
+  as `FRONT_SEQ_LOAD_FAST`; this is not the active background-swap/load
+  mechanism
+- `SEQ_BACKGROUND_SWAP_BEGIN` / `FRONT_SEQ_BACKGROUND_SWAP_BEGIN` (`0x6d`)
+- `SEQ_BACKGROUND_SWAP_DONE` / `FRONT_SEQ_BACKGROUND_SWAP_DONE` (`0x6e`)
 
-On the AVR side, the user-facing control is now the 5-state background-load
-selector `PAR_FILE_LOAD_BACKGROUND` on the load page. It still sends the same
-raw byte value on the same opcode number, so this is a naming/UI update rather
-than a new transport shape.
+On the AVR side, the user-facing control is the 5-state background-load
+selector `PAR_FILE_LOAD_BACKGROUND` on the load page:
+
+| Value | Label | File types that may request background swap |
+|-------|-------|---------------------------------------------|
+| `0` | `off` | none |
+| `1` | `pat` | `.pat` / `WTYPE_PATTERN` |
+| `2` | `prf` | `.prf` / `WTYPE_PERFORMANCE` |
+| `3` | `all` | `.all` / `WTYPE_ALL` |
+| `4` | `tot` | `.pat`, `.prf`, and `.all` |
+
+That selector still persists as one raw byte in globals / `.cfg` storage. The
+old `SEQ_LOAD_BACKGROUND` / `FRONT_SEQ_LOAD_FAST` setting-byte path at `0x50`
+is still present in current code, but the completed background-loading feature
+does not depend on it. The active background-load prelude is the `0x6d/0x6e`
+swap handshake.
 
 The old `PresetLoadCache` and `presetLoad_*` cache API were removed in Session
 020. File-load receive paths now route bytes directly to normal Preset/Pattern
@@ -226,15 +243,81 @@ storage. `avrCommsReceivingProtocol.c` only keeps a tiny file-load ingress
 bracket to ensure file bytes land in normal-kit endpoint mode during the old
 AVR file-transfer envelope; it is not a cache or staging owner.
 
-File-load traffic should follow this broad rule:
+Current active background-load prelude:
 
-- `.prf` / `.all` style loads refresh normal storage images while temp
+```text
+AVR file loader validates the selected file header
+-> preset_backgroundSwapNeeded(fileType) checks sequencer-running state,
+   PAR_FILE_LOAD_BACKGROUND, temp-playback guard, and SEQ_TMP_PATTERN guard
+-> AVR displays "Bckgrnd Swap..."
+-> AVR sends SEQ_CC / SEQ_BACKGROUND_SWAP_BEGIN / fileType
+-> STM handles FRONT_SEQ_BACKGROUND_SWAP_BEGIN:
+   - pat_copyToTmpPattern(seq_activePattern)
+   - seq_setNextPattern(SEQ_TMP_PATTERN, 0x0f)
+   - preset_tempPlaybackSwitchState.forceInstantSwitch = 1
+   - preset_tempPlaybackSwitchState.patternOnlyTempPlayback = fileType is pattern
+   - arm frontParser_backgroundSwapPending
+-> frontParser_serviceBackgroundSwapAck() runs from the STM main loop
+-> after temp playback readiness plus 400 ticks, STM sends
+   FRONT_SEQ_BACKGROUND_SWAP_DONE / fileType as priority traffic
+-> AVR accepts SEQ_BACKGROUND_SWAP_DONE even while avrCommsParser_rxDisable is true
+-> AVR continues the ordinary SEQ_FILE_BEGIN / file payload / SEQ_FILE_DONE load
+```
+
+Readiness for the STM ACK is code-defined:
+
+- `seq_activePattern == SEQ_TMP_PATTERN`;
+- every `seq_perTrackActivePattern[track] == SEQ_TMP_PATTERN`;
+- for `.pat`, `preset_allVoiceSourcesUseNormal()` must be true;
+- for `.prf` / `.all`, `preset_allVoiceSourcesUseTmp()` must be true.
+
+File-load traffic follows this broad rule:
+
+- `.pat`, `.prf`, and `.all` loads refresh normal storage images while temp
   playback can keep running.
 - file loads must not create a second sound-authority cache.
-- future file-load-while-temp-active behavior should use the existing
-  normal/temp copy/playback model, not a revived load cache.
+- file-load-while-temp-active behavior uses the existing normal/temp
+  copy/playback model, not a revived load cache.
+- when AVR already knows temp playback is active
+  (`preset_backgroundTempPlaybackActive`), another `.pat`, `.prf`, or `.all`
+  load skips `SEQ_BACKGROUND_SWAP_BEGIN` and proceeds as an ordinary load into
+  normal storage.
+- the temp-playback flag clears only when STM reports a non-`SEQ_TMP_PATTERN`
+  played pattern through `SEQ_CHANGE_PAT`.
 
-### 5. Callback and Hold Primitives
+Morph rule:
+
+- file loads must not reset or resend current global morph or current per-voice
+  morph amounts;
+- `.pat` load begin has no morph side effect;
+- `.prf` / `.all` load begin may invalidate the live morph apply cache so newly
+  loaded endpoints are recomputed from the existing current morph amounts, but
+  it must not mutate those morph amounts;
+- AVR file-backed kit reads/writes/dumps use `END_OF_KIT_PARAMETERS`, not
+  `END_OF_SOUND_PARAMETERS`, so `PAR_MORPH_DRUM1..PAR_MORPH_HIHAT` stay live
+  performance/display controls rather than saved kit bytes.
+
+### 5. Background Temp-Playback UI Feedback
+
+The AVR owns the visible temp-playback hint because it already tracks
+`preset_backgroundTempPlaybackActive`.
+
+Relevant functions:
+
+- `preset_isBackgroundTempPlaybackActive()`
+- `buttonHandler_refreshTempPlaybackLedHint()`
+- `preset_notePlayedPatternChanged()`
+
+Current UI behavior while temp playback is active:
+
+- outside `SELECT_MODE_PERF`, `LED_MODE2` / PERF flashes while the current mode
+  LED remains active;
+- inside `SELECT_MODE_PERF`, all eight SELECT LEDs flash;
+- `SHIFT+PERF` is ignored so PAT_GEN cannot be entered while temp playback
+  remains active;
+- `NUM_OF_BLINKABLE_LEDS` is currently `8` to support all SELECT LEDs blinking.
+
+### 6. Callback and Hold Primitives
 
 Legacy wait primitives still exist:
 
@@ -276,11 +359,33 @@ In `front/LxrAvr/Preset/presetManager.c`:
 - `preset_shouldPreserveMenuEndpointsDuringFileLoad()`
 - `preset_saveMenuEndpointsDuringFileLoad()`
 - `preset_restoreMenuEndpointsDuringFileLoad()`
+- `preset_backgroundSwapNeeded()`
+- `preset_performBackgroundSwapWait()`
+- `preset_backgroundSwapDoneFromStm()`
+- `preset_notePlayedPatternChanged()`
+- `preset_isBackgroundTempPlaybackActive()`
 
 These are the file-load and menu-preservation flows that start the transport/session traffic.
 
 They are the right place to keep the user-facing initiation logic.
-They are not the right place to own the in-flight load-session state.
+They are not the right place to own STM storage/session semantics. They do own
+the AVR policy decision about whether the current file type should request the
+STM background-swap prelude.
+
+### STM background-swap service points
+
+In `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c`:
+
+- `FRONT_SEQ_BACKGROUND_SWAP_BEGIN` is the receive-side entry point.
+- `frontParser_serviceBackgroundSwapAck()` is the non-blocking main-loop
+  service that waits for readiness and sends `FRONT_SEQ_BACKGROUND_SWAP_DONE`.
+- `frontParser_backgroundSwapTempPlaybackReady()` defines when the ACK may arm
+  its final delay.
+
+In `mainboard/LxrStm32/src/main.c`:
+
+- `frontParser_serviceBackgroundSwapAck()` is called after
+  `uart_processFront()` each main-loop pass.
 
 ## Send-Side Completion State
 
@@ -296,7 +401,7 @@ The send-side migration is complete for the current audit scope:
 
 ## The `.pat` Rule
 
-Pattern-only background loading is the important wrinkle.
+Pattern-only background loading is the important wrinkle and is now active code.
 
 `.pat` background loading should never switch preset parameter read/write away from normal storage.
 
@@ -305,12 +410,13 @@ That means:
 - pattern data can be staged in pattern-owned temp structures;
 - parameter ingress must remain on normal storage for `.pat` background loads;
 - pattern temp/normal ownership and parameter temp/normal ownership must remain separate;
-- the implementation may need an explicit load-kind discriminator or mode bit to distinguish pattern-only background loads from parameter-bearing file loads.
+- the implementation uses `preset_tempPlaybackSwitchState.patternOnlyTempPlayback`
+  to distinguish pattern-only background loads from parameter-bearing file loads.
 
 This rule is easy to miss if the pattern loader and parameter loader share one broad session object.
-That is exactly why the future interface needs to keep the ownership boundaries explicit.
+That is exactly why the interface keeps the ownership boundaries explicit.
 
-## Future Shape After The Audit
+## Current Shape After The Audit
 
 The comms layer now has this split:
 
@@ -321,8 +427,8 @@ The comms layer now has this split:
 - `Preset` for storage and session semantics
 - `Pattern` for pattern storage and pattern temp behavior
 
-The parser must not keep a second background-load model. It should route
-semantics into `Preset` and `Pattern`, then get out of the way.
+The parser must not keep a second background-load model. It routes semantics
+into `Preset` and `Pattern`, then gets out of the way.
 
 The old PRF/cache initiator names are now commented out rather than active.
 Keep their history in the log archive rather than reintroducing them in place,
@@ -337,3 +443,9 @@ and do not bring back a cache-as-authority model under the same names.
 - Do not merge pattern-only background loading with parameter storage switching.
 - Do not let send/receive protocol work blur the ownership boundary between
   parsing bytes and deciding what they mean.
+- Do not treat `SEQ_LOAD_BACKGROUND` / `FRONT_SEQ_LOAD_FAST` at `0x50` as the
+  active background-load mechanism; active background swap is `0x6d/0x6e`.
+- Do not reset current global/per-voice morph amounts from any file-load begin
+  or done message.
+- Do not send another `SEQ_BACKGROUND_SWAP_BEGIN` while AVR temp playback state
+  is already active.

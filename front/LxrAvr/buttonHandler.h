@@ -107,6 +107,8 @@ void buttonHandler_buttonPressed(uint8_t buttonNr);
 //--------------------------------------------------------
 void buttonHandler_handleModeButtons(uint8_t mode);
 //--------------------------------------------------------
+void buttonHandler_refreshTempPlaybackLedHint(void);
+//--------------------------------------------------------
 //uint8_t buttonHandler_getMutedVoices();
 //--------------------------------------------------------
 void buttonHandler_buttonReleased(uint8_t buttonNr);

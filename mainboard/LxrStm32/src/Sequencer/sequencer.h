@@ -65,8 +65,8 @@ enum Seq_RollModeEnum //0=trig, 1=nte, 2=vel, 3=bth, 4=all
    ROLL_MODE_VELOCITY,
    ROLL_MODE_BOTH,
    ROLL_MODE_ALL,
-   ROLL_MODE_FIRST_ON,
-   ROLL_MODE_FIRST_OFF,
+   // ROLL_MODE_FIRST_ON,
+   // ROLL_MODE_FIRST_OFF,
 };
 
 enum Seq_QuantisationEnum

@@ -37,18 +37,15 @@
 #ifndef PARAMETERARRAY_H_
 #define PARAMETERARRAY_H_
 
-
 #define TYPE_UINT8 				0	// byte
-#define TYPE_FLT 				   1	// float
+#define TYPE_FLT 				1	// float
 #define TYPE_SPECIAL_F			2	// float value targeting modNodeValue (as opposed to actual parameter)
 #define TYPE_UINT32				3	// 32 bit int
 #define TYPE_SPECIAL_P			4	// pan
 #define TYPE_SPECIAL_FILTER_F	5	// not used apparently
-#define TYPE_UINT8_VMORPH     6  // individual voice morph - change and queue to send to front
 
 // --AS **PATROT this list needs to correspond exactly with the sound parameters in the AVR side because
-// modulation targets are sent across and they have to match in this list 
-
+// modulation targets are sent across and they have to match in this list
 enum ParamEnums
 {
 
@@ -321,103 +318,54 @@ enum ParamEnums
 	PAR_AUDIO_OUT6,
 
 	//--AS
-   PAR_ENVELOPE_POSITION_1,
-   PAR_ENVELOPE_POSITION_2,
-   PAR_ENVELOPE_POSITION_3,
-   PAR_ENVELOPE_POSITION_4,
-   PAR_ENVELOPE_POSITION_5,
-   PAR_ENVELOPE_POSITION_6,
-
-   PAR_UNUSED01,      // 110 - beware going over 127, can't fit into midi data, will need another msg
-   PAR_KIT_VERSION,
-
-   END_OF_KIT_PARAMETERS, // We want to retain individ. voice morph in the menu, it's not from kits
-						  // But it does get modulated, so it needs a special section
-
-    PARAM_UNUSED_02 = END_OF_KIT_PARAMETERS,
-
-    // bc: individ. morph per voice params
-	PAR_MORPH_DRUM1,
-	PAR_MORPH_DRUM2,			// 230
-	PAR_MORPH_DRUM3,
-	PAR_MORPH_SNARE,
-	PAR_MORPH_CYM,
-	PAR_MORPH_HIHAT,
-    END_OF_SOUND_PARAMETERS,
-//#########################################
-//######## End of sound Parameters ########
-//#########################################
-//all parameters in this section are only there to be referenced from the menu
-//they are not saved anywhere
+	PAR_MIDI_NOTE1,
+	PAR_MIDI_NOTE2,
+	PAR_MIDI_NOTE3,
+	PAR_MIDI_NOTE4,
+	PAR_MIDI_NOTE5,
+	PAR_MIDI_NOTE6,
+	PAR_MIDI_NOTE7, //110 - beware going over 127, can't fit into midi data, will need another msg
+	END_OF_SOUND_PARAMETERS,
+	//#########################################
+	//######## End of sound Parameters ########
+	//#########################################
 /*
-	//  Legacy performance-macro destination slots, kept as placeholders while
-	//    file-load and protocol paths are being retired. 
+	//all parameters in this section are only there to be referenced from the menu
+	//they are not saved anywhere
 
-	PARAM_UNUSED_03 = END_OF_SOUND_PARAMETERS,
-
-
-	PARAM_UNUSED_04,
-	PARAM_UNUSED_05,
-	PARAM_UNUSED_06,
-	PARAM_UNUSED_07,			// 240
-	PARAM_UNUSED_08,
-	PARAM_UNUSED_09,
-
-	PAR_ROLL,
+	PAR_ROLL= END_OF_SOUND_PARAMETERS,
 	PAR_MORPH,
 
-	PAR_ACTIVE_STEP, 					
+	PAR_ACTIVE_STEP,
 	PAR_STEP_VOLUME,
 	PAR_STEP_PROB,
 	PAR_STEP_NOTE,
 
 	PAR_EUKLID_LENGTH,
 	PAR_EUKLID_STEPS,
-	PAR_EUKLID_ROTATION,             	// 250
-	PAR_EUKLID_SUBSTEP_ROTATION,
 
 	PAR_AUTOM_TRACK,
 
-	// --AS these are now indices into modTargets --BC: todo: this causes pitch fine autom. to adjust coarse instead
 	PAR_P1_DEST,
 	PAR_P2_DEST,
 
-	PAR_P1_VAL,				// 256
+	PAR_P1_VAL,
 	PAR_P2_VAL,
 
 	PAR_SHUFFLE,
 
 	PAR_PATTERN_BEAT,
-	PAR_PATTERN_NEXT,			// 260
-
+	PAR_PATTERN_NEXT,
 	PAR_TRACK_LENGTH,
-	PAR_TRACK_SCALE,
-
-	PAR_POS_X,
-	PAR_POS_Y,
-	PAR_FLUX,
-	PAR_SOM_FREQ,
-	PAR_TRACK_ROTATION,			// --AS **PATROT
-
-	//    Session 025 legacy macro parameters: kept only while the remaining
-	//    file-load and protocol cleanup work is in flight. 
-	PAR_UNUSED_10,
-	PAR_UNUSED_11,
-
-	PAR_ROLL_NOTE,                   	// 270
-	PAR_ROLL_VELOCITY,
-	PAR_ROLL_MODE,
-	PAR_TRANSPOSE,
-	PAR_TRANSPOSE_ON_OFF,
 
 
 	//#########################################
 	//######## Global Parameters ##############
 	//#########################################
-	PAR_BEGINNING_OF_GLOBALS,
-	
+	PAR_BEGINNING_OF_GLOBALS, //a placeholder to mark the beginning of the global var space not present in morph and not needed in the seq
+	//global params
 	PAR_BPM = PAR_BEGINNING_OF_GLOBALS,
-	
+
 	PAR_MIDI_CHAN_1,
 	PAR_MIDI_CHAN_2,
 	PAR_MIDI_CHAN_3,
@@ -429,44 +377,12 @@ enum ParamEnums
 	PAR_FOLLOW,
 
 	PAR_QUANTISATION,
-   
-   PAR_MIDI_NOTE1,
-	PAR_MIDI_NOTE2,
-	PAR_MIDI_NOTE3,
-	PAR_MIDI_NOTE4,
-	PAR_MIDI_NOTE5,
-	PAR_MIDI_NOTE6,
-	PAR_MIDI_NOTE7,
 
 	NUM_PARAMS
 */
 };
 
 #include "stm32f4xx.h"
-
-/* Phase 8 folds the parameter classification helpers into the preset-owned
-   parameter table module so ParameterMap can become compatibility-only. */
-enum
-{
-   PRESET_VOICE_PARAM_LENGTH = 37
-};
-
-/* Canonical voice ownership map used by the preset parameter classifiers. The
-   first dimension is intentionally left unsized so the table can stay aligned
-   with PRESET_SYNTH_VOICES without forcing this header to include KitState.h. */
-extern const uint16_t preset_voiceParamMask[][PRESET_VOICE_PARAM_LENGTH];
-
-uint16_t preset_canonicalParamFromVoiceMask(uint16_t param);
-uint8_t preset_firstVoiceForMask(uint8_t voiceMask);
-uint8_t preset_voiceMaskForParameter(uint16_t param);
-uint8_t preset_isVoiceParameter(uint16_t param);
-uint16_t preset_resolveAutomationTargetSelector(uint8_t selector);
-uint8_t preset_selectorForAutomationTargetDestination(uint16_t destination);
-uint8_t preset_voiceSelectorForAutomationTargetDestination(uint16_t destination,
-                                                           uint8_t fallback);
-uint8_t preset_isAutomationTargetSelectorParam(uint16_t param);
-uint8_t preset_isMorphAmountParam(uint16_t param);
-uint8_t preset_morphVoiceForParam(uint16_t param);
 
 typedef union
 {

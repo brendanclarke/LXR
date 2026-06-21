@@ -183,6 +183,8 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_SEQ_SET_GLOBAL_MORPH_MSB   0x6a	// set/report the high bit of global morph
 #define FRONT_SEQ_REPORT_GLOBAL_MORPH_LSB 0x6b	// report the low 7 bits of global morph back to AVR
 #define FRONT_SEQ_REPORT_GLOBAL_MORPH_MSB 0x6c	// report the high bit of global morph back to AVR
+#define FRONT_SEQ_BACKGROUND_SWAP_BEGIN 0x6d	// request background-swap prep before file load
+#define FRONT_SEQ_BACKGROUND_SWAP_DONE  0x6e	// background-swap prep complete
 
 #define FRONT_SEQ_TMP_KIT_ENDPOINT_BOTH 0x00	// copy both endpoints
 #define FRONT_SEQ_TMP_KIT_ENDPOINT_FRONT_ONLY 0x01	// copy only the kit/front endpoint
@@ -221,6 +223,7 @@ extern uint8_t midi_envPosition[6];
 void frontParser_parseUartData(unsigned char data);
 void frontParser_handleMidiMessage(void);
 void frontParser_applyParameterCommand(MidiMsg msg, uint8_t updateOriginalValue);
+void frontParser_serviceBackgroundSwapAck(void);
 uint8_t frontParser_isQuietUi();
 
 #endif /* UARTFRONTSYX_FRONTPANELRECEIVINGPROTOCOL_H_ */

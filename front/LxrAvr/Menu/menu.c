@@ -217,7 +217,7 @@ const Name valueNames[NUM_NAMES] PROGMEM =
       {SHORT_SEQ_PC_TIME, CAT_SEQUENCER, LONG_SEQ_PC_TIME}, // TEXT_SEQ_PC_TIME
       {SHORT_BUT_SHIFT_MODE, CAT_GLOBAL, LONG_BUT_SHIFT_MODE}, // TEXT_BUT_SHIFT_MODE
       {SHORT_LOAD_PERF_ON_BANK, CAT_GLOBAL, LONG_LOAD_PERF_ON_BANK}, // TEXT_LOAD_PERF_ON_BANK
-      {SHORT_SKIP_FIRST_ROLL, CAT_SEQUENCER, LONG_SKIP_FIRST_ROLL}, // TEXT_LOAD_PERF_ON_BANK      
+      {SHORT_UNUSED5, CAT_UNUSED5, LONG_UNUSED5}, // previously SKIP_FIRST_ROLL      
       {SHORT_MORPH_VOICE, CAT_MORPH_VOICE, LONG_MORPH_VOICE}, // text for voice morph automation
       
       {SHORT_MORPH_DRUM1, CAT_MORPH_VOICE, LONG_MORPH_DRUM1}, 
@@ -476,24 +476,23 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	    /*PAR_ENVELOPE_POSITION_5*/		DTYPE_0B127,
 	    /*PAR_ENVELOPE_POSITION_6*/		DTYPE_0B127,
 	    /*PARAM_UNUSED_01*/		DTYPE_0B127,
-       /*PAR_KIT_VERSION*/    DTYPE_0B255,
-       
-       /*PAR_MORPH_DRUM1*/		DTYPE_0B255,
+        /*PAR_KIT_VERSION*/     DTYPE_0B255,
+	    /*PARAM_UNUSED_02*/		DTYPE_0B127,
+
+        /*PAR_MORPH_DRUM1*/		DTYPE_0B255,
 	    /*PAR_MORPH_DRUM2*/		DTYPE_0B255,
 	    /*PAR_MORPH_DRUM3*/		DTYPE_0B255,
 	    /*PAR_MORPH_SNARE*/		DTYPE_0B255,
 	    /*PAR_MORPH_CYM*/		DTYPE_0B255,
 	    /*PAR_MORPH_HIHAT*/		DTYPE_0B255,
        
-       /*PAR_MAC1_DST1*/      DTYPE_AUTOM_TARGET,
-       /*PAR_MAC1_DST1_AMT*/  DTYPE_PM63, 
-       /*PAR_MAC1_DST2*/      DTYPE_AUTOM_TARGET,
-       /*PAR_MAC1_DST2_AMT*/  DTYPE_PM63,
-   
-       /*PAR_MAC2_DST1*/      DTYPE_AUTOM_TARGET,
-       /*PAR_MAC2_DST1_AMT*/  DTYPE_PM63,
-       /*PAR_MAC2_DST2*/      DTYPE_AUTOM_TARGET,
-       /*PAR_MAC2_DST2_AMT*/  DTYPE_PM63,
+       /*PARAM_UNUSED_03*/		DTYPE_0B127,
+       /*PARAM_UNUSED_04*/		DTYPE_0B127, 
+       /*PARAM_UNUSED_05*/		DTYPE_0B127,
+       /*PARAM_UNUSED_06*/		DTYPE_0B127,
+       /*PARAM_UNUSED_07*/		DTYPE_0B127,
+       /*PARAM_UNUSED_08*/		DTYPE_0B127,
+       /*PARAM_UNUSED_09*/		DTYPE_0B127,
 
 	    /*PAR_ROLL*/ 			DTYPE_MENU | (MENU_ROLL_RATES<<4),
 	    /*PAR_MORPH*/ 			DTYPE_0B255,
@@ -557,7 +556,7 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	   /*PAR_SEQ_PC_TIME*/  DTYPE_ON_OFF, // -bc- change patterns on sub-step instead of bar
 	   /*PAR_BUT_SHIFT_MODE*/ DTYPE_ON_OFF, // -bc- make shift a toggle
       /*PAR_LOAD_PERF_ON_BANK*/  DTYPE_ON_OFF, // -bc- load perfs instead of kits on bank change cc
-      /*PAR_SKIP_FIRST_ROLL*/  DTYPE_ON_OFF,
+      /*PAR_SKIP_FIRST_ROLL*/  DTYPE_ON_OFF, // previously SKIP_FIRST_ROLL, unused now
       /*PAR_FILE_LOAD_BACKGROUND*/  DTYPE_MENU | (MENU_FILE_LOAD_BACKGROUND<<4),
       
       /*PAR_GLOBAL_SETTINGS_VERSION*/  DTYPE_0B127,
@@ -645,8 +644,8 @@ void menu_init()
 	parameter_values[PAR_EUKLID_STEPS] = 16;
 	parameter_values[PAR_EUKLID_ROTATION] = 0;
    
-   parameter_values[PAR_MAC1] = 0;
-   parameter_values[PAR_MAC2] = 0;
+   // parameter_values[PAR_MAC1] = 0;
+   // parameter_values[PAR_MAC2] = 0;
 
 	//initialize the roll value
 	parameter_values[PAR_ROLL] = 10;
@@ -656,7 +655,7 @@ void menu_init()
    parameter_values[PAR_TRANSPOSE] = 63;
    parameter_values[PAR_TRANSPOSE_ON_OFF] = 0;
    parameter_values[PAR_ACTIVE_STEP] = 0;
-   parameter_values[PAR_SKIP_FIRST_ROLL] = 0;
+   // parameter_values[PAR_SKIP_FIRST_ROLL] = 0;
    
 	//avrComms_sendData(SEQ_CC,SEQ_ROLL_RATE,8); //value is initialized in cortex firmware
 
@@ -2026,7 +2025,7 @@ void menu_handleLoadMenu(int8_t inc, uint8_t btnClicked)
                //preset_loadAll(menu_currentPresetNr[SAVE_TYPE_ALL],0,0,menu_voiceArray);//last 0 is don't release kit lock
                preset_loadPerf(menu_currentPresetNr[SAVE_TYPE_PERFORMANCE],menu_voiceArray);//last 0 is don't release kit lock
                menu_resetSaveParameters();
-            buttonHandler_handleModeButtons(SELECT_MODE_PERF);
+               // buttonHandler_handleModeButtons(SELECT_MODE_PERF);
                break;
             
             case SAVE_TYPE_ALL:
@@ -3749,10 +3748,10 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
    case PAR_LOAD_PERF_ON_BANK:
       parameter_values[PAR_LOAD_PERF_ON_BANK]=value;
       break;
-   case PAR_SKIP_FIRST_ROLL:
-      parameter_values[PAR_SKIP_FIRST_ROLL]=value; 
-      avrComms_sendData(SEQ_CC, SEQ_ROLL_MODE, (uint8_t)(value+5) );
-      break;
+//    case PAR_SKIP_FIRST_ROLL:
+//       parameter_values[PAR_SKIP_FIRST_ROLL]=value; 
+//       avrComms_sendData(SEQ_CC, SEQ_ROLL_MODE, (uint8_t)(value+5) );
+//       break;
    case PAR_FILE_LOAD_BACKGROUND:
       parameter_values[PAR_FILE_LOAD_BACKGROUND]=value; 
       avrComms_sendData(SEQ_CC, SEQ_LOAD_BACKGROUND,value);

@@ -441,7 +441,7 @@ void preset_applySingleParameterValue(uint16_t param, uint8_t value)
       || (param >= PAR_VEL_DEST_1 && param <= PAR_VEL_DEST_6)
       || (param >= PAR_VOICE_LFO1 && param <= PAR_VOICE_LFO6)
       || (param >= PAR_TARGET_LFO1 && param <= PAR_TARGET_LFO6)
-      || (param >= PAR_MAC1_DST1 && param <= PAR_MAC2_DST2_AMT)
+//    || (param >= PAR_MAC1_DST1 && param <= PAR_MAC2_DST2_AMT)
       || (param >= PAR_MORPH_DRUM1 && param <= PAR_MORPH_HIHAT)))
    {
       return;

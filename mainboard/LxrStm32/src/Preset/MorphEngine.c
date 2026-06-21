@@ -392,6 +392,17 @@ void preset_setGlobalMorphAmount(uint8_t morphAmount)
       kit->voiceMorphAmount[voice] = morphAmount;
    }
 
+   if(kit == &preset_tmpKitState)
+   {
+      preset_normalKitState.globalMorphAmount = morphAmount;
+
+      for(voice=0;voice<PRESET_SYNTH_VOICES;voice++)
+      {
+         preset_normalKitState.voiceMorphBaseAmount[voice] = morphAmount;
+         preset_normalKitState.voiceMorphAmount[voice] = morphAmount;
+      }
+   }
+
    preset_syncVMorphAmountMirrorsFromLiveSources();
 }
 
@@ -431,6 +442,13 @@ void preset_setVoiceMorphAmount(uint8_t synthVoice, uint8_t morphAmount)
    kit = preset_getMorphKitForImage(preset_getMorphImageForVoice(synthVoice));
    kit->voiceMorphBaseAmount[synthVoice] = morphAmount;
    kit->voiceMorphAmount[synthVoice] = morphAmount;
+
+   if(kit == &preset_tmpKitState)
+   {
+      preset_normalKitState.voiceMorphBaseAmount[synthVoice] = morphAmount;
+      preset_normalKitState.voiceMorphAmount[synthVoice] = morphAmount;
+   }
+
    preset_vMorphAmount[synthVoice + 1] = morphAmount;
 }
 

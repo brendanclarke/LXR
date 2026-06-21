@@ -48,6 +48,11 @@ static void avrCommsParser_syncVoiceMorphDisplayValues(uint8_t amount)
       parameter_values[PAR_MORPH_DRUM1 + voice] = amount;
 }
 
+static uint8_t avrCommsParser_isVoiceMorphDisplayParam(uint16_t paramNr)
+{
+   return paramNr >= PAR_MORPH_DRUM1 && paramNr <= PAR_MORPH_HIHAT;
+}
+
 static void avrCommsParser_handleVoiceMorphReport(uint8_t slot, uint8_t payload)
 {
    uint8_t voice;
@@ -421,6 +426,11 @@ void avrComms_parseData(uint8_t data)
             {
                /* RESTORE: Allow these messages to fall through to the processor even when rxDisable is true. */
             }
+            else if((avrCommsParser_command.status == SEQ_CC)
+               && (avrCommsParser_command.data1 == SEQ_BACKGROUND_SWAP_DONE))
+            {
+               /* Background-load acknowledge: allow processing while file-load rxDisable is true. */
+            }
             else
             {
                return;
@@ -491,6 +501,11 @@ void avrComms_parseData(uint8_t data)
                   case SEQ_FLOW_END:
                   case SEQ_FLOW_ABORT:
                      avrCommsSending_handleFlowMessage(avrCommsParser_command.data1, avrCommsParser_command.data2);
+                     break;
+
+                  case SEQ_BACKGROUND_SWAP_DONE:
+                     preset_backgroundSwapDoneFromStm(avrCommsParser_command.data2);
+                     buttonHandler_refreshTempPlaybackLedHint();
                      break;
 
                   case SEQ_REPORT_GLOBAL_MORPH_LSB:
@@ -615,6 +630,7 @@ void avrComms_parseData(uint8_t data)
                      led_setBlinkLed((uint8_t)((patMsg == SEQ_TMP_PATTERN) ? LED_STEP16 : (LED_PART_SELECT1+patMsg)),0);
                   	//clear last pattern led
                      menu_playedPattern = patMsg;
+                     preset_notePlayedPatternChanged(patMsg);
                   	
                      if(parameter_values[PAR_FOLLOW] || tempBoundaryAck) {
                      	
@@ -648,6 +664,8 @@ void avrComms_parseData(uint8_t data)
                         led_initPerformanceLeds();
                      	//led_setValue(1,LED_PART_SELECT1+avrCommsParser_command.data2);
                      }
+
+                     buttonHandler_refreshTempPlaybackLedHint();
                      
                      break;
                   case SEQ_RUN_STOP:
@@ -726,7 +744,9 @@ void avrComms_parseData(uint8_t data)
             {
                // RESTORE: Update main parameters only. Do not touch parameters2 (morph parameter endpoint)
                // to avoid corrupting morph state during a display-only synchronization.
-               parameter_values[avrCommsParser_command.data1]=avrCommsParser_command.data2;
+               if(!avrCommsParser_rxDisable
+                  || !avrCommsParser_isVoiceMorphDisplayParam(avrCommsParser_command.data1))
+                  parameter_values[avrCommsParser_command.data1]=avrCommsParser_command.data2;
                avrCommsParser_restoreCount++;
             }
             else if(avrCommsParser_command.status == PRF_RESTORE_PARAM_CC2)
@@ -734,7 +754,9 @@ void avrComms_parseData(uint8_t data)
                uint16_t paramNr = (uint16_t)(avrCommsParser_command.data1+128);
                if(paramNr < NUM_PARAMS)
                {
-                  parameter_values[paramNr]=avrCommsParser_command.data2;
+                  if(!avrCommsParser_rxDisable
+                     || !avrCommsParser_isVoiceMorphDisplayParam(paramNr))
+                     parameter_values[paramNr]=avrCommsParser_command.data2;
                   avrCommsParser_restoreCount++;
                   // RESTORE: Parameters2 mirroring explicitly removed for restore dumps.
                }
@@ -768,7 +790,10 @@ void avrComms_parseData(uint8_t data)
                // lcd_string(text);
 
                avrCommsParser_restoreActive = 0;
-               menu_repaintAll();
+
+               // don't repaint during sessions that hold the panel state like file loads
+               if(!avrCommsParser_rxDisable)
+                  menu_repaintAll();
                // Inform STM we have finished and re-enabled normal operation.
                avrComms_sendData(PARAM_RESTORE_ACK, 0, 0);
             }

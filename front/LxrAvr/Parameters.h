@@ -301,6 +301,18 @@ enum ParamEnums
 
 	PAR_KIT_VERSION,
 
+	//#########################################
+	//######## End of sound Parameters ########
+	//#########################################
+
+	//all parameters in this section are only there to be referenced from the menu
+	//they are not saved anywhere
+
+	END_OF_KIT_PARAMETERS,  // We want to retain individ. voice morph in the menu, it's not from kits
+						    // But it does get modulated, so it needs a special section
+							
+	PARAM_UNUSED_02 = END_OF_KIT_PARAMETERS,
+
 	/*bc: individ. morph per voice params*/
 	PAR_MORPH_DRUM1,
 	PAR_MORPH_DRUM2,			/*230*/
@@ -311,24 +323,19 @@ enum ParamEnums
 
 	/* Legacy performance-macro destination slots, kept as placeholders while
 	   file-load and protocol paths are being retired. */
-	PAR_MAC1_DST1,
-	PAR_MAC1_DST1_AMT,
-	PAR_MAC1_DST2,
-	PAR_MAC1_DST2_AMT,
+    END_OF_SOUND_PARAMETERS,
+	
+	PARAM_UNUSED_03 = END_OF_SOUND_PARAMETERS,
+	PARAM_UNUSED_04,
+	PARAM_UNUSED_05,
+	PARAM_UNUSED_06,
+	PARAM_UNUSED_07,			/*240*/
+	PARAM_UNUSED_08,
+	PARAM_UNUSED_09,
 
-	PAR_MAC2_DST1,
-	PAR_MAC2_DST1_AMT,			/*240*/
-	PAR_MAC2_DST2,
-	PAR_MAC2_DST2_AMT,
 
-	//#########################################
-	//######## End of sound Parameters ########
-	//#########################################
 
-	//all parameters in this section are only there to be referenced from the menu
-	//they are not saved anywhere
-	END_OF_SOUND_PARAMETERS,
-	PAR_ROLL= END_OF_SOUND_PARAMETERS,
+	PAR_ROLL,
 	PAR_MORPH,
 
 	PAR_ACTIVE_STEP, 					
@@ -366,8 +373,8 @@ enum ParamEnums
 
 	/* Session 025 legacy macro parameters: kept only while the remaining
 	   file-load and protocol cleanup work is in flight. */
-	PAR_MAC1,
-	PAR_MAC2,
+	PAR_UNUSED_10,
+	PAR_UNUSED_11,
 
 	PAR_ROLL_NOTE,                   	/*270*/
 	PAR_ROLL_VELOCITY,
@@ -414,7 +421,7 @@ enum ParamEnums
 	PAR_SEQ_PC_TIME,			// bool, 0 for bar sequence change, 1 for step change
 	PAR_BUT_SHIFT_MODE,			// 0 normal shift operation, 1 shift button is a toggle
 	PAR_LOAD_PERF_ON_BANK,			// 0, incoming bank changes select kit, 1 bank changes select perf
-	PAR_SKIP_FIRST_ROLL,			/*300*/
+	PAR_UNUSED_12,			// prev skip first roll /*300*/
 
 	PAR_FILE_LOAD_BACKGROUND,	// menu, background-load mode selector
 

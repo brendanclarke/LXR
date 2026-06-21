@@ -66,3 +66,4 @@ front/AVR/Release/
 .DS_Store
 .localized
 Thumbs.db
+.aider*
