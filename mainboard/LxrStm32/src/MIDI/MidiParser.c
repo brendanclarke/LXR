@@ -339,11 +339,23 @@ void midiParser_parseMidiMessage(MidiMsg msg)
 //-----------------------------------------------------------
 
 
-/* Split CC router: channel parser first, global parser second. */
+/* Split CC router. Global CC0/CC1 intentionally keep the existing channel
+   parser bank/morph behavior; Global CC2-127 use the alternate global table. */
 void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
 {
+   const uint8_t chanonly = (msg.status & 0x0F) + 1;
+
+   if(chanonly == midiParser_voiceMidiChannel(7))
+   {
+      if(msg.data1 == BANK || msg.data1 == MOD_WHEEL)
+         channelMidiParser_MIDIccHandler(msg, updateOriginalValue);
+      else
+         globalMidiParser_MIDIccHandler(msg, updateOriginalValue);
+
+      return;
+   }
+
    channelMidiParser_MIDIccHandler(msg, updateOriginalValue);
-   globalMidiParser_MIDIccHandler(msg, updateOriginalValue);
 }
 /* Cache a new status byte and prime the running-status state machine. */
 void midiParser_handleStatusByte(unsigned char data)

@@ -36,6 +36,8 @@
 | 025 | 2026-06-17 | local repo, macro deprecation cleanup and docs handoff | Zeroed legacy macro slots during file load, disabled the live AVR/STM macro send/apply paths, added deprecation breadcrumbs to the macro parameter/text sites, and refreshed the comms and memory docs |
 | 026 | 2026-06-18 | local repo, voice morph PERF controls plus encoder-list findings | Connected individual PERF voice morph controls to full-range AVR/STM traffic, synced global/voice/velocity morph display reports, preserved the LFO overlay model, and archived the unresolved encoder list mismatch |
 | 027 | 2026-06-19 | local branch `dev-vmorph-front`, live-record automation + encoder menu fix | Fixed front-panel live-record automation destination storage by making step automation destinations raw `PAR_*` ids, preserved external MIDI recording with a MIDI-domain helper, fixed encoder `DTYPE_MENU` value normalization, and restored encoder-press execution on the clear menu |
+| 028 | 2026-06-21 | local repo, background file loading via temporary data complete | Completed the active `0x6d/0x6e` background-swap handshake so `.pat`, `.prf`, and `.all` loads can write normal storage while playback continues from temp |
+| 029 | 2026-06-21 | local repo, Global MIDI CC/NRPN table implementation | Added a separate Global-channel CC2-127 and NRPN parser table while preserving existing CC0 bank-change, CC1 morph, and non-global channel MIDI behavior |
 
 ---
 
@@ -153,6 +155,10 @@ Session 027 fixed the live-record wrong-parameter bug by making `Step.param1Nr` 
 Session 028 completed background loading through the existing normal/temporary Pattern and Preset storage model. AVR `.pat` / `.prf` / `.all` loads now optionally start a `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) based on the 5-state `PAR_FILE_LOAD_BACKGROUND` selector, STM copies the currently audible pattern/kit state to temp, forces an immediate switch to `SEQ_TMP_PATTERN`, waits for temp-readiness plus the ACK delay, then lets the ordinary file load write normal storage while temp playback continues. `.pat` background loading is pattern-only and keeps preset parameters normal, current global/per-voice morph amounts survive all file loads, `.prf` / `.all` no longer zero the AVR per-voice morph menu values, repeated loads while already playing temp skip another copy-to-temp, and the AVR UI now hints temp playback with PERF/SELECT LED flashing while disabling `SHIFT+PERF`.
 - **Find here**: completed background-load handshake, `0x6d/0x6e` swap ACK, `PAR_FILE_LOAD_BACKGROUND` policy, STM normal-to-temp copy, force instant temp switch, `.pat` pattern-only temp playback, morph preservation, `END_OF_KIT_PARAMETERS`, repeated-load temp guard, temp-playback LED hint, deprecated load-fast/cache cleanup notes, hardware verification
 
+### 029 — Global MIDI CC/NRPN Table Implementation (2026-06-21)
+Session 029 added a separate Global-channel MIDI CC/NRPN implementation while leaving the existing non-global Channel MIDI parser in place. Global-channel CC0 bank change and CC1 morph intentionally keep the existing `ChannelMidiParser.c` behavior; Global-channel CC2-127 now pre-empt overlapping voice-channel assignments and route only through `GlobalMidiParser.c`, where the requested flat CC table and Global-only NRPN selector/data-entry table translate into the existing internal `frontParser_applyParameterCommand()` CC/CC2 apply path. The durable MIDI reference now lives in `knowledge_files/comms_spec_reference/MIDI_TABLE.md`, `COMMS_FLOW_SPEC.md` documents the pre-emption rule, the STM build passed, and the user hardware-tested the new Global parser successfully.
+- **Find here**: Global MIDI CC pre-emption, preserved Global CC0/CC1 behavior, separate Global CC2-127 table, Global NRPN CC98/99/6 handling, non-global channel MIDI table, `MIDI_TABLE.md`, build and hardware verification
+
 
 ---
 
@@ -210,6 +216,9 @@ Session 028 completed background loading through the existing normal/temporary P
 | File loads must not reset current global morph or per-voice morph amounts; `.prf` / `.all` refresh loaded endpoints through normal storage and live morph apply-cache invalidation | 028 |
 | Use `END_OF_KIT_PARAMETERS` for saved kit bytes/dumps; keep `PAR_MORPH_DRUM1..PAR_MORPH_HIHAT` inside `END_OF_SOUND_PARAMETERS` for runtime automation/modulation domains | 028 |
 | AVR tracks `preset_backgroundTempPlaybackActive`; while active, PERF LED flashes outside PERF mode, all SELECT LEDs flash in PERF, and `SHIFT+PERF` is disabled | 028 |
+| For MIDI CC messages, the configured Global channel pre-empts overlapping voice-channel assignments; Global CC0/CC1 preserve the current bank/morph path, while Global CC2-127 use the separate Global table | 029 |
+| Global MIDI NRPN is Global-channel-only after Session 029: CC99/CC98 select the NRPN number and CC6 applies NRPN0-92 through the internal CC2 apply path | 029 |
+| The durable complete external MIDI spec table is `knowledge_files/comms_spec_reference/MIDI_TABLE.md` | 029 |
 
 
 ---

@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
 Date: 2026-06-21
-Status: current AVR<->STM comms reference after Session 028 completed background file loading through temporary Pattern/Preset storage. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading now uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
+Status: current AVR<->STM comms reference after Session 029 added a durable external MIDI table and split Global-channel CC2-127 onto a separate Global parser table. Session 028 completed background file loading through temporary Pattern/Preset storage. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading now uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
 
 ## Purpose
 
@@ -72,11 +72,22 @@ The comms layer should route bytes into those owners, not duplicate their state.
 routing/filter settings, channel/global MIDI interpretation, voice triggering,
 and sequencer-originated MIDI output fan-out.
 
+The complete current external MIDI input table lives in
+`knowledge_files/comms_spec_reference/MIDI_TABLE.md`.
+
 Internal parameter application is not owned by `MidiParser.c`. External MIDI may
 parse a CC/CC2 message and then call the front-panel receive/protocol helper
 when it needs to apply the internal parameter command cases. The dependency
 direction is MIDI -> uARTFrontSYX for shared internal CC/CC2 application, not
 uARTFrontSYX -> MIDI parser.
+
+Session 029 routing rule: for MIDI CC messages, the configured Global channel
+pre-empts overlapping voice-channel assignments. Global CC0 and CC1 intentionally
+keep the existing `ChannelMidiParser.c` bank-change and morph behavior. Global
+CC2-127 route only through `GlobalMidiParser.c` and its separate CC/NRPN table;
+non-global CC messages continue to use the existing channel parser. This
+pre-emption rule is specific to CC routing; note and program-change routing keep
+their existing behavior.
 
 `mainboard/LxrStm32/src/MIDI/MidiOutputControl.c/.h` is the current MIDI
 voice/output-control file. Existing `voiceControl_*` functions retain their

@@ -29,6 +29,311 @@ static inline uint8_t midiParser_voiceMidiChannel(uint8_t voice)
 static uint8_t midiParser_mtcIgnore = 1;
 static volatile uint32_t midiParser_lastMtcReceived = 0x0;
 static uint8_t midiParser_mtcIsRunning = 0;
+static uint16_t globalMidiParser_activeNrpnNumber = 0;
+static uint8_t globalMidiParser_nrpnSelected = 0;
+
+#define GLOBAL_MIDI_UNMAPPED I_DUNNO
+
+static const uint16_t globalMidiParser_ccToLxrParam[128] = {
+   [2] = OSC_WAVE_DRUM1,
+   [3] = OSC_WAVE_DRUM2,
+   [4] = OSC_WAVE_DRUM3,
+   [5] = OSC_WAVE_SNARE,
+   [7] = CYM_WAVE1,
+   [8] = WAVE1_HH,
+   [9] = F_OSC1_COARSE,
+   [10] = F_OSC1_FINE,
+   [11] = F_OSC2_COARSE,
+   [12] = F_OSC2_FINE,
+   [13] = F_OSC3_COARSE,
+   [14] = F_OSC3_FINE,
+   [15] = F_OSC4_COARSE,
+   [16] = F_OSC4_FINE,
+   [17] = F_OSC5_COARSE,
+   [18] = F_OSC5_FINE,
+   [19] = F_OSC6_COARSE,
+   [20] = F_OSC6_FINE,
+   [21] = MOD_WAVE_DRUM1,
+   [22] = MOD_WAVE_DRUM2,
+   [23] = MOD_WAVE_DRUM3,
+   [24] = CYM_WAVE2,
+   [25] = CYM_WAVE3,
+   [26] = WAVE2_HH,
+   [27] = WAVE3_HH,
+   [28] = SNARE_NOISE_F,
+   [29] = SNARE_MIX,
+   [30] = CYM_MOD_OSC_F1,
+   [31] = CYM_MOD_OSC_F2,
+   [32] = CYM_MOD_OSC_GAIN1,
+   [33] = CYM_MOD_OSC_GAIN2,
+   [34] = MOD_OSC_F1,
+   [35] = MOD_OSC_F2,
+   [36] = MOD_OSC_GAIN1,
+   [37] = MOD_OSC_GAIN2,
+   [38] = FILTER_FREQ_DRUM1,
+   [39] = FILTER_FREQ_DRUM2,
+   [40] = FILTER_FREQ_DRUM3,
+   [41] = SNARE_FILTER_F,
+   [42] = CYM_FIL_FREQ,
+   [43] = HAT_FILTER_F,
+   [44] = RESO_DRUM1,
+   [45] = RESO_DRUM2,
+   [46] = RESO_DRUM3,
+   [47] = SNARE_RESO,
+   [48] = CYM_RESO,
+   [49] = HAT_RESO,
+   [50] = VELOA1,
+   [51] = VELOD1,
+   [52] = VELOA2,
+   [53] = VELOD2,
+   [54] = VELOA3,
+   [55] = VELOD3,
+   [56] = VELOA4,
+   [57] = VELOD4,
+   [58] = VELOA5,
+   [59] = VELOD5,
+   [60] = VELOA6,
+   [61] = VELOD6,
+   [62] = VELOD6_OPEN,
+   [63] = VOL_SLOPE1,
+   [64] = VOL_SLOPE2,
+   [65] = VOL_SLOPE3,
+   [66] = EG_SNARE1_SLOPE,
+   [67] = CYM_SLOPE,
+   [68] = VOL_SLOPE6,
+   [69] = REPEAT1,
+   [70] = CYM_REPEAT,
+   [71] = PITCHD1,
+   [72] = PITCHD2,
+   [73] = PITCHD3,
+   [74] = PITCHD4,
+   [75] = MODAMNT1,
+   [76] = MODAMNT2,
+   [77] = MODAMNT3,
+   [78] = MODAMNT4,
+   [79] = PITCH_SLOPE1,
+   [80] = PITCH_SLOPE2,
+   [81] = PITCH_SLOPE3,
+   [82] = PITCH_SLOPE4,
+   [83] = FMAMNT1,
+   [84] = FMDTN1,
+   [85] = FMAMNT2,
+   [86] = FMDTN2,
+   [87] = FMAMNT3,
+   [88] = FMDTN3,
+   [89] = VOL1,
+   [90] = VOL2,
+   [91] = VOL3,
+   [92] = VOL4,
+   [93] = VOL5,
+   [94] = VOL6,
+   [95] = PAN1,
+   [96] = PAN2,
+   [97] = PAN3,
+   [100] = PAN4,
+   [101] = PAN5,
+   [102] = PAN6,
+   [103] = OSC1_DIST,
+   [104] = OSC2_DIST,
+   [105] = OSC3_DIST,
+   [106] = SNARE_DISTORTION,
+   [107] = CYMBAL_DISTORTION,
+   [108] = HAT_DISTORTION,
+   [109] = VOICE_DECIMATION1,
+   [110] = VOICE_DECIMATION2,
+   [111] = VOICE_DECIMATION3,
+   [112] = VOICE_DECIMATION4,
+   [113] = VOICE_DECIMATION5,
+   [114] = VOICE_DECIMATION6,
+   [115] = VOICE_DECIMATION_ALL,
+   [116] = FREQ_LFO1,
+   [117] = FREQ_LFO2,
+   [118] = FREQ_LFO3,
+   [119] = FREQ_LFO4,
+   [120] = FREQ_LFO5,
+   [121] = FREQ_LFO6,
+   [122] = AMOUNT_LFO1,
+   [123] = AMOUNT_LFO2,
+   [124] = AMOUNT_LFO3,
+   [125] = AMOUNT_LFO4,
+   [126] = AMOUNT_LFO5,
+   [127] = AMOUNT_LFO6,
+};
+
+static const uint16_t globalMidiParser_nrpnToLxrParam[] = {
+   128 + CC2_FILTER_DRIVE_1,
+   128 + CC2_FILTER_DRIVE_2,
+   128 + CC2_FILTER_DRIVE_3,
+   128 + CC2_FILTER_DRIVE_4,
+   128 + CC2_FILTER_DRIVE_5,
+   128 + CC2_FILTER_DRIVE_6,
+   128 + CC2_MIX_MOD_1,
+   128 + CC2_MIX_MOD_2,
+   128 + CC2_MIX_MOD_3,
+   128 + CC2_VOLUME_MOD_ON_OFF1,
+   128 + CC2_VOLUME_MOD_ON_OFF2,
+   128 + CC2_VOLUME_MOD_ON_OFF3,
+   128 + CC2_VOLUME_MOD_ON_OFF4,
+   128 + CC2_VOLUME_MOD_ON_OFF5,
+   128 + CC2_VOLUME_MOD_ON_OFF6,
+   128 + CC2_VELO_MOD_AMT_1,
+   128 + CC2_VELO_MOD_AMT_2,
+   128 + CC2_VELO_MOD_AMT_3,
+   128 + CC2_VELO_MOD_AMT_4,
+   128 + CC2_VELO_MOD_AMT_5,
+   128 + CC2_VELO_MOD_AMT_6,
+   128 + CC2_VEL_DEST_1,
+   128 + CC2_VEL_DEST_2,
+   128 + CC2_VEL_DEST_3,
+   128 + CC2_VEL_DEST_4,
+   128 + CC2_VEL_DEST_5,
+   128 + CC2_VEL_DEST_6,
+   128 + CC2_WAVE_LFO1,
+   128 + CC2_WAVE_LFO2,
+   128 + CC2_WAVE_LFO3,
+   128 + CC2_WAVE_LFO4,
+   128 + CC2_WAVE_LFO5,
+   128 + CC2_WAVE_LFO6,
+   128 + CC2_VOICE_LFO1,
+   128 + CC2_VOICE_LFO2,
+   128 + CC2_VOICE_LFO3,
+   128 + CC2_VOICE_LFO4,
+   128 + CC2_VOICE_LFO5,
+   128 + CC2_VOICE_LFO6,
+   128 + CC2_TARGET_LFO1,
+   128 + CC2_TARGET_LFO2,
+   128 + CC2_TARGET_LFO3,
+   128 + CC2_TARGET_LFO4,
+   128 + CC2_TARGET_LFO5,
+   128 + CC2_TARGET_LFO6,
+   128 + CC2_RETRIGGER_LFO1,
+   128 + CC2_RETRIGGER_LFO2,
+   128 + CC2_RETRIGGER_LFO3,
+   128 + CC2_RETRIGGER_LFO4,
+   128 + CC2_RETRIGGER_LFO5,
+   128 + CC2_RETRIGGER_LFO6,
+   128 + CC2_SYNC_LFO1,
+   128 + CC2_SYNC_LFO2,
+   128 + CC2_SYNC_LFO3,
+   128 + CC2_SYNC_LFO4,
+   128 + CC2_SYNC_LFO5,
+   128 + CC2_SYNC_LFO6,
+   128 + CC2_OFFSET_LFO1,
+   128 + CC2_OFFSET_LFO2,
+   128 + CC2_OFFSET_LFO3,
+   128 + CC2_OFFSET_LFO4,
+   128 + CC2_OFFSET_LFO5,
+   128 + CC2_OFFSET_LFO6,
+   128 + CC2_FILTER_TYPE_1,
+   128 + CC2_FILTER_TYPE_2,
+   128 + CC2_FILTER_TYPE_3,
+   128 + CC2_FILTER_TYPE_4,
+   128 + CC2_FILTER_TYPE_5,
+   128 + CC2_FILTER_TYPE_6,
+   128 + CC2_TRANS1_VOL,
+   128 + CC2_TRANS2_VOL,
+   128 + CC2_TRANS3_VOL,
+   128 + CC2_TRANS4_VOL,
+   128 + CC2_TRANS5_VOL,
+   128 + CC2_TRANS6_VOL,
+   128 + CC2_TRANS1_WAVE,
+   128 + CC2_TRANS2_WAVE,
+   128 + CC2_TRANS3_WAVE,
+   128 + CC2_TRANS4_WAVE,
+   128 + CC2_TRANS5_WAVE,
+   128 + CC2_TRANS6_WAVE,
+   128 + CC2_TRANS1_FREQ,
+   128 + CC2_TRANS2_FREQ,
+   128 + CC2_TRANS3_FREQ,
+   128 + CC2_TRANS4_FREQ,
+   128 + CC2_TRANS5_FREQ,
+   128 + CC2_TRANS6_FREQ,
+   128 + CC2_AUDIO_OUT1,
+   128 + CC2_AUDIO_OUT2,
+   128 + CC2_AUDIO_OUT3,
+   128 + CC2_AUDIO_OUT4,
+   128 + CC2_AUDIO_OUT5,
+   128 + CC2_AUDIO_OUT6,
+};
+
+static uint8_t globalMidiParser_isGlobalChannel(MidiMsg msg)
+{
+   const uint8_t chanonly = (msg.status & 0x0F) + 1;
+   return (chanonly == midiParser_voiceMidiChannel(7));
+}
+
+static void globalMidiParser_applyInternalParameter(uint16_t lxrParamNr,
+                                                    uint8_t value,
+                                                    uint8_t updateOriginalValue,
+                                                    enum MidiSource source)
+{
+   MidiMsg internalMsg = {0};
+
+   if(lxrParamNr == GLOBAL_MIDI_UNMAPPED || lxrParamNr >= END_OF_SOUND_PARAMETERS)
+      return;
+
+   if(lxrParamNr < 128)
+   {
+      internalMsg.status = MIDI_CC;
+      internalMsg.data1 = (uint8_t)lxrParamNr;
+   }
+   else
+   {
+      internalMsg.status = MIDI_CC2;
+      internalMsg.data1 = (uint8_t)(lxrParamNr - 128);
+   }
+
+   internalMsg.data2 = value;
+   internalMsg.bits.source = source;
+   internalMsg.bits.sysxbyte = 0;
+   internalMsg.bits.length = 2;
+
+   frontParser_applyParameterCommand(internalMsg, updateOriginalValue);
+
+   if((midiParser_txRxFilter & 0x04) && updateOriginalValue)
+   {
+      if(seq_recordActive)
+         seq_recordAutomationMidiDestination(frontParser_activeTrack, lxrParamNr, value);
+      else
+         channelMidiParser_sendParameterEcho(lxrParamNr, value);
+   }
+}
+
+static uint8_t globalMidiParser_handleNrpnControl(MidiMsg msg,
+                                                  uint8_t updateOriginalValue)
+{
+   switch(msg.data1)
+   {
+      case NRPN_FINE:
+         globalMidiParser_activeNrpnNumber &= (uint16_t)~0x7f;
+         globalMidiParser_activeNrpnNumber |= (uint16_t)(msg.data2 & 0x7f);
+         globalMidiParser_nrpnSelected = 1;
+         return 1;
+
+      case NRPN_COARSE:
+         globalMidiParser_activeNrpnNumber &= 0x7f;
+         globalMidiParser_activeNrpnNumber |= (uint16_t)(msg.data2 << 7);
+         globalMidiParser_nrpnSelected = 1;
+         return 1;
+
+      case NRPN_DATA_ENTRY_COARSE:
+         if(globalMidiParser_nrpnSelected
+            && globalMidiParser_activeNrpnNumber
+                  < (sizeof(globalMidiParser_nrpnToLxrParam)
+                     / sizeof(globalMidiParser_nrpnToLxrParam[0])))
+         {
+            globalMidiParser_applyInternalParameter(
+               globalMidiParser_nrpnToLxrParam[globalMidiParser_activeNrpnNumber],
+               msg.data2,
+               updateOriginalValue,
+               msg.bits.source);
+         }
+         return 1;
+
+      default:
+         return 0;
+   }
+}
 
 uint8_t globalMidiParser_handleSystemMessage(MidiMsg msg)
 {
@@ -147,184 +452,20 @@ void midiParser_checkMtc(void)
 }
 void globalMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
 {
-   /* Global-channel CC ladder and sequencer-side effects. */
-   const uint8_t chanonly = (msg.status & 0x0F)+1;
-   const uint16_t MIDIparamNr = msg.data1;
-   uint8_t i;
-   uint16_t LXRparamNr = I_DUNNO; // zero is undefined in LXR param numbers
+   uint16_t lxrParamNr;
 
-      if (chanonly == midiParser_voiceMidiChannel(7)) // GLOBAL is a target
-      {
-         switch(MIDIparamNr){
-            case MOD_WHEEL: // global morph is handled elsewhere
-               break;
-            case CHANNEL_VOL: // voice 1-6
-               break;
-            case UNDEF_9: // voice 1-6
-               break;
-            case PAN: // pan 1-6
-               break;            
-            case EFFECT_1: // decimation 1-6, VOICE_DECIMATION_ALL, this is MIDI CC 12
-               mixer_decimation_rate[6] = valueShaperI2F(msg.data2,-0.7f);
-               LXRparamNr=VOICE_DECIMATION_ALL;
-               break;
-            case EFFECT_2: // distortion, 1-3, SNARE_DISTORTION CYMBAL_DISTORTION HAT_DISTORTION
-               break;
-            case UNDEF_14: // osc coarse tune, voice 1-6
-               break;
-            case UNDEF_14_LSB: // osc fine tune, voice 1-6
-               break;
-            case GEN_CONTROLLER_16: // performance roll rate
-	       seq_setRollRate(msg.data2);
-               break;
-            case GEN_CONTROLLER_17: // performance roll note
-	       seq_setRollNote(msg.data2);
-               break;
-            case GEN_CONTROLLER_18: // filter drive, 1-6
-	       seq_setRollVelocity(msg.data2); // performance roll velocity
-               break;
-            case GEN_CONTROLLER_19: // filter type 1-6 // global set roll on/off by code 0=none, 127=all
-	    {
-		for(i=0;i<7;i++)
-		{seq_rollChange(i, ((msg.data2>>i)&0x01));}
-	    }
-               break;
-            case UNDEF_20: // snare mix - snare only
-               break;
-            case UNDEF_21: // snare noise freq - snare only
-               break;
-            case UNDEF_22: // mix mod - DRUM voice 1-3 only
-               break;
-            case UNDEF_23: // volume mod 
-               break;
-            case UNDEF_24: // velo mod amount, voice 1-6
-               break;
-            case UNDEF_25: // velocity mod destination 1-6
-               break;
-            case UNDEF_26: // transient wave volume, voice 1-6
-               break;
-            case UNDEF_27: // transient wave select, voice 1-6
-               break;
-            case UNDEF_28: // transient wave frequency
-               break;
-            case SOUND_VAR: // snare and cym repeat only
-               break;
-            case ENV_RELEASE: // open hat decay - voice 7 (param 6) channel only
-               break;
-            case ENV_ATTACK: // attack, voices 1-6
-               break;
-            case SOUND_BRIGHT: // volume slope (1-3), EG_SNARE1_SLOPE, CYM_SLOPE, VOL_SLOPE6
-               break;
-            case ENV_DECAY: // decay, voice 1-6
-               break;
-            case SOUND_VIB_RATE: // lfo rate 1-3 - lfo params are different for 4-6
-               break;
-            case SOUND_VIB_DEPTH: // AMOUNT_LFO* (1-6)
-               break;
-            case SOUND_VIB_DELAY: // 128+CC2_OFFSET_LFO* (1-6)
-               break;
-            case SOUND_UNDEF: // 128+CC2_WAVE_LFO* (1-6)
-               break;
-            case GEN_CONTROLLER_80: /*80*/	// 128+CC2_VOICE_LFO* (1-6)
-               break;
-            case GEN_CONTROLLER_81: // 128+CC2_TARGET_LFO* (1-6)
-               break;
-            case GEN_CONTROLLER_82: // 128+CC2_RETRIGGER_LFO* (1-6)
-               break;
-            case GEN_CONTROLLER_83: // 128+CC2_SYNC_LFO* (1-6) (different param for snare etc)
-               break;
-            case PORT_CONTROL: // PITCHD* (1-4 for DRUM and SNARE)
-               break;
-            case UNDEF_85: // MODAMNT* (1-4 for DRUM and SNARE)
-               break;
-            case UNDEF_86: // pitch slope for DRUM and SNARE only
-               break;
-            case UNDEF_89: // 128+CC2_AUDIO_OUT* (1-6)
-               break;
-            case UNDEF_90: 
-               break;
-            case UNDEF_102: // MOD_WAVE_DRUM* (1-3 only)
-	    	if(msg.data2<16)
-                {
-                  seq_setNextPattern(msg.data2&0x07,0x7f); // all voices, hold off
-                  if(msg.data2>7)
-                  {
-                     seq_newVoiceAvailable=0x7f; // also re-load kit voice
-                  }
-               }  
-               break;
-            case UNDEF_103: // FMDTN* (1-3 only)
-	       pat_setLoop(msg.data2); // loop the sequence, just as from the frontpanel keys in perf mode. on yer own to send valid CC data. 0 is off.
-               break;
-            case UNDEF_104: /*104*/	// FMAMNT* (1-3 only)
-               break;
-            case UNDEF_105: // CYM_WAVE2, WAVE2_HH (voice 5,6)
-               break;
-            case UNDEF_106: // CYM_MOD_OSC_GAIN1, MOD_OSC_GAIN1 (voice 5,6)
-               break;
-            case UNDEF_107: // CYM_MOD_OSC_F1, MOD_OSC_F1 (voice 5,6)
-               break;
-            case UNDEF_108: // CYM_WAVE3, WAVE3_HH (voice 5,6)
-               break;
-            case UNDEF_109: // CYM_MOD_OSC_GAIN2, MOD_OSC_GAIN2 (voice 5,6)
-               break;
-            case UNDEF_110: // CYM_MOD_OSC_F2, MOD_OSC_F2 (voice 5,6)
-               break;
-            case TRACK1_SOUND_OFF: /*113*/	//128+CC2_MUTE_* (1-6)
-            case TRACK2_SOUND_OFF:
-            case TRACK3_SOUND_OFF:
-            case TRACK4_SOUND_OFF:
-            case TRACK5_SOUND_OFF:
-            case TRACK6_SOUND_OFF:
-            case TRACK7_SOUND_OFF:
-               {
-               
-                  if(msg.data2 == 0)
-                  {
-                     seq_setMute(MIDIparamNr-TRACK1_SOUND_OFF,0);
-                  }
-                  else
-                  {
-                     seq_setMute(MIDIparamNr-TRACK1_SOUND_OFF,1);
-                  }
-               }
-               LXRparamNr=128+CC2_MUTE_1+MIDIparamNr-TRACK1_SOUND_OFF;
-               break;
-	    case ALL_SOUND_OFF:     /*120*/ // bytecode - 0 is mute none, 127 is mute all
-		for(i=0;i<7;i++)
-		{seq_setMute(i, ((msg.data2>>i)&0x01));}
-		break;
-            case RESET_ALL_CONTROLLERS:
-               {// this should be the only circumstance in which VOICE_CC is sent back to front
-                  seq_newVoiceAvailable=0x7f;
-                  channelMidiParser_sendPatchReset();
-               }
-               break;
-            default:
-               break;
-         }
-      
-         if (LXRparamNr) // we got a valid MIDI CC destination, so LXRparamNr is non-zero
-         {
-            frontParser_originalCcValues[LXRparamNr] = msg.data2;
-            preset_storeParameterIngress(LXRparamNr, msg.data2);
-            modNode_originalValueChanged(LXRparamNr-1); // BS offset goes here NB: also for above 127 params?
-         
-            if((midiParser_txRxFilter & 0x04)&&updateOriginalValue) 
-            {
-               if(seq_recordActive)
-               {
-               //record automation if record is turned on
-                  seq_recordAutomationMidiDestination(frontParser_activeTrack, LXRparamNr, msg.data2);
-               }
-               
-               else{
-               //midi data goes to kit params
-               //frontParser_applyParameterCommand(msg,1);
-               //we received a midi cc message forward it to the front panel
-                  channelMidiParser_sendParameterEcho(LXRparamNr, msg.data2);
-               }
-            }
-         }
-      }
-   }
+   if(!globalMidiParser_isGlobalChannel(msg))
+      return;
+
+   if(msg.data1 == BANK || msg.data1 == MOD_WHEEL)
+      return;
+
+   if(globalMidiParser_handleNrpnControl(msg, updateOriginalValue))
+      return;
+
+   lxrParamNr = globalMidiParser_ccToLxrParam[msg.data1 & 0x7f];
+   globalMidiParser_applyInternalParameter(lxrParamNr,
+                                           msg.data2,
+                                           updateOriginalValue,
+                                           msg.bits.source);
+}
