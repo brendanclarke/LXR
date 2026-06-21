@@ -2487,12 +2487,12 @@ static void frontParser_handleSeqCC()
          seq_setRollVelocity(frontParser_command.data2);
          break;
       case FRONT_SEQ_ROLL_MODE:
-         if(frontParser_command.data2==ROLL_MODE_FIRST_ON)
-            seq_skipFirstRoll=0;
-         else if(frontParser_command.data2==ROLL_MODE_FIRST_OFF)
-            seq_skipFirstRoll=1;   
-         else
-            seq_rollMode = frontParser_command.data2;
+         // if(frontParser_command.data2==ROLL_MODE_FIRST_ON)
+         //    seq_skipFirstRoll=0;
+         // else if(frontParser_command.data2==ROLL_MODE_FIRST_OFF)
+         //    seq_skipFirstRoll=1;   
+         // else
+         seq_rollMode = frontParser_command.data2;
          break;
       case FRONT_SEQ_TRANSPOSE:
          seq_transpose_voiceAmount[frontParser_activeTrack]=frontParser_command.data2;

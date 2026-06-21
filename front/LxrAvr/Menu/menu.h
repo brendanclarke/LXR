@@ -217,7 +217,7 @@ enum NamesEnum
 	TEXT_SEQ_PC_TIME,
 	TEXT_BUT_SHIFT_MODE,
    TEXT_LOAD_PERF_ON_BANK,
-   TEXT_SKIP_FIRST_ROLL,
+   TEXT_UNUSED5,
    TEXT_MORPH_VOICE,
    /* Legacy macro UI text slots, retained only as placeholders while the
       macro feature is deprecated and can be removed safely later. */
@@ -332,7 +332,7 @@ enum shortNamesEnum
    SHORT_SEQ_PC_TIME,
    SHORT_BUT_SHIFT_MODE,
    SHORT_LOAD_PERF_ON_BANK,
-   SHORT_SKIP_FIRST_ROLL,
+   SHORT_UNUSED5,
    SHORT_MORPH_VOICE,
    SHORT_MORPH_DRUM1,
    SHORT_MORPH_DRUM2,
@@ -480,7 +480,7 @@ enum longNamesEnum
    LONG_SEQ_PC_TIME,
    LONG_BUT_SHIFT_MODE,
    LONG_LOAD_PERF_ON_BANK,
-   LONG_SKIP_FIRST_ROLL,
+   LONG_UNUSED5,
    LONG_MORPH_VOICE,
    LONG_MORPH_DRUM1,
    LONG_MORPH_DRUM2,

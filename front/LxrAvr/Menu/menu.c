@@ -217,7 +217,7 @@ const Name valueNames[NUM_NAMES] PROGMEM =
       {SHORT_SEQ_PC_TIME, CAT_SEQUENCER, LONG_SEQ_PC_TIME}, // TEXT_SEQ_PC_TIME
       {SHORT_BUT_SHIFT_MODE, CAT_GLOBAL, LONG_BUT_SHIFT_MODE}, // TEXT_BUT_SHIFT_MODE
       {SHORT_LOAD_PERF_ON_BANK, CAT_GLOBAL, LONG_LOAD_PERF_ON_BANK}, // TEXT_LOAD_PERF_ON_BANK
-      {SHORT_SKIP_FIRST_ROLL, CAT_SEQUENCER, LONG_SKIP_FIRST_ROLL}, // TEXT_LOAD_PERF_ON_BANK      
+      {SHORT_UNUSED5, CAT_UNUSED5, LONG_UNUSED5}, // previously SKIP_FIRST_ROLL      
       {SHORT_MORPH_VOICE, CAT_MORPH_VOICE, LONG_MORPH_VOICE}, // text for voice morph automation
       
       {SHORT_MORPH_DRUM1, CAT_MORPH_VOICE, LONG_MORPH_DRUM1}, 
@@ -556,7 +556,7 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	   /*PAR_SEQ_PC_TIME*/  DTYPE_ON_OFF, // -bc- change patterns on sub-step instead of bar
 	   /*PAR_BUT_SHIFT_MODE*/ DTYPE_ON_OFF, // -bc- make shift a toggle
       /*PAR_LOAD_PERF_ON_BANK*/  DTYPE_ON_OFF, // -bc- load perfs instead of kits on bank change cc
-      /*PAR_SKIP_FIRST_ROLL*/  DTYPE_ON_OFF,
+      /*PAR_SKIP_FIRST_ROLL*/  DTYPE_ON_OFF, // previously SKIP_FIRST_ROLL, unused now
       /*PAR_FILE_LOAD_BACKGROUND*/  DTYPE_MENU | (MENU_FILE_LOAD_BACKGROUND<<4),
       
       /*PAR_GLOBAL_SETTINGS_VERSION*/  DTYPE_0B127,
@@ -655,7 +655,7 @@ void menu_init()
    parameter_values[PAR_TRANSPOSE] = 63;
    parameter_values[PAR_TRANSPOSE_ON_OFF] = 0;
    parameter_values[PAR_ACTIVE_STEP] = 0;
-   parameter_values[PAR_SKIP_FIRST_ROLL] = 0;
+   // parameter_values[PAR_SKIP_FIRST_ROLL] = 0;
    
 	//avrComms_sendData(SEQ_CC,SEQ_ROLL_RATE,8); //value is initialized in cortex firmware
 
@@ -3748,10 +3748,10 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
    case PAR_LOAD_PERF_ON_BANK:
       parameter_values[PAR_LOAD_PERF_ON_BANK]=value;
       break;
-   case PAR_SKIP_FIRST_ROLL:
-      parameter_values[PAR_SKIP_FIRST_ROLL]=value; 
-      avrComms_sendData(SEQ_CC, SEQ_ROLL_MODE, (uint8_t)(value+5) );
-      break;
+//    case PAR_SKIP_FIRST_ROLL:
+//       parameter_values[PAR_SKIP_FIRST_ROLL]=value; 
+//       avrComms_sendData(SEQ_CC, SEQ_ROLL_MODE, (uint8_t)(value+5) );
+//       break;
    case PAR_FILE_LOAD_BACKGROUND:
       parameter_values[PAR_FILE_LOAD_BACKGROUND]=value; 
       avrComms_sendData(SEQ_CC, SEQ_LOAD_BACKGROUND,value);

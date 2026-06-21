@@ -421,7 +421,7 @@ enum ParamEnums
 	PAR_SEQ_PC_TIME,			// bool, 0 for bar sequence change, 1 for step change
 	PAR_BUT_SHIFT_MODE,			// 0 normal shift operation, 1 shift button is a toggle
 	PAR_LOAD_PERF_ON_BANK,			// 0, incoming bank changes select kit, 1 bank changes select perf
-	PAR_SKIP_FIRST_ROLL,			/*300*/
+	PAR_UNUSED_12,			// prev skip first roll /*300*/
 
 	PAR_FILE_LOAD_BACKGROUND,	// menu, background-load mode selector
 
