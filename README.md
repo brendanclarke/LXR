@@ -1,174 +1,258 @@
-Additions to .34 Firmware:
-====================================
-1. Copy individual tracks between patterns.
-	- select (view) the source pattern
-	- press and hold 'copy'
-	- press the source track (voice) button
-	- press the destination pattern button
+# Sonic Potions LXR Drumsynth Firmware
+## -bc- edition, based on v0.37
 
-2. New global menu option for instant pattern switching
-	- when enabled, switching patterns with the buttons or a program change MIDI message happens on the next sub-step (keeping the current sequencer position) rather than at the end of the bar
+The LXR is a digital drum synthesizer based on a 32-bit Cortex-M4 (STM32F407) audio/control processor and an ATmega644 8-bit front-panel CPU. Originally developed by Julian Schmidt / Sonic Potions.
 
-3. MIDI CC assignments are by voice channel rather than all on the global channel - see document in this folder for new assignments
-	- this includes a morph assignment to Mod Wheel on the global channel
-	- MIDI CC's also get recorded to automation slots (rather than updating voice parameters) when record is on
+The `front` folder contains the AVR code. The `mainboard` folder contains the STM32F4 code. The `tools` folder contains the firmware image builder, which combines AVR and Cortex code into a single file usable by the bootloader.
 
-4. Drumkit can be changed by sending a 'Bank MSB' (CC0) signal on the global MIDI channel
+### Libraries
 
-5. Individual drum voices can be changed by sending a 'Bank MSB' (CC0) signal on their individual MIDI channels
+The mainboard code uses several third-party libraries, all located in the `Libraries` subfolder with their own licenses:
 
-6. New global menu option to make the 'shift' button a toggle rather than momentary
+- ARM CMSIS library
+- ST STM32_USB_Device_Library
+- ST STM32_USB_OTG_Driver
+- ST STM32F4xx_StdPeriph_Driver
 
-7. Multiple voices can be set to respond (and record) note-ons on the global channel. When the currently active track has a 'note' assignment other than 'any', note-ons to the global channel will be matched to ALL tracks that have a note assignment other than 'any', rather than just the active one.
+### Thanks
 
-8. MIDI channel select menus now have a '0' option that disables MIDI input.
+Many thanks to Rudeog for bug fixes and features in versions 0.26 and 0.33, to Patrick Dowling and Andrew Shakinovsky for Makefile and code contributions, and to Julian Schmidt for the original LXR design and open-source release.
 
-9. 'Load' menu now includes entries to load individual drum voices. This includes a number of load/save menu changes to deal with this:
-	- The name and number of drum voices will reflect the drum kit the voice was derived from, even if this was changed via a MIDI bank change request.
-	- The shortcut functions of the knobs has changed (knobs 1-4, from left to right):
+---
 
-	LOAD MENU
+## Building the Firmware
 
-		- knob 1: change load type (kit, drum 1, pattern, etc)
-		- knob 2: change preset number NB: auto-loads for all kit and voice types
-		- knob 3: no function, except disables auto-load if turned
-		- knob 4: disables auto-load, moves cursor between load type and 'ok' if it exists
+Build requirements are documented in `requirements.txt`. In brief, you need `arm-none-eabi-gcc`, `avr-gcc` (with avr-libc), `make`, and a host C++ compiler for the FirmwareImageBuilder tool. All are available from your platform's standard package manager or from the Arm and Microchip toolchain download pages.
 
-	SAVE MENU
+```bash
+make clean
+make firmware
+```
 
-		- knob 1: change save type (same as for load menu)
-		- knob 2: change cursor position (ie cycles through type, preset, alphanums, and 'ok')
-		- knob 3: change cursor value
-		- knob 4: for alphanumeric values, cycles through more characters
-		note that the order of characters for the shortcut knobs has changed. Capital letters are all the way on the left of knob 3, numbers are in the middle of knob 3, and lower case is all the way to the left of knob 4.
+The output is `firmware image/FIRMWARE.BIN`. Copy this to the root of the SD card and power on while holding the main encoder button.
 
-10. Added pattern scaling option. This is accessed via a second page under 'click' (the transient voicing sub-page). [TODO: should change when changing PATTERN]
+### Linux (quick reference)
 
+```bash
+sudo apt install gcc-arm-none-eabi binutils-arm-none-eabi gcc-avr binutils-avr avr-libc make build-essential
+# On x64 systems you may also need:
+sudo apt-get install libc6-dev-i386
+```
 
-11. 'Performance' and 'All' save types now save the morph target parameters in addition to the drum kit and pattern. The version number for this type of file has been incremented to 3. Previous versions will load with an empty morph target, but will be re-saved as the new type. 
+### macOS (quick reference)
 
-12. added a global option to interpret Bank Change (CC0) messages incoming on the global channel as a command to load a 'Performance' data set instead of a drum kit. Bank changes on voice MIDI channels will still change that part individually.
+```bash
+brew install arm-none-eabi-gcc
+brew tap osx-cross/avr && brew install avr-gcc
+xcode-select --install   # for make and host C++
+```
 
-13. Added a 'realign pattern' shortcut. pressing the pattern button of the currently viewed pattern in 'perf' mode will align all tracks to the master clock. This also resets any 'pattern rotation' set. Also, when holding shift in 'PERF' mode, you can press the voice buttons to quickly switch the active voice for pattern rotation. This is in addition to the multiple voice-unmute shortcut. shift+current pattern will also do the re-alignment.
+### Windows (quick reference)
 
-14. When the velocity of a step is set to '0', the step will not re-trigger envelopes. This lets you use steps as 'automation only' - a bit like 'trigless locks' on elektron kit.
+WSL Ubuntu is recommended. Inside WSL:
 
-15. One-shot LFO's. These are added as additional waveforms in the LFO settings. i.e. "si1", "tr1", etc are 1 shot versions of sine, triangle, and all the other normal lfo shapes. 
-	- There is also a new LFO shape "exponential triangle" - "xtr" and "xt1" which are the exponential up followed immediately by exponential down. 
-	-With a one-shot LFO selected, the 'offset' control instead sets a delay for the start of the LFO. It's a little weird because the delay gets scaled with 'rate' but it adds a lot of musical options. 
-	- The 'noise' LFO holds a single random value on each retrigger. 
-	- The 'rect' LFO is inverted in one-shot mode, so that it can be instantly on and then off, with the 'offset' delay setting an off portion at the beginning if desired.
+```bash
+sudo apt install gcc-arm-none-eabi binutils-arm-none-eabi gcc-avr binutils-avr avr-libc make g++
+```
 
-16. Quick access to morph target parameters. When viewing a single parameter (click in and adjust with the encoder), press 'shift' to edit and view the parameter for the morph target.
+See `requirements.txt` for MSYS2 paths and toolchain override options if your compilers are not on `PATH`.
 
-17. Per-voice morph [TODO: add to PERF menu instead of macros]. This can be currently set by step automation or as a velocity automation target. The per-voice morph for all voices is overwritten by any global morph values received. 
+---
 
-18. Per-voice morph modulation by LFO. This works slightly differently than per-voice morph. The LFO modulation always operates between the current per-voice morph value (at zero mod depth) and the morph kit value (at full mod depth).
+## Additions to Sonic Potions Firmware v0.37
 
-19. Background file loading: when loading a file [TODO: file type selector in global menu], the currently used pattern and parameters are stored in temporary data while the load executes. The sound is changed when a new pattern is selected.
+The following features have been added in the -bc- edition on top of the upstream v0.37 release. For full implementation history see `knowledge_files/log_archive/000_SESSION_INDEX.md`.
 
+### General UI
 
-Sonic Potions LXR Drumsynth Firmware
-====================================
-The LXR is a digital drum synthesizer based on the 32-bit Cortex-M4 processor and an Atmega644 8-bit CPU. Developed by Julian Schmidt.
+**Morph kit parameter quick access.** While viewing a single parameter in the encoder click-in view, hold SHIFT to toggle between editing the normal parameter value and the morph target value for that parameter. This lets you set morph kit values without save/reload faff.
 
-    The 'front' folder contains the AVR code
+**Re-align patterns shortcut.** in PERF mode, press the current pattern button again to realign all tracks to the master clock and clear any pattern rotation offsets or misalignment from setting different pattern timescales. In PERF mode, pressing the button of the currently active pattern also performs the realignment.
 
-    The 'mainboard' folder contains the STM32F4 code
+**Pot (knob) assignments in load/save reworked.** The shortcut knob functions have been revised to speed up character entry when naming files. In the load menu: knob 1 changes load type, knob 2 changes preset number with auto-load for kit and voice types, knob 3 disables auto-load if turned, knob 4 disables auto-load and moves the cursor. In the save menu: knob 1 changes save type, knob 2 moves the cursor between fields, knob 3 changes the cursor value, knob 4 cycles through additional characters. Capital letters are at the left of knob 3, numbers are in the middle, lower case is at the left of knob 4.
 
-    The 'tools' folder contains the firmware image builder tool, to combine AVR and Cortex code into a single file, usable by the bootloader.
+**SHIFT as toggle.** A global menu option makes the SHIFT button a toggle rather than momentary. This is useful for step editing workflows where you need SHIFT to remain active across multiple button presses.
 
-Please note that there are libraries from ST and ARM used in the mainboard code of this project. They are all located in the Libraries subfolder of the project. Those come with their own license. The libraries are:
+---
 
-    ARM CMSIS library
-    ST STM32_USB_Device_Library
-    ST STM32_USB_OTG_Driver
-    ST STM32F4xx_StdPeriph_Driver
+### Sound / Voice Mode
 
-	
+**Individual voice morph.** Each drum voice has an independent morph value that blends between the kit parameters and the morph-target parameters for that voice only. Per-voice morph can be set from the PERF menu, by step automation, or by velocity modulation and LFO (see below). Global morph still operates across all voices and overwrites individual per-voice morph values when received.
 
-Many Thanks to user Rudeog who contributet a lot of bugfixes and features for version 0.26 and 0.33 as well as Patrick Dowling for the Makefiles for the Linux build system!
+**One-shot LFO waveforms.** Additional LFO waveforms are available: `si1`, `tr1`, `sq1`, `rmp1`, `rnd1` etc. are one-shot versions of sine, triangle, square, ramp, and noise. There is also a new `xtr`/`xt1` exponential-triangle shape (exponential rise followed immediately by exponential fall). In one-shot mode, the LFO offset control sets a pre-trigger delay; the delay is scaled with rate. The noise one-shot holds a single random value on each retrigger. The rect one-shot is phase-inverted so it can be immediately on and then off, with the offset delay setting an off portion at the start if desired.
 
+**Disable MIDI input per voice or globally.** MIDI channel select menus now include a `0` option that disables MIDI input for that voice or globally, making it straightforward to isolate voices from external MIDI.
 
+**Multi-voice note trigger on global MIDI channel.** When the active track has a note assignment other than 'any', note-ons received on the global MIDI channel are matched and recorded to all tracks that have a note assignment other than 'any', not just the currently active one. This makes it easier to record multi-voice patterns from an external keyboard on the global channel.
 
-Instructions for building on Linux using the provided makefiles:
-----------------------------------------------------------------
-You will need:
-- the ARM GCC compiler 
-- the AVR GCC compiler 
-- the AVR c libs
+**Per-voice MIDI CC assignments.** Individual voice MIDI channels now have direct CC mappings without needing NRPN, covering all voice parameters. The global channel takes precedence: global CC1 is morph (Mod Wheel), and global CC2-127 route through the global CC table. See `knowledge_files/comms_spec_reference/MIDI_TABLE.md` for the full assignment table.
 
+**Per-voice morph as automation target.** Individual voice morph is available as a velocity modulation target and as an LFO modulation target. LFO-to-voice-morph modulates between the current per-voice morph value (at zero depth) and the morph kit value (at full depth).
 
- 
-GNU Tools for ARM Embedded Processors 
--------------------------------------
-project homepage: https://launchpad.net/gcc-arm-embedded
+---
 
+### PERF Mode
 
-For Ubuntu 10.04/12.04/13.04 32/64-bit user, PPA is available at https://launchpad.net/~terry.guo/+archive/gcc-arm-embedded.
+**Roll independent of pattern length.** Roll rate is no longer tied to the current pattern length, allowing consistent roll behavior when switching between patterns of different lengths.
 
-otherwise you can download the 32bit binaries here
-https://launchpad.net/gcc-arm-embedded/4.8/4.8-2014-q1-update/+download/gcc-arm-none-eabi-4_8-2014q1-20140314-linux.tar.bz2
+**Rolls recordable in three modes.** Rolls can be recorded as full (pitch and velocity), note (pitch) only, or velocity only, giving more control over how roll content lands in the sequencer.
 
+**Individual voice morph in PERF menu.** Each voice has a morph control directly accessible from the PERF page, displayed and settable in full 0–255 range.
 
---- Installing the ARM GCC binaries ----
+**Track transpose.** A track transpose function is available as a SHIFT function on the PERF menu.
 
-download the binary package:
-'wget https://launchpad.net/gcc-arm-embedded/4.8/4.8-2014-q1-update/+download/gcc-arm-none-eabi-4_8-2014q1-20140314-linux.tar.bz2'
+**Instant pattern switching.** A global menu option makes pattern switching (via buttons or program change MIDI) happen at the next sub-step rather than at the end of the bar, keeping the sequencer position. The default behavior (end-of-bar switching) is preserved when the option is off.
 
-extract it:
-'tar xvjf gcc-arm-none-eabi-4_8-2014q1-20140314-linux.tar.bz2 '
+**Per-track pattern assignment.** Individual tracks can be set to follow different patterns: hold a VOICE button and press a pattern button to assign that track to a different pattern source independently of the other tracks.
 
-move it to /opt/ARM:
-'sudo mv gcc-arm-none-eabi-4_8-2014q1 /opt/ARM'
+**Looper.** SEQ buttons 8–16 provide looper functionality in PERF mode.
 
-include it permanently in your PATH variable
-'echo "PATH=$PATH:/opt/ARM/bin" >> ~/.bashrc'
+---
 
-IMPORTANT!
-for x64 systems, you have to install the 32-bit version of libc6 or you will get an 'arm-none-eabi-gcc: not found' error when invocing arm-none-eabi-gcc:
-'sudo apt-get install libc6-dev-i386'
+### Sequencer / Step Mode
 
+**Copy step, copy sub-step, copy single-voice track between patterns.** Steps and sub-steps can be copied individually. To copy a single voice track between patterns: view the source pattern, hold COPY, press the source track (voice) button, then press the destination pattern button.
 
+**Voice load from kit via step automation.** Individual drum voices can be changed by step automation targeting a Bank MSB (CC0) value, letting you swap a single drum sound mid-pattern from within the sequencer without a full kit change.
 
---- Installing the AVR GCC compiler and AVR libc---
+**Automation-only steps (velocity 0).** When a step's velocity is set to 0, it does not retrigger the voice envelope but still plays back any automation recorded on that step. This works like a 'trigless lock' — useful for parameter movement without a new hit.
 
-These should normaly be available from you package manager
-'sudo apt-get install gcc-avr avr-libc'
+**Track pattern step timing scale.** Pattern scaling per track is accessible via a second page under the 'click' (transient voicing) sub-page. This lets you run a track at a different rhythmic subdivision from the rest of the pattern.
 
+**Per-voice morph settable by step automation.** Individual voice morph amounts can be written directly into step automation slots, allowing per-step morph movements on individual voices.
 
-Now you are ready to go.
-To build the firmware, go to the LXR folder containing this file and type:
-'make firmware'
+---
 
-you should now find a new FIRMWARE.BIN file in the 'firmware image' subfolder
+### File / Load-Save Mode
+
+**Version number for kit files.** Kit files now carry a version number. The .prf and .all file format has been incremented to version 3 to include morph target parameters. Previous versions load with an empty morph target and are re-saved as the new type.
 
+**Reload kit from snapshot.** Pressing SHIFT+PLAY reverts all voice parameters to their state at the last file load, discarding any live edits made since. This is a quick way to recover the saved kit without going through the load menu.
 
-Thanks a lot to Patrick Dowling and Andrew Shakinovsky for their code contributions!
+**Load a kit by MIDI bank change.** Sending a Bank MSB (CC0) message on the global MIDI channel loads the corresponding .kit file. Individual drum voices can also be changed by sending Bank MSB on their individual MIDI channels.
 
-Instructions for building on windows using Eclipse:
----------------------------------------------------
+**Load a performance file by MIDI bank change.** A global menu option switches Bank MSB (CC0) messages on the global channel from loading .kit files to loading .prf (performance) files, which include the full drum kit, pattern set, BPM, and morph target.
+
+**.prf and .all save morph kit.** The performance and 'all' save types now include morph target parameters, preserving the full morph state across saves and loads.
+
+**Load individual drum voices from kit files.** The Load menu now includes entries to load individual drum voices from .kit files without replacing the full drumkit. The name and number shown for a loaded voice reflect the kit it was derived from, even if the voice was subsequently changed by a MIDI bank change.
+
+**Background file loading.** When loading a file, the currently playing pattern and parameters are held in a temporary slot while the load executes in the background. The loaded sound becomes active when the next new pattern is selected. A global menu option controls which file types use background loading.
+
+---
+
+## Developer Notes
+
+This repository is designed to be LLM-friendly for feature development. Start a session with something like:
+
+> "The goal of this session is to implement \<some feature\>. Read @README.md and @MEMORY.md for project context and any further files as necessary, then write a plan of implementation with possible conflicts and risk factors to the root directory as \<some feature\>\_AUDIT.md."
+
+The LLM will pull the context it needs, you review the plan, work through it, and write back the session log and updated MEMORY.md when done. There are verbose session logs, a handoff template, and a lightweight log index to keep context manageable.
+
+For a running session index and keyword lookup: `knowledge_files/log_archive/000_SESSION_INDEX.md`.
 
-1.  Install Eclipse Juno CDT (You could install a later version, but this is the version I have working)
+---
 
-2.  Install the Eclipse GNU ARM plugin. Go into the help menu, Install new Software, add a site: http://gnuarmeclipse.sourceforge.net/updates. Then check the box to install that plugin.
+## Repository
 
-3.  Download and install the GCC ARM toolchain https://launchpad.net/gcc-arm-embedded/+download
+**Structure**
+- **Session logs:** `knowledge_files/log_archive/` — see `000_SESSION_INDEX.md` for a keyword index
+- **Comms and protocol specs:** `knowledge_files/comms_spec_reference/`
+- **Hardware notes:** `knowledge_files/hardware_archive/`
 
-4.  Download and install gnu make: http://gnuwin32.sourceforge.net/packages/make.htm
+## Directory Structure
 
-5.  Download and install Atmel AVR toolchain from http://www.atmel.com/tools/ATMELAVRTOOLCHAINFORWINDOWS.aspx (you don't need the headers package)
+```text
+./LXR/
+├── LICENSE.txt
+├── MEMORY.md
+├── Makefile
+├── README.md
+├── requirements.txt
+├── conflicts.txt
+├── firmware image/
+│   └── FIRMWARE.BIN                    ← combined build output
+├── front/
+│   ├── LxrAvr/                         ← ATmega644 front-panel firmware
+│   │   ├── Hardware/
+│   │   ├── IO/
+│   │   ├── Menu/
+│   │   ├── Preset/
+│   │   ├── avrComms/                   ← AVR-side inter-MCU comms (avrComms* / avrCommsParser* naming)
+│   │   └── Makefile
+│   └── LxrAvr_bootloader/
+│       ├── Bootloader/
+│       ├── elmChan/
+│       └── lcd/
+├── knowledge_files/
+│   ├── SESSION_HANDOFF_TEMPLATE.md     ← template for writing new session handoff logs
+│   ├── comms_spec_reference/
+│   │   ├── COMMS_FLOW_SPEC.md          ← inter-MCU protocol spec
+│   │   ├── BACKGROUND_LOAD_TEMPORARY.md
+│   │   └── MIDI_TABLE.md               ← full external MIDI CC/NRPN assignment table
+│   ├── hardware_archive/
+│   │   ├── front/
+│   │   │   ├── AVR_HARDWARE.md
+│   │   │   └── AVR_SETUP_ALLOCATION.md
+│   │   ├── main/
+│   │   │   ├── STM32F4_HARDWARE.md
+│   │   │   └── STM32F4_SETUP_ALLOCATION.md
+│   │   └── ATMEGA_STM32F4_COMMS_AUDIT.md
+│   ├── log_archive/
+│   │   ├── 000_SESSION_INDEX.md        ← index of all sessions with keyword lookup
+│   │   ├── 001_SESSION_HANDOFF_LOG.md
+│   │   └── ...                         ← see 000_SESSION_INDEX.md for current list
+│   └── reference_material/
+├── mainboard/
+│   ├── LxrStm32/                       ← STM32F407 audio/sequencer/MIDI firmware
+│   │   ├── Libraries/                  ← ARM CMSIS + ST peripheral libraries
+│   │   ├── Makefile
+│   │   ├── stm32_flash.ld
+│   │   └── src/
+│   │       ├── AudioCodecManager/      ← DMA ISRs, I2S init, SPSC audio queue
+│   │       ├── DSPAudio/               ← voice DSP, mixer
+│   │       ├── Hardware/               ← clocks, SD_FAT, USB
+│   │       ├── MIDI/                   ← UART MIDI, USB MIDI, parser, output control
+│   │       ├── Preset/                 ← kit/morph/pattern state, background load, morph engine
+│   │       ├── SampleRom/              ← sample flash metadata and load helpers
+│   │       ├── Sequencer/              ← sequencer, Euclidean/SOM generators, clock sync
+│   │       └── uARTFrontSYX/           ← STM-side front-panel UART transport and parser
+│   └── LxrStm32_bootloader/
+└── tools/
+    ├── FirmwareImageBuilder/           ← host tool source (C++)
+    └── bin/
+        ├── FirmwareImageBuilder        ← pre-built Linux binary
+        ├── FirmwareImageBuilder.exe    ← pre-built Windows binary
+        └── makeFirmware.bat
+```
 
-6.  Ensure that the bin directory from 3, 4, and 5 are on the path. I made a batch file that adds these 3 bin directories to my path and launches eclipse.
+### Where to look for things
 
-7.  Fetch the LXR sources from github. You can either install git and do it the git way, or download a zip and unzip it.
+| Question | File |
+|----------|------|
+| Which session introduced a fix? | `knowledge_files/log_archive/000_SESSION_INDEX.md` |
+| Full details of a fix or decision? | `knowledge_files/log_archive/0xx_SESSION_HANDOFF_LOG.md` |
+| Handoff log template | `knowledge_files/SESSION_HANDOFF_TEMPLATE.md` |
+| Confirmed hardware pin / IRQ details | `knowledge_files/hardware_archive/front/` and `knowledge_files/hardware_archive/main/` |
+| Inter-MCU comms protocol | `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md` |
+| Background file load spec | `knowledge_files/comms_spec_reference/BACKGROUND_LOAD_TEMPORARY.md` |
+| External MIDI CC/NRPN table | `knowledge_files/comms_spec_reference/MIDI_TABLE.md` |
+| Current known issues and reminders | `MEMORY.md` |
 
-8.  In Eclipse, create a workspace in root folder of whole tree that you unzipped (or git'd).
+---
 
-9.  Add two project dirs mainboard\firmware\DrumSynth_FPU and front\AVR to the workspace. To do this, use File/Import/General/Existing projects into workspace. Then select root directory and browse to these dirs. Do this step once for each of these two dirs. You will end up with two projects in your workspace.
+## Hardware Overview
 
-10.  These should build. Eclipse is a bit squirrely, so you might need to do a make clean first to create the first makefiles, or rebuild indexes.
+- **Audio/control MCU:** STM32F407 (`mainboard/LxrStm32`) — DSP, sequencer, MIDI, USB
+- **Front-panel MCU:** ATmega644 (`front/LxrAvr`) — LCD, encoders, buttons, LEDs, SD card preset I/O
+- **Inter-MCU link:** UART-based protocol at 500,000 baud (`mainboard/LxrStm32/src/uARTFrontSYX/` on the STM side, `front/LxrAvr/avrComms/` on the AVR side)
 
-11.  I've built the firmwareimagebuilder.exe in the \tools\bin folder. I've also put a batch file that launches it and copies the binaries from the respective output directories to create FIRMWARE.BIN in that same dir. If you don't trust the .EXE I built, you will need to build it from tools\FirmwareImageBuilder\FirmwareImageBuilder. As is you will need visual studio. If you don't have it, you can try to install the free version, mingw, etc and compile the one file FirmwareImageBuilder.cpp (I've fixed it so it should build with any tool) and make your own exe and copy it to that dir.
+### MCU Naming Conventions
 
-12.  Thats it, after running the batch file you will have your firmware file. 
+STM-side front-panel comms live under `mainboard/LxrStm32/src/uARTFrontSYX/` and use the `frontPanel*` naming. AVR-side comms live under `front/LxrAvr/avrComms/` and use the `avrComms*` / `avrCommsParser*` naming. The terms `frontPanel` and `frontParser` on the AVR side are historical only and should not be used for new code or documentation.
+
+### Encoder
+
+AVR main encoder: Timer1 CTC at ~32.05 kHz, fixed `AB=11` rest phase, six stable-sample phase filter, 192-sample button debounce, narrow rest-jump recovery, edit-mode-only acceleration (1–2 rev/s → 1–4× multiplier). See `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` for the full hardware-approved implementation record. Do not reintroduce legacy read modes, PCINT decoding, or Timer0 encoder sampling.
+
+---

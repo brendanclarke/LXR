@@ -1,3 +1,46 @@
+Firmware v0.37 - -bc- edition - continued
+---------------------------
+additional updates: see ./knowledge_files/log_archive/000_SESSION_INDEX.md
+
+Firmware v0.37 - -bc- edition
+---------------------------
+## ADDITIONS TO v0.37
+### GENERAL UI ADDITIONS
+- Morph parameter quick access (hold SHIFT on single-parameter view)
+- Pot assignments in load/save changed to speed up character selection.
+- Global setting to make SHIFT a toggle (for step editing)
+### SOUND/VOICE MODE
+- Individual voice morph
+- One-shot LFO waveforms
+- Disable MIDI input with '0' option (global or voice)
+- Multi-voice note trigger assignments Global MIDI channel
+- Individual voice MIDI Channels have CC mapping without NRPN (Pre-empted by Global Channel)
+- Individual voice morph is an automation target for velocity mod and LFO
+### PERF MODE
+- Roll independent of pattern length.
+- Rolls can be recorded as full, note (pitch) only, velocity only.
+- Individual voice morph menu items.
+- Track transpose (SHIFT function on PERF menu).
+- Pattern change 'instant' instead of end of bar and global setting to toggle this
+- Tracks may be set to patterns independently (select pattern while holding a VOICE button)
+- Re-align/sync track patterns shortcut (double-press pattern SELECT button)
+- Looper (SEQ buttons 8-16)
+### SEQUENCER/ STEP MODE
+- Copy Step, Copy Sub-Step, Copy single-voice track between patterns
+- Voice load from kit step automation
+- Automation-only steps (velocity 0 steps)
+- Track pattern step timing scale (in 'click' menu)
+- Individual voice morph can be set by step automation
+### FILE/ LOAD-SAVE MODE
+- Version number for kit files
+- Reload kit parameters (SHIFT+PLAY)
+- Load a .kit file by bank change (CC0 on global channel)
+- Load a .prf file by bank change (CC0 on global channel), global setting to toggle .kit or .prf load
+- .prf and .all save morph kits within them
+- Loading of individual drum voices from .kit files
+- Loading of individual drum voices by bank change
+- Background file loading (wait and change on next new pattern) and global setting to select file types
+
 Firmware v0.37
 ---------------------------
 - fixes the scrambled OLED after a AVR soft reset
