@@ -97,7 +97,7 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **Rolls recordable in three modes.** Rolls can be recorded as full (pitch and velocity), note (pitch) only, or velocity only, giving more control over how roll content lands in the sequencer.
 
-**Individual voice morph in PERF menu.** Each voice has a morph control directly accessible from the PERF page, displayed and settable in full 0–255 range.
+**Individual voice morph in PERF menu.** Each voice has a morph control directly accessible from the PERF page, displayed and settable in full 0–255 range. Per-voice step automation and velocity automation will update these values in realtime. LFO modulation will not.
 
 **Track transpose.** A track transpose function is available as a SHIFT function on the PERF menu.
 
@@ -105,17 +105,17 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **Per-track pattern assignment.** Individual tracks can be set to follow different patterns: hold a VOICE button and press a pattern button to assign that track to a different pattern source independently of the other tracks.
 
-**Looper.** SEQ buttons 8–16 provide looper functionality in PERF mode.
+**Looper.** SEQ buttons 9–16 provide looper functionality in PERF mode. Button 10 sets the longest length (64 sub-steps, 1/2 Bar), halving at each button to 16 (1 sub-step or 1/64th). Holding button 9 in addition 'dots' the loop length, adding 50% to the last loop button held. Releasing all loop buttons returns the sequencer to the position it would have reached without looping immediately.
 
 ---
 
 ### Sequencer / Step Mode
 
-**Copy step, copy sub-step, copy single-voice track between patterns.** Steps and sub-steps can be copied individually. To copy a single voice track between patterns: view the source pattern, hold COPY, press the source track (voice) button, then press the destination pattern button.
+**Copy step, copy sub-step, copy single-voice track between patterns.** Main sequencer steps and sub-steps can be copied individually within the track of a pattern. To copy a single voice track between patterns: view the source pattern, hold COPY, press the source track (voice) button, then press the destination pattern button.
 
 **Voice load from kit via step automation.** Individual drum voices can be changed by step automation targeting a Bank MSB (CC0) value, letting you swap a single drum sound mid-pattern from within the sequencer without a full kit change.
 
-**Automation-only steps (velocity 0).** When a step's velocity is set to 0, it does not retrigger the voice envelope but still plays back any automation recorded on that step. This works like a 'trigless lock' — useful for parameter movement without a new hit.
+**Automation-only steps (velocity 0).** When a step's velocity is set to 0, it does not retrigger the voice envelope but still plays back any automation recorded on that step. This works like a 'trigless lock' — useful for parameter movement without changing envelope states.
 
 **Track pattern step timing scale.** Pattern scaling per track is accessible via a second page under the 'click' (transient voicing) sub-page. This lets you run a track at a different rhythmic subdivision from the rest of the pattern.
 
@@ -127,7 +127,7 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **Version number for kit files.** Kit files now carry a version number. The .prf and .all file format has been incremented to version 3 to include morph target parameters. Previous versions load with an empty morph target and are re-saved as the new type.
 
-**Reload kit from snapshot.** Pressing SHIFT+PLAY reverts all voice parameters to their state at the last file load, discarding any live edits made since. This is a quick way to recover the saved kit without going through the load menu.
+**Reload kit from snapshot.** Pressing SHIFT+PLAY reverts all voice parameters to their state at the last file load, discarding any live edits made to the parameters.
 
 **Load a kit by MIDI bank change.** Sending a Bank MSB (CC0) message on the global MIDI channel loads the corresponding .kit file. Individual drum voices can also be changed by sending Bank MSB on their individual MIDI channels.
 
