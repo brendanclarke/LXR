@@ -143,7 +143,19 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 ## Developer Notes
 
-This repository is designed to be LLM-friendly for feature development. Start a session with something like:
+### Structure
+
+A few key changes have been made to the way the code and ownership in the LXR work from the 0.37 release:
+
+**The Canonical Preset Parameters are stored on the STM.** Previously, the STM stored only the interpolated parameters calculated by and sourced from the AVR. This created an exceedingly large amount of parameter and morph traffic in some cases and could crash the AVR. The amount of storage needed on the STM for this is negligible. The routines to manage preset storage and morph are in a new 'preset' folder in 'mainboard'. 
+
+**The Morph Interpolation is performed on the STM.** The morph interpolation is now calculated asynchronously on the STM as one parameter per cycle of the main() loop. Per-voice morph by LFO (if it is assigned) is done with a separate calculation pass on just that voice, so morph gets a little slower with more assignments, but keeps the overhead stable.
+
+**'FrontPanelParser' Naming convention is changed.** The communication exchange files in '/mainboard/' are within folder '/uARTFrontSYX/' to indicate that the communcations spec should ideally migrate in the direction of a full sysEx implementation. In the AVR code, the communications files are in '/avrComms/' and use 'avrComms' as the naming convention to avoid semantic confusion with identically named files and functions between the STM and AVR. 
+
+### Knowledge Files
+
+This repository is designed to be LLM-friendly for feature development. MEMORY.md exists as a context quick-start for a development session, referencing the spec descriptions and log index in `knowledge_files/`. Start a session with something like:
 
 > "The goal of this session is to implement \<some feature\>. Read @README.md and @MEMORY.md for project context and any further files as necessary, then write a plan of implementation with possible conflicts and risk factors to the root directory as \<some feature\>\_AUDIT.md."
 
