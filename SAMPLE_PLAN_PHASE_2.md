@@ -1,5 +1,8 @@
 # SAMPLE_PLAN_PHASE_2: Oscillator Fixes and Looped Playback Framework
 
+> [!NOTE]
+> **Status: Complete**
+> All code changes detailed in this plan have been implemented and successfully compiled. A compiler warning for an unused `modBuffer` parameter in the disabled FM sample path has also been patched out.
 ## Scope
 
 This phase covers sample metadata loop flags and playback behavior in:

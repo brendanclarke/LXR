@@ -40,6 +40,7 @@
 #include "MidiParser.h"
 #include "MidiNoteNumbers.h"
 #include "sequencer.h"
+#include <string.h>
 
 
 //TODO die phaseInc berechnung kann man doch sicher per LUT machen!
@@ -67,6 +68,13 @@ uint32_t freq2PhaseIncr(const float f) //4096
 __inline uint32_t freq2PhaseIncr1024(const float f)
 {
 	return (((1024*f)/REAL_FS))*4194304 ; //(<<22)
+}
+//-----------------------------------------------------------
+void osc_resetSamplePlayback(OscInfo* osc)
+{
+   osc->samplePosition = 0u;
+   osc->sampleFraction = 0u;
+   osc->sampleActive = 1u;
 }
 //-----------------------------------------------------------
 __inline uint32_t freq2PhaseIncr32767(const float f)
@@ -510,72 +518,82 @@ int16_t calcSampleOscFm(OscInfo* osc, OscInfo* modOsc)
 //------------------------------------------------------------------
 void calcUserSampleOscFmBlock(OscInfo* osc,int16_t* modBuffer, int16_t* buf, uint8_t size ,const float gain)
 {
-	//TODO optimize performance by moving sampleInfo to oscillator struct
-	SampleInfo info = sampleMemory_getSampleInfo(osc->waveform - OSC_SAMPLE_START);
+   (void)modBuffer;
+   const uint8_t sampleIndex = (uint8_t)(osc->waveform - OSC_SAMPLE_START);
+   const uint8_t sampleCount = sampleMemory_getNumSamples();
 
-	//cast sample data to signed int16_t array
-	int16_t* sampleData = (int16_t*)((int8_t*)(info.offset));
+   if(sampleIndex >= sampleCount)
+   {
+      memset(buf, 0, size * sizeof(int16_t));
+      return;
+   }
 
-	uint8_t i;
-	for(i=0;i<size;i++)
-	{
-		const uint32_t oscPhase 	= osc->phase;
-		int16_t oscOut ;
-
-		const uint32_t index =  oscPhase + (((uint32_t)(modBuffer[i]*osc->fmMod))<<14);
-		uint32_t  itg	= index>>17;
-
-	#if INTERPOLATE_FM_OSC
-		oscOut = sampleData[itg++];
-		const float frac	= (index&20000)*0.00000762939453125f;//=> * 1/0x20000
-		oscOut += frac*(sampleData[itg] - oscOut);
-	#else
-		oscOut = sampleData[itg];
-	#endif
-
-		//one shot
-		if(itg < info.size)
-		{
-			osc->phase = oscPhase + osc->phaseInc;
-		}
-		osc->output = oscOut;
-		buf[i] = oscOut * gain;
-	}
+   /* For Phase 2, route FM user samples through the non-FM long-index reader.
+      This preserves safe bounds while avoiding a second buggy long-sample path. */
+   calcUserSampleOscBlock(osc, buf, size, gain);
 }
 //---------------------------------------------------------------
 void calcUserSampleOscBlock(OscInfo* osc, int16_t* buf, const uint8_t size ,const float gain)
 {
-	//TODO optimize performance by moving sampleInfo to oscillator struct
-	SampleInfo info = sampleMemory_getSampleInfo(osc->waveform - OSC_SAMPLE_START);
+   const uint8_t sampleIndex = (uint8_t)(osc->waveform - OSC_SAMPLE_START);
+   const uint8_t sampleCount = sampleMemory_getNumSamples();
 
-	//cast sample data to signed int16_t array
-	int16_t* sampleData = (int16_t*)((int8_t*)(info.offset));
+   if(sampleIndex >= sampleCount)
+   {
+      memset(buf, 0, size * sizeof(int16_t));
+      return;
+   }
 
-	uint8_t i;
-	for(i=0;i<size;i++)
-	{
-		const uint32_t oscPhase = osc->phase;
-		int16_t oscOut ;
-		uint32_t  itg	= oscPhase>>17;
+   SampleInfo info = sampleMemory_getSampleInfo(sampleIndex);
+   const uint32_t sampleSize = sampleMemory_getSampleSizeFrames(info);
+   const uint8_t looped = sampleMemory_isSampleLooped(info);
+   int16_t* sampleData = (int16_t*)((int8_t*)(info.offset));
 
+   if(sampleSize == 0u || info.offset < SAMPLE_ROM_START_ADDRESS || !osc->sampleActive)
+   {
+      memset(buf, 0, size * sizeof(int16_t));
+      return;
+   }
 
-	#if INTERPOLATE_OSC
+   uint8_t i;
+   for(i = 0; i < size; i++)
+   {
+      uint32_t pos = osc->samplePosition;
+      uint32_t nextPos = pos + 1u;
+      int16_t oscOut = 0;
 
-		oscOut = sampleData[itg++];
-		const float frac = (oscPhase&20000)*0.00000762939453125f;//=> * 1/0x20000
-		oscOut += frac*(sampleData[itg] - oscOut);
-	#else
-		oscOut = sampleData[itg];
-	#endif
-	//	oscOut = (oscOut - 127)*256;
+      if(pos >= sampleSize)
+      {
+         if(looped)
+            pos %= sampleSize;
+         else
+         {
+            osc->sampleActive = 0u;
+            buf[i] = 0;
+            continue;
+         }
+      }
 
-		//one shot
-		if(itg < info.size)
-		{
-			osc->phase = oscPhase + osc->phaseInc;
-		}
-		buf[i] = oscOut * gain;
-	}
+#if INTERPOLATE_OSC
+      oscOut = sampleData[pos];
+      if(nextPos < sampleSize)
+      {
+         const float frac = (osc->sampleFraction & 0x1ffffu) * 0.00000762939453125f;
+         oscOut += frac * (sampleData[nextPos] - oscOut);
+      }
+#else
+      oscOut = sampleData[pos];
+#endif
+
+      osc->sampleFraction += osc->phaseInc;
+      osc->samplePosition += (osc->sampleFraction >> 17);
+      osc->sampleFraction &= 0x1ffffu;
+
+      if(looped && sampleSize > 0u && osc->samplePosition >= sampleSize)
+         osc->samplePosition %= sampleSize;
+
+      buf[i] = oscOut * gain;
+   }
 }
 //---------------------------------------------------------------
 void calcSampleOscBlock(OscInfo* osc, int16_t* buf, const uint8_t size ,const float gain)

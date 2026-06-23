@@ -62,6 +62,9 @@ typedef struct OscStruct
 	int16_t 	output;
 	uint32_t	phaseInc;
 	uint32_t	phase;		// the current phase of the osc 8bit indexing 24 interpolation
+	uint32_t samplePosition;  /* integer frame index for user samples */
+	uint32_t sampleFraction;  /* 17-bit fractional accumulator for user samples */
+	uint8_t sampleActive;     /* one-shot playback gate; cleared when sample ends */
 	float	 	freq;		// frequency in [Hz]
 	uint8_t		waveform;	// the selected waveform of the osc
 
@@ -137,5 +140,6 @@ void osc_setBaseNote(OscInfo* osc, uint8_t baseNote);
 //-----------------------------------------------------------
 /** recalculate the frequency if either the base note or the offset note value changed*/
 void osc_recalcFreq(OscInfo* osc);
+void osc_resetSamplePlayback(OscInfo* osc);
 
 #endif /* OSCILLATOR_H_ */

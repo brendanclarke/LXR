@@ -33,6 +33,33 @@ void sampleMemory_init()
 #endif
 }
 //---------------------------------------------------------------
+uint32_t sampleMemory_getSampleSizeFrames(SampleInfo info)
+{
+   return info.size & SAMPLE_INFO_SIZE_MASK;
+}
+
+uint8_t sampleMemory_isSampleLooped(SampleInfo info)
+{
+   return (uint8_t)((info.size & SAMPLE_INFO_LOOP_FLAG) != 0u);
+}
+
+SampleInfo sampleMemory_makeSampleInfo(const char* name,
+                                       uint32_t sizeFrames,
+                                       uint32_t offset,
+                                       uint8_t looped)
+{
+   SampleInfo info;
+
+   memset(&info, 0, sizeof(info));
+   memcpy(info.name, name, 3);
+   info.size = sizeFrames & SAMPLE_INFO_SIZE_MASK;
+   if(looped)
+      info.size |= SAMPLE_INFO_LOOP_FLAG;
+   info.offset = offset;
+
+   return info;
+}
+//---------------------------------------------------------------
 SampleInfo sampleMemory_getSampleInfo(uint8_t index)
 {
 	return sampleMemory_infoData[index];
@@ -93,9 +120,10 @@ void sampleMemory_loadSamples()
 		sd_setActiveSample(i);
 		len 	= sd_getActiveSampleLength();
 		name = sd_getActiveSampleName();
-		memcpy(info[i].name, name,3);
-		info[i].offset 	= SAMPLE_ROM_START_ADDRESS + 4 + addr*4; //+1 because of num_samples
-		info[i].size 	= len/2;
+		info[i] = sampleMemory_makeSampleInfo(name,
+                                      len / 2u,
+                                      SAMPLE_ROM_START_ADDRESS + 4u + addr * 4u,
+                                      0u);
 
 		for(j=0;j<len;)
 		{

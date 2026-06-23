@@ -112,11 +112,15 @@ void Cymbal_trigger( const uint8_t vel, const uint8_t note)
 		cymbalVoice.osc.phase = (0x3ff<<20)*offset;//voiceArray[voiceNr].osc.startPhase ;
 	else if(cymbalVoice.osc.waveform > SINE && cymbalVoice.osc.waveform <= REC)
 		cymbalVoice.osc.phase = (0xff<<20)*offset;
-	else
+	else {
 		cymbalVoice.osc.phase = 0;
+		osc_resetSamplePlayback(&cymbalVoice.osc);
+	}
 
 	cymbalVoice.modOsc.phase = 0;
+	osc_resetSamplePlayback(&cymbalVoice.modOsc);
 	cymbalVoice.modOsc2.phase = 0;
+	osc_resetSamplePlayback(&cymbalVoice.modOsc2);
 
 	osc_setBaseNote(&cymbalVoice.osc,note);
 	osc_setBaseNote(&cymbalVoice.modOsc,note);

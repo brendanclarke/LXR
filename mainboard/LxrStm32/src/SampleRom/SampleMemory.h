@@ -38,9 +38,12 @@
 typedef struct SampleInfoStruct
 {
 	char name[3];
-	uint16_t size;		//size in bytes
-	uint32_t offset;	//start address in bytes
+	uint32_t size;		/* bit 31 loop flag, bits 30..0 length in int16 frames */
+	uint32_t offset;	/* absolute STM32 internal flash address */
 } SampleInfo;
+
+#define SAMPLE_INFO_LOOP_FLAG ((uint32_t)0x80000000u)
+#define SAMPLE_INFO_SIZE_MASK ((uint32_t)0x7fffffffu)
 
 
 //--------------------------------------
@@ -49,6 +52,12 @@ void sampleMemory_loadSamples();
 SampleInfo sampleMemory_getSampleInfo(uint8_t index);
 uint8_t sampleMemory_getNumSamples();
 uint32_t sampleMemory_setNumSamples(uint8_t num);
+uint32_t sampleMemory_getSampleSizeFrames(SampleInfo info);
+uint8_t sampleMemory_isSampleLooped(SampleInfo info);
+SampleInfo sampleMemory_makeSampleInfo(const char* name,
+                                       uint32_t sizeFrames,
+                                       uint32_t offset,
+                                       uint8_t looped);
 
 
 #endif /* SAMPLEMEMORY_H_ */
