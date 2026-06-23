@@ -33,6 +33,7 @@
 #define SAMPLE_INFO_START_ADDRESS 	((uint32_t)0x080F9E70)
 #define SAMPLE_INFO_SIZE 			0x190
 #define SAMPLE_ROM_SIZE				((uint32_t)0x00078E70) //499.216 kByte
+#define SAMPLE_MAX_COUNT			((uint8_t)50)
 
 typedef struct SampleInfoStruct
 {
@@ -47,7 +48,7 @@ void sampleMemory_init();
 void sampleMemory_loadSamples();
 SampleInfo sampleMemory_getSampleInfo(uint8_t index);
 uint8_t sampleMemory_getNumSamples();
-void sampleMemory_setNumSamples(uint8_t num);
+uint32_t sampleMemory_setNumSamples(uint8_t num);
 
 
 #endif /* SAMPLEMEMORY_H_ */
