@@ -107,45 +107,7 @@ if ((status & STATUS_BPL_MASK) || !(status & STATUS_READY_MASK)) return SPI_ERR_
 - **Read-back Verification**: After writing the final `SampleInfo` metadata table to flash, read it back into memory and `memcmp` against the buffer to ensure power wasn't lost.
 - **Watchdog & IRQ**: Add `IWDG_ReloadCounter()` periodically within the block-erase loops to prevent watchdog resets. Wrap the actual SPI transaction payloads in `__disable_irq()` / `__enable_irq()` to prevent the audio codec from contending on the SPI bus.
 ---
-### 4. Sample Name in Single-Parameter View via UART
-**Target Files**: `front/LxrAvr/Menu/menu.c`, `front/LxrAvr/avrComms/avrCommsReceivingProtocol.c`, `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.c`
-**Why it needs to change**: The AVR UI displays the parameter value, but it has no direct access to the `SampleMemory` on the STM32. A new UART opcode must be negotiated so the AVR can request the 8-character string dynamically.
-**Line-by-line implementation strategy**:
-1. **Protocol Definition**: Define new opcodes in the shared namespace.
-```c
-#define CMD_REQUEST_SAMPLE_NAME 0x5E //~~0x7A~~  **don't use** /* AVR -> STM32: Payload = 1 byte (Sample Index) */
-#define CMD_RESPONSE_SAMPLE_NAME 0x5F //~~0x7B~~ **dont use** /* STM32 -> AVR: Payload = 8 bytes (ASCII String) */
-```
-2. **AVR Side (`menu.c` & `avrComms`)**:
-```c
-/* Add the missing constant to AVR codebase */
-#define OSC_SAMPLE_START 100 
-/* In menu.c around DTYPE_MENU rendering: */
-case DTYPE_MENU: {
-    uint8_t menuId = (uint8_t)(parameter_dtypes[parNr] >> 4);
-    if (menuId == MENU_WAVEFORM && curParmVal >= OSC_SAMPLE_START) {
-        /* Transmit request over UART if string cache is stale/empty */
-        avrComms_requestSampleName(curParmVal - OSC_SAMPLE_START);
-        /* Render from the volatile cache populated by the UART RX interrupt */
-        memcpy(&editDisplayBuffer[1][0], avrComms_getSampleNameCache(), 8);
-    } else {
-        getMenuItemNameForValue(menuId, curParmVal, &editDisplayBuffer[1][13]);
-    }
-    break;
-}
-```
-3. **STM32 Side (`frontPanelReceivingProtocol.c`)**:
-Add the intercept hook in the switch-case statement handling incoming UART bytes:
-```c
-case CMD_REQUEST_SAMPLE_NAME:
-    uint8_t targetIndex = rxBuffer[1];
-    char nameBuf[8] = { ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' };
-    sampleMemory_getDisplayName(targetIndex, nameBuf);
-    frontPanel_sendDataArray(CMD_RESPONSE_SAMPLE_NAME, (uint8_t*)nameBuf, 8);
-    break;
-```
----
-### 5. Waveform Interpolation and Global Setting (Stretch Goal)
+### 4. Waveform Interpolation and Global Setting (Stretch Goal)
 **Target Files**: `ParameterArray.h`, `menuPages.h`, `modulationNode.c`, `Oscillator.c`
 **Why it needs to change**: The logic does not exist in the split-processor firmware. We must completely port the `modNode_waveInterpGeneration` fractional math, while safely inserting the UI toggle so it doesn't shift existing parameter array indices and break preset compatibility.
 **Line-by-line implementation strategy**:
