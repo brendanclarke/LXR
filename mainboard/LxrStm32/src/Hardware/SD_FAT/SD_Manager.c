@@ -48,6 +48,7 @@ FIL sd_File;			/* place to hold 1 file*/
 DIR sd_Directory;
 uint8_t sd_initOkFlag = 0;
 uint8_t sd_foundSampleFiles = 0;
+static uint8_t sd_foundLoopFiles = 0;
 uint32_t sd_currentSampleLength = 0;
 char sd_currentSampleName[12];
 //---------------------------------------------------------------------------------------
@@ -105,9 +106,62 @@ void sdManager_init()
 }
 
 //---------------------------------------------------------------------------------------
+void sdManager_countLoopFolder(void)
+{
+   FRESULT res;
+   FILINFO fno;
+   char *fn;
+
+   sd_foundLoopFiles = 0;
+
+   res = f_opendir(&sd_Directory, "/loops");
+   if(res != FR_OK)
+   {
+      return;
+   }
+
+   while(1)
+   {
+      res = f_readdir(&sd_Directory, &fno);
+      if(res != FR_OK || fno.fname[0] == 0) break;
+      if(fno.fname[0] == '.') continue;
+
+      fn = fno.fname;
+
+      if(fno.fattrib & AM_DIR)
+      {
+         continue;
+      }
+      else
+      {
+         int i;
+         for(i = 0; i < 12 - 3; i++)
+         {
+            if(fn[i] == '.')
+            {
+               if((fn[i+1] == 'W') && (fn[i+2] == 'A') && (fn[i+3] == 'V'))
+               {
+                  sd_foundLoopFiles++;
+               }
+            }
+         }
+      }
+   }
+}
+
+//---------------------------------------------------------------------------------------
 uint8_t sd_getNumSamples()
 {
-	return sd_foundSampleFiles;
+   uint16_t total = (uint16_t)sd_foundSampleFiles + (uint16_t)sd_foundLoopFiles;
+
+   if(total > 255u) total = 255u;
+
+   return (uint8_t)total;
+}
+
+uint8_t sd_getNumOneShotSamples(void)
+{
+   return sd_foundSampleFiles;
 }
 //---------------------------------------------------------------------------------------
 /*
@@ -145,69 +199,86 @@ uint32_t findDataChunk()
 //selects the active sample from the folder
 void sd_setActiveSample(uint8_t sampleNr)
 {
-	FRESULT res;
-	uint8_t currentSample=0;
-	//goto sample directory
-	res = f_opendir(&sd_Directory, "/samples");                       /* Open the directory */
-    if (res == FR_OK)
-    {
-		//count .wav files in sample dir
-		FILINFO fno;
+   FRESULT res;
+   uint8_t currentSample = 0;
+   const char* folder;
+   uint8_t localIndex;
 
-		while(1)
-		{
-			res = f_readdir(&sd_Directory, &fno);
-			if (res != FR_OK || fno.fname[0] == 0) break;  /* Break on error or end of dir */
-			if (fno.fname[0] == '.') continue;             /* Ignore dot entry */
+   if(sampleNr < sd_foundSampleFiles)
+   {
+      folder = "/samples";
+      localIndex = sampleNr;
+   }
+   else
+   {
+      folder = "/loops";
+      localIndex = sampleNr - sd_foundSampleFiles;
+   }
 
-			char *fn = fno.fname; //8.3 format
+   res = f_opendir(&sd_Directory, folder);
+   if(res != FR_OK)
+   {
+      sd_currentSampleLength = 0;
+      return;
+   }
 
-			if (fno.fattrib & AM_DIR) {                    /* It is a directory */
-				continue;									// skip directories
-			}else {                                       /* It is a file. */
-              //check if .wav file
-				//get ext
+   FILINFO fno;
 
-				int i;
-				for(i=0;i<12-3;i++)
-				{
-					if(fn[i]=='.')
-					{
-						if( (fn[i+1]=='W') && (fn[i+2]=='A') && (fn[i+3]=='V') )
-						{
+   while(1)
+   {
+      res = f_readdir(&sd_Directory, &fno);
+      if(res != FR_OK || fno.fname[0] == 0) break;
+      if(fno.fname[0] == '.') continue;
 
-							if(sampleNr == currentSample)
-							{
-								//found sample
-								char filename[22] = "/samples/";
-								memcpy(&filename[9],fn,13);
-								filename[21] = 0;
+      char *fn = fno.fname;
 
-								FRESULT res = f_open((FIL*)&sd_File,filename,FA_OPEN_EXISTING | FA_READ);
+      if(fno.fattrib & AM_DIR)
+      {
+         continue;
+      }
+      else
+      {
+         int i;
+         for(i = 0; i < 12 - 3; i++)
+         {
+            if(fn[i] == '.')
+            {
+               if((fn[i+1] == 'W') && (fn[i+2] == 'A') && (fn[i+3] == 'V'))
+               {
+                  if(localIndex == currentSample)
+                  {
+                     char filename[22];
+                     uint8_t prefixLen;
 
-								if(res!=FR_OK)
-								{
-									//file open error... maybe the file does not exist?
-									return;
-								}
-								//copy name
-								memcpy(sd_currentSampleName,fn,11);
-								sd_currentSampleName[11] = 0;
-								//set read pointer to sample data
-								sd_currentSampleLength = findDataChunk();
+                     memset(filename, 0, sizeof(filename));
+                     memcpy(filename, folder, strlen(folder));
+                     prefixLen = strlen(folder);
+                     filename[prefixLen] = '/';
+                     memcpy(&filename[prefixLen + 1], fn, 13);
+                     filename[21] = 0;
 
-								return;
-							}
-							currentSample++;
-						}
-					}
-				}
+                     res = f_open((FIL*)&sd_File, filename, FA_OPEN_EXISTING | FA_READ);
 
+                     if(res != FR_OK)
+                     {
+                        sd_currentSampleLength = 0;
+                        return;
+                     }
+
+                     memcpy(sd_currentSampleName, fn, 11);
+                     sd_currentSampleName[11] = 0;
+                     sd_currentSampleLength = findDataChunk();
+
+                     return;
+                  }
+                  currentSample++;
+               }
             }
-		}
+         }
+      }
+   }
 
-		sd_initOkFlag = 1;
-    }
+   sd_currentSampleLength = 0;
 }
 //---------------------------------------------------------------------------------------
 uint32_t sd_getActiveSampleLength()

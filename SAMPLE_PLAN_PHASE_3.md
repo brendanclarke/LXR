@@ -676,3 +676,10 @@ The current code does not check `sd_initOkFlag` before proceeding with the impor
 This is actually the desired behavior — loops-only import should work. However, `sdManager_init()` is called from `sampleMemory_init()` and handles the FatFs mount (`f_mount`). If `f_opendir("/samples")` fails, the mount is still valid and `sdManager_countLoopFolder()` can still open `/loops` successfully.
 
 **Action**: No code change needed. The FatFs mount in `sdManager_init()` happens before the directory open. Even if `/samples` is missing, the filesystem is mounted and `/loops` can be scanned.
+
+---
+
+## Notes
+- Phase 3 changes have been fully implemented in `SD_Manager.c`, `SD_Manager.h`, and `SampleMemory.c`.
+- The build could not be verified locally due to missing `make` in the current Windows environment, but the code edits exactly matched the described scope and logic in this plan.
+- The next step is hardware and build verification as outlined in the verification plan.

@@ -52,6 +52,8 @@ void sdManager_init();
 
 //returns the number of samples in the sample folder /samples
 uint8_t sd_getNumSamples();
+void sdManager_countLoopFolder(void);
+uint8_t sd_getNumOneShotSamples(void);
 //selects the active sample from the folder [0:NUM_SAMPLES]
 void sd_setActiveSample(uint8_t sampleNr);
 uint32_t sd_getActiveSampleLength();

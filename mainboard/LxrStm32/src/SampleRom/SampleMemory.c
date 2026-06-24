@@ -88,7 +88,6 @@ uint32_t sampleMemory_setNumSamples(uint8_t num)
 #define BLOCKSIZE 2
 void sampleMemory_loadSamples()
 {
-	uint8_t numSamples = sd_getNumSamples();
 	SampleInfo info[SAMPLE_MAX_COUNT];
 	uint32_t addr = 0;
 	uint8_t i;
@@ -98,6 +97,9 @@ void sampleMemory_loadSamples()
 	uint32_t j;
 	char* name;
 
+	sdManager_countLoopFolder();
+	uint8_t numSamples = sd_getNumSamples();
+	uint8_t oneShotCount = sd_getNumOneShotSamples();
 
 	if(numSamples==0 || numSamples > SAMPLE_MAX_COUNT)
 	{
@@ -120,10 +122,13 @@ void sampleMemory_loadSamples()
 		sd_setActiveSample(i);
 		len 	= sd_getActiveSampleLength();
 		name = sd_getActiveSampleName();
+		
+		uint8_t looped = (i >= oneShotCount) ? 1u : 0u;
+
 		info[i] = sampleMemory_makeSampleInfo(name,
                                       len / 2u,
                                       SAMPLE_ROM_START_ADDRESS + 4u + addr * 4u,
-                                      0u);
+                                      looped);
 
 		for(j=0;j<len;)
 		{
