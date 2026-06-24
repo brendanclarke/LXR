@@ -67,9 +67,9 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **Morph kit parameter quick access.** While viewing a single parameter in the encoder click-in view, hold SHIFT to toggle between editing the normal parameter value and the morph target value for that parameter. This lets you set morph kit values without save/reload faff.
 
-**Re-align patterns shortcut.** in PERF mode, press the current pattern button again to realign all tracks to the master clock and clear any pattern rotation offsets or misalignment from setting different pattern timescales. In PERF mode, pressing the button of the currently active pattern also performs the realignment.
+**Re-align patterns shortcut.** in PERF mode, press the current pattern button again to realign all tracks to the master clock and clear any pattern rotation offsets or misalignment from setting different pattern timescales. 
 
-**Pot (knob) assignments in load/save reworked.** The shortcut knob functions have been revised to speed up character entry when naming files. In the load menu: knob 1 changes load type, knob 2 changes preset number with auto-load for kit and voice types, knob 3 disables auto-load if turned, knob 4 disables auto-load and moves the cursor. In the save menu: knob 1 changes save type, knob 2 moves the cursor between fields, knob 3 changes the cursor value, knob 4 cycles through additional characters. Capital letters are at the left of knob 3, numbers are in the middle, lower case is at the left of knob 4.
+**Pot (knob) assignments in load/save reworked.** The shortcut knob functions have been revised to speed up character entry when naming files. In the load menu: knob 1 changes load type, knob 2 changes preset number with auto-load for kit and voice types, knob 3 disables auto-load if turned, knob 4 disables auto-load and moves the cursor. In the save menu: knob 1 changes save type, knob 2 moves the cursor between fields, knobs 3 and 4 cycles through characters. Capital letters are at the left of knob 3, numbers are in the middle, lower case is at the left of knob 4.
 
 **SHIFT as toggle.** A global menu option makes the SHIFT button a toggle rather than momentary. This is useful for step editing workflows where you need SHIFT to remain active across multiple button presses.
 
