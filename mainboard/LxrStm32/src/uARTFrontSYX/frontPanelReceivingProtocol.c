@@ -1788,13 +1788,15 @@ void frontParser_handleMidiMessage(void)
          {
          
             case FRONT_SAMPLE_START_UPLOAD:
+            {
                seq_setRunning(0);
                sampleMemory_init();
-               sampleMemory_loadSamples();
+               uint8_t sampleStatus = sampleMemory_loadSamples();
                FLASH_Lock();
             
-               frontPanelSending_sendSampleUploadAck();
+               frontPanelSending_sendSampleUploadResult(sampleStatus);
                break;
+            }
          
             case FRONT_SAMPLE_COUNT:
                frontPanelSending_sendSampleCountReply();

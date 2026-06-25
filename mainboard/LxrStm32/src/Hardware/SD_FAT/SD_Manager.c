@@ -47,8 +47,8 @@ FATFS sd_Fatfs;		/* File system object for the logical drive */
 FIL sd_File;			/* place to hold 1 file*/
 DIR sd_Directory;
 uint8_t sd_initOkFlag = 0;
-uint8_t sd_foundSampleFiles = 0;
-static uint8_t sd_foundLoopFiles = 0;
+uint16_t sd_foundSampleFiles = 0;
+static uint16_t sd_foundLoopFiles = 0;
 uint32_t sd_currentSampleLength = 0;
 char sd_currentSampleName[12];
 //---------------------------------------------------------------------------------------
@@ -150,16 +150,12 @@ void sdManager_countLoopFolder(void)
 }
 
 //---------------------------------------------------------------------------------------
-uint8_t sd_getNumSamples()
+uint16_t sd_getNumSamples(void)
 {
-   uint16_t total = (uint16_t)sd_foundSampleFiles + (uint16_t)sd_foundLoopFiles;
-
-   if(total > 255u) total = 255u;
-
-   return (uint8_t)total;
+   return (uint16_t)(sd_foundSampleFiles + sd_foundLoopFiles);
 }
 
-uint8_t sd_getNumOneShotSamples(void)
+uint16_t sd_getNumOneShotSamples(void)
 {
    return sd_foundSampleFiles;
 }
@@ -197,12 +193,12 @@ uint32_t findDataChunk()
 }
 //---------------------------------------------------------------------------------------
 //selects the active sample from the folder
-void sd_setActiveSample(uint8_t sampleNr)
+void sd_setActiveSample(uint16_t sampleNr)
 {
    FRESULT res;
-   uint8_t currentSample = 0;
+   uint16_t currentSample = 0;
    const char* folder;
-   uint8_t localIndex;
+   uint16_t localIndex;
 
    if(sampleNr < sd_foundSampleFiles)
    {

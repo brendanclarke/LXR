@@ -64,10 +64,12 @@ void frontPanelSending_sendCallbackAck(void)
    frontPanelSending_sendPriorityByte(FRONT_CALLBACK_ACK);
 }
 
-void frontPanelSending_sendSampleUploadAck(void)
+void frontPanelSending_sendSampleUploadResult(uint8_t statusFlags)
 {
-   /* Acknowledge a sample upload request. */
-   frontPanelSending_sendByte(ACK);
+   frontPanelSending_sendByte(SAMPLE_CC);
+   frontPanelSending_sendByte(FRONT_SAMPLE_UPLOAD_RESULT);
+   frontPanelSending_sendByte((uint8_t)(statusFlags & (SAMPLE_UPLOAD_STATUS_COUNT_LIMIT |
+                                                       SAMPLE_UPLOAD_STATUS_FLASH_LIMIT)));
 }
 
 void frontPanelSending_sendSampleCountReply(void)

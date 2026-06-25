@@ -61,8 +61,9 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define PARAM_RESTORE_ACK             0xc9	// acknowledge a parameter restore request
 //#define PRF_CACHE_REJECTED            0x00	// PRF cache request rejected
 //#define PRF_CACHE_ACCEPTED            0x01	// PRF cache request accepted
-#define FRONT_SAMPLE_START_UPLOAD 		0x01	// begin sample upload
-#define FRONT_SAMPLE_COUNT		 		   0x02	// sample count request/response
+#define FRONT_SAMPLE_START_UPLOAD       0x01 // begin sample upload
+#define FRONT_SAMPLE_COUNT              0x02 // sample count request/response
+#define FRONT_SAMPLE_UPLOAD_RESULT      0x03 // upload completed; data2 is SAMPLE_UPLOAD_STATUS_* flags
 
 // message
 #define FRONT_CURRENT_STEP_NUMBER_CC	0x01	/**< send the current active chase light step number to the frontplate*/

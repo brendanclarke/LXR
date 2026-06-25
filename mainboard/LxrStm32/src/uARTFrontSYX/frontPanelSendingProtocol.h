@@ -30,8 +30,8 @@ void frontPanelSending_sendPriorityTripletWait(uint8_t status, uint8_t data1, ui
 
 /* Acknowledge an AVR callback request with FRONT_CALLBACK_ACK. */
 void frontPanelSending_sendCallbackAck(void);
-/* Acknowledge SAMPLE_START_UPLOAD after STM starts sample reload handling. */
-void frontPanelSending_sendSampleUploadAck(void);
+/* Report SAMPLE_START_UPLOAD completion. data2 carries SAMPLE_UPLOAD_STATUS_* flags. */
+void frontPanelSending_sendSampleUploadResult(uint8_t statusFlags);
 /* Reply to FRONT_SAMPLE_COUNT with the sample ROM count. */
 void frontPanelSending_sendSampleCountReply(void);
 /* Reply to a track-length query for trackNr. Caller must pass 0..6. */

@@ -47,7 +47,7 @@
 /* Sample storage mirrors SampleMemory.h; keep these addresses in sync. */
 #define FLASH_IF_SAMPLE_START_ADDRESS      ((uint32_t)0x08080000)
 /* First byte of metadata table. PCM writes must stop before this address. */
-#define FLASH_IF_SAMPLE_INFO_START_ADDRESS ((uint32_t)0x080F9E70)
+#define FLASH_IF_SAMPLE_INFO_START_ADDRESS ((uint32_t)0x080F9400)
 #define FLASH_IF_SAMPLE_END_ADDRESS        USER_FLASH_END_ADDRESS
 
 #define FLASH_IF_OK              ((uint32_t)0)

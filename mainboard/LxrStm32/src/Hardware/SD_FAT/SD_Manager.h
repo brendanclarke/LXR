@@ -50,12 +50,13 @@
 
 void sdManager_init();
 
-//returns the number of samples in the sample folder /samples
-uint8_t sd_getNumSamples();
+// Returns the total number of .WAV files found across /samples and /loops.
+uint16_t sd_getNumSamples(void);
 void sdManager_countLoopFolder(void);
-uint8_t sd_getNumOneShotSamples(void);
-//selects the active sample from the folder [0:NUM_SAMPLES]
-void sd_setActiveSample(uint8_t sampleNr);
+// Returns only the number of files found in /samples.
+uint16_t sd_getNumOneShotSamples(void);
+// Selects the active file by combined /samples-first index.
+void sd_setActiveSample(uint16_t sampleNr);
 uint32_t sd_getActiveSampleLength();
 char* sd_getActiveSampleName();
 //read sample data from the active file.

@@ -25,15 +25,18 @@
 #define SAMPLE_ROM_START_ADDRESS 	((uint32_t)0x08080000)
 #define SAMPLE_PAGE_SIZE               	(uint32_t)0x20000  		/* Page size = 128KByte */
 
-//size for sample info struct = 7byte
-//50 samples = 350 byte = 0x15e
-// flash size 0x080FA000 - 0x15e = 0x080F9EA2
-//auf 400 byte aufgestockt = 0x190
-//flash size 0x080FA000 - 0x190 = 0x080F9E70
-#define SAMPLE_INFO_START_ADDRESS 	((uint32_t)0x080F9E70)
-#define SAMPLE_INFO_SIZE 			0x190
-#define SAMPLE_ROM_SIZE				((uint32_t)0x00078E70) //499.216 kByte
-#define SAMPLE_MAX_COUNT			((uint8_t)50)
+// Sample flash is split into:
+//   [SAMPLE_ROM_START_ADDRESS]          32-bit committed sample count
+//   [SAMPLE_ROM_START_ADDRESS + 4 ...]  packed PCM data
+//   [SAMPLE_INFO_START_ADDRESS ...]     SampleInfo metadata table
+//
+// SampleInfo is compiler-padded to 12 bytes on STM32:
+//   char name[3] + 1 byte padding + uint32_t size + uint32_t offset.
+// 248 entries require 2976 bytes (0xBA0), so reserve 0xC00 bytes.
+#define SAMPLE_INFO_SIZE                ((uint32_t)0x00000C00u)
+#define SAMPLE_INFO_START_ADDRESS       ((uint32_t)0x080F9400)
+#define SAMPLE_ROM_SIZE                 ((uint32_t)(SAMPLE_INFO_START_ADDRESS - SAMPLE_ROM_START_ADDRESS))
+#define SAMPLE_MAX_COUNT                ((uint8_t)248)
 
 typedef struct SampleInfoStruct
 {
@@ -45,10 +48,14 @@ typedef struct SampleInfoStruct
 #define SAMPLE_INFO_LOOP_FLAG ((uint32_t)0x80000000u)
 #define SAMPLE_INFO_SIZE_MASK ((uint32_t)0x7fffffffu)
 
+#define SAMPLE_UPLOAD_STATUS_OK          ((uint8_t)0x00u)
+#define SAMPLE_UPLOAD_STATUS_COUNT_LIMIT ((uint8_t)0x01u)
+#define SAMPLE_UPLOAD_STATUS_FLASH_LIMIT ((uint8_t)0x02u)
+
 
 //--------------------------------------
 void sampleMemory_init();
-void sampleMemory_loadSamples();
+uint8_t sampleMemory_loadSamples(void);
 SampleInfo sampleMemory_getSampleInfo(uint8_t index);
 uint8_t sampleMemory_getNumSamples();
 uint32_t sampleMemory_setNumSamples(uint8_t num);
