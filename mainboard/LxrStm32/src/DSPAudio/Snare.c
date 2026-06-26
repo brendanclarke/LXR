@@ -106,8 +106,11 @@ void Snare_trigger(const uint8_t vel, const uint8_t note)
 		snareVoice.osc.phase = (0x3ff<<20)*offset;//voiceArray[voiceNr].osc.startPhase ;
 	else if(snareVoice.osc.waveform > SINE && snareVoice.osc.waveform <= REC)
 		snareVoice.osc.phase = (0xff<<20)*offset;
-	else
+	else {
 		snareVoice.osc.phase = 0;
+		// Imported one-shot samples must be re-armed on every trigger.
+		osc_resetSamplePlayback(&snareVoice.osc);
+	}
 
 	DecayEg_trigger(&snareVoice.oscPitchEg);
 	slopeEg2_trigger(&snareVoice.oscVolEg);

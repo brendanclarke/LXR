@@ -28,12 +28,64 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
+/* Only internal flash sectors 8..11 are allowed to be unprotected/erased for
+   sample import. This mask is the hardware safety line between sample storage
+   and executable firmware sectors on the STM32F407VGT6. */
+#define FLASH_IF_SAMPLE_WRP_MASK (OB_WRP_Sector_8 | OB_WRP_Sector_9 | \
+                                  OB_WRP_Sector_10 | OB_WRP_Sector_11)
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
 /* Private function prototypes -----------------------------------------------*/
 static uint32_t GetSector(uint32_t Address);
+static uint8_t FLASH_If_IsWordAligned(uint32_t address);
+static uint8_t FLASH_If_RangeIsValid(uint32_t address, uint32_t words, uint32_t limit);
 
 /* Private functions ---------------------------------------------------------*/
+
+static uint8_t FLASH_If_IsWordAligned(uint32_t address)
+{
+  /* STM32 flash programming here writes whole 32-bit words. Rejecting
+     unaligned addresses avoids a bus fault or partial write attempt. */
+  return (uint8_t)((address & 0x03u) == 0u);
+}
+
+static uint8_t FLASH_If_RangeIsValid(uint32_t address, uint32_t words, uint32_t limit)
+{
+  uint32_t bytes;
+
+  /* Inputs: absolute internal-flash address, 32-bit word count, inclusive
+     upper address. Output: 1 when the whole write lies in the sample region.
+     This guards both PCM writes and metadata/count writes from crossing into
+     firmware sectors or past the STM32F4's internal flash end. */
+  if(words == 0u)
+  {
+    return 1u;
+  }
+
+  if(!FLASH_If_IsWordAligned(address))
+  {
+    return 0u;
+  }
+
+  if(address < FLASH_IF_SAMPLE_START_ADDRESS || address > limit)
+  {
+    return 0u;
+  }
+
+  if(words > 0x3fffffffu)
+  {
+    return 0u;
+  }
+
+  bytes = words * 4u;
+
+  if(bytes > (limit - address + 1u))
+  {
+    return 0u;
+  }
+
+  return 1u;
+}
 
 /**
   * @brief  Unlocks Flash for write access
@@ -43,13 +95,14 @@ static uint32_t GetSector(uint32_t Address);
 void FLASH_If_Init(void)
 { 
 
-
+	/* Unlock only long enough to clear stale status, then leave flash locked.
+	   Erase/write helpers manage their own unlock windows. */
+	FLASH_Unlock();
 	/* Clear pending flags (if any) */
 	FLASH_ClearFlag(FLASH_FLAG_EOP | FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR |
 				  FLASH_FLAG_PGAERR | FLASH_FLAG_PGPERR|FLASH_FLAG_PGSERR);
 
-	/* Unlock the Flash Program Erase controller */
-	FLASH_Unlock();
+	FLASH_Lock();
 }
 
 /**
@@ -60,7 +113,20 @@ void FLASH_If_Init(void)
   */
 uint32_t FLASH_If_Erase(uint32_t startAddress)
 {
-  uint32_t UserStartSector = FLASH_Sector_1, i = 0;
+  uint32_t UserStartSector = FLASH_Sector_1;
+  uint32_t i = 0;
+
+  /* Sample import may erase only the sample region start. Keeping this exact
+     address check prevents legacy IAP callers from erasing the application
+     area through this helper. */
+  if(startAddress != FLASH_IF_SAMPLE_START_ADDRESS)
+  {
+    return FLASH_IF_ERR_BOUNDS;
+  }
+
+  FLASH_Unlock();
+  FLASH_ClearFlag(FLASH_FLAG_EOP | FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR |
+                  FLASH_FLAG_PGAERR | FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR);
 
   /* Get the sector where start the user flash area */
   UserStartSector = GetSector(startAddress);
@@ -69,14 +135,16 @@ uint32_t FLASH_If_Erase(uint32_t startAddress)
   {
     /* Device voltage range supposed to be [2.7V to 3.6V], the operation will
        be done by word */
-uint8_t error = FLASH_EraseSector(i, VoltageRange_3);
+    FLASH_Status error = FLASH_EraseSector(i, VoltageRange_3);
     if (error != FLASH_COMPLETE)
     {
       /* Error occurred while page erase */
-      return (1);
+      FLASH_Lock();
+      return FLASH_IF_ERR_OPERATION;
     }
   }
-  return (0);
+  FLASH_Lock();
+  return FLASH_IF_OK;
 }
 
 /**
@@ -93,33 +161,79 @@ uint32_t FLASH_If_Write(__IO uint32_t* FlashAddress, uint32_t* Data ,uint32_t Da
 {
   uint32_t i = 0;
 
-  //js adress parameter is just offset 0->x
- // *FlashAddress *=4;
- // *FlashAddress += APPLICATION_ADDRESS;
+  if(FlashAddress == 0 || Data == 0)
+  {
+    return FLASH_IF_ERR_OPERATION;
+  }
 
-  for (i = 0; (i < DataLength) && (*FlashAddress <= (USER_FLASH_END_ADDRESS-4)); i++)
+  if(!FLASH_If_IsWordAligned(*FlashAddress))
+  {
+    return FLASH_IF_ERR_ALIGNMENT;
+  }
+
+  if(!FLASH_If_RangeIsValid(*FlashAddress, DataLength, FLASH_IF_SAMPLE_END_ADDRESS))
+  {
+    return FLASH_IF_ERR_BOUNDS;
+  }
+
+  FLASH_Unlock();
+  FLASH_ClearFlag(FLASH_FLAG_EOP | FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR |
+                  FLASH_FLAG_PGAERR | FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR);
+
+  for (i = 0; i < DataLength; i++)
   {
     /* Device voltage range supposed to be [2.7V to 3.6V], the operation will
        be done by word */ 
-	  FLASH_Status error = FLASH_ProgramWord(*FlashAddress, *(uint32_t*)(Data+i)) ;
+	  FLASH_Status error = FLASH_ProgramWord(*FlashAddress, Data[i]) ;
     if (error == FLASH_COMPLETE)
     {
      /* Check the written value */
-      if (*(uint32_t*)*FlashAddress != *(uint32_t*)(Data+i))
+      if (*(uint32_t*)*FlashAddress != Data[i])
       {
         /* Flash content doesn't match SRAM content */
-        return(2);
+        FLASH_Lock();
+        return FLASH_IF_ERR_VERIFY;
       }
       /* Increment FLASH destination address */
-      *FlashAddress += 4;
+      *FlashAddress += 4u;
     }
     else
     {
       /* Error occurred while writing data in Flash memory */
-      return (1);
+      FLASH_Lock();
+      return FLASH_IF_ERR_OPERATION;
     }
   }
-  return (0);
+  FLASH_Lock();
+  return FLASH_IF_OK;
+}
+
+uint32_t FLASH_If_WriteSamplePcm(__IO uint32_t* FlashAddress,
+                                 uint32_t* Data,
+                                 uint32_t DataLength)
+{
+  /* PCM is written before the metadata table is committed. Unlike the generic
+     write helper, this wrapper deliberately caps the destination at the byte
+     before FLASH_IF_SAMPLE_INFO_START_ADDRESS. Output is the same FLASH_IF_*
+     status surface as FLASH_If_Write(). */
+  if(FlashAddress == 0)
+  {
+    return FLASH_IF_ERR_OPERATION;
+  }
+
+  if(!FLASH_If_IsWordAligned(*FlashAddress))
+  {
+    return FLASH_IF_ERR_ALIGNMENT;
+  }
+
+  if(!FLASH_If_RangeIsValid(*FlashAddress,
+                            DataLength,
+                            FLASH_IF_SAMPLE_INFO_START_ADDRESS - 1u))
+  {
+    return FLASH_IF_ERR_BOUNDS;
+  }
+
+  return FLASH_If_Write(FlashAddress, Data, DataLength);
 }
 
 /**
@@ -130,20 +244,15 @@ uint32_t FLASH_If_Write(__IO uint32_t* FlashAddress, uint32_t* Data ,uint32_t Da
   */
 uint16_t FLASH_If_GetWriteProtectionStatus(void)
 {
-  uint32_t UserStartSector = FLASH_Sector_1;
+  uint16_t sampleWrp = FLASH_OB_GetWRP() & FLASH_IF_SAMPLE_WRP_MASK;
 
-  /* Get the sector where start the user flash area */
-  UserStartSector = GetSector(APPLICATION_ADDRESS);
-
-  /* Check if there are write protected sectors inside the user flash area */
-  if ((FLASH_OB_GetWRP() >> (UserStartSector/8)) == (0xFFF >> (UserStartSector/8)))
-  { /* No write protected sectors inside the user flash area */
-    return 1;
-  }
-  else
-  { /* Some sectors inside the user flash area are write protected */
+  /* In STM32F4 option bytes, a set WRP bit means the sector is writable. */
+  if(sampleWrp == FLASH_IF_SAMPLE_WRP_MASK)
+  {
     return 0;
   }
+
+  return 1;
 }
 
 /**
@@ -154,26 +263,21 @@ uint16_t FLASH_If_GetWriteProtectionStatus(void)
   */
 uint32_t FLASH_If_DisableWriteProtection(void)
 {
-  __IO uint32_t UserStartSector = FLASH_Sector_1, UserWrpSectors = OB_WRP_Sector_1;
-
-  /* Get the sector where start the user flash area */
-  UserStartSector = GetSector(((uint32_t)0x08080000));
-
-  /* Mark all sectors inside the user flash area as non protected */  
-  UserWrpSectors = 0xFFF-((1 << (UserStartSector/8))-1);
-   
   /* Unlock the Option Bytes */
   FLASH_OB_Unlock();
 
-  /* Disable the write protection for all sectors inside the user flash area */
-  FLASH_OB_WRPConfig(UserWrpSectors, DISABLE);
+  /* Disable write protection only for the sample sectors. */
+  FLASH_OB_WRPConfig(FLASH_IF_SAMPLE_WRP_MASK, DISABLE);
 
   /* Start the Option Bytes programming process. */  
   if (FLASH_OB_Launch() != FLASH_COMPLETE)
   {
     /* Error: Flash write unprotection failed */
+    FLASH_OB_Lock();
     return (2);
   }
+
+  FLASH_OB_Lock();
 
   /* Write Protection successfully disabled */
   return (1);

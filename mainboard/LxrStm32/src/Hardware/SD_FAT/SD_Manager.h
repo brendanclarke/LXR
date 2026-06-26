@@ -50,15 +50,37 @@
 
 void sdManager_init();
 
-//returns the number of samples in the sample folder /samples
-uint8_t sd_getNumSamples();
-//selects the active sample from the folder [0:NUM_SAMPLES]
-void sd_setActiveSample(uint8_t sampleNr);
+// Returns the total number of playable-looking .WAV entries found across
+// /samples and /loops. sdManager_init() counts /samples; sample import calls
+// sdManager_countLoopFolder() before this to refresh /loops.
+uint16_t sd_getNumSamples(void);
+// Counts .WAV entries in /loops. Missing /loops is allowed and leaves count 0.
+void sdManager_countLoopFolder(void);
+// Returns only the number of files found in /samples.
+uint16_t sd_getNumOneShotSamples(void);
+// Opens /samples or /loops for one-pass import iteration.
+// Input: looped=0 selects /samples, looped=1 selects /loops.
+// Output: 1 when the directory was opened and future sd_openNext... calls may
+// advance through it; 0 when the folder is absent or unreadable.
+uint8_t sd_openSampleFolder(uint8_t looped);
+// Opens the next valid WAV in the current import folder.
+// Output: 1 with sd_File positioned at its data chunk and active metadata set;
+// 0 at end-of-folder or when no further valid WAV can be opened.
+uint8_t sd_openNextSampleInFolder(void);
+// Selects the active file by combined /samples-first index.
+// Input: sampleNr 0..N where /samples entries come before /loops entries.
+// Output: 1 only when a valid non-empty WAV data chunk is open. This indexed
+// compatibility helper is intentionally not used by the current importer
+// because repeated rescans made each later sample slower than the previous one.
+uint8_t sd_setActiveSample(uint16_t sampleNr);
 uint32_t sd_getActiveSampleLength();
 char* sd_getActiveSampleName();
+// Closes the active sample file after import has consumed or skipped it.
+void sd_closeActiveSample(void);
 //read sample data from the active file.
-//returns the bytes read.
-//if 0 is returned the EOF is reached
+// Input size is int16 frame count; return value is bytes read.
+// A zero return means EOF or a FatFs read error; sample import treats both as
+// SAMPLE_UPLOAD_STATUS_READ_ERROR when they occur before the expected length.
 uint16_t sd_readSampleData(int16_t* data, uint16_t size);
 
 

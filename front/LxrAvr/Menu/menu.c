@@ -33,11 +33,17 @@
 #define MACRO_VMORPH_CYM   175
 #define MACRO_VMORPH_HIHAT 210
 
+/* AVR Timer2 tick is about 13.1 ms, so 9155 ticks gives roughly two minutes for
+   the STM to erase/program internal flash. The wait loop parses UART traffic
+   during this window so progress/result packets are not missed. */
+#define MENU_SAMPLE_UPLOAD_TIMEOUT_TICKS ((uint16_t)9155u)
+
 
 // uppercase 3 letters in buf
 static void upr_three(char *buf);
 // given a menuid and a param value fill buf with the short menu item value. will not exceed 3 chars
 static void getMenuItemNameForValue(const uint8_t menuId, const uint8_t curParmVal, char *buf);
+static uint8_t menu_waitSampleUploadResult(uint8_t *statusFlags);
 // given a menu id returns the number of entries
 static uint8_t getMaxEntriesForMenu(uint8_t menuId);
 // given a number, convert it to a note name
@@ -1305,6 +1311,50 @@ void menu_setNumSamples(uint8_t num)
 	menu_numSamples = num;
 }
 //-----------------------------------------------------------------
+void menu_showSampleUploadProgress(uint8_t looped, uint8_t index)
+{
+	char number[4] = {0,0,0,0};
+
+	/* This is called both before the command is sent and from UART progress
+	   packets. Keeping it as a small shared renderer makes the initial "Started"
+	   page and numbered updates use identical LCD cursor positions. */
+	lcd_clear();
+	lcd_home();
+	if(looped)
+		lcd_string_F(PSTR("Loop upload"));
+	else
+		lcd_string_F(PSTR("Sample upload"));
+
+	lcd_setcursor(0,2);
+	lcd_string_F(PSTR("Started"));
+	if(index != 0u)
+	{
+		lcd_string_F(PSTR(" "));
+		numtostru(number, index);
+		lcd_string(number);
+	}
+}
+//-----------------------------------------------------------------
+static uint8_t menu_waitSampleUploadResult(uint8_t *statusFlags)
+{
+	uint16_t start = time_sysTick;
+
+	/* Parse normal protocol packets while waiting. The previous raw ACK wait
+	   could return early or hang because the STM sends SAMPLE_CC result/progress
+	   triples, not a bare ACK byte, during sample import. */
+	while((uint16_t)(time_sysTick - start) < MENU_SAMPLE_UPLOAD_TIMEOUT_TICKS)
+	{
+		uart_checkAndParse();
+		if(avrComms_sampleUploadDone)
+		{
+			*statusFlags = avrComms_sampleUploadStatus;
+			return 1u;
+		}
+	}
+
+	return 0u;
+}
+//-----------------------------------------------------------------
 
 static void menu_displayModTargetFull(uint8_t curParmVal)
 {
@@ -2040,26 +2090,65 @@ void menu_handleLoadMenu(int8_t inc, uint8_t btnClicked)
                break;
             
             case SAVE_TYPE_SAMPLES:
+               /* The SD card is normally AVR-owned. Release AVR SPI before the
+                  STM import command so the STM sample loader can temporarily
+                  access the card without bus contention. */
                spi_deInit();
                
                //Display load message
-               lcd_clear();
-               lcd_home();
-               lcd_string_F(PSTR("Sample upload"));
-               lcd_setcursor(0,2);
-               lcd_string_F(PSTR("Started"));
+               menu_showSampleUploadProgress(0u, 0u);
+               /* Let the LCD settle before the STM begins the blocking flash
+                  operation; without this, the final character in "Sample" could
+                  be missed visually on the first screen. */
+               _delay_ms(250);
                //send load sample command to mainboard
+               /* Clear the result latch before sending START_UPLOAD so a stale
+                  result from an earlier import cannot end the wait immediately. */
+               avrComms_sampleUploadDone = 0u;
+               avrComms_sampleUploadStatus = SAMPLE_UPLOAD_STATUS_OK;
                avrComms_sendData(SAMPLE_CC,SAMPLE_START_UPLOAD,0x00);
-               //wait for ack
                {
-                  uint8_t ret = uart_waitAck();
-                  if(ret == ACK)
+                  uint8_t sampleStatus = SAMPLE_UPLOAD_STATUS_OK;
+                  if(menu_waitSampleUploadResult(&sampleStatus))
                   {
-                     
+                     if(sampleStatus & SAMPLE_UPLOAD_STATUS_COUNT_LIMIT)
+                     {
+                        lcd_clear();
+                        lcd_home();
+                        lcd_string_F(PSTR("Sample upload"));
+                        lcd_setcursor(0,2);
+                        lcd_string_F(PSTR("248 max exceeded"));
+                        _delay_ms(1000);
+                     }
+
+                     if(sampleStatus & SAMPLE_UPLOAD_STATUS_FLASH_LIMIT)
+                     {
+                        lcd_clear();
+                        lcd_home();
+                        lcd_string_F(PSTR("Sample upload"));
+                        lcd_setcursor(0,2);
+                        lcd_string_F(PSTR("Flash exceeded"));
+                        _delay_ms(1000);
+                     }
+
+                     if(sampleStatus & SAMPLE_UPLOAD_STATUS_READ_ERROR)
+                     {
+                        lcd_clear();
+                        lcd_home();
+                        lcd_string_F(PSTR("Sample upload"));
+                        lcd_setcursor(0,2);
+                        lcd_string_F(PSTR("Read error"));
+                        _delay_ms(1000);
+                     }
                   }
                   else
                   {
-                     
+                     lcd_clear();
+                     lcd_home();
+                     lcd_string_F(PSTR("Sample upload"));
+                     lcd_setcursor(0,2);
+                     lcd_string_F(PSTR("Load timeout"));
+                     _delay_ms(1000);
                   }
                }
                //re-initialize SD-Card

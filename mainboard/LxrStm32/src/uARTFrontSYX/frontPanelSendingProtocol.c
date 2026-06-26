@@ -64,10 +64,27 @@ void frontPanelSending_sendCallbackAck(void)
    frontPanelSending_sendPriorityByte(FRONT_CALLBACK_ACK);
 }
 
-void frontPanelSending_sendSampleUploadAck(void)
+void frontPanelSending_sendSampleUploadResult(uint8_t statusFlags)
 {
-   /* Acknowledge a sample upload request. */
-   frontPanelSending_sendByte(ACK);
+   /* Mask to documented status bits so stale local flags cannot leak into the
+      AVR parser. Output packet shape: SAMPLE_CC, RESULT opcode, flags. */
+   frontPanelSending_sendByte(SAMPLE_CC);
+   frontPanelSending_sendByte(FRONT_SAMPLE_UPLOAD_RESULT);
+   frontPanelSending_sendByte((uint8_t)(statusFlags & (SAMPLE_UPLOAD_STATUS_COUNT_LIMIT |
+                                                       SAMPLE_UPLOAD_STATUS_FLASH_LIMIT |
+                                                       SAMPLE_UPLOAD_STATUS_READ_ERROR)));
+}
+
+void frontPanelSending_sendSampleUploadProgress(uint8_t looped, uint8_t index)
+{
+   /* Progress packets are intentionally ordinary three-byte protocol messages.
+      The AVR wait loop continues parsing them while the STM blocks in flash
+      import, which keeps the LCD updated and prevents the former hang where
+      uart_waitAck() ignored the actual response shape. */
+   frontPanelSending_sendByte(SAMPLE_CC);
+   frontPanelSending_sendByte(looped ? FRONT_SAMPLE_UPLOAD_LOOP_PROGRESS :
+                                      FRONT_SAMPLE_UPLOAD_SAMPLE_PROGRESS);
+   frontPanelSending_sendByte(index);
 }
 
 void frontPanelSending_sendSampleCountReply(void)
