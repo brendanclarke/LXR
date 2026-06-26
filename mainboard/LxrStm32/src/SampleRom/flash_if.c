@@ -28,6 +28,9 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
+/* Only internal flash sectors 8..11 are allowed to be unprotected/erased for
+   sample import. This mask is the hardware safety line between sample storage
+   and executable firmware sectors on the STM32F407VGT6. */
 #define FLASH_IF_SAMPLE_WRP_MASK (OB_WRP_Sector_8 | OB_WRP_Sector_9 | \
                                   OB_WRP_Sector_10 | OB_WRP_Sector_11)
 /* Private macro -------------------------------------------------------------*/
@@ -41,6 +44,8 @@ static uint8_t FLASH_If_RangeIsValid(uint32_t address, uint32_t words, uint32_t 
 
 static uint8_t FLASH_If_IsWordAligned(uint32_t address)
 {
+  /* STM32 flash programming here writes whole 32-bit words. Rejecting
+     unaligned addresses avoids a bus fault or partial write attempt. */
   return (uint8_t)((address & 0x03u) == 0u);
 }
 
@@ -48,6 +53,10 @@ static uint8_t FLASH_If_RangeIsValid(uint32_t address, uint32_t words, uint32_t 
 {
   uint32_t bytes;
 
+  /* Inputs: absolute internal-flash address, 32-bit word count, inclusive
+     upper address. Output: 1 when the whole write lies in the sample region.
+     This guards both PCM writes and metadata/count writes from crossing into
+     firmware sectors or past the STM32F4's internal flash end. */
   if(words == 0u)
   {
     return 1u;
@@ -107,6 +116,9 @@ uint32_t FLASH_If_Erase(uint32_t startAddress)
   uint32_t UserStartSector = FLASH_Sector_1;
   uint32_t i = 0;
 
+  /* Sample import may erase only the sample region start. Keeping this exact
+     address check prevents legacy IAP callers from erasing the application
+     area through this helper. */
   if(startAddress != FLASH_IF_SAMPLE_START_ADDRESS)
   {
     return FLASH_IF_ERR_BOUNDS;
@@ -200,6 +212,10 @@ uint32_t FLASH_If_WriteSamplePcm(__IO uint32_t* FlashAddress,
                                  uint32_t* Data,
                                  uint32_t DataLength)
 {
+  /* PCM is written before the metadata table is committed. Unlike the generic
+     write helper, this wrapper deliberately caps the destination at the byte
+     before FLASH_IF_SAMPLE_INFO_START_ADDRESS. Output is the same FLASH_IF_*
+     status surface as FLASH_If_Write(). */
   if(FlashAddress == 0)
   {
     return FLASH_IF_ERR_OPERATION;

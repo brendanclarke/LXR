@@ -30,8 +30,14 @@ void frontPanelSending_sendPriorityTripletWait(uint8_t status, uint8_t data1, ui
 
 /* Acknowledge an AVR callback request with FRONT_CALLBACK_ACK. */
 void frontPanelSending_sendCallbackAck(void);
-/* Report SAMPLE_START_UPLOAD completion. data2 carries SAMPLE_UPLOAD_STATUS_* flags. */
+/* Report SAMPLE_START_UPLOAD completion. Input statusFlags is a bitmask of
+   SAMPLE_UPLOAD_STATUS_*; output is SAMPLE_CC/FRONT_SAMPLE_UPLOAD_RESULT/data2.
+   The AVR waits for this parsed packet, not a raw ACK byte. */
 void frontPanelSending_sendSampleUploadResult(uint8_t statusFlags);
+/* Report the 1-based sample or loop currently being imported. Inputs:
+   looped=0 emits FRONT_SAMPLE_UPLOAD_SAMPLE_PROGRESS, looped=1 emits
+   FRONT_SAMPLE_UPLOAD_LOOP_PROGRESS; index is the user-visible 1-based count. */
+void frontPanelSending_sendSampleUploadProgress(uint8_t looped, uint8_t index);
 /* Reply to FRONT_SAMPLE_COUNT with the sample ROM count. */
 void frontPanelSending_sendSampleCountReply(void);
 /* Reply to a track-length query for trackNr. Caller must pass 0..6. */

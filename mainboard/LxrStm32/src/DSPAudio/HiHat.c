@@ -114,6 +114,7 @@ void HiHat_trigger( uint8_t vel, uint8_t isOpen, const uint8_t note)
 		hatVoice.osc.phase = (0xff<<20)*offset;
 	else {
 		hatVoice.osc.phase = 0;
+		// Imported one-shot samples must be re-armed on every trigger.
 		osc_resetSamplePlayback(&hatVoice.osc);
 	}
 
@@ -223,4 +224,3 @@ void HiHat_calcSyncBlock(int16_t* buf, const uint8_t size)
 	calcDistBlock(&hatVoice.distortion,buf,size);
 }
 //---------------------------------------------------
-

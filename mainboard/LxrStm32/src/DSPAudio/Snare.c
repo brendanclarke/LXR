@@ -108,6 +108,7 @@ void Snare_trigger(const uint8_t vel, const uint8_t note)
 		snareVoice.osc.phase = (0xff<<20)*offset;
 	else {
 		snareVoice.osc.phase = 0;
+		// Imported one-shot samples must be re-armed on every trigger.
 		osc_resetSamplePlayback(&snareVoice.osc);
 	}
 

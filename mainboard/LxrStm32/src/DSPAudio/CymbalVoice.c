@@ -114,10 +114,13 @@ void Cymbal_trigger( const uint8_t vel, const uint8_t note)
 		cymbalVoice.osc.phase = (0xff<<20)*offset;
 	else {
 		cymbalVoice.osc.phase = 0;
+		// Imported one-shot samples must be re-armed on every trigger.
 		osc_resetSamplePlayback(&cymbalVoice.osc);
 	}
 
 	cymbalVoice.modOsc.phase = 0;
+	// Mod oscillators can also select imported samples, so reset their sample
+	// read heads together with their phase.
 	osc_resetSamplePlayback(&cymbalVoice.modOsc);
 	cymbalVoice.modOsc2.phase = 0;
 	osc_resetSamplePlayback(&cymbalVoice.modOsc2);
@@ -218,4 +221,3 @@ void Cymbal_calcSyncBlock(int16_t* buf, const uint8_t size)
 		calcDistBlock(&cymbalVoice.distortion,buf,size);
 }
 //---------------------------------------------------
-

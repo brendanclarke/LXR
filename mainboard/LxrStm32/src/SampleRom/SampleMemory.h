@@ -36,7 +36,7 @@
 #define SAMPLE_INFO_SIZE                ((uint32_t)0x00000C00u)
 #define SAMPLE_INFO_START_ADDRESS       ((uint32_t)0x080F9400)
 #define SAMPLE_ROM_SIZE                 ((uint32_t)(SAMPLE_INFO_START_ADDRESS - SAMPLE_ROM_START_ADDRESS))
-#define SAMPLE_MAX_COUNT                ((uint8_t)248)
+#define SAMPLE_MAX_COUNT                ((uint8_t)248) /* AVR waveform menu exposes s0..s247 only. */
 
 typedef struct SampleInfoStruct
 {
@@ -45,22 +45,38 @@ typedef struct SampleInfoStruct
 	uint32_t offset;	/* absolute STM32 internal flash address */
 } SampleInfo;
 
+/* Phase 2 reuses SampleInfo.size bit 31 as the loop flag without expanding
+   the on-flash ABI. The lower 31 bits remain the int16 frame count. */
 #define SAMPLE_INFO_LOOP_FLAG ((uint32_t)0x80000000u)
 #define SAMPLE_INFO_SIZE_MASK ((uint32_t)0x7fffffffu)
+/* The table writer deals in flash words. These constants document the expected
+   padded STM32 layout and are checked at compile time in SampleMemory.c. */
+#define SAMPLE_INFO_FLASH_WORDS ((uint32_t)3u)
+#define SAMPLE_INFO_FLASH_BYTES (SAMPLE_INFO_FLASH_WORDS * 4u)
 
+/* SAMPLE_UPLOAD_STATUS_* bits are sent STM->AVR in SAMPLE_UPLOAD_RESULT.
+   OK means no warning bits set; non-zero bits are warnings/errors displayed by
+   the AVR menu after the blocking import returns. */
 #define SAMPLE_UPLOAD_STATUS_OK          ((uint8_t)0x00u)
 #define SAMPLE_UPLOAD_STATUS_COUNT_LIMIT ((uint8_t)0x01u)
 #define SAMPLE_UPLOAD_STATUS_FLASH_LIMIT ((uint8_t)0x02u)
+#define SAMPLE_UPLOAD_STATUS_READ_ERROR  ((uint8_t)0x04u)
 
 
 //--------------------------------------
 void sampleMemory_init();
+/* Imports /samples first and /loops second from the SD card into STM32
+   internal flash. Output is SAMPLE_UPLOAD_STATUS_* flags; on success the
+   committed sample count at SAMPLE_ROM_START_ADDRESS is updated last. */
 uint8_t sampleMemory_loadSamples(void);
 SampleInfo sampleMemory_getSampleInfo(uint8_t index);
 uint8_t sampleMemory_getNumSamples();
 uint32_t sampleMemory_setNumSamples(uint8_t num);
+/* Inputs: on-flash SampleInfo. Outputs: decoded frame count / loop flag. */
 uint32_t sampleMemory_getSampleSizeFrames(SampleInfo info);
 uint8_t sampleMemory_isSampleLooped(SampleInfo info);
+/* Builds a zero-padded SampleInfo for flash. Inputs are 8.3 name, int16 frame
+   length, absolute PCM offset, and loop flag; output is the packed metadata. */
 SampleInfo sampleMemory_makeSampleInfo(const char* name,
                                        uint32_t sizeFrames,
                                        uint32_t offset,

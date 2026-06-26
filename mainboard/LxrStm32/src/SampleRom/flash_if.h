@@ -44,9 +44,13 @@
 
 /* End of the Flash address */
 #define USER_FLASH_END_ADDRESS        0x080FFFFF
-/* Sample storage mirrors SampleMemory.h; keep these addresses in sync. */
+/* Sample storage mirrors SampleMemory.h; keep these addresses in sync.
+   The STM32F407VGT6 has 1 MB internal flash. User samples are intentionally
+   limited to sectors 8..11 (0x08080000..0x080FFFFF) so sample import never
+   erases the bootloader, application sectors, SRAM, or any external hardware. */
 #define FLASH_IF_SAMPLE_START_ADDRESS      ((uint32_t)0x08080000)
-/* First byte of metadata table. PCM writes must stop before this address. */
+/* First byte of metadata table. PCM writes must stop before this address so
+   audio data cannot overwrite the SampleInfo table written at the end. */
 #define FLASH_IF_SAMPLE_INFO_START_ADDRESS ((uint32_t)0x080F9400)
 #define FLASH_IF_SAMPLE_END_ADDRESS        USER_FLASH_END_ADDRESS
 
@@ -68,6 +72,10 @@
 void FLASH_If_Init(void);
 uint32_t FLASH_If_Erase(uint32_t startAddress);
 uint32_t FLASH_If_Write(__IO uint32_t* FlashAddress, uint32_t* Data, uint32_t DataLength);
+/* Write PCM sample words only below FLASH_IF_SAMPLE_INFO_START_ADDRESS.
+   Inputs: FlashAddress points to the absolute internal-flash destination and
+   is advanced by FLASH_If_Write(); Data points to 32-bit packed PCM words;
+   DataLength is a 32-bit word count. Output: FLASH_IF_* status. */
 uint32_t FLASH_If_WriteSamplePcm(__IO uint32_t* FlashAddress,
                                  uint32_t* Data,
                                  uint32_t DataLength);

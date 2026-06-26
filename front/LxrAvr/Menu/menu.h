@@ -641,6 +641,10 @@ void menu_repaint();
 //-----------------------------------------------------------------
 //number of user samples in flash
 void menu_setNumSamples(uint8_t num);
+//show sample-import progress while the STM flashes samples.
+//Inputs: looped=0 prints Sample upload, looped=1 prints Loop upload; index 0
+//prints the initial Started screen, non-zero appends the 1-based item number.
+void menu_showSampleUploadProgress(uint8_t looped, uint8_t index);
 //-----------------------------------------------------------------
 void menu_enterVoiceMode();
 //-----------------------------------------------------------------

@@ -38,6 +38,7 @@
 | 027 | 2026-06-19 | local branch `dev-vmorph-front`, live-record automation + encoder menu fix | Fixed front-panel live-record automation destination storage by making step automation destinations raw `PAR_*` ids, preserved external MIDI recording with a MIDI-domain helper, fixed encoder `DTYPE_MENU` value normalization, and restored encoder-press execution on the clear menu |
 | 028 | 2026-06-21 | local repo, background file loading via temporary data complete | Completed the active `0x6d/0x6e` background-swap handshake so `.pat`, `.prf`, and `.all` loads can write normal storage while playback continues from temp |
 | 029 | 2026-06-21 | local repo, Global MIDI CC/NRPN table implementation | Added a separate Global-channel CC2-127 and NRPN parser table while preserving existing CC0 bank-change, CC1 morph, and non-global channel MIDI behavior |
+| 030 | 2026-06-26 | local repo, sample import phases 1-3 closeout | Hardened STM sample flash import, stabilized dense `/samples` + `/loops` loading, added parsed progress/result packets, and archived the temporary phase docs |
 
 ---
 
@@ -159,6 +160,10 @@ Session 028 completed background loading through the existing normal/temporary P
 Session 029 added a separate Global-channel MIDI CC/NRPN implementation while leaving the existing non-global Channel MIDI parser in place. Global-channel CC0 bank change and CC1 morph intentionally keep the existing `ChannelMidiParser.c` behavior; Global-channel CC2-127 now pre-empt overlapping voice-channel assignments and route only through `GlobalMidiParser.c`, where the requested flat CC table and Global-only NRPN selector/data-entry table translate into the existing internal `frontParser_applyParameterCommand()` CC/CC2 apply path. The durable MIDI reference now lives in `knowledge_files/comms_spec_reference/MIDI_TABLE.md`, `COMMS_FLOW_SPEC.md` documents the pre-emption rule, the STM build passed, and the user hardware-tested the new Global parser successfully.
 - **Find here**: Global MIDI CC pre-emption, preserved Global CC0/CC1 behavior, separate Global CC2-127 table, Global NRPN CC98/99/6 handling, non-global channel MIDI table, `MIDI_TABLE.md`, build and hardware verification
 
+### 030 — Sample Import Stabilization And Closeout (2026-06-26)
+Session 030 completed the sample-handling phase closeout across the earlier Phase 1/2/3 planning docs. STM sample import is now bounded to internal flash sectors 8-11 with metadata/count committed last, imported `SampleInfo` keeps a 12-byte ABI with a loop flag in bit 31, oscillator playback handles long one-shots and loops with dense bounds checks, `/samples` and optional `/loops` import through one-pass SD traversal, invalid files no longer consume silent slots, AVR waits for parsed `SAMPLE_UPLOAD_RESULT` packets instead of raw ACK bytes, and the LCD receives numbered sample/loop progress packets. The temporary phase docs can be deleted after this archive/log/spec/comment pass.
+- **Find here**: sample flash bounds, dense sample metadata, `/samples` then `/loops`, one-pass SD traversal, parsed sample upload result/progress protocol, loop flag in `SampleInfo.size`, long-sample oscillator playback, hardware SD ownership notes, temporary phase-doc preservation
+
 
 ---
 
@@ -219,6 +224,12 @@ Session 029 added a separate Global-channel MIDI CC/NRPN implementation while le
 | For MIDI CC messages, the configured Global channel pre-empts overlapping voice-channel assignments; Global CC0/CC1 preserve the current bank/morph path, while Global CC2-127 use the separate Global table | 029 |
 | Global MIDI NRPN is Global-channel-only after Session 029: CC99/CC98 select the NRPN number and CC6 applies NRPN0-92 through the internal CC2 apply path | 029 |
 | The durable complete external MIDI spec table is `knowledge_files/comms_spec_reference/MIDI_TABLE.md` | 029 |
+| Sample import writes only STM32 internal flash sectors 8-11; PCM must stay below `SAMPLE_INFO_START_ADDRESS` and the committed sample count is written last | 030 |
+| Current sample import order is dense `/samples` one-shots first, then optional `/loops`; invalid/unreadable/too-large WAV candidates must not consume waveform slots | 030 |
+| AVR sample import completion waits on parsed `SAMPLE_UPLOAD_RESULT` while processing progress packets; do not restore raw `uart_waitAck()` for this path | 030 |
+| `SampleInfo` remains a 12-byte on-flash ABI; bit 31 of `size` is the loop flag and bits 30..0 are int16 frame count | 030 |
+| Current imported-sample oscillator playback uses 32-bit `samplePosition`, 17-bit `sampleFraction`, and trigger-time `osc_resetSamplePlayback()` for one-shots/loops | 030 |
+| The sample-import SD ownership exception is safe only when AVR releases SPI before `SAMPLE_START_UPLOAD` and STM deinitializes SPI on every import exit | 030 |
 
 
 ---

@@ -29,6 +29,12 @@ volatile MidiMsg avrCommsParser_command;
 static uint16_t avrCommsParser_nrpnNr = 0;
 
 volatile uint8_t avrCommsParser_restoreActive = 0; // RESTORE: True during a canonical parameter dump from STM
+/* Sample import completion latch. The load menu clears this before sending
+   SAMPLE_START_UPLOAD; the UART parser sets it only when the STM sends the
+   explicit RESULT packet. This avoids the old first-load race with stale bytes
+   and raw ACK waiting. */
+volatile uint8_t avrComms_sampleUploadDone = 0;
+volatile uint8_t avrComms_sampleUploadStatus = 0;
 static uint16_t avrCommsParser_restoreCount = 0;
 static uint16_t avrCommsParser_restoreMorphCount = 0;
 static uint8_t avrCommsParser_reportGlobalMorphLsb = 0;
@@ -688,6 +694,25 @@ void avrComms_parseData(uint8_t data)
                {
                   case SAMPLE_COUNT:
                      menu_setNumSamples(avrCommsParser_command.data2);
+                     break;
+
+                  case SAMPLE_UPLOAD_RESULT:
+                     /* Store flags before done so the foreground wait loop
+                        cannot observe completion with stale status. */
+                     avrComms_sampleUploadStatus = avrCommsParser_command.data2;
+                     avrComms_sampleUploadDone = 1u;
+                     break;
+
+                  case SAMPLE_UPLOAD_SAMPLE_PROGRESS:
+                     /* STM sends one-based user-visible counts; the menu does
+                        not infer progress from local directory state. */
+                     menu_showSampleUploadProgress(0u, avrCommsParser_command.data2);
+                     break;
+
+                  case SAMPLE_UPLOAD_LOOP_PROGRESS:
+                     /* Loop progress is separate so the LCD can switch wording
+                        from "Sample upload" to "Loop upload" during pass two. */
+                     menu_showSampleUploadProgress(1u, avrCommsParser_command.data2);
                      break;
                
                   default:

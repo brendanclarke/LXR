@@ -167,11 +167,14 @@ void Drum_trigger(const uint8_t voiceNr, const uint8_t vol, const uint8_t note)
 			voiceArray[voiceNr].osc.phase = (0xff<<20)*offset;
 		else {
 			voiceArray[voiceNr].osc.phase = 0;
+			// Imported samples carry one-shot/loop playback state outside phase.
+			// Reset it on trigger so the same sample can play from frame 0 again.
 			osc_resetSamplePlayback(&voiceArray[voiceNr].osc);
 		}
         
         if(voiceArray[voiceNr].modOsc.waveform >  REC) {
             voiceArray[voiceNr].modOsc.phase = 0;
+            // Same reset is needed when an imported sample is used as mod osc.
             osc_resetSamplePlayback(&voiceArray[voiceNr].modOsc);
         }
 
@@ -298,4 +301,3 @@ void calcDrumVoiceSyncBlock(const uint8_t voiceNr, int16_t* buf, const uint8_t s
 	bufferTool_addGain(buf,voiceArray[voiceNr].vol,size);
 }
 //---------------------------------------------------
-

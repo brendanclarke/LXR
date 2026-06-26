@@ -1789,6 +1789,11 @@ void frontParser_handleMidiMessage(void)
          
             case FRONT_SAMPLE_START_UPLOAD:
             {
+               /* Blocking STM-side import. The AVR releases its SD SPI pins
+                  before sending this command; STM stops the sequencer before
+                  erasing/programming internal flash sectors 8..11, initializes
+                  SD access for the import, then reports completion with an
+                  explicit SAMPLE_UPLOAD_RESULT packet. */
                seq_setRunning(0);
                sampleMemory_init();
                uint8_t sampleStatus = sampleMemory_loadSamples();
@@ -1799,6 +1804,8 @@ void frontParser_handleMidiMessage(void)
             }
          
             case FRONT_SAMPLE_COUNT:
+               /* Count reply lets the AVR waveform menu know exactly how many
+                  dense sample slots are valid after import. */
                frontPanelSending_sendSampleCountReply();
                break;
          

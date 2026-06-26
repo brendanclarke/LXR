@@ -72,6 +72,9 @@ __inline uint32_t freq2PhaseIncr1024(const float f)
 //-----------------------------------------------------------
 void osc_resetSamplePlayback(OscInfo* osc)
 {
+   /* Called by each voice trigger path after phase reset. Without this, a
+      one-shot imported sample that reached its end would remain silent on the
+      next trigger, and long samples would resume from their previous offset. */
    osc->samplePosition = 0u;
    osc->sampleFraction = 0u;
    osc->sampleActive = 1u;
@@ -522,6 +525,8 @@ void calcUserSampleOscFmBlock(OscInfo* osc,int16_t* modBuffer, int16_t* buf, uin
    const uint8_t sampleIndex = (uint8_t)(osc->waveform - OSC_SAMPLE_START);
    const uint8_t sampleCount = sampleMemory_getNumSamples();
 
+   /* Guard first so a stale AVR waveform value such as s1 after only s0 loaded
+      produces silence rather than reading past the SampleInfo table. */
    if(sampleIndex >= sampleCount)
    {
       memset(buf, 0, size * sizeof(int16_t));
@@ -538,6 +543,9 @@ void calcUserSampleOscBlock(OscInfo* osc, int16_t* buf, const uint8_t size ,cons
    const uint8_t sampleIndex = (uint8_t)(osc->waveform - OSC_SAMPLE_START);
    const uint8_t sampleCount = sampleMemory_getNumSamples();
 
+   /* Phase 2 fixed the off-by-one: valid slots are 0..sampleCount-1. Any
+      waveform outside that range is zero-filled so an empty menu slot cannot
+      dereference uncommitted flash metadata. */
    if(sampleIndex >= sampleCount)
    {
       memset(buf, 0, size * sizeof(int16_t));
@@ -549,6 +557,8 @@ void calcUserSampleOscBlock(OscInfo* osc, int16_t* buf, const uint8_t size ,cons
    const uint8_t looped = sampleMemory_isSampleLooped(info);
    int16_t* sampleData = (int16_t*)((int8_t*)(info.offset));
 
+   /* Metadata guard: zero-length samples, impossible offsets, and completed
+      one-shots all render silence. Looped samples never clear sampleActive. */
    if(sampleSize == 0u || info.offset < SAMPLE_ROM_START_ADDRESS || !osc->sampleActive)
    {
       memset(buf, 0, size * sizeof(int16_t));
@@ -565,9 +575,14 @@ void calcUserSampleOscBlock(OscInfo* osc, int16_t* buf, const uint8_t size ,cons
       if(pos >= sampleSize)
       {
          if(looped)
+         {
+            /* /loops samples wrap at the imported frame count. */
             pos %= sampleSize;
+         }
          else
          {
+            /* /samples are one-shots: clear the gate once the read head passes
+               the final frame, then output zeros until the next trigger reset. */
             osc->sampleActive = 0u;
             buf[i] = 0;
             continue;
@@ -590,7 +605,9 @@ void calcUserSampleOscBlock(OscInfo* osc, int16_t* buf, const uint8_t size ,cons
       osc->sampleFraction &= 0x1ffffu;
 
       if(looped && sampleSize > 0u && osc->samplePosition >= sampleSize)
+      {
          osc->samplePosition %= sampleSize;
+      }
 
       buf[i] = oscOut * gain;
    }

@@ -21,6 +21,11 @@ extern uint8_t avrComms_sysexMode;
 extern uint8_t avrComms_longOp;
 extern uint8_t avrComms_longData;
 extern uint8_t avrCommsParser_rxDisable;
+/* Latched by SAMPLE_UPLOAD_RESULT while the menu is waiting for a blocking STM
+   sample import to finish. Volatile because UART RX parsing can update it while
+   menu_waitSampleUploadResult() polls from foreground code. */
+extern volatile uint8_t avrComms_sampleUploadDone;
+extern volatile uint8_t avrComms_sampleUploadStatus;
 uint8_t avrCommsParser_isRestoreActive(void);
 
 
@@ -83,8 +88,19 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define PARAM_RESTORE_ACK     0xc9	// acknowledge a parameter restore request
 //#define PRF_CACHE_REJECTED    0x00	// PRF cache request rejected
 //#define PRF_CACHE_ACCEPTED    0x01	// PRF cache request accepted
+/* SAMPLE_CC subcommands mirror STM frontPanelReceivingProtocol.h.
+   START_UPLOAD/COUNT are AVR requests; RESULT/progress are STM replies. */
 #define SAMPLE_START_UPLOAD 0x01	// begin sample upload
 #define SAMPLE_COUNT		0x02	// sample count request/response
+#define SAMPLE_UPLOAD_RESULT 0x03	// upload completed; data2 is SAMPLE_UPLOAD_STATUS_* flags
+#define SAMPLE_UPLOAD_SAMPLE_PROGRESS 0x04	// data2 is 1-based sample number
+#define SAMPLE_UPLOAD_LOOP_PROGRESS   0x05	// data2 is 1-based loop number
+/* Status bits shown by the load menu after RESULT. They must stay in sync with
+   mainboard/LxrStm32/src/SampleRom/SampleMemory.h. */
+#define SAMPLE_UPLOAD_STATUS_OK          0x00
+#define SAMPLE_UPLOAD_STATUS_COUNT_LIMIT 0x01
+#define SAMPLE_UPLOAD_STATUS_FLASH_LIMIT 0x02
+#define SAMPLE_UPLOAD_STATUS_READ_ERROR  0x04
 
 //preset status bytes
 #define PRESET_NAME				0xb4	/**< this message consists of 4 messages with status FRONT_PRESET_NAME and 2 data bytes each with 2 charactzers of the name*/

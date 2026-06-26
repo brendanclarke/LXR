@@ -62,9 +62,9 @@ typedef struct OscStruct
 	int16_t 	output;
 	uint32_t	phaseInc;
 	uint32_t	phase;		// the current phase of the osc 8bit indexing 24 interpolation
-	uint32_t samplePosition;  /* integer frame index for user samples */
-	uint32_t sampleFraction;  /* 17-bit fractional accumulator for user samples */
-	uint8_t sampleActive;     /* one-shot playback gate; cleared when sample ends */
+	uint32_t samplePosition;  /* User sample integer frame index; 32-bit so long imported WAVs can play past 64K frames. */
+	uint32_t sampleFraction;  /* User sample 17-bit fractional accumulator paired with freq2PhaseIncr32767(). */
+	uint8_t sampleActive;     /* One-shot playback gate; reset on trigger, cleared at end unless SampleInfo loop bit is set. */
 	float	 	freq;		// frequency in [Hz]
 	uint8_t		waveform;	// the selected waveform of the osc
 
@@ -129,8 +129,14 @@ int16_t calcNextOscSampleFm(OscInfo* osc, OscInfo* modOsc);
 //-----------------------------------------------------------
 void calcSampleOscBlock(OscInfo* osc, int16_t* buf, const uint8_t size ,const float gain);
 //-----------------------------------------------------------
+/* FM user-sample compatibility path. Inputs match other block renderers; output
+   is size int16 samples in buf. The implementation delegates to the non-FM
+   long-index reader to keep a single bounds-safe sample path. */
 void calcUserSampleOscFmBlock(OscInfo* osc,int16_t* modBuffer, int16_t* buf, uint8_t size ,const float gain);
 //-----------------------------------------------------------
+/* Render an imported user sample selected by osc->waveform - OSC_SAMPLE_START.
+   Inputs: osc playback state, output buffer, frame count, gain. Output: buffer
+   is filled with PCM or zeros when the slot is invalid/inactive. */
 void calcUserSampleOscBlock(OscInfo* osc, int16_t* buf, const uint8_t size ,const float gain);
 //-----------------------------------------------------------
 int16_t calcSampleOsc(OscInfo* osc);
@@ -140,6 +146,9 @@ void osc_setBaseNote(OscInfo* osc, uint8_t baseNote);
 //-----------------------------------------------------------
 /** recalculate the frequency if either the base note or the offset note value changed*/
 void osc_recalcFreq(OscInfo* osc);
+/* Reset imported-sample playback state on trigger. Input/output is the
+   oscillator struct; samplePosition and sampleFraction are cleared and
+   sampleActive is armed for one-shot playback. */
 void osc_resetSamplePlayback(OscInfo* osc);
 
 #endif /* OSCILLATOR_H_ */
