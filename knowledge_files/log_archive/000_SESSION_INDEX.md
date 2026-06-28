@@ -39,6 +39,8 @@
 | 028 | 2026-06-21 | local repo, background file loading via temporary data complete | Completed the active `0x6d/0x6e` background-swap handshake so `.pat`, `.prf`, and `.all` loads can write normal storage while playback continues from temp |
 | 029 | 2026-06-21 | local repo, Global MIDI CC/NRPN table implementation | Added a separate Global-channel CC2-127 and NRPN parser table while preserving existing CC0 bank-change, CC1 morph, and non-global channel MIDI behavior |
 | 030 | 2026-06-26 | local repo, sample import phases 1-3 closeout | Hardened STM sample flash import, stabilized dense `/samples` + `/loops` loading, added parsed progress/result packets, and archived the temporary phase docs |
+| 031 | 2026-06-28 | local repo, sample import redo and display | Cleanly rewrote sample import logic after reverting experiments, added deterministic sorting and 128-frame PCM blocks, and updated LCD to show 'Writing Flash' |
+| 032 | 2026-06-28 | local repo, oscillator interpolation complete | Finalized oscillator waveform interpolation wire-up, added single dynamically assigned fractional blend slot, and fixed standard state writeback for sample/phase tracking |
 
 ---
 
@@ -168,7 +170,9 @@ Session 030 completed the sample-handling phase closeout across the earlier Phas
 Session 031 started with oscillator interpolation planning/experiments, but the durable closeout is the clean reimplementation of the sample-import additions after reverting the experimental work. STM sample import now builds a sorted cached 8.3 WAV-name list per folder, orders `/samples` and `/loops` numerically/alphabetically, sends immediate real one-based progress for the current accepted file, uses larger 128-frame PCM transfer blocks, and sends sample progress/result packets through priority-wait transport. AVR sample upload no longer has a fixed timeout or `Load timeout`; it waits for parsed `SAMPLE_UPLOAD_RESULT` while switching locally to `Writing Flash` dots after progress idles. `COMMS_FLOW_SPEC.md` and `MEMORY.md` were updated; `SAMPLE_LOAD_REDO_AUDIT.md` is superseded by the handoff log.
 - **Find here**: sorted cached sample-name import, numerical-alphabetical WAV ordering, immediate current-file progress, final loop number display, larger PCM blocks, reliable sample progress/result packets, no sample-upload timeout, AVR-local `Writing Flash` idle spinner, interpolation carry-forward reminders
 
-
+### 032 — Oscillator Waveform Interpolation (2026-06-28)
+Session 032 finalized the implementation of oscillator waveform interpolation, adding a single dynamically assigned fractional blend slot (`OSC_WAVE_INTERP_MAX_ACTIVE=1`). The front panel `PAR_OSC_WAVE_INTERPOLATION` menu parameter was successfully wired through the AVR-to-STM protocol to toggle this behavior globally. Critical fixes were made to the double-render crossfade blocks in `Oscillator.c` to recalculate `phaseInc` for the target waveform (preventing pitch doubling) and to explicitly write back standard oscillator state like `phase` and `samplePosition` (preventing endless 16-frame looping squeals for samples).
+- **Find here**: oscillator waveform interpolation, fractional blend slot, double-render crossfade fixes, `osc_setFreq` target recalculation, state writeback for samples
 ---
 
 ## Key Cross-Session Facts (quick lookup)

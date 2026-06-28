@@ -42,11 +42,28 @@
 #include "Snare.h"
 #include "sequencer.h"
 #include "MorphEngine.h"
+#include "Oscillator.h"
+#include "../SampleRom/SampleMemory.h"
 
 INCCMZ ModulationNode velocityModulators[6];
 
 //INCCMZ ModulationNode macroModulators[4];
 ModulationNode macroModulators[4];
+
+/* Waveform-parameter interpolation state.
+   modNode_waveInterpEnabled: set by modNode_setWaveInterpEnabled() from the
+     front-panel receive path; read by osc_waveInterpActive() each render call.
+   modNode_waveInterpGeneration: bumped by modNode_resetTargets() at the start of
+     every DSP block. Each oscillator stores the generation at which its blend
+     state was written; a mismatch means the state is stale and interp is skipped.
+     Starts at 1 so that zero-initialised oscillators (generation=0) are always
+     stale on the first block, preventing unintended blend on startup.
+   modNode_waveInterpActiveCount: reset to 0 each block in modNode_resetTargets().
+     Incremented per oscillator in modNode_updateValue(). Capped at
+     OSC_WAVE_INTERP_MAX_ACTIVE so the double-render cost is bounded. */
+static uint8_t  modNode_waveInterpEnabled      = 0u;
+static uint32_t modNode_waveInterpGeneration   = 1u;
+static uint8_t  modNode_waveInterpActiveCount  = 0u;
 
 //-----------------------------------------------------------------------
 /* LFO-to-voice-morph is serviced by the sequencer morph drain from lastVal.
@@ -76,8 +93,55 @@ static uint8_t modNode_isVelocityModTarget(ModulationNode* vm)
    return 0;
 }
 
-	 //-----------------------------------------------------------------------
-	void modNode_init(ModulationNode* vm)
+/* Maps a voice parameter index to the oscillator pointer that should receive
+   waveform blend state. Returns NULL for non-waveform parameters.
+   Covers all six primary oscillators: drum1-3, snare, cymbal, hihat. */
+static OscInfo* modNode_getWaveTargetOsc(uint16_t param)
+{
+   switch (param) {
+   case PAR_OSC_WAVE_DRUM1: return &voiceArray[0].osc;
+   case PAR_OSC_WAVE_DRUM2: return &voiceArray[1].osc;
+   case PAR_OSC_WAVE_DRUM3: return &voiceArray[2].osc;
+   case PAR_OSC_WAVE_SNARE: return &snareVoice.osc;
+   case PAR_WAVE1_CYM:      return &cymbalVoice.osc;
+   case PAR_WAVE1_HH:       return &hatVoice.osc;
+   default:                 return NULL;
+   }
+}
+
+/* Returns the highest valid waveform ID at the current sample count.
+   OSC_SAMPLE_START is the first user-sample waveform ID.
+   If no samples are loaded, the highest waveform is CRASH (0x05). */
+static uint8_t modNode_getMaxWaveformIndex(void)
+{
+   const uint8_t sampleCount = sampleMemory_getNumSamples();
+   if (sampleCount == 0u) {
+      return CRASH;
+   }
+   /* OSC_SAMPLE_START + sampleCount - 1 is the last valid waveform ID.
+      Cast to uint16_t before subtraction to avoid uint8_t underflow if the
+      sum exceeded 255 (impossible given SAMPLE_MAX_COUNT=248, but explicit). */
+   const uint16_t maxWave = (uint16_t)OSC_SAMPLE_START + (uint16_t)sampleCount - 1u;
+   return (maxWave > 255u) ? 255u : (uint8_t)maxWave;
+}
+
+void modNode_setWaveInterpEnabled(uint8_t enabled)
+{
+   modNode_waveInterpEnabled = enabled ? 1u : 0u;
+}
+
+uint8_t modNode_getWaveInterpEnabled(void)
+{
+   return modNode_waveInterpEnabled;
+}
+
+uint32_t modNode_getWaveInterpGeneration(void)
+{
+   return modNode_waveInterpGeneration;
+}
+
+//-----------------------------------------------------------------------
+void modNode_init(ModulationNode* vm)
 	{
 	vm->lastVal = 0;
 	vm->amount = 0.f;
@@ -142,6 +206,16 @@ void modNode_originalValueChanged(uint16_t idx)
 //-----------------------------------------------------------------------
 void modNode_resetTargets()
 {
+	/* Bump the waveform-interp generation epoch and reset the per-block active
+	   count. Oscillators that were not refreshed this block have a stale
+	   generation and will fail the osc_waveInterpActive() guard automatically.
+	   Wrap 0 to 1 so zero-initialised oscillators are always stale. */
+	modNode_waveInterpGeneration++;
+	if (modNode_waveInterpGeneration == 0u) {
+		modNode_waveInterpGeneration = 1u;
+	}
+	modNode_waveInterpActiveCount = 0u;
+
 	uint8_t i;
 	for(i=0;i<6;i++)
 	{
@@ -281,8 +355,51 @@ void modNode_updateValue(ModulationNode* vm, float val)
    	switch(p->type)
    	{
    	case TYPE_UINT8:
-   		(*((uint8_t*)p->ptr)) = (*((uint8_t*)p->ptr)) * vm->amount * val + (1.f-vm->amount) * (*((uint8_t*)p->ptr));
+   	{
+   		uint8_t *dst = (uint8_t*)p->ptr;
+   		const float current = (float)*dst;
+   		float modulated = current * vm->amount * val + (1.f - vm->amount) * current;
+   		if (modulated < 0.f) {
+   			modulated = 0.f;
+   		}
+
+   		/* Waveform blend path: if interp is enabled and this is a waveform parameter
+   		   with budget remaining, write fractional blend state to the oscillator instead
+   		   of truncating modulated to an integer ID immediately.
+   		   The integer floor is still written to *dst so that osc->waveform reflects
+   		   the base waveform; osc_waveInterpActive() uses waveInterpFrac on top of that. */
+   		if (modNode_waveInterpEnabled) {
+   			OscInfo *osc = modNode_getWaveTargetOsc(vm->destination);
+   			if (osc != NULL && modNode_waveInterpActiveCount < OSC_WAVE_INTERP_MAX_ACTIVE) {
+   				const uint8_t maxWave = modNode_getMaxWaveformIndex();
+   				if (modulated > (float)maxWave) {
+   					modulated = (float)maxWave;
+   				}
+
+   				uint8_t base = (uint8_t)modulated;
+   				if (base > maxWave) {
+   					base = maxWave;
+   				}
+   				float frac = modulated - (float)base;
+   				uint8_t next = base;
+   				if (base < maxWave) {
+   					next = (uint8_t)(base + 1u);
+   				} else {
+   					/* At the ceiling waveform: clamp fraction to 0 so interp guard
+   					   rejects it and the hard ceiling waveform is rendered. */
+   					frac = 0.f;
+   				}
+
+   				*dst = base;
+   				osc_setWaveInterp(osc, frac, next, modNode_waveInterpGeneration);
+   				modNode_waveInterpActiveCount++;
+   				break;
+   			}
+   		}
+
+   		*dst = (uint8_t)modulated;
    		break;
+   	}
    	case TYPE_UINT32:
    		(*((uint32_t*)p->ptr)) = (*((uint32_t*)p->ptr)) * vm->amount * val + (1.f-vm->amount) * (*((uint32_t*)p->ptr));
    		break;

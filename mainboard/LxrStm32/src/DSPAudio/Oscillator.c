@@ -41,6 +41,7 @@
 #include "MidiNoteNumbers.h"
 #include "sequencer.h"
 #include <string.h>
+#include "modulationNode.h"
 
 
 //TODO die phaseInc berechnung kann man doch sicher per LUT machen!
@@ -84,6 +85,245 @@ __inline uint32_t freq2PhaseIncr32767(const float f)
 {
 	return (((1024*f)/REAL_FS))*131072 ; //(<<17)
 }
+//-----------------------------------------------------------
+
+/* Scratch buffers for waveform-blend rendering.
+   Block-sized static globals: two waveforms are rendered into these before the
+   per-sample blend loop runs. Static so they are not allocated on the audio stack.
+   Size = OUTPUT_DMA_SIZE (16 frames). */
+static int16_t osc_interp_a[OUTPUT_DMA_SIZE];
+static int16_t osc_interp_b[OUTPUT_DMA_SIZE];
+
+/* -----------------------------------------------------------------------
+   osc_clearWaveInterp
+   Resets blend fields to inactive. Call on the temporary OscInfo copies used
+   inside the blend helpers so recursive calcNextOscSampleBlock() calls do not
+   re-enter the blend path.
+   Input/output: osc -- waveInterpFrac=0.f, waveInterpNext=osc->waveform,
+   waveInterpGeneration=0.
+   ----------------------------------------------------------------------- */
+void osc_clearWaveInterp(OscInfo* osc)
+{
+   osc->waveInterpFrac = 0.f;
+   osc->waveInterpNext = osc->waveform;
+   osc->waveInterpGeneration = 0u;
+}
+
+/* -----------------------------------------------------------------------
+   osc_setWaveInterp
+   Writes waveform-blend target state. Called by modNode_updateValue() inside
+   the TYPE_UINT8 branch for waveform parameters.
+   Inputs:
+     osc          - the oscillator to update.
+     fracValue    - blend fraction in (0.0, 1.0).
+     nextWaveform - the integer waveform ID above the current integer floor.
+     generation   - current block generation from modNode_getWaveInterpGeneration().
+   Output: osc->waveInterpFrac, waveInterpNext, waveInterpGeneration written.
+   ----------------------------------------------------------------------- */
+void osc_setWaveInterp(OscInfo* osc, float fracValue, uint8_t nextWaveform, uint32_t generation)
+{
+   osc->waveInterpFrac = fracValue;
+   osc->waveInterpNext = nextWaveform;
+   osc->waveInterpGeneration = generation;
+}
+
+/* -----------------------------------------------------------------------
+   osc_waveInterpActive  (static, called only inside Oscillator.c)
+   Guard function called at the top of each calcNextOscSample[Fm][Block]
+   dispatcher. Returns 1 only when a valid blend is active for this oscillator.
+   Returning 0 causes the normal waveform-switch path to run unchanged.
+
+   Conditions that return 0 (in order of cheapest check first):
+     1. modNode_getWaveInterpEnabled() is 0  (global flag off)
+     2. osc->waveInterpGeneration != modNode_getWaveInterpGeneration()
+           (blend state from a prior DSP block -- auto-expired)
+     3. osc->waveInterpFrac <= 0.f or >= 1.f  (no fractional blend needed)
+     4. osc->waveInterpNext <= osc->waveform   (illegal or reverse direction)
+     5. osc->waveform or waveInterpNext exceeds the highest valid waveform ID
+
+   Input: osc (read-only). Output: 0 or 1.
+   ----------------------------------------------------------------------- */
+static uint8_t osc_waveInterpActive(const OscInfo* osc)
+{
+   if (!modNode_getWaveInterpEnabled()) {
+      return 0u;
+   }
+   if (osc->waveInterpGeneration != modNode_getWaveInterpGeneration()) {
+      return 0u;
+   }
+   if (osc->waveInterpFrac <= 0.f || osc->waveInterpFrac >= 1.f) {
+      return 0u;
+   }
+   if (osc->waveInterpNext <= osc->waveform) {
+      return 0u;
+   }
+   const uint8_t numSamples = sampleMemory_getNumSamples();
+   const uint8_t maxWave = (numSamples > 0u)
+                         ? (uint8_t)(OSC_SAMPLE_START + numSamples - 1u)
+                         : (uint8_t)(OSC_SAMPLE_START - 1u);
+   if (osc->waveform > maxWave || osc->waveInterpNext > maxWave) {
+      return 0u;
+   }
+   return 1u;
+}
+
+/* -----------------------------------------------------------------------
+   calcPeriodicInterpBlock  (static)
+   Block-mode waveform blend for non-FM oscillators.
+   Renders waveform and waveInterpNext into osc_interp_a and osc_interp_b
+   by calling calcNextOscSampleBlock() on temporary copies with interp cleared
+   (to prevent re-entry). Then blends per sample by waveInterpFrac.
+   Inputs: osc, buf (OUTPUT_DMA_SIZE int16 output), size, gain.
+   Output: buf filled. osc->phase advanced by phaseInc * size.
+   ----------------------------------------------------------------------- */
+static void calcPeriodicInterpBlock(OscInfo* osc, int16_t* buf, const uint8_t size, const float gain)
+{
+   OscInfo oscA = *osc;
+   OscInfo oscB = *osc;
+   const float frac = osc->waveInterpFrac;
+   uint8_t i;
+
+   oscA.waveform = osc->waveform;
+   osc_clearWaveInterp(&oscA);
+   oscB.waveform = osc->waveInterpNext;
+   osc_setFreq(&oscB);
+   osc_clearWaveInterp(&oscB);
+
+   calcNextOscSampleBlock(&oscA, osc_interp_a, size, 1.f);
+   calcNextOscSampleBlock(&oscB, osc_interp_b, size, 1.f);
+
+   for (i = 0u; i < size; i++) {
+      const int16_t a = osc_interp_a[i];
+      const int16_t b = osc_interp_b[i];
+      buf[i] = (int16_t)((a + frac * (float)(b - a)) * gain);
+   }
+
+   /* State writeback: restore all standard oscillator state from oscA 
+      (phase, NOISE PRNG iterations, etc) so it advances naturally. */
+   *osc = oscA;
+   /* If either neighbor was a sample, ensure sample playback state advances. 
+      oscB might have been a sample while oscA was not. */
+   if (oscB.samplePosition > oscA.samplePosition) {
+       osc->samplePosition = oscB.samplePosition;
+       osc->sampleFraction = oscB.sampleFraction;
+       osc->sampleActive   = oscB.sampleActive;
+   }
+}
+
+/* -----------------------------------------------------------------------
+   calcPeriodicInterp  (static)
+   Scalar waveform blend for non-FM oscillators. Same logic as the block
+   version but produces one sample. Used by calcNextOscSample().
+   Output: blended int16. osc->phase advanced by one phaseInc. osc->output set.
+   ----------------------------------------------------------------------- */
+static int16_t calcPeriodicInterp(OscInfo* osc)
+{
+   const float frac = osc->waveInterpFrac;
+   OscInfo oscA = *osc;
+   OscInfo oscB = *osc;
+   int16_t a, b, out;
+
+   oscA.waveform = osc->waveform;
+   osc_clearWaveInterp(&oscA);
+   oscB.waveform = osc->waveInterpNext;
+   osc_setFreq(&oscB);
+   osc_clearWaveInterp(&oscB);
+
+   /* Render one sample by routing through the block path with size=1.
+      This reuses calcNextOscSampleBlock()'s waveform dispatch without
+      duplicating the switch logic. */
+   calcNextOscSampleBlock(&oscA, &a, 1u, 1.f);
+   calcNextOscSampleBlock(&oscB, &b, 1u, 1.f);
+
+   out = (int16_t)(a + frac * (float)(b - a));
+
+   *osc = oscA;
+   if (oscB.samplePosition > oscA.samplePosition) {
+       osc->samplePosition = oscB.samplePosition;
+       osc->sampleFraction = oscB.sampleFraction;
+       osc->sampleActive   = oscB.sampleActive;
+   }
+   osc->output = out;
+   return out;
+}
+
+/* -----------------------------------------------------------------------
+   calcPeriodicInterpFmBlock  (static)
+   Block-mode waveform blend for FM oscillators.
+   Identical to calcPeriodicInterpBlock but routes through
+   calcNextOscSampleFmBlock(). Needed because the FM dispatch path applies
+   the FM modulator index before the wavetable lookup.
+   Inputs: osc, modBuffer (FM modulator samples), buf, size, gain.
+   Output: buf filled. osc->phase advanced. osc->output = last blended sample.
+   ----------------------------------------------------------------------- */
+static void calcPeriodicInterpFmBlock(OscInfo* osc, int16_t* modBuffer, int16_t* buf, const uint8_t size, const float gain)
+{
+   OscInfo oscA = *osc;
+   OscInfo oscB = *osc;
+   const float frac = osc->waveInterpFrac;
+   int16_t lastOut = 0;
+   uint8_t i;
+
+   oscA.waveform = osc->waveform;
+   osc_clearWaveInterp(&oscA);
+   oscB.waveform = osc->waveInterpNext;
+   osc_setFreq(&oscB);
+   osc_clearWaveInterp(&oscB);
+
+   calcNextOscSampleFmBlock(&oscA, modBuffer, osc_interp_a, size, 1.f);
+   calcNextOscSampleFmBlock(&oscB, modBuffer, osc_interp_b, size, 1.f);
+
+   for (i = 0u; i < size; i++) {
+      const int16_t a = osc_interp_a[i];
+      const int16_t b = osc_interp_b[i];
+      lastOut = (int16_t)(a + frac * (float)(b - a));
+      buf[i] = (int16_t)(lastOut * gain);
+   }
+
+   *osc = oscA;
+   if (oscB.samplePosition > oscA.samplePosition) {
+       osc->samplePosition = oscB.samplePosition;
+       osc->sampleFraction = oscB.sampleFraction;
+       osc->sampleActive   = oscB.sampleActive;
+   }
+   osc->output = lastOut;
+}
+
+/* -----------------------------------------------------------------------
+   calcPeriodicInterpFm  (static)
+   Scalar waveform blend for FM oscillators.
+   Inputs: osc, modOsc (provides modOsc->output as modulator sample).
+   Output: blended int16. osc->phase advanced. osc->output set.
+   ----------------------------------------------------------------------- */
+static int16_t calcPeriodicInterpFm(OscInfo* osc, OscInfo* modOsc)
+{
+   const float frac = osc->waveInterpFrac;
+   OscInfo oscA = *osc;
+   OscInfo oscB = *osc;
+   int16_t a, b, out;
+   int16_t modBuf[1] = { modOsc->output };
+
+   oscA.waveform = osc->waveform;
+   osc_clearWaveInterp(&oscA);
+   oscB.waveform = osc->waveInterpNext;
+   osc_setFreq(&oscB);
+   osc_clearWaveInterp(&oscB);
+
+   calcNextOscSampleFmBlock(&oscA, modBuf, &a, 1u, 1.f);
+   calcNextOscSampleFmBlock(&oscB, modBuf, &b, 1u, 1.f);
+
+   out = (int16_t)(a + frac * (float)(b - a));
+   
+   *osc = oscA;
+   if (oscB.samplePosition > oscA.samplePosition) {
+       osc->samplePosition = oscB.samplePosition;
+       osc->sampleFraction = oscB.sampleFraction;
+       osc->sampleActive   = oscB.sampleActive;
+   }
+   osc->output = out;
+   return out;
+}
+
 //-----------------------------------------------------------
 void calcSineBlock(OscInfo* osc, int16_t* buf, const uint8_t size ,const float gain)
 {
@@ -228,6 +468,11 @@ int16_t calcFm(OscInfo* osc, OscInfo* modOsc, const int16_t table[][1024])
 //-----------------------------------------------------------
 void calcNextOscSampleFmBlock(OscInfo* osc, int16_t* modBuffer, int16_t* buf, uint8_t size ,const float gain)
 {
+	if (osc_waveInterpActive(osc)) {
+		calcPeriodicInterpFmBlock(osc, modBuffer, buf, size, gain);
+		return;
+	}
+
 	switch(osc->waveform)
 		{
 		case SINE:
@@ -264,6 +509,10 @@ void calcNextOscSampleFmBlock(OscInfo* osc, int16_t* modBuffer, int16_t* buf, ui
 //-----------------------------------------------------------
 int16_t calcNextOscSampleFm(OscInfo* osc,OscInfo* modOsc)
 {
+	if (osc_waveInterpActive(osc)) {
+		return calcPeriodicInterpFm(osc, modOsc);
+	}
+
 	switch(osc->waveform)
 	{
 	case SINE:
@@ -351,6 +600,13 @@ int16_t calcNoise(OscInfo* osc)
 //-----------------------------------------------------------
 void calcNextOscSampleBlock(OscInfo* osc, int16_t* buf, const uint8_t size, const float gain)
 {
+	/* Waveform blend guard: if modulation has set a fractional waveform target
+	   for this oscillator this DSP block, render both neighbors and blend. */
+	if (osc_waveInterpActive(osc)) {
+		calcPeriodicInterpBlock(osc, buf, size, gain);
+		return;
+	}
+
 	switch(osc->waveform)
 		{
 		case SINE:
@@ -387,6 +643,10 @@ void calcNextOscSampleBlock(OscInfo* osc, int16_t* buf, const uint8_t size, cons
 //-----------------------------------------------------------
 int16_t calcNextOscSample(OscInfo* osc)
 {
+	if (osc_waveInterpActive(osc)) {
+		return calcPeriodicInterp(osc);
+	}
+
 	switch(osc->waveform)
 	{
 	case SINE:

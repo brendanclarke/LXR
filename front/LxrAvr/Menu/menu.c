@@ -3674,6 +3674,10 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
          avrComms_sendData(SEQ_CC,SEQ_MIDI_CHAN,(uint8_t)((0x07<<4) | ((value-1)&0x0f) ));
       break;
 
+	case PAR_OSC_WAVE_INTERPOLATION:
+		avrComms_sendData(SEQ_CC, SEQ_OSC_WAVE_INTERPOLATION, value);
+		break;
+
 	case PAR_POS_X:
 		avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
 		avrComms_sendData(SEQ_CC,SEQ_POSX,value);

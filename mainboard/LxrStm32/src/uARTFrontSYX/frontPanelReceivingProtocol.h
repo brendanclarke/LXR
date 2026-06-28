@@ -193,6 +193,7 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_SEQ_REPORT_GLOBAL_MORPH_MSB 0x6c	// report the high bit of global morph back to AVR
 #define FRONT_SEQ_BACKGROUND_SWAP_BEGIN 0x6d	// request background-swap prep before file load
 #define FRONT_SEQ_BACKGROUND_SWAP_DONE  0x6e	// background-swap prep complete
+#define FRONT_SEQ_OSC_WAVE_INTERPOLATION 0x70   // enable/disable waveform interpolation
 
 #define FRONT_SEQ_TMP_KIT_ENDPOINT_BOTH 0x00	// copy both endpoints
 #define FRONT_SEQ_TMP_KIT_ENDPOINT_FRONT_ONLY 0x01	// copy only the kit/front endpoint

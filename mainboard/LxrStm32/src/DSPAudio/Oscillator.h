@@ -68,6 +68,16 @@ typedef struct OscStruct
 	float	 	freq;		// frequency in [Hz]
 	uint8_t		waveform;	// the selected waveform of the osc
 
+	/* Waveform-blend state. Written by modNode_updateValue() when the interp flag
+	   is on and a waveform parameter is being modulated to a fractional position.
+	   waveInterpGeneration is compared against modNode_getWaveInterpGeneration()
+	   each DSP block; a mismatch means the state is stale and interp is skipped.
+	   waveInterpFrac == 0 or >= 1 means no blend is active. */
+	float    waveInterpFrac;       // blend fraction: 0.0=waveform, 1.0=waveInterpNext
+	uint8_t  waveInterpNext;       // target waveform ID to blend toward
+	uint8_t  _wavePad;             // explicit alignment pad (float follows uint8_t)
+	uint32_t waveInterpGeneration; // DSP block generation token from modNode
+
 	uint8_t		tableOffset;	//overtone table
 
 
@@ -150,5 +160,16 @@ void osc_recalcFreq(OscInfo* osc);
    oscillator struct; samplePosition and sampleFraction are cleared and
    sampleActive is armed for one-shot playback. */
 void osc_resetSamplePlayback(OscInfo* osc);
+
+/* Resets all three waveform-blend fields to inactive state. Called on recursive
+   calcNextOscSampleBlock() calls inside blend helpers to prevent re-entry.
+   Input/output: osc -- waveInterpFrac=0, waveInterpNext=osc->waveform, generation=0. */
+void osc_clearWaveInterp(OscInfo* osc);
+
+/* Writes waveform-blend target state to an oscillator. Called from
+   modNode_updateValue() when a TYPE_UINT8 waveform parameter is modulated
+   to a fractional position and the interp budget permits.
+   Inputs: osc, fracValue (0.0..1.0), nextWaveform, generation (from modNode). */
+void osc_setWaveInterp(OscInfo* osc, float fracValue, uint8_t nextWaveform, uint32_t generation);
 
 #endif /* OSCILLATOR_H_ */
