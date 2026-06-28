@@ -207,17 +207,14 @@ void avrCommsPanelParser_ccHandler(void)
 //------------------------------------------------------------
 void avrComms_parseData(uint8_t data)
 {
-   uint8_t i;
 	// if high byte set a new message starts
    if(data&0x80)
    {	
       if(data==PATCH_RESET)
       {
-         for(i=0;i<END_OF_MORPH_PARAMETERS;i++)
-         {
-            parameter_values[i]=parameter_values_fileLoadSnapshot[i];
-         }
-         menu_repaintAll();
+         /* PATCH_RESET now belongs to the AVR->STM reload path. If a legacy
+            sender still emits it back toward AVR, do not restore the local
+            file-load snapshots here; that behavior is retired. */
       }
       else if(data==CALLBACK_ACK)
       {

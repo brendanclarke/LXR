@@ -13,6 +13,7 @@
 #include "Preset/KitState.h"
 #include "Preset/MorphEngine.h"
 #include "Preset/EndpointRestore.h"
+#include "Preset/ParameterIngress.h"
 
 PresetTempPlaybackSwitchState preset_tempPlaybackSwitchState = {0};
 
@@ -102,6 +103,73 @@ uint8_t preset_allVoiceSourcesUseNormal(void)
    }
 
    return 1;
+}
+
+uint8_t preset_isTempPresetPlaybackActive(void)
+{
+   return preset_tempPlaybackSwitchState.tempPresetPlaybackActive;
+}
+
+void preset_setTempPresetPlaybackActive(uint8_t active)
+{
+   preset_tempPlaybackSwitchState.tempPresetPlaybackActive = (active != 0);
+   if(!active)
+      preset_tempPlaybackSwitchState.resnapshotTmpFromNormalPending = 0;
+}
+
+void preset_reapplyCurrentPlaybackSources(void)
+{
+   uint8_t synthVoice;
+   const PresetKitState *sharedKit = preset_isTmpKitActive()
+                                   ? &preset_tmpKitState
+                                   : &preset_normalKitState;
+
+   preset_syncVMorphAmountMirrorsFromLiveSources();
+   preset_applySharedParameterValues(sharedKit);
+
+   for(synthVoice=0; synthVoice<SEQ_SYNTH_VOICES; synthVoice++)
+   {
+      const PresetKitState *voiceKit =
+         (preset_voiceSourceState[synthVoice] == PRESET_VOICE_SOURCE_TMP)
+       ? &preset_tmpKitState
+       : &preset_normalKitState;
+
+      preset_applyVoiceParameterValues(voiceKit, synthVoice);
+      preset_applyVoiceAutomationTargets(&voiceKit->interpolatedAutomationTargets,
+                                         synthVoice);
+   }
+}
+
+uint8_t preset_reloadNormalFromTemporaryPreset(void)
+{
+   if(preset_isTempPresetPlaybackActive() || !preset_tmpKitState.valid)
+      return 0;
+
+   /* PATCH_RESET must restore both kit/front and morph endpoints, but not the
+      live morph amount controls. Those remain performance state and are
+      applied when the refreshed normal image is replayed below. */
+   preset_setEndpointIngressSuppressed(1);
+   preset_copyKitEndpoints(&preset_normalKitState,
+                           &preset_tmpKitState,
+                           PRESET_KIT_ENDPOINT_BOTH);
+   preset_setEndpointIngressSuppressed(0);
+
+   preset_invalidateLiveMorphApplyCache(PRESET_MORPH_IMAGE_NORMAL);
+   preset_reapplyCurrentPlaybackSources();
+   preset_maybePushKitEndpointsToFrontWithGlobalMorphReport(&preset_normalKitState);
+   return 1;
+}
+
+void preset_resnapshotTemporaryPresetFromNormal(void)
+{
+   preset_setEndpointIngressSuppressed(1);
+   preset_copyKitEndpoints(&preset_tmpKitState,
+                           &preset_normalKitState,
+                           PRESET_KIT_ENDPOINT_BOTH);
+   preset_setEndpointIngressSuppressed(0);
+   preset_invalidateLiveMorphApplyCache(PRESET_MORPH_IMAGE_TMP);
+   preset_tempPlaybackSwitchState.resnapshotTmpFromNormalPending = 0;
+   preset_setTempPresetPlaybackActive(0);
 }
 
 /* Updates the per-voice source state after a pattern change and optionally

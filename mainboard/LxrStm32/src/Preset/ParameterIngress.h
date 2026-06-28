@@ -51,6 +51,11 @@ uint8_t preset_shouldApplyIngressToLive(void);
    is in flight. The target value determines whether selector bytes are routed
    to front-panel targets or morph-endpoint targets. */
 void preset_setAutomationIngressTarget(uint8_t target);
+/* This is not a long-running lock. It exists only so a temp/normal resnapshot
+   cannot interleave with live front-panel or MIDI endpoint writes and leave
+   one endpoint group copied while the other still reflects an older preset
+   image. */
+void preset_setEndpointIngressSuppressed(uint8_t suppressed);
 
 /* Updates the interpolated automation target image only. This helper exists so
    the restore path can rebuild the worker-owned target cache without touching

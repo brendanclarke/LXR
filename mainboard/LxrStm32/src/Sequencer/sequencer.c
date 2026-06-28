@@ -699,6 +699,16 @@ static void seq_nextStep()
 
          if(!patternOnlyTempPlayback)
             preset_updateVoiceSourcesForPatternChange(oldTrackPattern, !activePatternChanged);
+         if(preset_tempPlaybackSwitchState.resnapshotTmpFromNormalPending
+            && !patternOnlyTempPlayback
+            && preset_allVoiceSourcesUseNormal())
+         {
+            /* The protected .prf/.all temp image must survive until playback
+               is truly back on normal preset data. Active-pattern change alone
+               is not enough; per-voice source ownership must also be normal
+               again before temp is repurposed as the new reload snapshot. */
+            preset_resnapshotTemporaryPresetFromNormal();
+         }
          tmpBoundaryPatternChanged =
             (preset_trackPatternUsesTmp(oldActivePattern)
              != preset_trackPatternUsesTmp(newActivePattern));

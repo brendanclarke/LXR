@@ -39,6 +39,10 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray);
 uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray);
 void preset_backgroundSwapDoneFromStm(uint8_t fileType);
 uint8_t preset_isBackgroundTempPlaybackActive(void);
+/* AVR needs a lightweight view of whether temp playback is using temporary
+   preset parameters, not just the temporary pattern slot, because SHIFT+PLAY
+   must be disabled only for the protected .prf/.all background-load window. */
+uint8_t preset_isBackgroundTempPresetPlaybackActive(void);
 void preset_notePlayedPatternChanged(uint8_t playedPattern);
 
 char* preset_loadName(uint8_t presetNr, uint8_t what, uint8_t loadSave);

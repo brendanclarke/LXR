@@ -52,7 +52,9 @@ void frontPanelSending_sendTrackRotationValue(uint8_t rotation);
 void frontPanelSending_sendBankChange(uint8_t bankCode, uint8_t value);
 /* Echo an internal parameter value using PARAM_CC/PARAM_CC2 encoding. */
 void frontPanelSending_sendParameterEcho(uint16_t paramNr, uint8_t value);
-/* Send PATCH_RESET through the front-panel SysEx byte path. */
+/* Legacy outbound PATCH_RESET helper. PATCH_RESET is now primarily an AVR->STM
+   reload request path and must not be used to ask AVR to restore local
+   snapshot arrays. */
 void frontPanelSending_sendPatchReset(void);
 /* Pulse one front-panel voice activity LED with NOTE_ON encoding. */
 void frontPanelSending_sendVoiceActivity(uint8_t voice);

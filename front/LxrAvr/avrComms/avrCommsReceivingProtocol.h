@@ -38,7 +38,7 @@ uint8_t avrCommsParser_isRestoreActive(void);
 
 #define SYSEX_START			0xF0	// SysEx start byte
 #define SYSEX_END			0xF7	// SysEx end byte
-#define PATCH_RESET			0xFE	// reset to the last loaded patch image
+#define PATCH_RESET			0xFE	// SHIFT+PLAY reload request; AVR sends it to STM and does not restore local snapshots
 #define CALLBACK_ACK		0xFD	// callback/priority-byte acknowledge
 //control messages from cortex for leds
 //status, param changes

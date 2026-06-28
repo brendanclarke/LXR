@@ -72,7 +72,7 @@ typedef struct MidiStruct {
 #define MIDI_PITCH_WHEEL	0xE0	// 2 data bytes
 #define MIDI_AT				0xA0	// 2 data bytes
 #define CHANNEL_PRESSURE	0xD0	// 2 data bytes
-#define PATCH_RESET		0xFE // reset patch to last loaded - no data bytes to follow.
+#define PATCH_RESET		0xFE // SHIFT+PLAY reload request: restore normal preset endpoints from STM temporary storage.
 
 //-----------------------------------------------------------
 // CCs (2nd byte controller number)

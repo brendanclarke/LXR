@@ -84,10 +84,15 @@ static uint8_t comm_flowChannel = 0;
 static uint8_t comm_flowBudgetRemaining = 0;
 static uint8_t frontParser_backgroundSwapPending = 0;
 static uint8_t frontParser_backgroundSwapFileType = 0;
+static uint8_t frontParser_backgroundSwapPrepared = 0;
+static uint8_t frontParser_backgroundSwapPreparedType = 0;
 static uint8_t frontParser_backgroundSwapAckDelayActive = 0;
 static uint32_t frontParser_backgroundSwapStartTick = 0;
 static uint8_t frontParser_fileLoadIngressActive = 0;
 static uint8_t frontParser_fileLoadBracketActive = 0;
+static uint8_t frontParser_fileLoadEndpointMode = PRESET_KIT_ENDPOINT_BOTH;
+static uint8_t frontParser_fileLoadMirrorToTmp = 0;
+static uint8_t frontParser_fileLoadPreserveTempPreset = 0;
 
 static void frontParser_beginFileLoadIngress(uint8_t bracketed)
 {
@@ -103,6 +108,9 @@ static void frontParser_endFileLoadIngress(void)
 {
    frontParser_fileLoadIngressActive = 0;
    frontParser_fileLoadBracketActive = 0;
+   frontParser_fileLoadMirrorToTmp = 0;
+   frontParser_fileLoadPreserveTempPreset = 0;
+   frontParser_fileLoadEndpointMode = PRESET_KIT_ENDPOINT_BOTH;
    preset_setIngressTarget(SEQ_PARAM_INGRESS_CURRENT_IMAGE);
    preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
 }
@@ -1231,6 +1239,37 @@ static uint8_t frontParser_backgroundSwapTempPlaybackReady(void)
    return preset_allVoiceSourcesUseTmp();
 }
 
+static uint8_t frontParser_fileLoadHasPresetEndpoints(uint8_t fileType)
+{
+   return fileType != FRONT_FILE_DONE_TYPE_PATTERN;
+}
+
+static uint8_t frontParser_fileLoadShouldPreserveTempPreset(uint8_t fileType)
+{
+   return frontParser_backgroundSwapPrepared
+       && (frontParser_backgroundSwapPreparedType == fileType)
+       && ((fileType == FRONT_FILE_DONE_TYPE_PERFORMANCE)
+        || (fileType == FRONT_FILE_DONE_TYPE_ALL));
+}
+
+static void frontParser_mirrorNormalPresetEndpointsToTmp(uint8_t endpointMode)
+{
+   /* Ordinary loads mirror the loaded endpoint subset straight into temp so
+      temporary storage always stays the authoritative “last loaded preset”
+      image. Protected .prf/.all background loads are the only exception. */
+   preset_setEndpointIngressSuppressed(1);
+   preset_copyKitEndpoints(&preset_tmpKitState,
+                           &preset_normalKitState,
+                           endpointMode);
+   preset_setEndpointIngressSuppressed(0);
+   preset_invalidateLiveMorphApplyCache(PRESET_MORPH_IMAGE_TMP);
+   preset_tempPlaybackSwitchState.resnapshotTmpFromNormalPending = 0;
+   preset_setTempPresetPlaybackActive(0);
+
+   if(preset_isTmpKitActive() || !preset_allVoiceSourcesUseNormal())
+      preset_reapplyCurrentPlaybackSources();
+}
+
 void frontParser_serviceBackgroundSwapAck(void)
 {
    if(!frontParser_backgroundSwapPending)
@@ -1313,7 +1352,12 @@ void frontParser_parseUartData(unsigned char data)
       }
       else if(data==PATCH_RESET)
       {
-         seq_newVoiceAvailable=0x7f;
+         /* AVR performs a UI-level disable for SHIFT+PLAY, but STM remains the
+            authoritative guard. If temp preset playback is still the active
+            sound source, ignore PATCH_RESET here so a stale front-panel state
+            cannot trigger a forbidden temp->normal restore. PATCH_RESET stays
+            on the wire, but its meaning is now an STM-owned storage restore. */
+         (void)preset_reloadNormalFromTemporaryPreset();
       }
       else if(data==FRONT_CALLBACK_ACK)
       {
@@ -2165,6 +2209,7 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN:
       {
          uint8_t endpointMode = frontParser_command.data2;
+         frontParser_fileLoadEndpointMode = endpointMode;
 
          /* RESTORE: Switch ingress target to normal kit endpoint buffer.
             Subsequent parameter and target messages will populate preset_normalKitState endpoint images.
@@ -2207,6 +2252,8 @@ static void frontParser_handleSeqCC()
 
       case FRONT_SEQ_TMP_KIT_ENDPOINT_END:
          preset_applyNormalEndpointAutomationTargets();
+         if(frontParser_fileLoadMirrorToTmp)
+            frontParser_mirrorNormalPresetEndpointsToTmp(frontParser_fileLoadEndpointMode);
 
          /* RESTORE: Switch ingress target back to the surrounding context. During
             file load, endpoint dumps are nested inside normal kit-endpoint ingress. */
@@ -2662,12 +2709,34 @@ static void frontParser_handleSeqCC()
          preset_tempPlaybackSwitchState.forceInstantSwitch = 1;
          preset_tempPlaybackSwitchState.patternOnlyTempPlayback =
             (frontParser_command.data2 == FRONT_FILE_DONE_TYPE_PATTERN);
+         frontParser_backgroundSwapPrepared = 1;
+         frontParser_backgroundSwapPreparedType = frontParser_command.data2;
          frontParser_backgroundSwapPending = 1;
          frontParser_backgroundSwapFileType = frontParser_command.data2;
          frontParser_backgroundSwapAckDelayActive = 0;
          break;
       case FRONT_SEQ_FILE_BEGIN:
          frontParser_beginFileLoadIngress(1);
+         frontParser_fileLoadMirrorToTmp = 0;
+         frontParser_fileLoadPreserveTempPreset = 0;
+         if(frontParser_fileLoadHasPresetEndpoints(frontParser_command.data2))
+         {
+            if(frontParser_fileLoadShouldPreserveTempPreset(frontParser_command.data2))
+            {
+               /* Protected .prf/.all background loads intentionally do not
+                  mirror into temp while the file bytes are arriving. Temp is
+                  still the audible old sound and only becomes the new snapshot
+                  after playback later returns to normal. */
+               frontParser_fileLoadPreserveTempPreset = 1;
+               preset_tempPlaybackSwitchState.resnapshotTmpFromNormalPending = 1;
+               preset_setTempPresetPlaybackActive(1);
+            }
+            else
+            {
+               frontParser_fileLoadMirrorToTmp = 1;
+            }
+         }
+         frontParser_backgroundSwapPrepared = 0;
          if((frontParser_command.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
             || (frontParser_command.data2 == FRONT_FILE_DONE_TYPE_ALL))
          {
@@ -2683,6 +2752,8 @@ static void frontParser_handleSeqCC()
             preset_morphLoadDisabled = 0;
             preset_vMorphFlag = 0;
          }
+         frontParser_fileLoadMirrorToTmp = 0;
+         frontParser_fileLoadPreserveTempPreset = 0;
          seq_voicesLoading=0;
          frontParser_endFileLoadIngress();
          break;
