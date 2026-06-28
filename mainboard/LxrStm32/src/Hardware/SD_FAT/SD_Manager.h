@@ -58,12 +58,13 @@ uint16_t sd_getNumSamples(void);
 void sdManager_countLoopFolder(void);
 // Returns only the number of files found in /samples.
 uint16_t sd_getNumOneShotSamples(void);
-// Opens /samples or /loops for one-pass import iteration.
+// Opens /samples or /loops for sorted import iteration.
 // Input: looped=0 selects /samples, looped=1 selects /loops.
-// Output: 1 when the directory was opened and future sd_openNext... calls may
-// advance through it; 0 when the folder is absent or unreadable.
+// Output: 1 when the directory was opened and its short WAV names were cached
+// in sorted order; 0 when the folder is absent or unreadable.
 uint8_t sd_openSampleFolder(uint8_t looped);
-// Opens the next valid WAV in the current import folder.
+// Opens the next valid WAV from the active folder's cached numerical-
+// alphabetical 8.3 filename list, independent of FAT directory-entry order.
 // Output: 1 with sd_File positioned at its data chunk and active metadata set;
 // 0 at end-of-folder or when no further valid WAV can be opened.
 uint8_t sd_openNextSampleInFolder(void);

@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
-Date: 2026-06-26
-Status: current AVR<->STM comms reference after Session 030 stabilized sample import through `SAMPLE_CC` result/progress packets, dense `/samples` then `/loops` metadata, and one-pass STM SD folder traversal. Session 029 added a durable external MIDI table and split Global-channel CC2-127 onto a separate Global parser table. Session 028 completed background file loading through temporary Pattern/Preset storage. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading now uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
+Date: 2026-06-28
+Status: current AVR<->STM comms reference after Session 031 redid sample import with sorted cached `/samples` and `/loops` iteration, immediate real progress numbers, reliable `SAMPLE_CC` progress/result packets, and AVR-local `Writing Flash` idle display with no upload timeout. Session 029 added a durable external MIDI table and split Global-channel CC2-127 onto a separate Global parser table. Session 028 completed background file loading through temporary Pattern/Preset storage. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading now uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
 
 ## Purpose
 
@@ -322,6 +322,8 @@ Hardware safety:
   flash sectors 8..11 (`0x08080000..0x080FFFFF`).
 - PCM writes are bounded below the metadata table at `0x080F9400`; metadata and
   the committed sample count are written only after accepted PCM writes finish.
+- STM sends progress/result packets with the priority wait transport so sparse
+  user-facing sample-import status cannot be dropped by a full UART FIFO.
 - The operation is blocking and can interrupt audio; it is not a background-load
   mechanism and must not be combined with the temp pattern/preset load model.
 
@@ -349,6 +351,9 @@ STM to AVR:
 | `SAMPLE_UPLOAD_SAMPLE_PROGRESS` / `FRONT_SAMPLE_UPLOAD_SAMPLE_PROGRESS` | `0x04` | 1-based count | Current `/samples` item being flashed |
 | `SAMPLE_UPLOAD_LOOP_PROGRESS` / `FRONT_SAMPLE_UPLOAD_LOOP_PROGRESS` | `0x05` | 1-based count | Current `/loops` item being flashed |
 
+Progress payloads are always real one-based item numbers. There is no
+`data2 == 0` final marker and no separate STM `Writing Flash` signal.
+
 Result flags:
 
 | Flag | Value | Meaning |
@@ -366,27 +371,42 @@ AVR Load: Samples selected
 -> AVR displays "Sample upload / Started" and delays 250 ms for LCD visibility
 -> AVR clears avrComms_sampleUploadDone/status
 -> AVR sends SAMPLE_CC / SAMPLE_START_UPLOAD / 0
--> AVR waits up to MENU_SAMPLE_UPLOAD_TIMEOUT_TICKS while repeatedly calling
-   uart_checkAndParse()
+-> AVR waits without a wall-clock timeout while repeatedly calling
+   uart_checkAndParse(), checking for progress idle, and animating local
+   "Writing Flash" dots after roughly two seconds without numbered progress
 -> STM receives FRONT_SAMPLE_START_UPLOAD
 -> STM calls seq_setRunning(0), sampleMemory_init(), sampleMemory_loadSamples()
--> sampleMemory_loadSamples imports /samples first, then /loops
--> STM sends per-file progress packets and final SAMPLE_UPLOAD_RESULT
+-> sampleMemory_loadSamples imports /samples first, then /loops, using a sorted
+   cached 8.3 short-name list for each folder
+-> STM sends each per-file progress packet immediately after accepting that file
+   and before reading/writing its PCM payload
+-> STM writes metadata/count last and sends final SAMPLE_UPLOAD_RESULT
 -> AVR parser latches result status and menu displays any warning/error
 -> AVR reinitializes preset/SD state and queries SAMPLE_COUNT
 ```
 
-Important Session 030 rules:
+Important Session 030/031 rules:
 
 - Do not use `uart_waitAck()` for sample import completion. The STM replies with
   normal `SAMPLE_CC` packets, so the AVR must keep parsing while waiting.
+- Do not restore a fixed AVR upload timeout or `Load timeout` screen. Completion
+  is the parsed `SAMPLE_UPLOAD_RESULT` packet.
 - Do not create metadata before a candidate is known to be valid and fully
   written. Dense user slots (`s0`, `s1`, `s2`, ...) depend on writing metadata
   only after PCM success.
-- Do not use indexed `sd_setActiveSample()` for the main importer. It rescans
-  from the start of the folder for every index and made each later sample take
-  longer. Current import uses `sd_openSampleFolder()` plus
-  `sd_openNextSampleInFolder()` once per folder.
+- Do not use indexed `sd_setActiveSample()` for the main importer. Current
+  import uses `sd_openSampleFolder()` to build one sorted short-name cache for
+  the active folder, then `sd_openNextSampleInFolder()` advances by cache index.
+- Do not delay progress by one file and do not send a synthetic final progress
+  marker. The LCD status must describe the file currently being imported; this
+  is what lets the final loop/sample number appear before the silent final work.
+- Sample filenames are sorted on STM by a small ASCII/natural comparator over
+  short 8.3 names: digit runs compare numerically, case is ignored, and `_`,
+  `-`, and spaces are treated as separators so names such as `01_cut.wav` sort
+  before `01-unohit.wav`.
+- The AVR owns only the display fallback for the silent final stage: if numbered
+  progress has started and no new progress arrives for roughly two seconds while
+  waiting for result, it switches to `Writing Flash` and animates dots locally.
 - `/loops` is optional. Missing `/loops` is one-shot-only import, not a load
   failure.
 - `SampleInfo.size` packs the loop bit in bit 31 and the int16 frame count in
@@ -547,3 +567,7 @@ and do not bring back a cache-as-authority model under the same names.
   is already active.
 - Do not revive raw-ACK waits for sample import; wait by parsing
   `SAMPLE_UPLOAD_RESULT`.
+- Do not revive sample-upload wall-clock timeouts or `Load timeout`; the AVR
+  owns only a display idle spinner while it waits for result.
+- Do not delay sample progress by one file or send synthetic final progress
+  markers; progress packets are real current-file one-based counts.

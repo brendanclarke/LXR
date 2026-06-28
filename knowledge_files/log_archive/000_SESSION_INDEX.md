@@ -164,6 +164,10 @@ Session 029 added a separate Global-channel MIDI CC/NRPN implementation while le
 Session 030 completed the sample-handling phase closeout across the earlier Phase 1/2/3 planning docs. STM sample import is now bounded to internal flash sectors 8-11 with metadata/count committed last, imported `SampleInfo` keeps a 12-byte ABI with a loop flag in bit 31, oscillator playback handles long one-shots and loops with dense bounds checks, `/samples` and optional `/loops` import through one-pass SD traversal, invalid files no longer consume silent slots, AVR waits for parsed `SAMPLE_UPLOAD_RESULT` packets instead of raw ACK bytes, and the LCD receives numbered sample/loop progress packets. The temporary phase docs can be deleted after this archive/log/spec/comment pass.
 - **Find here**: sample flash bounds, dense sample metadata, `/samples` then `/loops`, one-pass SD traversal, parsed sample upload result/progress protocol, loop flag in `SampleInfo.size`, long-sample oscillator playback, hardware SD ownership notes, temporary phase-doc preservation
 
+### 031 — Sample Import Redo And Display Cleanup (2026-06-28)
+Session 031 started with oscillator interpolation planning/experiments, but the durable closeout is the clean reimplementation of the sample-import additions after reverting the experimental work. STM sample import now builds a sorted cached 8.3 WAV-name list per folder, orders `/samples` and `/loops` numerically/alphabetically, sends immediate real one-based progress for the current accepted file, uses larger 128-frame PCM transfer blocks, and sends sample progress/result packets through priority-wait transport. AVR sample upload no longer has a fixed timeout or `Load timeout`; it waits for parsed `SAMPLE_UPLOAD_RESULT` while switching locally to `Writing Flash` dots after progress idles. `COMMS_FLOW_SPEC.md` and `MEMORY.md` were updated; `SAMPLE_LOAD_REDO_AUDIT.md` is superseded by the handoff log.
+- **Find here**: sorted cached sample-name import, numerical-alphabetical WAV ordering, immediate current-file progress, final loop number display, larger PCM blocks, reliable sample progress/result packets, no sample-upload timeout, AVR-local `Writing Flash` idle spinner, interpolation carry-forward reminders
+
 
 ---
 
@@ -230,6 +234,11 @@ Session 030 completed the sample-handling phase closeout across the earlier Phas
 | `SampleInfo` remains a 12-byte on-flash ABI; bit 31 of `size` is the loop flag and bits 30..0 are int16 frame count | 030 |
 | Current imported-sample oscillator playback uses 32-bit `samplePosition`, 17-bit `sampleFraction`, and trigger-time `osc_resetSamplePlayback()` for one-shots/loops | 030 |
 | The sample-import SD ownership exception is safe only when AVR releases SPI before `SAMPLE_START_UPLOAD` and STM deinitializes SPI on every import exit | 030 |
+| Current sample import uses a sorted cached STM-side 8.3 short-name list per folder; digit runs compare numerically and `_`/`-`/space are separator runs so slot order is deterministic | 031 |
+| Sample upload progress packets are immediate real one-based current-file numbers; do not delay progress by one file and do not send `data2 == 0` final markers | 031 |
+| AVR sample upload has no fixed timeout or `Load timeout`; it waits for `SAMPLE_UPLOAD_RESULT` and uses a display-only local `Writing Flash` idle spinner after numbered progress goes quiet | 031 |
+| STM sample progress/result packets use priority-wait transport because they are sparse user-facing status triples and must not be dropped | 031 |
+| Future oscillator waveform interpolation must use `PAR_OSC_WAVE_INTERPOLATION` and apply literally across the full waveform parameter domain, including imported samples/loops/noise/base waves | 031 |
 
 
 ---

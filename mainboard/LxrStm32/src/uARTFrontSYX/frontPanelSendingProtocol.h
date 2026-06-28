@@ -36,7 +36,9 @@ void frontPanelSending_sendCallbackAck(void);
 void frontPanelSending_sendSampleUploadResult(uint8_t statusFlags);
 /* Report the 1-based sample or loop currently being imported. Inputs:
    looped=0 emits FRONT_SAMPLE_UPLOAD_SAMPLE_PROGRESS, looped=1 emits
-   FRONT_SAMPLE_UPLOAD_LOOP_PROGRESS; index is the user-visible 1-based count. */
+   FRONT_SAMPLE_UPLOAD_LOOP_PROGRESS; index is the user-visible 1-based count.
+   The implementation uses the priority wait transport because every progress
+   packet represents a real accepted file and must not be dropped. */
 void frontPanelSending_sendSampleUploadProgress(uint8_t looped, uint8_t index);
 /* Reply to FRONT_SAMPLE_COUNT with the sample ROM count. */
 void frontPanelSending_sendSampleCountReply(void);

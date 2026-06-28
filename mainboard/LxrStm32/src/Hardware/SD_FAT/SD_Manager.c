@@ -51,12 +51,25 @@ uint16_t sd_foundSampleFiles = 0;
 static uint16_t sd_foundLoopFiles = 0;
 uint32_t sd_currentSampleLength = 0;
 char sd_currentSampleName[12];
-/* Current directory for one-pass sample import. Keeping this as state avoids
-   the old indexed selector's repeated directory rescans. */
+/* Current directory for sample import. The importer processes /samples first
+   and /loops second; the same sorted-name cache below is rebuilt for each
+   folder so RAM use stays bounded. */
 static const char* sd_activeSampleFolder = "/samples";
+/* Cached sorted short names for the active import folder.
+   Inputs: one FatFs scan in sd_openSampleFolder().
+   Outputs: sd_openNextSampleInFolder() opens WAVs by deterministic
+   numerical-alphabetical order without rescanning the directory between
+   progress packets or at end-of-folder. The cache stores only 8.3 names, not
+   WAV data, and is reused for /samples then /loops. 248 mirrors the
+   AVR-visible s0..s247 limit without including SampleMemory.h here. */
+#define SD_SORTED_SAMPLE_CACHE_MAX ((uint16_t)248u)
+static char sd_sortedSampleNames[SD_SORTED_SAMPLE_CACHE_MAX][13];
+static uint16_t sd_sortedSampleNameCount = 0u;
+static uint16_t sd_sortedSampleNameIndex = 0u;
 //---------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------
 static uint32_t findDataChunk(void);
+static uint8_t sdManager_openEntry(const char* folder, const FILINFO* fno);
 
 /* Clears the public active-sample metadata whenever no WAV is open.
    Inputs: none. Outputs: sd_currentSampleLength=0 and empty name. */
@@ -74,6 +87,125 @@ static char sdManager_toUpper(char c)
       return (char)(c - ('a' - 'A'));
 
    return c;
+}
+
+static uint8_t sdManager_isDigit(char c)
+{
+   return (uint8_t)(c >= '0' && c <= '9');
+}
+
+static uint8_t sdManager_isNameSeparator(char c)
+{
+   return (uint8_t)(c == '_' || c == '-' || c == ' ');
+}
+
+static void sdManager_copyShortName(char* dst, const char* src)
+{
+   uint8_t i;
+
+   /* Inputs are FatFs short 8.3 names. Output is a NUL-terminated 13-byte copy
+      suitable for later comparison/opening. Keeping copies fixed-size avoids
+      depending on long filename support, which is disabled in ffconf.h. */
+   for(i = 0u; i < 12u; i++)
+   {
+      dst[i] = src[i];
+      if(src[i] == 0)
+         break;
+   }
+
+   if(i == 12u)
+      dst[12] = 0;
+   else
+      dst[i] = 0;
+}
+
+static int8_t sdManager_compareSampleNames(const char* a, const char* b)
+{
+   /* Natural, ASCII-only short-name comparator.
+      Inputs: two NUL-terminated 8.3 filenames from FILINFO.fname.
+      Output: <0 when a sorts first, 0 when equal, >0 when b sorts first.
+      Digit runs compare by numeric value so numbered waveform sets load in slot
+      order. Separator runs ('_', '-', and spaces) are skipped when both names
+      are at a separator boundary after an equal prefix, so punctuation does not
+      place 01-unohit before 01_cut. This comparator defines the slot assignment
+      order. */
+   while(*a || *b)
+   {
+      if(sdManager_isNameSeparator(*a) && sdManager_isNameSeparator(*b))
+      {
+         while(sdManager_isNameSeparator(*a))
+            a++;
+         while(sdManager_isNameSeparator(*b))
+            b++;
+         continue;
+      }
+
+      if(sdManager_isDigit(*a) && sdManager_isDigit(*b))
+      {
+         const char* aRun = a;
+         const char* bRun = b;
+         const char* aSig = a;
+         const char* bSig = b;
+         const char* aEnd;
+         const char* bEnd;
+         uint8_t aSigLen;
+         uint8_t bSigLen;
+         uint8_t aRunLen;
+         uint8_t bRunLen;
+
+         while(*aSig == '0')
+            aSig++;
+         while(*bSig == '0')
+            bSig++;
+
+         aEnd = aSig;
+         bEnd = bSig;
+         while(sdManager_isDigit(*aEnd))
+            aEnd++;
+         while(sdManager_isDigit(*bEnd))
+            bEnd++;
+
+         aSigLen = (uint8_t)(aEnd - aSig);
+         bSigLen = (uint8_t)(bEnd - bSig);
+         if(aSigLen != bSigLen)
+            return (aSigLen < bSigLen) ? -1 : 1;
+
+         while(aSig < aEnd && bSig < bEnd)
+         {
+            if(*aSig != *bSig)
+               return (*aSig < *bSig) ? -1 : 1;
+            aSig++;
+            bSig++;
+         }
+
+         while(sdManager_isDigit(*a))
+            a++;
+         while(sdManager_isDigit(*b))
+            b++;
+
+         aRunLen = (uint8_t)(a - aRun);
+         bRunLen = (uint8_t)(b - bRun);
+         if(aRunLen != bRunLen)
+            return (aRunLen < bRunLen) ? -1 : 1;
+
+         continue;
+      }
+      else
+      {
+         const char ca = sdManager_toUpper(*a);
+         const char cb = sdManager_toUpper(*b);
+
+         if(ca != cb)
+            return (ca < cb) ? -1 : 1;
+
+         if(*a)
+            a++;
+         if(*b)
+            b++;
+      }
+   }
+
+   return 0;
 }
 
 static uint8_t sdManager_isWavFile(const FILINFO* fno)
@@ -103,6 +235,102 @@ static uint8_t sdManager_isWavFile(const FILINFO* fno)
    }
 
    return 0;
+}
+
+static void sdManager_resetSortedSampleCache(void)
+{
+   /* Inputs: none. Outputs: an empty cache and rewinded iterator. Called before
+      each folder pass so /samples and /loops share the same BSS array instead
+      of reserving two filename tables. */
+   sd_sortedSampleNameCount = 0u;
+   sd_sortedSampleNameIndex = 0u;
+}
+
+static void sdManager_insertSortedSampleName(const char* name)
+{
+   uint16_t pos = 0u;
+   uint16_t i;
+
+   /* Input is one short 8.3 WAV name from FatFs. Output mutates the fixed cache
+      so names remain sorted as they are discovered. Keeping the cache sorted at
+      insertion time avoids a second sort pass and, when a folder has more than
+      248 WAVs, preserves the first 248 sorted names instead of whichever 248
+      happened to appear earliest in raw FAT directory order. */
+   while(pos < sd_sortedSampleNameCount &&
+         sdManager_compareSampleNames(sd_sortedSampleNames[pos], name) <= 0)
+   {
+      pos++;
+   }
+
+   if(sd_sortedSampleNameCount >= SD_SORTED_SAMPLE_CACHE_MAX)
+   {
+      if(pos >= SD_SORTED_SAMPLE_CACHE_MAX)
+      {
+         return;
+      }
+
+      for(i = SD_SORTED_SAMPLE_CACHE_MAX - 1u; i > pos; i--)
+      {
+         sdManager_copyShortName(sd_sortedSampleNames[i],
+                                 sd_sortedSampleNames[i - 1u]);
+      }
+   }
+   else
+   {
+      for(i = sd_sortedSampleNameCount; i > pos; i--)
+      {
+         sdManager_copyShortName(sd_sortedSampleNames[i],
+                                 sd_sortedSampleNames[i - 1u]);
+      }
+      sd_sortedSampleNameCount++;
+   }
+
+   sdManager_copyShortName(sd_sortedSampleNames[pos], name);
+}
+
+static uint8_t sdManager_buildSortedSampleCache(void)
+{
+   FRESULT res;
+   FILINFO fno;
+
+   /* Inputs are sd_activeSampleFolder and FatFs. Output is a cached sorted list
+      of up to SD_SORTED_SAMPLE_CACHE_MAX short WAV names plus an iterator reset
+      to the first entry. This replaces repeated directory walks with one scan
+      and makes end-of-folder a cheap index comparison. */
+   sdManager_resetSortedSampleCache();
+   res = f_opendir(&sd_Directory, sd_activeSampleFolder);
+   if(res != FR_OK)
+   {
+      sdManager_clearActiveSample();
+      return 0u;
+   }
+
+   while(1)
+   {
+      res = f_readdir(&sd_Directory, &fno);
+      if(res != FR_OK || fno.fname[0] == 0)
+         break;
+
+      if(!sdManager_isWavFile(&fno))
+         continue;
+
+      sdManager_insertSortedSampleName(fno.fname);
+   }
+
+   return 1u;
+}
+
+static uint8_t sdManager_openSortedEntryByName(const char* name)
+{
+   FILINFO fno;
+
+   /* Input is a selected short filename from the sorted scanner. Output matches
+      sdManager_openEntry(): 1 with sd_File open at the WAV data chunk, 0 if the
+      file disappeared or failed validation. A synthetic FILINFO is enough here
+      because sdManager_openEntry() only needs fname to build the path. */
+   memset(&fno, 0, sizeof(fno));
+   sdManager_copyShortName(fno.fname, name);
+   return sdManager_openEntry(sd_activeSampleFolder, &fno);
 }
 
 static uint8_t sdManager_openEntry(const char* folder, const FILINFO* fno)
@@ -227,40 +455,35 @@ uint8_t sd_openSampleFolder(uint8_t looped)
 {
    /* Input looped maps directly to the import pass: 0=/samples, 1=/loops.
       Output 0 allows sampleMemory_loadSamples() to skip an absent optional
-      folder without blocking on the "Sample Load" screen. */
+      folder without blocking on the "Sample Load" screen. Opening a folder now
+      builds the sorted short-name cache once; later sd_openNext... calls only
+      advance an index through that cache. */
    sd_activeSampleFolder = looped ? "/loops" : "/samples";
 
-   if(f_opendir(&sd_Directory, sd_activeSampleFolder) != FR_OK)
-   {
-      sdManager_clearActiveSample();
-      return 0;
-   }
-
-   return 1;
+   return sdManager_buildSortedSampleCache();
 }
 //---------------------------------------------------------------------------------------
 uint8_t sd_openNextSampleInFolder(void)
 {
-   FRESULT res;
-   FILINFO fno;
-
-   while(1)
+   /* Open the next valid WAV from the active folder's sorted name cache.
+      Inputs: sd_sortedSampleNameIndex and the cache built by
+      sd_openSampleFolder(). Output: 1 with sd_File positioned at the WAV data
+      chunk, or 0 at end-of-folder. Bad/truncated/non-parseable WAV candidates
+      are consumed here without creating sample slots. End-of-folder is now an
+      index compare instead of another complete FatFs directory walk, which
+      prevents the UI from sitting on an old progress number while the STM
+      scans. */
+   while(sd_sortedSampleNameIndex < sd_sortedSampleNameCount)
    {
-      res = f_readdir(&sd_Directory, &fno);
-      if(res != FR_OK || fno.fname[0] == 0)
+      if(sdManager_openSortedEntryByName(
+            sd_sortedSampleNames[sd_sortedSampleNameIndex++]))
       {
-         sdManager_clearActiveSample();
-         return 0;
-      }
-
-      /* Keep scanning until a valid WAV is open. Bad WAV candidates are skipped
-         here so the importer only sees playable files and keeps dense sN slots. */
-      if(sdManager_isWavFile(&fno) &&
-         sdManager_openEntry(sd_activeSampleFolder, &fno))
-      {
-         return 1;
+         return 1u;
       }
    }
+
+   sdManager_clearActiveSample();
+   return 0u;
 }
 //---------------------------------------------------------------------------------------
 /*

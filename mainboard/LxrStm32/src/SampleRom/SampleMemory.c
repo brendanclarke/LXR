@@ -114,7 +114,7 @@ static uint32_t sampleMemory_bytesToFlashWords(uint32_t byteCount)
 	return (byteCount + 3u) / 4u;
 }
 //---------------------------------------------------------------
-#define BLOCKSIZE 2
+#define BLOCKSIZE 128
 /* Blocking sample import entry point.
    Interdependencies:
    - SD_Manager owns directory iteration and the currently open WAV data chunk.
@@ -151,8 +151,7 @@ uint8_t sampleMemory_loadSamples(void)
 	   return OK so the AVR does not show a false hardware failure. */
 	if(totalFound == 0u)
 	{
-		spi_deInit();
-		return statusFlags;
+		goto sampleMemory_loadSamples_done;
 	}
 
 	if(totalFound > SAMPLE_MAX_COUNT)
@@ -165,8 +164,8 @@ uint8_t sampleMemory_loadSamples(void)
 	//erase user memory flash
 	if(FLASH_If_Erase(SAMPLE_ROM_START_ADDRESS) != FLASH_IF_OK)
 	{
-		spi_deInit();
-		return statusFlags;
+		statusFlags |= SAMPLE_UPLOAD_STATUS_FLASH_LIMIT;
+		goto sampleMemory_loadSamples_done;
 	}
 
 	//reserve space for sample info header
@@ -227,35 +226,50 @@ uint8_t sampleMemory_loadSamples(void)
 				progressIndex = sampleProgress;
 			}
 
+			/* Emit the progress number for the file that is actually about to
+			   be imported. Inputs are the folder type and dense one-based count
+			   assigned above; output is an AVR display update such as
+			   "Loop upload Started 103". This must happen immediately after a
+			   candidate is accepted, before payload reads and before the next
+			   sd_openNextSampleInFolder() call, because the end-of-folder scan
+			   can be the long silent part. Do not delay this by one file:
+			   delayed progress is what leaves the screen on the second-last
+			   loop/sample. */
 			frontPanelSending_sendSampleUploadProgress(looped, progressIndex);
 
 			for(j = 0u; j < len; )
 			{
 				int16_t data[BLOCKSIZE];
+				uint32_t framesRemaining;
 				uint16_t framesToRead;
 				uint16_t bytesRead;
 				uint32_t wordsRead;
 
 				memset(data, 0, sizeof(data));
-				/* Read two int16 frames at a time except for a final single
-				   frame. Zero-fill before reading so an odd 32-bit flash word
-				   has deterministic padding in the unused halfword. */
-				framesToRead = ((len - j) >= (uint32_t)(BLOCKSIZE * 2u)) ? BLOCKSIZE : 1u;
+				/* Read a bounded block of int16 frames instead of the old
+				   two-frame/one-word loop. Inputs are the remaining WAV data
+				   bytes; output is a frame count for sd_readSampleData(). This
+				   preserves dense-slot/error behavior but collapses thousands
+				   of tiny SD reads and flash writes into small batches.
+				   Zero-fill before reading so a final odd 32-bit flash word has
+				   deterministic padding. */
+				framesRemaining = (len - j) / 2u;
+				framesToRead = (framesRemaining > BLOCKSIZE)
+				                  ? BLOCKSIZE
+				                  : (uint16_t)framesRemaining;
 				bytesRead = sd_readSampleData(data, framesToRead);
 				if(bytesRead == 0u || (bytesRead & 1u) != 0u || (j + bytesRead) > len)
 				{
 					sd_closeActiveSample();
 					statusFlags |= SAMPLE_UPLOAD_STATUS_READ_ERROR;
-					spi_deInit();
-					return statusFlags;
+					goto sampleMemory_loadSamples_done;
 				}
 
 				if(bytesRead < (uint16_t)(framesToRead * 2u) && (j + bytesRead) < len)
 				{
 					sd_closeActiveSample();
 					statusFlags |= SAMPLE_UPLOAD_STATUS_READ_ERROR;
-					spi_deInit();
-					return statusFlags;
+					goto sampleMemory_loadSamples_done;
 				}
 
 				wordsRead = (((uint32_t)bytesRead / 2u) + 1u) / 2u;
@@ -267,8 +281,8 @@ uint8_t sampleMemory_loadSamples(void)
 				if(FLASH_If_WriteSamplePcm(&add, (uint32_t*)data, wordsRead) != FLASH_IF_OK)
 				{
 					sd_closeActiveSample();
-					spi_deInit();
-					return statusFlags;
+					statusFlags |= SAMPLE_UPLOAD_STATUS_FLASH_LIMIT;
+					goto sampleMemory_loadSamples_done;
 				}
 
 				j += bytesRead;
@@ -292,18 +306,27 @@ uint8_t sampleMemory_loadSamples(void)
 	//write info header
 	add = SAMPLE_INFO_START_ADDRESS ;
 	infoWords = (loadedSamples * sizeof(SampleInfo) + 3u) / 4u;
+	/* Metadata commit follows the already-visible current-file progress. There
+	   is no delayed final progress packet, standalone flash-start signal, or
+	   ACK wait here; the STM proceeds into metadata/count writes after the
+	   iterator ends, and the AVR owns the display-only transition to
+	   "Writing Flash" while it waits for SAMPLE_UPLOAD_RESULT. */
 	if(FLASH_If_Write(&add, (uint32_t*)(info), infoWords) != FLASH_IF_OK)
 	{
-		spi_deInit();
-		return statusFlags;
+		statusFlags |= SAMPLE_UPLOAD_STATUS_FLASH_LIMIT;
+		goto sampleMemory_loadSamples_done;
 	}
 
+	/* Final count commit makes the new import visible to normal sample-count
+	   reads. It is part of the same AVR-animated finalization phase that began
+	   after the file-import loop. */
 	if(sampleMemory_setNumSamples(loadedSamples) != FLASH_IF_OK)
 	{
-		spi_deInit();
-		return statusFlags;
+		statusFlags |= SAMPLE_UPLOAD_STATUS_FLASH_LIMIT;
+		goto sampleMemory_loadSamples_done;
 	}
 
+sampleMemory_loadSamples_done:
 	spi_deInit();
 	return statusFlags;
 

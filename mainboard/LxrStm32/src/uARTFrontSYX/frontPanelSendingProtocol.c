@@ -67,24 +67,29 @@ void frontPanelSending_sendCallbackAck(void)
 void frontPanelSending_sendSampleUploadResult(uint8_t statusFlags)
 {
    /* Mask to documented status bits so stale local flags cannot leak into the
-      AVR parser. Output packet shape: SAMPLE_CC, RESULT opcode, flags. */
-   frontPanelSending_sendByte(SAMPLE_CC);
-   frontPanelSending_sendByte(FRONT_SAMPLE_UPLOAD_RESULT);
-   frontPanelSending_sendByte((uint8_t)(statusFlags & (SAMPLE_UPLOAD_STATUS_COUNT_LIMIT |
-                                                       SAMPLE_UPLOAD_STATUS_FLASH_LIMIT |
-                                                       SAMPLE_UPLOAD_STATUS_READ_ERROR)));
+      AVR parser. Output packet shape: SAMPLE_CC, RESULT opcode, flags. Use the
+      priority wait path because the AVR wait loop has no timeout fallback; this
+      sparse completion packet is the only import-complete signal. */
+   frontPanelSending_sendPriorityTripletWait(
+      SAMPLE_CC,
+      FRONT_SAMPLE_UPLOAD_RESULT,
+      (uint8_t)(statusFlags & (SAMPLE_UPLOAD_STATUS_COUNT_LIMIT |
+                               SAMPLE_UPLOAD_STATUS_FLASH_LIMIT |
+                               SAMPLE_UPLOAD_STATUS_READ_ERROR)));
 }
 
 void frontPanelSending_sendSampleUploadProgress(uint8_t looped, uint8_t index)
 {
-   /* Progress packets are intentionally ordinary three-byte protocol messages.
-      The AVR wait loop continues parsing them while the STM blocks in flash
-      import, which keeps the LCD updated and prevents the former hang where
-      uart_waitAck() ignored the actual response shape. */
-   frontPanelSending_sendByte(SAMPLE_CC);
-   frontPanelSending_sendByte(looped ? FRONT_SAMPLE_UPLOAD_LOOP_PROGRESS :
-                                      FRONT_SAMPLE_UPLOAD_SAMPLE_PROGRESS);
-   frontPanelSending_sendByte(index);
+   uint8_t progressOpcode = looped ? FRONT_SAMPLE_UPLOAD_LOOP_PROGRESS :
+                                     FRONT_SAMPLE_UPLOAD_SAMPLE_PROGRESS;
+
+   /* Progress packets are sparse, user-facing protocol triples.
+      Inputs: looped selects sample vs loop wording on the AVR; index is the
+      one-based number to display. Output: SAMPLE_CC, progress opcode, index.
+      Use the priority wait transport so a full UART FIFO cannot drop one byte
+      and leave the AVR displaying an older number. No final marker is sent
+      here: every progress packet represents a real accepted file. */
+   frontPanelSending_sendPriorityTripletWait(SAMPLE_CC, progressOpcode, index);
 }
 
 void frontPanelSending_sendSampleCountReply(void)

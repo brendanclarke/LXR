@@ -33,21 +33,35 @@
 #define MACRO_VMORPH_CYM   175
 #define MACRO_VMORPH_HIHAT 210
 
-/* AVR Timer2 tick is about 13.1 ms, so 9155 ticks gives roughly two minutes for
-   the STM to erase/program internal flash. The wait loop parses UART traffic
-   during this window so progress/result packets are not missed. */
-#define MENU_SAMPLE_UPLOAD_TIMEOUT_TICKS ((uint16_t)9155u)
-
+#define MENU_SAMPLE_FLASH_ANIM_TICKS ((uint16_t)12u)
+/* Timer2 ticks at roughly 13.1 ms. 153 ticks is about two seconds: long enough
+   that normal progress packets keep the regular sample/loop screen alive, short
+   enough that the silent final flash/count commit no longer looks stuck. */
+#define MENU_SAMPLE_FLASH_IDLE_TICKS ((uint16_t)153u)
 
 // uppercase 3 letters in buf
 static void upr_three(char *buf);
 // given a menuid and a param value fill buf with the short menu item value. will not exceed 3 chars
 static void getMenuItemNameForValue(const uint8_t menuId, const uint8_t curParmVal, char *buf);
-static uint8_t menu_waitSampleUploadResult(uint8_t *statusFlags);
+static void menu_waitSampleUploadResult(uint8_t *statusFlags);
+static void menu_drawSampleUploadFlashDots(uint8_t phase);
+static void menu_showSampleUploadFlashProgress(uint8_t phase);
+static void menu_tickSampleUploadFlashProgress(void);
+static void menu_maybeShowSampleUploadFlashIdle(void);
 // given a menu id returns the number of entries
 static uint8_t getMaxEntriesForMenu(uint8_t menuId);
 // given a number, convert it to a note name
 static void setNoteName(uint8_t num, char *buf);
+/* AVR-owned final-flash display state. Normal sample/loop progress resets it;
+   the wait loop starts it locally after a short idle period while still waiting
+   for SAMPLE_UPLOAD_RESULT. This is display-only: STM remains responsible for
+   SD reads, internal flash writes, and the final result packet. */
+static uint8_t menu_sampleFlashProgressScreenActive = 0u;
+static uint8_t menu_sampleFlashProgressAnimate = 0u;
+static uint8_t menu_sampleFlashProgressPhase = 0u;
+static uint16_t menu_sampleFlashProgressLastTick = 0u;
+static uint8_t menu_sampleUploadProgressSeen = 0u;
+static uint16_t menu_sampleUploadLastProgressTick = 0u;
 
 static void menu_moveToMenuItem(int8_t inc);
 static void menu_encoderChangeParameter(int8_t inc);
@@ -1317,7 +1331,14 @@ void menu_showSampleUploadProgress(uint8_t looped, uint8_t index)
 
 	/* This is called both before the command is sent and from UART progress
 	   packets. Keeping it as a small shared renderer makes the initial "Started"
-	   page and numbered updates use identical LCD cursor positions. */
+	   page and numbered updates use identical LCD cursor positions. A numbered
+	   packet means the visible file-import phase is alive, so reset any flash
+	   spinner and refresh the idle timer. index==0 is only the pre-command
+	   local screen; it must not arm the idle-to-flash fallback. */
+	menu_sampleFlashProgressScreenActive = 0u;
+	menu_sampleFlashProgressAnimate = 0u;
+	menu_sampleUploadLastProgressTick = time_sysTick;
+	menu_sampleUploadProgressSeen = (uint8_t)(index != 0u);
 	lcd_clear();
 	lcd_home();
 	if(looped)
@@ -1335,24 +1356,105 @@ void menu_showSampleUploadProgress(uint8_t looped, uint8_t index)
 	}
 }
 //-----------------------------------------------------------------
-static uint8_t menu_waitSampleUploadResult(uint8_t *statusFlags)
+static void menu_drawSampleUploadFlashDots(uint8_t phase)
 {
-	uint16_t start = time_sysTick;
+	uint8_t i;
+	uint8_t dotCount = (uint8_t)((phase % 3u) + 1u);
 
-	/* Parse normal protocol packets while waiting. The previous raw ACK wait
-	   could return early or hang because the STM sends SAMPLE_CC result/progress
-	   triples, not a bare ACK byte, during sample import. */
-	while((uint16_t)(time_sysTick - start) < MENU_SAMPLE_UPLOAD_TIMEOUT_TICKS)
+	/* Inputs: local AVR animation phase 0..2. Output: only the first three
+	   cells of LCD line two are rewritten, so the wait loop can animate without
+	   clearing the whole screen. */
+	lcd_setcursor(0,2);
+	for(i = 0u; i < 3u; i++)
 	{
-		uart_checkAndParse();
-		if(avrComms_sampleUploadDone)
-		{
-			*statusFlags = avrComms_sampleUploadStatus;
-			return 1u;
-		}
+		if(i < dotCount)
+			lcd_string_F(PSTR("."));
+		else
+			lcd_string_F(PSTR(" "));
+	}
+}
+//-----------------------------------------------------------------
+static void menu_showSampleUploadFlashProgress(uint8_t phase)
+{
+	/* Display-only transition into the final import wait screen. Input phase
+	   seeds the local dot animation; output is the "Writing Flash" title plus
+	   local spinner state. This function never acknowledges, cancels, or
+	   completes the STM import. */
+	if(!menu_sampleFlashProgressScreenActive)
+	{
+		lcd_clear();
+		lcd_home();
+		lcd_string_F(PSTR("Writing Flash"));
+		menu_sampleFlashProgressScreenActive = 1u;
 	}
 
-	return 0u;
+	menu_sampleFlashProgressPhase = (uint8_t)(phase % 3u);
+	menu_sampleFlashProgressLastTick = time_sysTick;
+	menu_sampleFlashProgressAnimate = 1u;
+	menu_drawSampleUploadFlashDots(menu_sampleFlashProgressPhase);
+}
+//-----------------------------------------------------------------
+static void menu_tickSampleUploadFlashProgress(void)
+{
+	uint16_t now;
+
+	if(!menu_sampleFlashProgressAnimate)
+	{
+		return;
+	}
+
+	now = time_sysTick;
+	if((uint16_t)(now - menu_sampleFlashProgressLastTick) >= MENU_SAMPLE_FLASH_ANIM_TICKS)
+	{
+		menu_sampleFlashProgressLastTick = now;
+		menu_sampleFlashProgressPhase = (uint8_t)((menu_sampleFlashProgressPhase + 1u) % 3u);
+		menu_drawSampleUploadFlashDots(menu_sampleFlashProgressPhase);
+	}
+}
+//-----------------------------------------------------------------
+static void menu_maybeShowSampleUploadFlashIdle(void)
+{
+	uint16_t now;
+
+	/* AVR-side fallback for the silent end of sample import.
+	   Inputs: last numbered progress tick and current Timer2 tick.
+	   Output: display-only transition to "Writing Flash" if progress has
+	   started, no flash screen is active, and no numbered progress has arrived
+	   for the idle threshold while menu_waitSampleUploadResult() is still
+	   waiting. This does not acknowledge, cancel, or complete the STM import. */
+	if(menu_sampleFlashProgressAnimate || !menu_sampleUploadProgressSeen)
+	{
+		return;
+	}
+
+	now = time_sysTick;
+	if((uint16_t)(now - menu_sampleUploadLastProgressTick) >= MENU_SAMPLE_FLASH_IDLE_TICKS)
+	{
+		menu_showSampleUploadFlashProgress(0u);
+	}
+}
+//-----------------------------------------------------------------
+static void menu_waitSampleUploadResult(uint8_t *statusFlags)
+{
+
+	/* Wait for the explicit SAMPLE_UPLOAD_RESULT protocol packet while
+	   continuing to parse progress packets and animate the local final-flash
+	   screen. There is intentionally no timeout: large sorted imports and flash
+	   commits can exceed a fixed AVR wall-clock limit even though the STM is
+	   still working correctly. */
+	while(1)
+	{
+		uart_checkAndParse();
+		menu_maybeShowSampleUploadFlashIdle();
+		menu_tickSampleUploadFlashProgress();
+		if(avrComms_sampleUploadDone)
+		{
+			menu_sampleFlashProgressAnimate = 0u;
+			menu_sampleUploadProgressSeen = 0u;
+			*statusFlags = avrComms_sampleUploadStatus;
+			return;
+		}
+	}
 }
 //-----------------------------------------------------------------
 
@@ -2109,45 +2211,35 @@ void menu_handleLoadMenu(int8_t inc, uint8_t btnClicked)
                avrComms_sendData(SAMPLE_CC,SAMPLE_START_UPLOAD,0x00);
                {
                   uint8_t sampleStatus = SAMPLE_UPLOAD_STATUS_OK;
-                  if(menu_waitSampleUploadResult(&sampleStatus))
-                  {
-                     if(sampleStatus & SAMPLE_UPLOAD_STATUS_COUNT_LIMIT)
-                     {
-                        lcd_clear();
-                        lcd_home();
-                        lcd_string_F(PSTR("Sample upload"));
-                        lcd_setcursor(0,2);
-                        lcd_string_F(PSTR("248 max exceeded"));
-                        _delay_ms(1000);
-                     }
+                  menu_waitSampleUploadResult(&sampleStatus);
 
-                     if(sampleStatus & SAMPLE_UPLOAD_STATUS_FLASH_LIMIT)
-                     {
-                        lcd_clear();
-                        lcd_home();
-                        lcd_string_F(PSTR("Sample upload"));
-                        lcd_setcursor(0,2);
-                        lcd_string_F(PSTR("Flash exceeded"));
-                        _delay_ms(1000);
-                     }
-
-                     if(sampleStatus & SAMPLE_UPLOAD_STATUS_READ_ERROR)
-                     {
-                        lcd_clear();
-                        lcd_home();
-                        lcd_string_F(PSTR("Sample upload"));
-                        lcd_setcursor(0,2);
-                        lcd_string_F(PSTR("Read error"));
-                        _delay_ms(1000);
-                     }
-                  }
-                  else
+                  if(sampleStatus & SAMPLE_UPLOAD_STATUS_COUNT_LIMIT)
                   {
                      lcd_clear();
                      lcd_home();
                      lcd_string_F(PSTR("Sample upload"));
                      lcd_setcursor(0,2);
-                     lcd_string_F(PSTR("Load timeout"));
+                     lcd_string_F(PSTR("248 max exceeded"));
+                     _delay_ms(1000);
+                  }
+
+                  if(sampleStatus & SAMPLE_UPLOAD_STATUS_FLASH_LIMIT)
+                  {
+                     lcd_clear();
+                     lcd_home();
+                     lcd_string_F(PSTR("Sample upload"));
+                     lcd_setcursor(0,2);
+                     lcd_string_F(PSTR("Flash exceeded"));
+                     _delay_ms(1000);
+                  }
+
+                  if(sampleStatus & SAMPLE_UPLOAD_STATUS_READ_ERROR)
+                  {
+                     lcd_clear();
+                     lcd_home();
+                     lcd_string_F(PSTR("Sample upload"));
+                     lcd_setcursor(0,2);
+                     lcd_string_F(PSTR("Read error"));
                      _delay_ms(1000);
                   }
                }
