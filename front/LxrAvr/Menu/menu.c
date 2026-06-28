@@ -262,6 +262,7 @@ const Name valueNames[NUM_NAMES] PROGMEM =
       {SHORT_FILE_LOAD_BACKGROUND, CAT_FILE, LONG_FILE_LOAD_BACKGROUND},
       
       {SHORT_ENVELOPE_POSITION, CAT_VELO_EG, LONG_ENVELOPE_POSITION},
+	  {SHORT_OSC_WAVE_INTERPOLATION, CAT_OSC, LONG_OSC_WAVE_INTERPOLATION},
 };
 
 //---------------------------------------------------------------
@@ -576,7 +577,7 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	   /*PAR_SEQ_PC_TIME*/  DTYPE_ON_OFF, // -bc- change patterns on sub-step instead of bar
 	   /*PAR_BUT_SHIFT_MODE*/ DTYPE_ON_OFF, // -bc- make shift a toggle
       /*PAR_LOAD_PERF_ON_BANK*/  DTYPE_ON_OFF, // -bc- load perfs instead of kits on bank change cc
-      /*PAR_SKIP_FIRST_ROLL*/  DTYPE_ON_OFF, // previously SKIP_FIRST_ROLL, unused now
+      /*PAR_OSC_WAVE_INTERPOLATION*/  DTYPE_ON_OFF, // previously SKIP_FIRST_ROLL
       /*PAR_FILE_LOAD_BACKGROUND*/  DTYPE_MENU | (MENU_FILE_LOAD_BACKGROUND<<4),
       
       /*PAR_GLOBAL_SETTINGS_VERSION*/  DTYPE_0B127,
