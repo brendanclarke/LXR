@@ -385,6 +385,7 @@ const char shortNames[][4] PROGMEM  =
    {"xps"}, // TEXT_TRANSPOSE_ON_OFF,
    {"flb"}, // TEXT_FILE_LOAD_BACKGROUND,
    {"egp"}, // TEXT_ENVELOPE_POSITION
+   {"itp"}, // TEXT_OSC_WAVE_INTERPOLATION
 };
 //-----------------------------------------------------------------
 // These correspond with the catNamesEnum in menu.h
@@ -533,6 +534,7 @@ const char longNames[][16] PROGMEM =
    {"Sequence"}, // TEXT_TRANSPOSE_ON_OFF,
    {"LoadBgnd"}, // TEXT_FILE_LOAD_BACKGROUND,
    {"Position"}, // TEXT_ENVELOPE_POSITION
+   {"WavIntrp"}, // TEXT_OSC_WAVE_INTERPOLATION
 };
 
 

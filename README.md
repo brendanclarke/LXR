@@ -89,6 +89,10 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **Per-voice morph as automation target.** Individual voice morph is available as a velocity modulation target and as an LFO modulation target. LFO-to-voice-morph modulates between the current per-voice morph value (at zero depth) and the morph kit value (at full depth).
 
+**Samples imported as one-shot or loops.** Samples added to the 'SAMPLES' folder in the SD card are imported as one-shot. Samples in the 'LOOPS' folder always play looped. 248 Max samples; there should be about 300k free, there should be a warning if either limit is exceeded. 
+
+**Oscillator Wave Interpolation.** A global setting toggles a dynamically-assigned slot to interpolate across waveforms when a modulator changes the waveform of one of the primary oscillators of a drum voice. 
+
 ---
 
 ### PERF Mode

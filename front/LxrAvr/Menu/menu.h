@@ -238,6 +238,7 @@ enum NamesEnum
    TEXT_TRANSPOSE_ON_OFF,
    TEXT_FILE_LOAD_BACKGROUND,
    TEXT_ENVELOPE_POSITION,
+   TEXT_OSC_WAVE_INTERPOLATION,
 	NUM_NAMES
 };
 //-----------------------------------------------------------------
@@ -354,6 +355,7 @@ enum shortNamesEnum
    SHORT_FILE_LOAD_BACKGROUND,
    
    SHORT_ENVELOPE_POSITION,
+   SHORT_OSC_WAVE_INTERPOLATION,
 
 	
 };
@@ -499,6 +501,7 @@ enum longNamesEnum
    LONG_TRANSPOSE_ON_OFF,
    LONG_FILE_LOAD_BACKGROUND,
    LONG_ENVELOPE_POSITION,
+   LONG_OSC_WAVE_INTERPOLATION,
 	
 };
 

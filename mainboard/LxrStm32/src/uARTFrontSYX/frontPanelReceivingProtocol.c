@@ -2091,6 +2091,10 @@ static void frontParser_handleSeqCC()
          }
          break;
 
+      case FRONT_SEQ_OSC_WAVE_INTERPOLATION:
+         modNode_setWaveInterpEnabled(frontParser_command.data2);
+         break;
+
       case FRONT_SEQ_FLOW_END:
          if(frontParser_command.data2 == FLOW_CH_LOAD_SESSION)
          {

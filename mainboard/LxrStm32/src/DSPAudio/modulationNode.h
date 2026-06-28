@@ -38,6 +38,7 @@
 #define VELOCITYMODULATION_H_
 
 #include "stm32f4xx.h"
+#include "Oscillator.h"
 #include "Preset/ParameterArray.h"
 
 typedef struct ModulatorStruct
@@ -70,4 +71,25 @@ void modNode_vMorph(ModulationNode* vm, float val);
 void modNode_originalValueChanged(uint16_t idx);
 void modNode_setDestination(ModulationNode* vm, uint16_t dest);
 void modNode_updateValue(ModulationNode* vm, float val);
+
+/* Maximum number of oscillators that receive waveform blend state per DSP block.
+   Limits the double-render cost: the first OSC_WAVE_INTERP_MAX_ACTIVE eligible
+   waveform-parameter modulation targets get fractional blend state; later ones
+   fall through to integer waveform IDs as normal. */
+#define OSC_WAVE_INTERP_MAX_ACTIVE 1u
+
+/* Enable / disable waveform-parameter interpolation.
+   When enabled, modNode_updateValue() writes fractional blend state to oscillators
+   for TYPE_UINT8 waveform parameters instead of truncating to an integer ID.
+   Called from frontParser_handleSeqCC() on FRONT_SEQ_OSC_WAVE_INTERPOLATION. */
+void modNode_setWaveInterpEnabled(uint8_t enabled);
+
+/* Returns the current waveform interp enable flag (0 or 1). Read by
+   osc_waveInterpActive() in the audio render path. */
+uint8_t modNode_getWaveInterpEnabled(void);
+
+/* Returns the current DSP block generation counter. Read by osc_waveInterpActive()
+   to detect and reject stale per-oscillator blend state. */
+uint32_t modNode_getWaveInterpGeneration(void);
+
 #endif /* VELOCITYMODULATION_H_ */
