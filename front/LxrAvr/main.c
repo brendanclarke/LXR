@@ -28,7 +28,7 @@
 //-----------------------------------------------
 //defines
 //-----------------------------------------------
-#define FIRMWARE_VERSION "0.37-bc-"
+#define FIRMWARE_VERSION "-1.0"
 #define CORTEX_RESET_PIN	PB0
 //-----------------------------------------------
 //code
@@ -72,12 +72,14 @@ int main(void)
 #else
 	//print boot up message
 	lcd_home();
-	lcd_string_F(PSTR("Sonic Potions"));
+	// "Build v -1.0 LXR"
+	lcd_string_F(PSTR("Build v "));
+	lcd_string(FIRMWARE_VERSION);
+	lcd_string_F(PSTR(" LXR"));
 	//goto 2nd line
 	lcd_setcursor(0,2);
-   //lcd_string_F(PSTR("LXR Drums V"));
-	lcd_string_F(PSTR("LXR V"));
-	lcd_string(FIRMWARE_VERSION);
+    // "Catalyst Edition"
+	lcd_string_F(PSTR("Catalyst Edition"));
 #endif
 
 	

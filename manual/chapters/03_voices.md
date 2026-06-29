@@ -195,7 +195,12 @@ snc & LFO sync             & Activates clock sync. Sync rates: $\frac{1}{2}$, $\
 mod & Modulation amount    & Controls how strongly the LFO signal affects the target. \\
 wav & LFO waveform         & Sine (sin), Triangle (tri), Saw up (sup), Saw down (sdn),
                              Square (sqr), Random (rnd), Exponential saw up (xup),
-                             Exponential saw down (xdn). \\
+                             Exponential saw down (xdn), Exponential triangle (xtr),
+                             One-shot sine (si1), One-shot triangle (tr1), 
+                             One-shot square (sq1), One-shot ramp (rmp1), 
+                             Random single value per retrigger (rnd1), 
+                             and One-shot exponential triangle (xt1). 
+                             In one-shot mode, the LFO offset parameter sets a pre-trigger delay. \\
 rtg & LFO retrigger        & Allows the LFO to be retriggered from a sequencer track (v1–v6).
                              The LFO resets its phase whenever a note plays on the selected track. \\
 off & Phase offset         & Phase offset applied when the LFO is retriggered. \\

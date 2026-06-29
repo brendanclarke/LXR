@@ -5,7 +5,7 @@
 % ============================================================
 
 % ----- Version string (update per release) -----
-\newcommand{\manualversion}{Fork v1.0 (based on LXR firmware v0.91)}
+\newcommand{\manualversion}{Catalyst Edition v1.0 (based on LXR firmware v0.37)}
 
 % ----- Page geometry -----
 \usepackage[
@@ -25,6 +25,7 @@
 \usepackage{float}
 \usepackage{booktabs}
 \usepackage{longtable}
+\usepackage{calc}
 \usepackage{array}
 \usepackage{tabularx}
 \usepackage{multirow}
@@ -231,3 +232,6 @@
 \newcommand{\sectionrule}{%
   \vspace{4pt}\noindent\textcolor{lxrorange}{\rule{\linewidth}{0.6pt}}\vspace{4pt}%
 }
+
+% Fix for pandoc generating \def\LTcaptype{none} for longtables without caption
+\newcounter{none}

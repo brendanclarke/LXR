@@ -17,6 +17,10 @@ The first 5 are classical analogue waveforms realised using bandlimited wavetabl
 The 6th is a TR-909-style crash sample — included as a bonus, since a realistic crash is nearly
 impossible to synthesise using the available voice structure.
 
+Any samples loaded will be listed after the stock waveforms: one-shot samples first, then loops, alphabetically by the name of the file they were imported from. 
+
+If the oscillator waveform is modulated, interpolation between waveforms can be switched on in the global settings menu, producing a smoother transition between waves. 
+
 ## Filter
 
 The filter is a 2-pole (12 dB) state variable filter (SVF) realised as a non-linear
@@ -229,8 +233,9 @@ The LFO can be synced to the sequencer clock — at $\frac{1}{4}$ note sync, the
 
 \tip{You can use the LFO as an additional envelope by enabling the retrigger feature. Set the
 retrigger source to the same voice as the modulation destination — the LFO will restart on every
-played note. Set the LFO frequency so one full cycle is slightly longer than the amplitude
-envelope, to prevent it retriggering while the note is still sounding.}
+played note. Additional 'one-shot' LFOs are listed in the LFO waveforms as si1, tr1, etc. to use
+with this. When using one of these waveforms, 'offset' provides an adjustable delay before the
+start of the waveform.}
 
 ## Velocity Modulation
 

@@ -106,9 +106,9 @@ ergonomic step parameter editing, use Step (Edit) mode.}
 \subsection{Performance Mode}\label{performance-mode}
 
 This mode is designed for playing songs live. You can chain and change
-patterns on the fly, trigger manual rolls for each voice, and access the
-morph and global sample rate effects. Voice editing is not available in
-this mode.
+patterns on the fly, trigger manual rolls for each voice, loop the
+sequencer in smaller sub-divisions, and access the morph and global
+sample rate effects. Voice editing is not available in this mode.
 
 \begin{figure}[H]
   \centering
@@ -126,17 +126,40 @@ this mode.
   \textbf{Sequencer buttons 1--7 (5):} trigger a manual roll for each
   corresponding voice.
 \item
+  \textbf{Sequencer buttons 10-16 (5):} loop the sequencer by 8 to 1/8
+  step divisions.
+\item
+  \textbf{Sequencer button 9 (5):} increase the sequencer loop length by
+  50\%.
+\item
   \textbf{Select buttons (7):} change the playing pattern.
 \item
   \textbf{Voice buttons (9):} mute/unmute voices without holding shift.
 \end{itemize}
 
+\textbf{Re-align pattern:} If tracks become misaligned (due to different
+pattern timescales, step lengths, or independent track pattern
+assignments), press the pattern button of the selected and viewed
+pattern again to realign all tracks to the master clock.
+
+\subsubsection{Looper}\label{looper}
+
+Sequencer buttons 9--16 provide looper functionality in PERF mode.
+Button 10 sets the longest loop length (64 sub-steps, or 1/2 bar),
+halving at each subsequent button down to 16 (1 sub-step, or 1/64th).
+Holding button 9 in addition `dots' the loop length, adding 50\% to the
+duration of the last loop button held. Releasing all loop buttons
+immediately returns the sequencer to the position it would have reached
+without looping engaged.
+
 \subsubsection{Basic Performance Menu}\label{basic-performance-menu}
+
+{[}This table is out of date{]}
 
 \begin{paramtable}
 rol & Manual roll rate  & Trigger rate for the manual roll function of sequencer buttons 1–7. \\
 mrp & Morph amount      & Ratio between the original sound and the morph target. \\
-sr  & Global sample rate & A global sample rate reduction effect. \\
+srt & Global sample rate & A global sample rate reduction effect. \\
 shu & Shuffle amount    & Sets the amount of global shuffle. \\
 \end{paramtable}
 
@@ -145,7 +168,9 @@ shu & Shuffle amount    & Sets the amount of global shuffle. \\
 The first 7 sequencer buttons trigger a manual roll for each
 corresponding voice. The roll rate is set with the \param{rol}
 parameter. Rolls are recorded to the pattern when recording mode is
-active.
+active. Rolls can be recorded in three modes: full (pitch and velocity),
+note only (pitch), or velocity only. The roll record mode is set in the
+SHIFT + REC button menu.
 
 \subsubsection{Morph}\label{morph}
 
@@ -154,6 +179,16 @@ preset from the SD card as a morph target. The \param{mrp} parameter
 controls the ratio between the original and target sound. As morph
 increases, the current sound is gradually transformed into the morph
 target.
+
+Morph can be performed globally, to all voices at once, or to a single
+voice at a time. Global morph is set from the PERF menu, or by
+Modulation (CC1) on the global MIDI channel, and overrides the
+individual morph of all voices.
+
+Single voice morph can be set from the PERF menu, from CC1 on individual
+voice MIDI channels, from step automation on the sequencer, or through
+velocity or LFO modulation. All morph except for LFO modulation will
+update the parameter shown in the PERF menu.
 
 For loading a morph target, see the Load and Save Mode section.
 
@@ -171,9 +206,14 @@ With shuffle applied:
 \subsubsection{Change Pattern}\label{change-pattern}
 
 The 8 select buttons change the playing pattern, selecting from the 8
-patterns of the loaded pattern set. Pattern changes occur only at the
-end of a bar (track 1 is the reference track when different track
-lengths are used).
+patterns of the loaded pattern set. By default, pattern changes occur
+only at the end of a bar. However, this behavior can be toggled to
+`instant' switching on the next sub-step, maintaining the same sequencer
+position, by a global settings option.
+
+Each individual track may play from a different pattern if desired. To
+change pattern on a per- track basis, hold the `voice' button of the
+track, and press the select button of the pattern it should play.
 
 \subsubsection{Chain Patterns}\label{chain-patterns}
 
@@ -211,7 +251,7 @@ value (e.g.~r4 randomly selects from patterns 1--4).
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth]{pattern_chain_example2.jpeg}
+  \includegraphics[width=\linewidth]{pattern_chain_example2.png}
   \caption{Pattern chain with manual switch: the break always lands on bar 4.}
 \end{figure}
 
@@ -329,9 +369,20 @@ changes.
   Navigate to \texttt{ok} and push the encoder to save.
 \end{enumerate}
 
-\textbf{Quick naming:} while the cursor is in the name area, knob 1
-moves the cursor, knob 2 toggles case, and knob 3 scrolls through ASCII
-characters.
+\textbf{Quick naming:} While the cursor is in the name area, knob 1
+changes save type, knob 2 moves the cursor, and knobs 3 and 4 scroll
+through ASCII characters. Capital letters are positioned at the left of
+knob 3, followed by numbers in the middle. Lower case letters are
+positioned at the left of knob 4.
+
+\textbf{Re-loading} Pressing SHIFT + PLAY reverts all voice parameters
+to their state at the last file load, discarding any live edits made to
+the parameters.
+
+\textbf{Load individual drum voices:} The Load menu includes entries to
+load individual drum voices directly from .kit files without replacing
+the full drumkit. The name and number shown for a loaded voice reflect
+the kit it was derived from.
 
 \subsubsection{Morph Presets}\label{morph-presets}
 
@@ -360,11 +411,47 @@ Pattern sets are collections of 8 patterns stored in one file.
 
 \textbf{Loading:} navigate to \texttt{OK} on the display and push the
 encoder to start loading (required because loading takes 4--5 seconds).
-The pattern loads in the background --- \textbf{the loaded pattern does
-not play until you press one of the pattern change buttons in
-performance mode.}
 
 \textbf{Saving:} same procedure as saving a sound preset.
+
+\subsubsection{Performance Files}\label{performance-files}
+
+A performance file (.prf) contains a drum kit, a morph kit, a pattern
+set, and a BPM tempo. Loading and saving follow the same procedure as
+for a pattern set.
+
+\subsubsection{All Files}\label{all-files}
+
+`All' files (.all) contain all the data of a performance file and, in
+addition, all global settings as below.Loading and saving follow the
+same procedures as for performance files.
+
+\subsubsection{Background file loading}\label{background-file-loading}
+
+Pattern, performance and `all' files may be loaded in the background
+while the sequencer is playing if the global setting matches that file
+type or `tot' (total file set). When loading a file, the currently
+playing pattern and parameters are held in a temporary slot while the
+load executes in the background. The loaded sound becomes active when
+the next new pattern is played. The screen will indicate when a
+background load is initiated. Until the next pattern change, patgen and
+kit reload are disabled (SHIFT + PLAY, SHIFT + PERF). The performance
+mode LED will flash if performance mode is not selected, and the SELECT
+buttons will flash in performance mode until a newly loaded pattern is
+activated.
+
+\subsubsection{Samples}\label{samples}
+
+In the Load menu, samples can be imported from the SD card using the
+last option, \textbf{Load Samples}. At least one of two folders should
+be present on the card, named `SAMPLES' or `LOOPS', containing 16-bit,
+mono pcm .wav files (44.1kHz). When selected, \textbf{Load Samples}
+imports files alphabetically from `SAMPLES' and then `LOOPS', to a
+maximum of 248 individual files, or \textasciitilde300kB. When used as
+an oscillator waveform, the sample will always play looped if it was
+imported from the `LOOPS' folder. Samples are retained after power-down
+and are only overwritten by a subsequent sample import or firmware
+update.
 
 \subsubsection{Settings}\label{settings}
 
@@ -375,7 +462,9 @@ select \texttt{Globals}, navigate to \texttt{Ok}, and push the encoder.
 \subsection{Pattern Generator Mode}\label{pattern-generator-mode}
 
 The pattern generator creates polyrhythms automatically using the
-Euclidean algorithm.
+Euclidean algorithm. It can also apply offset to the steps of the
+pattern non-destructively, rotating the track through main steps and
+sub-steps based on the settings.
 
 \subsubsection{Accessing the Pattern
 Generator}\label{accessing-the-pattern-generator}
@@ -397,6 +486,8 @@ Generator}\label{accessing-the-pattern-generator}
 len & Track Length   & Length of the track in $\frac{1}{16}$ notes. Each track can have a
                        different length. \\
 stp & Number of Steps & The number of active steps to distribute in the pattern. \\
+rot & Step Rotation   & Rotation of the track in $\frac{1}{16}$ notes. \\
+ssr & Sub-step Rotation & Rotation of the track in $\frac{1}{128}$ notes.  \\
 \end{paramtable}
 
 \subsubsection{Generating Patterns}\label{generating-patterns}
@@ -411,7 +502,16 @@ stp & Number of Steps & The number of active steps to distribute in the pattern.
   pattern on the active track.
 \end{itemize}
 
-\attention{Existing pattern data is overwritten and there is no undo.}
+\attention{The pattern data is overwritten when *exiting* the Patgen page. It is recommended to copy to another pattern first if you have data you want to keep.}
+
+\subsubsection{Resetting a Generated
+Pattern}\label{resetting-a-generated-pattern}
+
+Each track is saved prior to any change while in the pattern generator.
+To restore all tracks to their original state, press the SHIFT + PERF
+combination again twice. Note, that if track length was adjusted, the
+tracks may be out of sync. Pattern re-alignment can be performed by
+selecting the pattern twice while in PERF mode.
 
 \subsection{Global Settings Menu}\label{global-settings-menu}
 
@@ -433,11 +533,25 @@ Menu}\label{accessing-the-settings-menu}
 
 \begin{paramtable}
 bpm & Tempo in BPM    & Internal clock tempo. Set to 0 to sync to incoming MIDI clock. \\
+qnt & Sequencer Quantisation & Sets the quantisation grid for recorded data. \\
+mid & Global MIDI Channel & Sets the channel for global functions (see MIDI Table). \\
+txf & Transmit MIDI Filter & Sets what MIDI commands are transmitted from the LXR. \\
+rxf & Receive MIDI Filter & Sets what MIDI commands are recognized by the LXR. \\
+mrt & MIDI Routing & Sets how MIDI is transmitted between the DIN jacks and USB. \\
 fet & Parameter fetch & When active, you must `fetch' the displayed value with the knob
                         before it changes — prevents value jumps on page switches. \\
 flw & Pattern follow  & When active, the viewed pattern always matches the playing pattern. \\
-qnt & Sequencer Quantisation & Sets the quantisation grid for recorded data. \\
-ss  & Screensaver     & Turns the screensaver on or off. \\
+ssv & Screensaver     & Turns the screensaver on or off. \\
+pcr & Bar Reset Mode & Sets whether bar count for repeat/chain resets on manual pattern changes. \\
+pci & Pattern Change Instant & Pattern changes occur instantly instead of end of bar when on. \\
+cki & Trigger in PPQ Time & Sets the PPQ time the LXR syncs to for the trigger expansion. \\
+co1 & Trigger out PPQ 1 & Sets the timing output by the trigger expansion for clock 1.\\
+co2 & Trigger out PPQ 2 & Sets the timing output by the trigger expansion for clock 2.\\
+mod & Trigger Gate Mode & Sets gate out on/off when trigger expansion is installed.\\
+b2p & Performance Bank Change & When enabled, MIDI Bank Change (CC0) loads a .prf file instead of a .kit.\\
+stg & Shift Toggle & When enabled, SHIFT works as a toggle.\\
+flb & File Background Load & Sets which files load in the background and queue change on next pattern.\\
+itp & Waveform Interpolation & Toggles Interpolating main oscillator waveforms when modulated.\\
 \end{paramtable}
 
 \subsubsection{Follow Mode}\label{follow-mode}
@@ -459,5 +573,5 @@ menu.
 Settings}\label{loading-and-saving-global-settings}
 
 Settings are loaded automatically on power-up. To save current settings,
-go to the save menu, select \texttt{Globals}, navigate to \texttt{Ok},
+go to the save menu, select \texttt{Settings}, navigate to \texttt{Ok},
 and push the encoder.

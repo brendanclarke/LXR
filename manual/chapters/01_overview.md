@@ -24,19 +24,19 @@ value jumps when switching menu pages — can be activated in the settings menu.
 ### 3) Record/Play Buttons
 
 **The Play button** starts and stops playback. The current pattern is reset to the first step when
-the sequencer is stopped.
+the sequencer is stopped. \[Alternative SHIFT function: reset last sound parameters loaded from file.\]
 
 **The Record button** activates the recording function. When the LED is lit, all incoming MIDI
 notes are recorded into the active pattern. Knob movements are also recorded to the selected
-automation track.
+automation track. \[Alternative SHIFT function: record settings.\]
 
 ### 4) Shift Button
 
-Activates an alternate function set for the buttons.
+Activates an alternate function set for the buttons. Hold SHIFT while pressing another button to activate the alternative function. A global setting can change the SHIFT button to work as a toggle instead, in which case the led indicates whether SHIFT is active or not.  
 
 ### 4) Copy/Clear Button
 
-Used to copy and clear sequencer data.
+Used to copy and \[clear (alternative SHIFT function)\] sequencer data.
 
 ### 5) 16 Sequencer Buttons
 
@@ -49,7 +49,8 @@ Function depends on the active mode:
 
 ### 6) Encoder
 
-Used to navigate through the menu.
+Used to navigate through the menu. Press the encoder to activate a selected option or enter a single-parameter view.
+\[Hold shift while in single-parameter view to view and edit the **morph** parameter where applicable.\]  
 
 ### 7) 8 Select Buttons
 

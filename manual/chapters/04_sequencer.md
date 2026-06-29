@@ -8,6 +8,8 @@ similar to classic TR-x0x machines, with additional features.
 There are 7 sequencer tracks — one per voice, plus an additional track to control the open hihat
 of voice 6.
 
+[**Brendan: To Review**] Pattern scaling per track is accessible via a second page under the 'click' (transient voicing) sub-page. This lets you run a track at a different rhythmic subdivision from the rest of the pattern.
+
 ### Select Tracks
 
 The active track is changed with the 7 voice buttons. A lit LED next to the button shows the
@@ -51,6 +53,10 @@ $\frac{1}{16}$th notes of the main steps.
 
 If the main step is inactive, none of its sub steps will be played. Each sub step can have its own
 pitch, volume, probability, and automation settings.
+
+### Step Scale and Step Length
+
+Each track in a pattern can have an independent step scale and step length. Step scale makes the track run slower than the master clock by multiples of 2 and is accessed from the secondary page under Voice Mode: Click. Step length is set from the Patgen mode or from the secondary page under Voice Mode: Mix. Note that even though these parameters are listed under Voice Mode, they are saved with the pattern data and can change across patterns in the pattern set. 
 
 ## Pattern
 
@@ -99,6 +105,10 @@ plays with 50\% chance, and the 3rd and 7th play with 25\% chance.}
 Parameter values can be recorded to the sequencer steps. Each step can store 2 parameter
 changes. They only affect that single step and are ignored if the step is inactive. The modulation
 targets can be different on every step.
+
+When a step's velocity is set to 0, it does not retrigger the voice envelope but still plays back
+any automation recorded on that step. This can be useful for assigning automation to a different
+voice than the track assignment, or changing the character of a voice as the sound decays.
 
 ### Choosing the Active Automation Track
 
@@ -181,6 +191,14 @@ It is possible to copy sequencer tracks and patterns to another position.
 3. Press the target voice/pattern button. The data is copied immediately, overwriting the
    destination.
 4. To abort, release the copy button before selecting a target.
+
+It is possible to copy sequencer main steps and sub-steps to another position:
+
+1. Press and hold the Copy button.
+2. Select the source data by pressing a sequencer button (main step copy) or a select button (sub-
+   step copy). The source LED starts flashing.
+3. Press the target sequencer button. If a main step was copied it will be applied immediately.
+4. If a sub-step was copied, press the select button to paste the sub-step.
 
 ## Clear Sequencer Data
 

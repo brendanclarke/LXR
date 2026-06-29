@@ -8,6 +8,8 @@ MIDI USB interface for use with a computer. Both provide an input/output pair.
 The MIDI channel (1–16) is selected in the settings menu. The synth listens to incoming messages
 on this channel and sends sequencer notes to the MIDI output on the same channel.
 
+MIDI input can be disabled per voice track by setting its MIDI channel to '0' in the global settings, or completely disabled by setting the global MIDI channel to '0'.
+
 ## MIDI Sync
 
 The LXR can be synced to external gear using MIDI clock signals. Set the BPM parameter in the
@@ -23,6 +25,8 @@ devices. MIDI start/stop messages are sent when the sequencer starts or stops.
 You can trigger all voices with external MIDI gear (drum pads, keyboard, etc.). If record mode is
 active, the played MIDI notes are directly recorded into the corresponding patterns. Note
 recording can be quantised to a grid.
+
+[**Brendan: To Review**] **Global MIDI Note Trigger:** If a MIDI note is received on the designated global MIDI channel, the LXR will trigger whichever track corresponds to the active track selected on the front panel, unless that track has a specific note override configured. This allows you to play the selected instrument chromatically from an external keyboard.
 
 The default MIDI note numbers for the 7 tracks are:
 
@@ -42,10 +46,73 @@ The sequencer currently transmits note-on trigger messages to the MIDI output. T
 send complete sequencer tracks with pitch information on separate MIDI channels is planned for a
 future release.
 
+## Program / Bank Changes
+
+Program Change messages on the global channel select the next pattern (0-7) for all tracks. Program Change messages on voice channels select the pattern for that track independently.
+
+Bank Select (CC0) and Mod Wheel (CC1) are supported. CC0 triggers bank/kit changes, and CC1 controls global morph on the global MIDI channel, or voice morph on individual voice MIDI channels.
+
 ## MIDI CC List
 
-Parameters can be remote-controlled with MIDI CC messages. See the tables below.
+Parameters can be remote-controlled with MIDI CC messages. [**Brendan: To Review**] The LXR now supports independent MIDI CC assignments per voice via a dedicated global channel, as well as the legacy per-channel mapping.
 
-## MIDI NRPN List
+### Channel MIDI CC Table
 
-Since the LXR has more than 127 parameters, some are controlled using NRPN messages.
+If a CC is received on a voice's specific MIDI channel, it controls that voice according to the table below.
+
+| CC | Function | Drum 1 | Drum 2 | Drum 3 | Snare | Cymbal | HH A | HH B |
+|---:|---|---|---|---|---|---|---|---|
+| 0 | Bank change | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 1 | Morph/mod wheel | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 7 | Voice volume | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 9 | Osc 1 waveform | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 10 | Pan | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 12 | Decimation | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 13 | Distortion | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 14 | Osc 1 coarse tune | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 16 | Filter frequency | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 17 | Filter resonance | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 18 | Filter drive | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 19 | Filter type | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 20 | Snare mix | -- | -- | -- | Yes | -- | -- | -- |
+| 21 | Snare noise frequency | -- | -- | -- | Yes | -- | -- | -- |
+| 22 | Mix/mod select | Yes | Yes | Yes | -- | -- | -- | -- |
+| 23 | Velocity volume mod on/off | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 24 | Velocity mod amount | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 25 | Velocity mod destination | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 26 | Transient volume | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 27 | Transient waveform | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 28 | Transient frequency | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 46 | Osc 1 fine tune | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 70 | Volume envelope repeat | -- | -- | -- | Yes | Yes | -- | -- |
+| 72 | Open hihat decay | -- | -- | -- | -- | -- | Yes | Yes |
+| 73 | Volume envelope attack | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 74 | Volume envelope slope | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 75 | Volume envelope decay | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 76 | LFO frequency | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 77 | LFO amount | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 78 | LFO phase offset | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 79 | LFO waveform | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 80 | LFO target voice selector | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 81 | LFO target selector | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 82 | LFO retrigger | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 83 | LFO sync | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 84 | Mod envelope decay | Yes | Yes | Yes | Yes | -- | -- | -- |
+| 85 | Envelope mod amount | Yes | Yes | Yes | Yes | -- | -- | -- |
+| 86 | Mod envelope slope | Yes | Yes | Yes | Yes | -- | -- | -- |
+| 89 | Audio output routing | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 90 | Envelope position reset | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| 102 | Mod oscillator waveform | Yes | Yes | Yes | -- | -- | -- | -- |
+| 103 | FM/mod oscillator coarse tune | Yes | Yes | Yes | -- | -- | -- | -- |
+| 104 | FM amount | Yes | Yes | Yes | -- | -- | -- | -- |
+| 105 | Mod oscillator waveform 1 | -- | -- | -- | -- | Yes | Yes | Yes |
+| 106 | Mod oscillator gain 1 | -- | -- | -- | -- | Yes | Yes | Yes |
+| 107 | Mod oscillator coarse tune 1 | -- | -- | -- | -- | Yes | Yes | Yes |
+| 108 | Mod oscillator waveform 2 | -- | -- | -- | -- | Yes | Yes | Yes |
+| 109 | Mod oscillator gain 2 | -- | -- | -- | -- | Yes | Yes | Yes |
+| 110 | Mod oscillator coarse tune 2 | -- | -- | -- | -- | Yes | Yes | Yes |
+| 120 | Track mute | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+
+### Global MIDI CC Table
+
+This table applies only on the configured Global MIDI channel. 
