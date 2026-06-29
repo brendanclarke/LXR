@@ -68,6 +68,13 @@ void euklid_setSteps(uint8_t trackNr, uint8_t value, uint8_t patternNr);
 void euklid_setRotation(uint8_t trackNr, uint8_t value, uint8_t patternNr);
 /* Store a new working sub-step rotation and apply it to the pattern. */
 void euklid_setSubStepRotation(uint8_t trackNr, uint8_t value, uint8_t patternNr);
+/* Restore the cached Euclid UI state for one track without rotating the
+   pattern again. Used when SHIFT+PERF rolls a touched track back from temp. */
+void euklid_restoreTrackState(uint8_t trackNr,
+                              uint8_t patternNr,
+                              uint8_t steps,
+                              uint8_t rotation,
+                              uint8_t subStepRotation);
 /* Generate and rotate one Euclid track into the target pattern. */
 void euklid_rotatePattern(uint8_t trackNr, uint8_t patternNr, uint8_t length, int8_t mainSteps, int8_t subSteps);
 /* Transfer the generated Euclid mask into the target pattern. */

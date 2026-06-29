@@ -275,6 +275,32 @@ void euklid_setSubStepRotation(uint8_t trackNr, uint8_t value, uint8_t patternNr
  
 }
 //-----------------------------------------------------
+void euklid_restoreTrackState(uint8_t trackNr,
+                              uint8_t patternNr,
+                              uint8_t steps,
+                              uint8_t rotation,
+                              uint8_t subStepRotation)
+{
+   /* SHIFT+PERF rollback restores the already-saved pre-edit track pattern
+      from temp back into normal storage first. At that point the pattern data
+      is already correct, so the Euclid engine must *not* rotate it again
+      here. This helper restores only the cached UI/control values that the
+      front panel expects for steps and both rotation amounts. */
+   if(patternNr != euklid_workingPattern)
+   {
+      euklid_clearRotation();
+      euklid_workingPattern = patternNr;
+   }
+
+   euklid_length[trackNr] = pat_getLengthRotatePtr(patternNr, trackNr)->length;
+   if(!euklid_length[trackNr])
+      euklid_length[trackNr] = 16;
+
+   euklid_steps[trackNr] = steps;
+   euklid_rotation[trackNr] = rotation;
+   euklid_subStepRotation[trackNr] = subStepRotation;
+}
+//-----------------------------------------------------
 void euklid_rotatePattern(uint8_t trackNr, uint8_t patternNr, uint8_t length, int8_t mainSteps, int8_t subSteps)
 {
    if(patternNr != euklid_workingPattern)

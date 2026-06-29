@@ -1,7 +1,7 @@
 # TEMPORARY / PATTERN / PARAMETER LOAD SPEC
 
-Date: 2026-06-21
-Status: current storage and switching spec after Session 028 completed background file loading through temporary Pattern/Preset storage. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`. Session 024 commented out the stale PRF/cache opcode surface without changing the live non-cache file-load path, Session 025 made the legacy macro slots zero-on-load plus inert on the apply/replay side, Session 026 connected per-voice morph display/control values to the active kit image via dedicated voice-morph traffic, Session 027 made step automation destinations raw AVR/menu `PAR_*` ids in pattern storage, and Session 028 finished the `0x6d/0x6e` background-swap handshake so `.pat`, `.prf`, and `.all` loads can write normal storage while playback continues from temp.
+Date: 2026-06-29
+Status: current storage and switching spec after Session 033 restored `SHIFT+PLAY` around STM temporary preset storage and added Euclid-page one-visit temp track backups on the `SHIFT+PERF` page, while keeping the Session 028 background-load model intact. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`. Session 024 commented out the stale PRF/cache opcode surface without changing the live non-cache file-load path, Session 025 made the legacy macro slots zero-on-load plus inert on the apply/replay side, Session 026 connected per-voice morph display/control values to the active kit image via dedicated voice-morph traffic, Session 027 made step automation destinations raw AVR/menu `PAR_*` ids in pattern storage, Session 028 finished the `0x6d/0x6e` background-swap handshake so `.pat`, `.prf`, and `.all` loads can write normal storage while playback continues from temp, and Session 033 made temp preset storage the authoritative reload image for `PATCH_RESET`.
 
 Naming note: STM-side front-panel ownership stays under `mainboard/LxrStm32/src/uARTFrontSYX/` with `frontPanel*` names. AVR-side comms now live under `front/LxrAvr/avrComms/` with `avrComms*` names. Older AVR `frontPanel*` references are historical only.
 
@@ -36,6 +36,21 @@ playback readiness is true plus the final ACK delay, and then ACKs the AVR so
 the ordinary file load can write normal storage. `.pat` background loading is
 pattern-only: it uses temp pattern playback but keeps preset parameters normal.
 File loads do not reset current global or per-voice morph amounts.
+
+Session 033 note: temp preset storage is now also the authoritative “last
+loaded preset” image. Ordinary `.snd` kit loads, instrument loads, morph
+loads, `.prf`, and `.all` loads mirror the loaded endpoint subset into temp
+immediately. Protected `.prf` / `.all` background loads are still the one
+exception during the load itself: temp keeps the old audible preset until
+playback later returns to normal, then STM resnapshots temp from the newly
+loaded normal preset. `PATCH_RESET` now means “restore normal preset endpoints
+from temp” and must be ignored while protected temp preset playback is still
+active.
+
+Session 033 note: `PAR_VOICE_DECIMATION_ALL` must never survive file import as
+`0`. AVR now clamps imported `0` to `127` before the value can propagate into
+normal storage, temp storage, or re-saved files, and startup seeds the menu
+copy to `127`.
 
 ## Purpose
 
@@ -246,6 +261,21 @@ pat_copyToTmpPattern(seq_activePattern)
 -> preset_captureTmpKitState()
 ```
 
+### Ordinary File Loads And `PATCH_RESET`
+
+Session 033 tightened the non-background rules:
+
+- `.snd` full-kit loads and individual instrument loads mirror only the
+  kit/front endpoint subset into temp;
+- morph loads mirror only the morph endpoint subset into temp;
+- `.prf` and `.all` loads without background loading mirror both endpoint
+  groups into temp immediately;
+- `PATCH_RESET` copies both kit/front and morph endpoint groups from temp back
+  into normal storage and reapplies the live normal image;
+- `PATCH_RESET` must stay disabled while protected `.prf` / `.all` temp preset
+  playback is still active, because temp is intentionally holding the old
+  audible sound during that window.
+
 ### Normal/temp boundary switch
 
 The current boundary switch is:
@@ -276,6 +306,9 @@ The current background-load flow is:
 9. On completion, no cache promotion occurs. Normal storage now contains the
    newly loaded file; temp storage remains the audible protected image until
    the user switches away from temp.
+10. Once playback later returns to normal, STM runs
+    `preset_resnapshotTemporaryPresetFromNormal()` so temp stops holding the
+    old sound and becomes the new last-loaded preset snapshot again.
 
 ### Background `.pat` load
 
@@ -317,6 +350,23 @@ Current behavior:
 
 This prevents a second background load from copying partially overwritten
 normal storage back into the still-audible temp image.
+
+### Euclid Page Temp Track Backups
+
+Session 033 also reuses `seq_tmpPattern` as a page-local edit backup on the
+real `SHIFT+PERF` Euclid page (`SELECT_MODE_PAT_GEN` / `EUKLID_PAGE`):
+
+1. entering the page begins one visit window;
+2. the first Euclid edit to each touched track copies that shown normal track
+   into the corresponding temp track slot;
+3. later edits to that same track during the same visit do not copy again;
+4. leaving the page commits by clearing the visit bookkeeping without restore;
+5. pressing `SHIFT+PERF` again during the same visit restores every touched
+   track from temp back into the shown normal pattern.
+
+This path is explicitly source/destination addressed and is separate from
+background temp playback. It is not active when the shown/edit pattern is
+already `SEQ_TMP_PATTERN`.
 
 ### Morph Amount Preservation During File Loads
 
@@ -361,6 +411,10 @@ These functions matter for the current normal/temp model:
 - `preset_updateVoiceSourcesForPatternChange()`
 - `preset_allVoiceSourcesUseTmp()`
 - `preset_allVoiceSourcesUseNormal()`
+- `preset_isTempPresetPlaybackActive()`
+- `preset_reloadNormalFromTemporaryPreset()`
+- `preset_resnapshotTemporaryPresetFromNormal()`
+- `preset_copyKitEndpoints()`
 - `pat_copyToTmpPattern()`
 - `frontParser_serviceBackgroundSwapAck()`
 - `preset_backgroundSwapNeeded()`
@@ -407,3 +461,5 @@ second staging owner.
 - Do not use `END_OF_SOUND_PARAMETERS` for file-backed kit bytes if the loop is
   meant to exclude non-file-backed live morph amount controls; use
   `END_OF_KIT_PARAMETERS`.
+- Do not let imported `PAR_VOICE_DECIMATION_ALL == 0` survive past the AVR
+  file-import boundary.

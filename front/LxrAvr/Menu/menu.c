@@ -845,6 +845,14 @@ void menu_enterStepMode()
 //-----------------------------------------------------------------
 void menu_enterPatgenMode()
 {
+   /* `menu_enterPatgenMode()` is used both for the first entry into the
+      Euclid/rotation editor and for later in-page track changes. Only the
+      first entry should begin a new temp-backup visit on the STM. Re-sending
+      BEGIN_VISIT while merely selecting another track on the same page would
+      clear the touched-track mask and leave rollback able to restore only the
+      most recently edited track. */
+   if(menu_activePage != EUKLID_PAGE)
+      avrComms_sendData(SEQ_CC, SEQ_EUKLID_RESET, SEQ_EUKLID_RESET_BEGIN_VISIT);
    avrComms_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS,
    				menu_getActiveVoice());
    menu_switchPage(EUKLID_PAGE);
