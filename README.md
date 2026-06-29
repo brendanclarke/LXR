@@ -67,7 +67,7 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **Morph kit parameter quick access.** While viewing a single parameter in the encoder click-in view, hold SHIFT to toggle between editing the normal parameter value and the morph target value for that parameter. This lets you set morph kit values without save/reload faff.
 
-**Re-align patterns shortcut.** in PERF mode, press the current pattern button again to realign all tracks to the master clock and clear any pattern rotation offsets or misalignment from setting different pattern timescales. 
+**Re-align patterns shortcut.** in PERF mode, press the pattern button of the selected + viewed pattern again to realign all tracks to the master clock and clear any misalignment from setting different pattern timescales or step lengths. 
 
 **Pot (knob) assignments in load/save reworked.** The shortcut knob functions have been revised to speed up character entry when naming files. In the load menu: knob 1 changes load type, knob 2 changes preset number with auto-load for kit and voice types, knob 3 disables auto-load if turned, knob 4 disables auto-load and moves the cursor. In the save menu: knob 1 changes save type, knob 2 moves the cursor between fields, knobs 3 and 4 cycles through characters. Capital letters are at the left of knob 3, numbers are in the middle, lower case is at the left of knob 4.
 
@@ -125,6 +125,8 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **Per-voice morph settable by step automation.** Individual voice morph amounts can be written directly into step automation slots, allowing per-step morph movements on individual voices.
 
+**Reset Patgen/Euklid Changes.** On the Patgen/Euclidean page (SHIFT + PERF), pressing SHIFT + PERF again twice resets the pattern to the state it was in before entering the page. Exiting the page commits all changes to the pattern. There may be residual track pattern offset after a reset if the pattern *length* parameter was altered. 
+
 ---
 
 ### File / Load-Save Mode
@@ -141,7 +143,7 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **Load individual drum voices from kit files.** The Load menu now includes entries to load individual drum voices from .kit files without replacing the full drumkit. The name and number shown for a loaded voice reflect the kit it was derived from, even if the voice was subsequently changed by a MIDI bank change.
 
-**Background file loading.** When loading a file, the currently playing pattern and parameters are held in a temporary slot while the load executes in the background. The loaded sound becomes active when the next new pattern is selected. A global menu option controls which file types use background loading.
+**Background file loading.** When loading a file, the currently playing pattern and parameters are held in a temporary slot while the load executes in the background. The loaded sound becomes active when the next new pattern is played. A global menu option controls which file types use background loading.
 
 ---
 
