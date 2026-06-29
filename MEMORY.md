@@ -212,6 +212,7 @@ User-referenced checkpoints:
 | Current comms specs | `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, `knowledge_files/comms_spec_reference/BACKGROUND_LOAD_TEMPORARY.md`, `knowledge_files/comms_spec_reference/MIDI_TABLE.md` |
 | Reference material snapshots | `knowledge_files/reference_material/` |
 | Current known issues and reminders? | `MEMORY.md` |
+| Project introduction for new users and end-user semantics? | `README.md` |
 | Session 003 STM morph move details | `knowledge_files/log_archive/003_SESSION_HANDOFF_LOG.md` |
 | Session 004 temp/background loading closeout | `knowledge_files/log_archive/004_SESSION_HANDOFF_LOG.md` |
 | Session 006 refactor planning details | `knowledge_files/log_archive/006_SESSION_HANDOFF_LOG.md` |
@@ -224,6 +225,22 @@ User-referenced checkpoints:
 | Current background `.pat` / `.prf` / `.all` loading via temporary data | `knowledge_files/log_archive/033_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/028_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md`, `knowledge_files/comms_spec_reference/BACKGROUND_LOAD_TEMPORARY.md` |
 | Current external MIDI CC/NRPN tables | `knowledge_files/log_archive/029_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/MIDI_TABLE.md` |
 | Current sample import and imported-sample playback | `knowledge_files/log_archive/031_SESSION_HANDOFF_LOG.md`, `knowledge_files/log_archive/030_SESSION_HANDOFF_LOG.md`, `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md` |
+
+---
+
+## Hardware Overview
+
+- **Audio/control MCU:** STM32F407 (`mainboard/LxrStm32`) — DSP, sequencer, MIDI, USB
+- **Front-panel MCU:** ATmega644 (`front/LxrAvr`) — LCD, encoders, buttons, LEDs, SD card preset I/O
+- **Inter-MCU link:** UART-based protocol at 500,000 baud (`mainboard/LxrStm32/src/uARTFrontSYX/` on the STM side, `front/LxrAvr/avrComms/` on the AVR side)
+
+### MCU Naming Conventions
+
+STM-side front-panel comms live under `mainboard/LxrStm32/src/uARTFrontSYX/` and use the `frontPanel*` naming. AVR-side comms live under `front/LxrAvr/avrComms/` and use the `avrComms*` / `avrCommsParser*` naming. The terms `frontPanel` and `frontParser` on the AVR side are historical only and should not be used for new code or documentation.
+
+### Encoder
+
+AVR main encoder: Timer1 CTC at ~32.05 kHz, fixed `AB=11` rest phase, six stable-sample phase filter, 192-sample button debounce, narrow rest-jump recovery, edit-mode-only acceleration (1–2 rev/s → 1–4× multiplier). See `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` for the full hardware-approved implementation record. Do not reintroduce legacy read modes, PCINT decoding, or Timer0 encoder sampling.
 
 ---
 
