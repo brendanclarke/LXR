@@ -83,6 +83,8 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 ### Sound / Voice Mode
 
+**Mod wheel controls morph.** On the global MIDI channel, CC1 will change global morph (and update the PERF menu parameter). On individual voice channels, CC1 will control individual voice morph also. The morph value recieved is doubled, except for 127 which is directly mapped to 255 to ensure the full morph kit end points are hit.
+
 **Individual voice morph.** Each drum voice has an independent morph value that blends between the kit parameters and the morph-target parameters for that voice only. Per-voice morph can be set from the PERF menu, by step automation, or by velocity modulation and LFO (see below). Global morph still operates across all voices and overwrites individual per-voice morph values when received.
 
 **One-shot LFO waveforms.** Additional LFO waveforms are available: `si1`, `tr1`, `sq1`, `rmp1`, `rnd1` etc. are one-shot versions of sine, triangle, square, ramp, and noise. There is also a new `xtr`/`xt1` exponential-triangle shape (exponential rise followed immediately by exponential fall). In one-shot mode, the LFO offset control sets a pre-trigger delay; the delay is scaled with rate. The noise one-shot holds a single random value on each retrigger. The rect one-shot is phase-inverted so it can be immediately on and then off, with the offset delay setting an off portion at the start if desired.
