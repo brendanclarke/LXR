@@ -91,11 +91,11 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **Per-voice MIDI CC assignments.** Individual voice MIDI channels now have direct CC mappings without needing NRPN, covering all voice parameters. The global channel takes precedence: global CC1 is morph (Mod Wheel), and global CC2-127 route through the global CC table. See `knowledge_files/comms_spec_reference/MIDI_TABLE.md` for the full assignment table.
 
-**Per-voice morph as automation target.** Individual voice morph is available as a velocity modulation target and as an LFO modulation target. LFO-to-voice-morph modulates between the current per-voice morph value (at zero depth) and the morph kit value (at full depth).
+**Per-voice morph as automation target.** Individual voice morph is available as a velocity modulation target and as an LFO modulation target. Velocity modulation sets the per-voice morph value once per trigger in the same way as step automation or from the PERF menu, and will cause a visible update to the PERF menu. LFO-to-voice-morph works differently: it modulates between the current per-voice morph value, which is visible on the PERF menu, and the morph kit value at full depth modulation depth.
 
 **Samples imported as one-shot or loops.** Samples added to the 'SAMPLES' folder in the SD card are imported as one-shot. Samples in the 'LOOPS' folder always play looped. 248 Max samples; there should be about 300k free, there should be a warning if either limit is exceeded. 
 
-**Oscillator Wave Interpolation.** A global setting toggles a dynamically-assigned slot to interpolate across waveforms when a modulator changes the waveform of one of the primary oscillators of a drum voice. 
+**Oscillator Wave Interpolation.** A global setting toggles a dynamically-assigned slot to interpolate across waveforms when a modulator changes the waveform of one of the primary oscillators of a drum voice. This applies only to the primary oscillator (not the FM oscillators) of the drum vocies.
 
 ---
 
@@ -105,7 +105,7 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **Rolls recordable in three modes.** Rolls can be recorded as full (pitch and velocity), note (pitch) only, or velocity only, giving more control over how roll content lands in the sequencer.
 
-**Individual voice morph in PERF menu.** Each voice has a morph control directly accessible from the PERF page, displayed and settable in full 0–255 range. Per-voice step automation and velocity automation will update these values in realtime. LFO modulation will not.
+**Individual voice morph in PERF menu.** Each voice has a morph control directly accessible from the PERF page, displayed and settable in full 0–255 range. Per-voice step automation and velocity automation will update these values in realtime. LFO modulation will not. Changing global morph will update all per-voice morph values. 
 
 **Track transpose.** A track transpose function is available as a SHIFT function on the PERF menu.
 
@@ -113,15 +113,13 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **Per-track pattern assignment.** Individual tracks can be set to follow different patterns: hold a VOICE button and press a pattern button to assign that track to a different pattern source independently of the other tracks.
 
-**Looper.** SEQ buttons 9–16 provide looper functionality in PERF mode. Button 10 sets the longest length (64 sub-steps, 1/2 Bar), halving at each button to 16 (1 sub-step or 1/64th). Holding button 9 in addition 'dots' the loop length, adding 50% to the last loop button held. Releasing all loop buttons returns the sequencer to the position it would have reached without looping immediately.
+**Looper.** SEQ buttons 9–16 provide looper functionality in PERF mode. Button 10 sets the longest length (64 sub-steps, 1/2 Bar), halving at each button to 16 (1 sub-step or 1/64th). Holding button 9 in addition 'dots' the loop length, adding 50% to the last loop button held. Releasing all loop buttons immediately returns the sequencer to the position it would have reached without looping engaged.
 
 ---
 
 ### Sequencer / Step Mode
 
 **Copy step, copy sub-step, copy single-voice track between patterns.** Main sequencer steps and sub-steps can be copied individually within the track of a pattern. To copy a single voice track between patterns: view the source pattern, hold COPY, press the source track (voice) button, then press the destination pattern button.
-
-**Voice load from kit via step automation.** Individual drum voices can be changed by step automation targeting a Bank MSB (CC0) value, letting you swap a single drum sound mid-pattern from within the sequencer without a full kit change.
 
 **Automation-only steps (velocity 0).** When a step's velocity is set to 0, it does not retrigger the voice envelope but still plays back any automation recorded on that step. This works like a 'trigless lock' — useful for parameter movement without changing envelope states.
 
@@ -135,11 +133,11 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 ### File / Load-Save Mode
 
-**Version number for kit files.** Kit files now carry a version number. The .prf and .all file format has been incremented to version 3 to include morph target parameters. Previous versions load with an empty morph target and are re-saved as the new type.
+**File format updates.** .prf and .all files now include morph endpoint targets when re-saved. All files now carry a version number to track changes.
 
 **Reload kit from snapshot.** Pressing SHIFT+PLAY reverts all voice parameters to their state at the last file load, discarding any live edits made to the parameters.
 
-**Load a kit by MIDI bank change.** Sending a Bank MSB (CC0) message on the global MIDI channel loads the corresponding .kit file. Individual drum voices can also be changed by sending Bank MSB on their individual MIDI channels.
+**Load a kit by MIDI bank change.** Sending a Bank MSB (CC0) message on the global MIDI channel loads the corresponding .kit file. Individual drum voices can also be changed by sending Bank MSB on their individual MIDI channels. This can selectively be changed to load a .prf file instead with the option below. 
 
 **Load a performance file by MIDI bank change.** A global menu option switches Bank MSB (CC0) messages on the global channel from loading .kit files to loading .prf (performance) files, which include the full drum kit, pattern set, BPM, and morph target.
 
@@ -147,7 +145,7 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **Load individual drum voices from kit files.** The Load menu now includes entries to load individual drum voices from .kit files without replacing the full drumkit. The name and number shown for a loaded voice reflect the kit it was derived from, even if the voice was subsequently changed by a MIDI bank change.
 
-**Background file loading.** When loading a file, the currently playing pattern and parameters are held in a temporary slot while the load executes in the background. The loaded sound becomes active when the next new pattern is played. A global menu option controls which file types use background loading.
+**Background file loading.** When loading a file, the currently playing pattern and parameters are held in a temporary slot while the load executes in the background. The loaded sound becomes active when the next new pattern is played. A global menu option controls which file types use background loading. This also affects how .prf files are loaded by MIDI bank change (CC0), if that option is selected. 
 
 ---
 
