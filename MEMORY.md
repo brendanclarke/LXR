@@ -8,9 +8,6 @@ Read it fully at the start of every session before touching any code.
 ## Quick Start
 
 ```bash
-# Repository root (confirmed)
-cd /Users/bc/LXR01/LXR-current/LXR
-
 # Build
 make clean
 make firmware
@@ -21,7 +18,7 @@ make firmware
 # - firmware image/FIRMWARE.BIN
 ```
 
-**Current working source**: repository root, branch `dev-realign-reload`.
+**Current working source**: repository root, branch `master`.
 
 **Canonical comms naming**: STM-side front-panel comms live under `mainboard/LxrStm32/src/uARTFrontSYX/` and keep the `frontPanel*` naming. AVR-side comms live under `front/LxrAvr/avrComms/` and use the `avrComms*` and `avrCommsParser*` naming. On the AVR side, `frontPanel` and `frontParser` are historical terminology only and should not be used for new code or docs.
 
