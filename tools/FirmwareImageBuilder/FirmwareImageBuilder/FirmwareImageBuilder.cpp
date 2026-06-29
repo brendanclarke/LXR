@@ -178,18 +178,22 @@ int main(int argc, char* argv[])
 
 	cout << "offset after STM: " << bytesWritten << endl;
 
-	//zero padding to get full code page
-	/*
-	float usedPages = cortexCodeSize/128.f;
-	int restForFullPage = (usedPages-floor(usedPages))*128;
-
-	for(int i=0;i<restForFullPage;i++)
+	// The AVR bootloader tracks file progress in mixed units (SPM_PAGESIZE in the
+	// AVR section, 512 in the CORTEX section), which leaves fileParser_bytesRead
+	// permanently 256 bytes behind the real read position after the AVR section.
+	// The success check (fileParser_bytesRead >= filesize) only fires when
+	// filesize % 512 is in [1, 256]. We target remainder 256 exactly, which is
+	// provably exact for any firmware size: pad with zeros until bytesWritten % 512 == 256.
+	// The STM32 flash is erased before writing, so these trailing zeros are harmless.
+	int tailPad = (256 - (bytesWritten % 512) + 512) % 512;
+	cout << "tail padding for bootloader success check: " << tailPad << " bytes" << endl;
+	for(int i=0; i<tailPad; i++)
 	{
 		char data = 0;
 		output << data;
+		bytesWritten++;
 	}
-	*/
-
+	cout << "final file size: " << bytesWritten << " (" << bytesWritten/512.f << " blocks, mod512=" << bytesWritten%512 << ")" << endl;
 
 	//finish
 	input.close();
