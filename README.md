@@ -247,34 +247,4 @@ For a running session index and keyword lookup: `knowledge_files/log_archive/000
         ├── FirmwareImageBuilder.exe    ← pre-built Windows binary
         └── makeFirmware.bat
 ```
-
-### Where to look for things
-
-| Question | File |
-|----------|------|
-| Which session introduced a fix? | `knowledge_files/log_archive/000_SESSION_INDEX.md` |
-| Full details of a fix or decision? | `knowledge_files/log_archive/0xx_SESSION_HANDOFF_LOG.md` |
-| Handoff log template | `knowledge_files/SESSION_HANDOFF_TEMPLATE.md` |
-| Confirmed hardware pin / IRQ details | `knowledge_files/hardware_archive/front/` and `knowledge_files/hardware_archive/main/` |
-| Inter-MCU comms protocol | `knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md` |
-| Background file load spec | `knowledge_files/comms_spec_reference/BACKGROUND_LOAD_TEMPORARY.md` |
-| External MIDI CC/NRPN table | `knowledge_files/comms_spec_reference/MIDI_TABLE.md` |
-| Current known issues and reminders | `MEMORY.md` |
-
----
-
-## Hardware Overview
-
-- **Audio/control MCU:** STM32F407 (`mainboard/LxrStm32`) — DSP, sequencer, MIDI, USB
-- **Front-panel MCU:** ATmega644 (`front/LxrAvr`) — LCD, encoders, buttons, LEDs, SD card preset I/O
-- **Inter-MCU link:** UART-based protocol at 500,000 baud (`mainboard/LxrStm32/src/uARTFrontSYX/` on the STM side, `front/LxrAvr/avrComms/` on the AVR side)
-
-### MCU Naming Conventions
-
-STM-side front-panel comms live under `mainboard/LxrStm32/src/uARTFrontSYX/` and use the `frontPanel*` naming. AVR-side comms live under `front/LxrAvr/avrComms/` and use the `avrComms*` / `avrCommsParser*` naming. The terms `frontPanel` and `frontParser` on the AVR side are historical only and should not be used for new code or documentation.
-
-### Encoder
-
-AVR main encoder: Timer1 CTC at ~32.05 kHz, fixed `AB=11` rest phase, six stable-sample phase filter, 192-sample button debounce, narrow rest-jump recovery, edit-mode-only acceleration (1–2 rev/s → 1–4× multiplier). See `knowledge_files/log_archive/019_SESSION_HANDOFF_LOG.md` for the full hardware-approved implementation record. Do not reintroduce legacy read modes, PCINT decoding, or Timer0 encoder sampling.
-
 ---
