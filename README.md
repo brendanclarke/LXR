@@ -20,7 +20,7 @@ Many thanks to Rudeog for bug fixes and features in versions 0.26 and 0.33, to P
 
 ### Reporting Bugs
 
-If you encounter a bug, have an idea for a feature, or make something unusual with this firmware, please let us know on the (Discord server!)[https://discord.gg/sWjGWuavUX]
+If you encounter a bug, have an idea for a feature, or make something unusual with this firmware, please let us know on the [https://discord.gg/sWjGWuavUX](Discord server!)
 
 ---
 
