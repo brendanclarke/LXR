@@ -77,6 +77,8 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **SHIFT as toggle.** A global menu option makes the SHIFT button a toggle rather than momentary. This is useful for step editing workflows where you need SHIFT to remain active across multiple button presses.
 
+**Encoder acceleration.** The encoder reading algorithm is updated and includes an acceleration implementation. By default this goes up to x4, but can be changed in config.h. **NB:** The firmware only supports 4-phase per detent encoders at the moment. I think this should be the vast majority of the kits out there in existence, but the original LXR had code to handle other cases too. If you have a 1-phase per detent or 2-phase per detent encoder, let me know and I'll port those over to the new implementation as best I can.
+
 ---
 
 ### Sound / Voice Mode
