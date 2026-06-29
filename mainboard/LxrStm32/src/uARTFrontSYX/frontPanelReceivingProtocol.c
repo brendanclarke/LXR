@@ -84,10 +84,107 @@ static uint8_t comm_flowChannel = 0;
 static uint8_t comm_flowBudgetRemaining = 0;
 static uint8_t frontParser_backgroundSwapPending = 0;
 static uint8_t frontParser_backgroundSwapFileType = 0;
+static uint8_t frontParser_backgroundSwapPrepared = 0;
+static uint8_t frontParser_backgroundSwapPreparedType = 0;
 static uint8_t frontParser_backgroundSwapAckDelayActive = 0;
 static uint32_t frontParser_backgroundSwapStartTick = 0;
 static uint8_t frontParser_fileLoadIngressActive = 0;
 static uint8_t frontParser_fileLoadBracketActive = 0;
+static uint8_t frontParser_fileLoadEndpointMode = PRESET_KIT_ENDPOINT_BOTH;
+static uint8_t frontParser_fileLoadMirrorToTmp = 0;
+static uint8_t frontParser_fileLoadPreserveTempPreset = 0;
+/* SHIFT+PERF edits use the temporary pattern slot as a one-visit backup for
+   each touched track. This state records whether the current Euclid page
+   visit is active, which normal pattern it is editing, and which tracks have
+   already been snapshotted so we only copy once per track until the user
+   leaves the page or explicitly re-selects it to restore. */
+static uint8_t frontParser_euklidSnapshotVisitActive = 0;
+static uint8_t frontParser_euklidSnapshotTrackMask = 0;
+static uint8_t frontParser_euklidSnapshotPattern = 0;
+static uint8_t frontParser_euklidSnapshotSteps[NUM_TRACKS];
+static uint8_t frontParser_euklidSnapshotRotation[NUM_TRACKS];
+static uint8_t frontParser_euklidSnapshotSubStepRotation[NUM_TRACKS];
+
+static void frontParser_beginEuklidSnapshotVisit(void)
+{
+   uint8_t pattern = pat_normalizePatternNumber(frontParser_shownPattern);
+
+   frontParser_euklidSnapshotVisitActive = (pattern != SEQ_TMP_PATTERN);
+   frontParser_euklidSnapshotTrackMask = 0;
+   frontParser_euklidSnapshotPattern = pattern;
+}
+
+static void frontParser_endEuklidSnapshotVisit(void)
+{
+   frontParser_euklidSnapshotVisitActive = 0;
+   frontParser_euklidSnapshotTrackMask = 0;
+   frontParser_euklidSnapshotPattern = 0;
+}
+
+static void frontParser_snapshotEuklidTrackIfNeeded(uint8_t trackNr)
+{
+   uint8_t trackBit;
+
+   if(trackNr >= NUM_TRACKS)
+      return;
+   if(!frontParser_euklidSnapshotVisitActive)
+      return;
+   if(frontParser_euklidSnapshotPattern == SEQ_TMP_PATTERN)
+      return;
+
+   trackBit = (uint8_t)(0x01u << trackNr);
+   if(frontParser_euklidSnapshotTrackMask & trackBit)
+      return;
+
+   /* The first Euclid/rotation edit to a track during one SHIFT+PERF visit
+      must preserve the pre-edit track image in the temp pattern slot. Later
+      edits in the same visit must reuse that same backup instead of
+      overwriting it, so the copy and the cached Euclid UI values are captured
+      exactly once here before any mutation reaches the normal track. */
+   pat_copyTrackPattern(trackNr, SEQ_TMP_PATTERN, frontParser_euklidSnapshotPattern);
+   frontParser_euklidSnapshotSteps[trackNr] = euklid_getSteps(trackNr);
+   frontParser_euklidSnapshotRotation[trackNr] = euklid_getRotation(trackNr);
+   frontParser_euklidSnapshotSubStepRotation[trackNr] = euklid_getSubStepRotation(trackNr);
+   frontParser_euklidSnapshotTrackMask |= trackBit;
+}
+
+static void frontParser_restoreEuklidSnapshotTracks(void)
+{
+   uint8_t track;
+
+   if(!frontParser_euklidSnapshotVisitActive)
+      return;
+   if(frontParser_euklidSnapshotPattern == SEQ_TMP_PATTERN)
+   {
+      frontParser_euklidSnapshotTrackMask = 0;
+      return;
+   }
+
+   /* Re-selecting SHIFT+PERF during the same visit is a rollback request, not
+      a page-navigation request. Every track backed up during this visit is
+      restored from temp to the normal pattern so the user gets the exact
+      pre-edit track image and cached Euclid page values back in one action. */
+   for(track = 0; track < NUM_TRACKS; track++)
+   {
+      if(frontParser_euklidSnapshotTrackMask & (uint8_t)(0x01u << track))
+      {
+         pat_copyTrackPattern(track, frontParser_euklidSnapshotPattern, SEQ_TMP_PATTERN);
+         euklid_restoreTrackState(track,
+                                  frontParser_euklidSnapshotPattern,
+                                  frontParser_euklidSnapshotSteps[track],
+                                  frontParser_euklidSnapshotRotation[track],
+                                  frontParser_euklidSnapshotSubStepRotation[track]);
+      }
+   }
+
+   frontParser_euklidSnapshotTrackMask = 0;
+
+   frontParser_activeFrontTrack = frontParser_activeTrack;
+   frontPanelSending_updateTrackLeds(frontParser_activeTrack,
+                                     frontParser_euklidSnapshotPattern,
+                                     frontParser_activeStep);
+   frontPanelSending_sendEuklidParamsReply(frontParser_activeTrack);
+}
 
 static void frontParser_beginFileLoadIngress(uint8_t bracketed)
 {
@@ -103,6 +200,9 @@ static void frontParser_endFileLoadIngress(void)
 {
    frontParser_fileLoadIngressActive = 0;
    frontParser_fileLoadBracketActive = 0;
+   frontParser_fileLoadMirrorToTmp = 0;
+   frontParser_fileLoadPreserveTempPreset = 0;
+   frontParser_fileLoadEndpointMode = PRESET_KIT_ENDPOINT_BOTH;
    preset_setIngressTarget(SEQ_PARAM_INGRESS_CURRENT_IMAGE);
    preset_setAutomationIngressTarget(SEQ_AUTOMATION_INGRESS_NONE);
 }
@@ -1231,6 +1331,37 @@ static uint8_t frontParser_backgroundSwapTempPlaybackReady(void)
    return preset_allVoiceSourcesUseTmp();
 }
 
+static uint8_t frontParser_fileLoadHasPresetEndpoints(uint8_t fileType)
+{
+   return fileType != FRONT_FILE_DONE_TYPE_PATTERN;
+}
+
+static uint8_t frontParser_fileLoadShouldPreserveTempPreset(uint8_t fileType)
+{
+   return frontParser_backgroundSwapPrepared
+       && (frontParser_backgroundSwapPreparedType == fileType)
+       && ((fileType == FRONT_FILE_DONE_TYPE_PERFORMANCE)
+        || (fileType == FRONT_FILE_DONE_TYPE_ALL));
+}
+
+static void frontParser_mirrorNormalPresetEndpointsToTmp(uint8_t endpointMode)
+{
+   /* Ordinary loads mirror the loaded endpoint subset straight into temp so
+      temporary storage always stays the authoritative “last loaded preset”
+      image. Protected .prf/.all background loads are the only exception. */
+   preset_setEndpointIngressSuppressed(1);
+   preset_copyKitEndpoints(&preset_tmpKitState,
+                           &preset_normalKitState,
+                           endpointMode);
+   preset_setEndpointIngressSuppressed(0);
+   preset_invalidateLiveMorphApplyCache(PRESET_MORPH_IMAGE_TMP);
+   preset_tempPlaybackSwitchState.resnapshotTmpFromNormalPending = 0;
+   preset_setTempPresetPlaybackActive(0);
+
+   if(preset_isTmpKitActive() || !preset_allVoiceSourcesUseNormal())
+      preset_reapplyCurrentPlaybackSources();
+}
+
 void frontParser_serviceBackgroundSwapAck(void)
 {
    if(!frontParser_backgroundSwapPending)
@@ -1313,7 +1444,12 @@ void frontParser_parseUartData(unsigned char data)
       }
       else if(data==PATCH_RESET)
       {
-         seq_newVoiceAvailable=0x7f;
+         /* AVR performs a UI-level disable for SHIFT+PLAY, but STM remains the
+            authoritative guard. If temp preset playback is still the active
+            sound source, ignore PATCH_RESET here so a stale front-panel state
+            cannot trigger a forbidden temp->normal restore. PATCH_RESET stays
+            on the wire, but its meaning is now an STM-owned storage restore. */
+         (void)preset_reloadNormalFromTemporaryPreset();
       }
       else if(data==FRONT_CALLBACK_ACK)
       {
@@ -2165,6 +2301,7 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN:
       {
          uint8_t endpointMode = frontParser_command.data2;
+         frontParser_fileLoadEndpointMode = endpointMode;
 
          /* RESTORE: Switch ingress target to normal kit endpoint buffer.
             Subsequent parameter and target messages will populate preset_normalKitState endpoint images.
@@ -2207,6 +2344,8 @@ static void frontParser_handleSeqCC()
 
       case FRONT_SEQ_TMP_KIT_ENDPOINT_END:
          preset_applyNormalEndpointAutomationTargets();
+         if(frontParser_fileLoadMirrorToTmp)
+            frontParser_mirrorNormalPresetEndpointsToTmp(frontParser_fileLoadEndpointMode);
 
          /* RESTORE: Switch ingress target back to the surrounding context. During
             file load, endpoint dumps are nested inside normal kit-endpoint ingress. */
@@ -2273,7 +2412,37 @@ static void frontParser_handleSeqCC()
          
       case FRONT_SEQ_EUKLID_RESET:
          {
-            euklid_clearRotation();
+         /* `FRONT_SEQ_EUKLID_RESET` now multiplexes legacy file-load cache
+            clears and the explicit SHIFT+PERF page-visit control. Reusing the
+            existing opcode avoids another transport command while still giving
+            the STM an exact begin/leave/restore signal for temp-track
+            snapshots on the Euclid page. */
+            switch(frontParser_command.data2)
+            {
+               case FRONT_SEQ_EUKLID_RESET_CLEAR_ROTATION:
+                  euklid_clearRotation();
+                  frontParser_endEuklidSnapshotVisit();
+                  break;
+
+               case FRONT_SEQ_EUKLID_RESET_BEGIN_VISIT:
+                  frontParser_beginEuklidSnapshotVisit();
+                  break;
+
+               case FRONT_SEQ_EUKLID_RESET_END_VISIT:
+                  /* Leaving SHIFT+PERF commits the current normal-pattern
+                     edits by discarding the per-visit temp-backup bookkeeping.
+                     Returning later must start a fresh snapshot cycle, so the
+                     old touched-track mask cannot survive across page exits. */
+                  frontParser_endEuklidSnapshotVisit();
+                  break;
+
+               case FRONT_SEQ_EUKLID_RESET_RESTORE_VISIT:
+                  frontParser_restoreEuklidSnapshotTracks();
+                  break;
+
+               default:
+                  break;
+            }
          }
          break;
    
@@ -2282,6 +2451,12 @@ static void frontParser_handleSeqCC()
             uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_command.data2&0x07);
             uint8_t length 	= frontParser_command.data2 >> 3;
             length += 1;
+         /* Every Euclid-page mutation shares the same contract: preserve the
+            untouched normal track in temp before the first edit of this visit,
+            then mutate only the normal track until the user either leaves the
+            page or explicitly re-selects SHIFT+PERF to restore from the saved
+            temp copies. */
+            frontParser_snapshotEuklidTrackIfNeeded(frontParser_activeTrack);
             euklid_setLength(frontParser_activeTrack, pattern, length);
             frontParser_activeFrontTrack = frontParser_activeTrack;
             frontPanelSending_updateTrackLeds(frontParser_activeTrack, pattern, frontParser_activeStep);
@@ -2293,7 +2468,7 @@ static void frontParser_handleSeqCC()
             uint8_t steps 	= frontParser_command.data2 >> 3;
             steps += 1;
             uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_command.data2 & 0x7);
-         
+            frontParser_snapshotEuklidTrackIfNeeded(frontParser_activeTrack);
             euklid_setSteps(frontParser_activeTrack,steps,pattern);
             frontParser_activeFrontTrack = frontParser_activeTrack;
             frontPanelSending_updateTrackLeds(frontParser_activeTrack, pattern, frontParser_activeStep);
@@ -2305,7 +2480,7 @@ static void frontParser_handleSeqCC()
             uint8_t rotation = frontParser_command.data2 >> 3;
          //rotation += 1;
             uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_command.data2 & 0x7);
-         
+            frontParser_snapshotEuklidTrackIfNeeded(frontParser_activeTrack);
             euklid_setRotation(frontParser_activeTrack,rotation,pattern);
             frontParser_activeFrontTrack = frontParser_activeTrack;
             frontPanelSending_updateTrackLeds(frontParser_activeTrack, pattern, frontParser_activeStep);
@@ -2317,7 +2492,7 @@ static void frontParser_handleSeqCC()
             uint8_t rotation = frontParser_command.data2 >> 3;
          //rotation += 1;
             uint8_t pattern = (frontParser_shownPattern == SEQ_TMP_PATTERN) ? SEQ_TMP_PATTERN : (frontParser_command.data2 & 0x7);
-         
+            frontParser_snapshotEuklidTrackIfNeeded(frontParser_activeTrack);
             euklid_setSubStepRotation(frontParser_activeTrack,rotation,pattern);
             frontParser_activeFrontTrack = frontParser_activeTrack;
             frontPanelSending_updateTrackLeds(frontParser_activeTrack, pattern, frontParser_activeStep);
@@ -2662,12 +2837,34 @@ static void frontParser_handleSeqCC()
          preset_tempPlaybackSwitchState.forceInstantSwitch = 1;
          preset_tempPlaybackSwitchState.patternOnlyTempPlayback =
             (frontParser_command.data2 == FRONT_FILE_DONE_TYPE_PATTERN);
+         frontParser_backgroundSwapPrepared = 1;
+         frontParser_backgroundSwapPreparedType = frontParser_command.data2;
          frontParser_backgroundSwapPending = 1;
          frontParser_backgroundSwapFileType = frontParser_command.data2;
          frontParser_backgroundSwapAckDelayActive = 0;
          break;
       case FRONT_SEQ_FILE_BEGIN:
          frontParser_beginFileLoadIngress(1);
+         frontParser_fileLoadMirrorToTmp = 0;
+         frontParser_fileLoadPreserveTempPreset = 0;
+         if(frontParser_fileLoadHasPresetEndpoints(frontParser_command.data2))
+         {
+            if(frontParser_fileLoadShouldPreserveTempPreset(frontParser_command.data2))
+            {
+               /* Protected .prf/.all background loads intentionally do not
+                  mirror into temp while the file bytes are arriving. Temp is
+                  still the audible old sound and only becomes the new snapshot
+                  after playback later returns to normal. */
+               frontParser_fileLoadPreserveTempPreset = 1;
+               preset_tempPlaybackSwitchState.resnapshotTmpFromNormalPending = 1;
+               preset_setTempPresetPlaybackActive(1);
+            }
+            else
+            {
+               frontParser_fileLoadMirrorToTmp = 1;
+            }
+         }
+         frontParser_backgroundSwapPrepared = 0;
          if((frontParser_command.data2 == FRONT_FILE_DONE_TYPE_PERFORMANCE)
             || (frontParser_command.data2 == FRONT_FILE_DONE_TYPE_ALL))
          {
@@ -2683,6 +2880,8 @@ static void frontParser_handleSeqCC()
             preset_morphLoadDisabled = 0;
             preset_vMorphFlag = 0;
          }
+         frontParser_fileLoadMirrorToTmp = 0;
+         frontParser_fileLoadPreserveTempPreset = 0;
          seq_voicesLoading=0;
          frontParser_endFileLoadIngress();
          break;

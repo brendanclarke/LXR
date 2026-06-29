@@ -149,7 +149,9 @@ void frontPanelSending_sendParameterEcho(uint16_t paramNr, uint8_t value)
 
 void frontPanelSending_sendPatchReset(void)
 {
-   /* Patch reset is mirrored as a SysEx packet. */
+   /* Legacy outbound compatibility helper only. PATCH_RESET now belongs to the
+      AVR->STM reload path and must not be used to trigger AVR-side snapshot
+      restore behavior. */
    frontPanelSending_sendSysExByte(PATCH_RESET);
 }
 

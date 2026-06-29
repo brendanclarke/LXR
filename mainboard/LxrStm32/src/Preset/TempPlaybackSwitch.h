@@ -32,6 +32,8 @@ typedef struct PresetTempPlaybackSwitchStateStruct
    uint8_t forceInstantSwitch;
    uint8_t tmpBoundaryPatternSwitchAck;
    uint8_t patternOnlyTempPlayback;
+   uint8_t tempPresetPlaybackActive;
+   uint8_t resnapshotTmpFromNormalPending;
 } PresetTempPlaybackSwitchState;
 
 extern PresetTempPlaybackSwitchState preset_tempPlaybackSwitchState;
@@ -53,6 +55,25 @@ uint8_t preset_allVoiceSourcesUseTmp(void);
 
 /* Reports whether every voice source currently points at the normal image. */
 uint8_t preset_allVoiceSourcesUseNormal(void);
+/* Background temp playback has two materially different forms: pattern-only
+   temp playback for .pat, and preset-carrying temp playback for protected
+   .prf/.all loads. Reload gating and temp resnapshot timing depend on that
+   distinction, so it lives in the canonical temp-switch state. */
+uint8_t preset_isTempPresetPlaybackActive(void);
+void preset_setTempPresetPlaybackActive(uint8_t active);
+/* Replay the currently selected normal/tmp source combination to the live DSP.
+   Callers use this after PATCH_RESET restores or after a temp image is mirrored
+   immediately while temp preset playback is still the audible source. */
+void preset_reapplyCurrentPlaybackSources(void);
+/* PATCH_RESET is an STM-owned storage restore. It copies the authoritative
+   temporary preset endpoint image back into normal storage and reapplies the
+   normal image because normal is the live source whenever this command is
+   allowed to run. */
+uint8_t preset_reloadNormalFromTemporaryPreset(void);
+/* Once playback has returned to normal after a protected .prf/.all background
+   load, temp must stop holding the old sound and become the new last-loaded
+   preset snapshot again. */
+void preset_resnapshotTemporaryPresetFromNormal(void);
 
 /* Updates the per-voice source state after a pattern change and optionally
    pushes any affected endpoint changes to the AVR restore queue. */

@@ -141,7 +141,15 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define FRONT_SEQ_TRACK_ROTATION		   0x34	// rotate a track start position
 #define FRONT_SEQ_EUKLID_ROTATION		0x35	// set Euclid rotation
 #define FRONT_SEQ_EUKLID_SUBSTEP_ROTATION 0x46	// set Euclid sub-step rotation
-#define FRONT_SEQ_EUKLID_RESET         0x47	// reset Euclid pattern state
+#define FRONT_SEQ_EUKLID_RESET         0x47	// reset Euclid state / SHIFT+PERF temp-track snapshot control
+/* `data2` values for FRONT_SEQ_EUKLID_RESET.
+   0x01 is the legacy cache-clear used by file operations.
+   The remaining values control one SHIFT+PERF visit: begin a snapshot window,
+   end/commit it on page leave, or restore the tracks touched during it. */
+#define FRONT_SEQ_EUKLID_RESET_CLEAR_ROTATION 0x01
+#define FRONT_SEQ_EUKLID_RESET_BEGIN_VISIT    0x02
+#define FRONT_SEQ_EUKLID_RESET_END_VISIT      0x03
+#define FRONT_SEQ_EUKLID_RESET_RESTORE_VISIT  0x04
 
 #define FRONT_SEQ_TRIGGER_IN_PPQ		   0x36	// input clock prescaler
 #define FRONT_SEQ_TRIGGER_OUT1_PPQ 		0x37	// trigger output 1 prescaler

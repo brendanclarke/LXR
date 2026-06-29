@@ -18,6 +18,7 @@
  */
 
 #include "Preset/KitState.h"
+#include "Preset/MorphEngine.h"
 #include <string.h>
 
 /* The temporary kit image is the dedicated storage block for temp-pattern
@@ -34,6 +35,65 @@ uint8_t preset_tmpKitActive = 0;
 /* Each synth voice keeps a tiny source marker so per-voice parameter writes can
    decide whether they belong in the temp image or the normal image. */
 uint8_t preset_voiceSourceState[PRESET_SYNTH_VOICES];
+
+static void preset_copyFullKitState(PresetKitState *dst, const PresetKitState *src)
+{
+   if(!dst || !src)
+      return;
+
+   memcpy(dst->kitEndpointParams, src->kitEndpointParams, END_OF_SOUND_PARAMETERS);
+   memcpy(dst->morphEndpointParams, src->morphEndpointParams, END_OF_SOUND_PARAMETERS);
+   memcpy(dst->interpolatedParams, src->interpolatedParams, END_OF_SOUND_PARAMETERS);
+   memcpy(&dst->frontPanelAutomationTargets,
+          &src->frontPanelAutomationTargets,
+          sizeof(dst->frontPanelAutomationTargets));
+   memcpy(&dst->morphParameterEndpointAutomationTargets,
+          &src->morphParameterEndpointAutomationTargets,
+          sizeof(dst->morphParameterEndpointAutomationTargets));
+   memcpy(&dst->interpolatedAutomationTargets,
+          &src->interpolatedAutomationTargets,
+          sizeof(dst->interpolatedAutomationTargets));
+   dst->globalMorphAmount = src->globalMorphAmount;
+   memcpy(dst->voiceMorphBaseAmount, src->voiceMorphBaseAmount, PRESET_SYNTH_VOICES);
+   memcpy(dst->voiceMorphAmount, src->voiceMorphAmount, PRESET_SYNTH_VOICES);
+   dst->valid = src->valid;
+}
+
+static void preset_refreshInterpolatedParamsFromEndpoints(PresetKitState *kit)
+{
+   uint16_t param;
+
+   if(!kit)
+      return;
+
+   for(param=0; param<END_OF_SOUND_PARAMETERS; param++)
+   {
+      uint8_t voiceMask = preset_voiceMaskForParameter(param);
+
+      /* Temporary preset storage now doubles as the canonical “last loaded
+         preset” image. Rebuild the interpolated cache from endpoint bytes here
+         so later PATCH_RESET restores do not depend on whichever image happened
+         to be live when the snapshot was refreshed. */
+      if(preset_isAutomationTargetSelectorParam(param)
+         || preset_isMorphAmountParam(param)
+         || !voiceMask)
+      {
+         kit->interpolatedParams[param] = kit->kitEndpointParams[param];
+      }
+      else
+      {
+         uint8_t synthVoice = preset_firstVoiceForMask(voiceMask);
+
+         if(synthVoice >= PRESET_SYNTH_VOICES)
+            kit->interpolatedParams[param] = kit->kitEndpointParams[param];
+         else
+            kit->interpolatedParams[param] =
+               preset_interpolateMorphValue(kit->kitEndpointParams[param],
+                                            kit->morphEndpointParams[param],
+                                            kit->voiceMorphAmount[synthVoice]);
+      }
+   }
+}
 
 /* Returns the kit image that current-image ingress should target right now.
    The function reads `preset_tmpKitActive` and then hands back either
@@ -108,31 +168,42 @@ void preset_setVoiceSourceState(uint8_t synthVoice, uint8_t sourceState)
    rather than the sequencer or parser. */
 void preset_captureTmpKitState(void)
 {
-   memcpy(preset_tmpKitState.kitEndpointParams,
-          preset_normalKitState.kitEndpointParams,
-          END_OF_SOUND_PARAMETERS);
-   memcpy(preset_tmpKitState.morphEndpointParams,
-          preset_normalKitState.morphEndpointParams,
-          END_OF_SOUND_PARAMETERS);
-   memcpy(preset_tmpKitState.interpolatedParams,
-          preset_normalKitState.interpolatedParams,
-          END_OF_SOUND_PARAMETERS);
-   memcpy(&preset_tmpKitState.frontPanelAutomationTargets,
-          &preset_normalKitState.frontPanelAutomationTargets,
-          sizeof(preset_tmpKitState.frontPanelAutomationTargets));
-   memcpy(&preset_tmpKitState.morphParameterEndpointAutomationTargets,
-          &preset_normalKitState.morphParameterEndpointAutomationTargets,
-          sizeof(preset_tmpKitState.morphParameterEndpointAutomationTargets));
-   memcpy(&preset_tmpKitState.interpolatedAutomationTargets,
-          &preset_normalKitState.interpolatedAutomationTargets,
-          sizeof(preset_tmpKitState.interpolatedAutomationTargets));
-   preset_tmpKitState.globalMorphAmount = preset_normalKitState.globalMorphAmount;
-   memcpy(preset_tmpKitState.voiceMorphBaseAmount,
-          preset_normalKitState.voiceMorphBaseAmount,
-          PRESET_SYNTH_VOICES);
-   memcpy(preset_tmpKitState.voiceMorphAmount,
-          preset_normalKitState.voiceMorphAmount,
-          PRESET_SYNTH_VOICES);
-
+   preset_copyFullKitState(&preset_tmpKitState, &preset_normalKitState);
    preset_tmpKitState.valid = 1;
+}
+
+void preset_copyKitEndpoints(PresetKitState *dst,
+                             const PresetKitState *src,
+                             uint8_t endpointMode)
+{
+   if(!dst || !src)
+      return;
+
+   /* Partial file loads need partial snapshot copies:
+      .snd/instrument loads refresh only the kit/front endpoint image, morph
+      loads refresh only the morph endpoint image, and .prf/.all refresh both.
+      Morph amounts remain live performance state, so this helper copies the
+      loaded endpoint subsets without overwriting the destination morph-amount
+      controls. */
+   if(endpointMode != PRESET_KIT_ENDPOINT_MORPH_ONLY)
+   {
+      memcpy(dst->kitEndpointParams, src->kitEndpointParams, END_OF_SOUND_PARAMETERS);
+      memcpy(&dst->frontPanelAutomationTargets,
+             &src->frontPanelAutomationTargets,
+             sizeof(dst->frontPanelAutomationTargets));
+      memcpy(&dst->interpolatedAutomationTargets,
+             &src->interpolatedAutomationTargets,
+             sizeof(dst->interpolatedAutomationTargets));
+   }
+
+   if(endpointMode != PRESET_KIT_ENDPOINT_FRONT_ONLY)
+   {
+      memcpy(dst->morphEndpointParams, src->morphEndpointParams, END_OF_SOUND_PARAMETERS);
+      memcpy(&dst->morphParameterEndpointAutomationTargets,
+             &src->morphParameterEndpointAutomationTargets,
+             sizeof(dst->morphParameterEndpointAutomationTargets));
+   }
+
+   preset_refreshInterpolatedParamsFromEndpoints(dst);
+   dst->valid = 1;
 }

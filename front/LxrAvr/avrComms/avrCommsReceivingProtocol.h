@@ -38,7 +38,7 @@ uint8_t avrCommsParser_isRestoreActive(void);
 
 #define SYSEX_START			0xF0	// SysEx start byte
 #define SYSEX_END			0xF7	// SysEx end byte
-#define PATCH_RESET			0xFE	// reset to the last loaded patch image
+#define PATCH_RESET			0xFE	// SHIFT+PLAY reload request; AVR sends it to STM and does not restore local snapshots
 #define CALLBACK_ACK		0xFD	// callback/priority-byte acknowledge
 //control messages from cortex for leds
 //status, param changes
@@ -199,7 +199,16 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SEQ_TRACK_ROTATION	0x34 // rotate a track start position
 #define SEQ_EUKLID_ROTATION	0x35	// set Euclid rotation
 #define SEQ_EUKLID_SUBSTEP_ROTATION 0x46	// set Euclid sub-step rotation
-#define SEQ_EUKLID_RESET   0x47	// reset Euclid pattern state
+#define SEQ_EUKLID_RESET   0x47	// reset Euclid state / SHIFT+PERF temp-track snapshot control
+/* `data2` values for SEQ_EUKLID_RESET.
+   0x01 keeps the legacy meaning used by file/preset operations: clear the STM
+   Euclid working caches before loading or saving pattern payloads.
+   The higher values are page-visit control for the SHIFT+PERF Euclid page and
+   reuse the existing opcode instead of adding another transport command. */
+#define SEQ_EUKLID_RESET_CLEAR_ROTATION 0x01
+#define SEQ_EUKLID_RESET_BEGIN_VISIT    0x02
+#define SEQ_EUKLID_RESET_END_VISIT      0x03
+#define SEQ_EUKLID_RESET_RESTORE_VISIT  0x04
 
 #define SEQ_TRIGGER_IN_PPQ	  0x36	// input clock prescaler
 #define SEQ_TRIGGER_OUT1_PPQ  0x37	// trigger output 1 prescaler

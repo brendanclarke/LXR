@@ -41,6 +41,7 @@
 | 030 | 2026-06-26 | local repo, sample import phases 1-3 closeout | Hardened STM sample flash import, stabilized dense `/samples` + `/loops` loading, added parsed progress/result packets, and archived the temporary phase docs |
 | 031 | 2026-06-28 | local repo, sample import redo and display | Cleanly rewrote sample import logic after reverting experiments, added deterministic sorting and 128-frame PCM blocks, and updated LCD to show 'Writing Flash' |
 | 032 | 2026-06-28 | local repo, oscillator interpolation complete | Finalized oscillator waveform interpolation wire-up, added single dynamically assigned fractional blend slot, and fixed standard state writeback for sample/phase tracking |
+| 033 | 2026-06-29 | local branch `dev-realign-reload`, commit `43f5006` plus uncommitted Euclid rollback WIP | Restored `SHIFT+PLAY` from STM temporary preset storage, clamped global decimation imports/startup to `127`, and added `SHIFT+PERF` Euclid-page per-visit temp-track rollback |
 
 ---
 
@@ -173,6 +174,10 @@ Session 031 started with oscillator interpolation planning/experiments, but the 
 ### 032 — Oscillator Waveform Interpolation (2026-06-28)
 Session 032 finalized the implementation of oscillator waveform interpolation, adding a single dynamically assigned fractional blend slot (`OSC_WAVE_INTERP_MAX_ACTIVE=1`). The front panel `PAR_OSC_WAVE_INTERPOLATION` menu parameter was successfully wired through the AVR-to-STM protocol to toggle this behavior globally. Critical fixes were made to the double-render crossfade blocks in `Oscillator.c` to recalculate `phaseInc` for the target waveform (preventing pitch doubling) and to explicitly write back standard oscillator state like `phase` and `samplePosition` (preventing endless 16-frame looping squeals for samples).
 - **Find here**: oscillator waveform interpolation, fractional blend slot, double-render crossfade fixes, `osc_setFreq` target recalculation, state writeback for samples
+
+### 033 — Kit Reload Restore + Euclid Temp-Track Rollback (2026-06-29)
+Session 033 had two durable outcomes. First, the committed `43f5006` pass restored `SHIFT+PLAY` around STM temporary preset storage: ordinary `.snd`, instrument, morph, `.prf`, and `.all` loads now mirror the appropriate endpoint subset into temp, protected `.prf` / `.all` background loads keep the old audible temp image only until playback returns to normal, `PATCH_RESET` now restores normal preset endpoints from STM temp, and `PAR_VOICE_DECIMATION_ALL` is clamped from imported `0` to `127` while startup now seeds that parameter to `127`. Second, after several discarded pattern-realign attempts and a user hard reset, the surviving local WIP redefined `SHIFT+PERF` Euclid editing around one-visit temp backups: the first edit to each touched track copies that normal track into `seq_tmpPattern`, leaving the page commits, and re-pressing `SHIFT+PERF` restores all touched tracks plus their cached Euclid UI values.
+- **Find here**: `PATCH_RESET` temp-to-normal reload semantics, endpoint-subset temp mirroring and post-background-load resnapshot rules, decimation-all `0 -> 127` guard, real `SHIFT+PERF` entry path via `SELECT_MODE_PAT_GEN`, `SEQ_EUKLID_RESET` visit-control multiplexing, multi-track rollback guard against repeated `BEGIN_VISIT`
 ---
 
 ## Key Cross-Session Facts (quick lookup)
@@ -243,6 +248,9 @@ Session 032 finalized the implementation of oscillator waveform interpolation, a
 | AVR sample upload has no fixed timeout or `Load timeout`; it waits for `SAMPLE_UPLOAD_RESULT` and uses a display-only local `Writing Flash` idle spinner after numbered progress goes quiet | 031 |
 | STM sample progress/result packets use priority-wait transport because they are sparse user-facing status triples and must not be dropped | 031 |
 | Future oscillator waveform interpolation must use `PAR_OSC_WAVE_INTERPOLATION` and apply literally across the full waveform parameter domain, including imported samples/loops/noise/base waves | 031 |
+| `PATCH_RESET` / `SHIFT+PLAY` now means STM-side temp-to-normal preset endpoint restore and must be ignored while protected `.prf` / `.all` temp preset playback is still active | 033 |
+| Imported `PAR_VOICE_DECIMATION_ALL` must never stay `0`; clamp file reads to `127` and boot the menu copy at `127` | 033 |
+| `SHIFT+PERF` Euclid edits use `seq_tmpPattern` as a one-visit per-track backup; `SEQ_EUKLID_RESET 0x02/0x03/0x04` begins, ends, and restores that visit | 033 |
 
 
 ---

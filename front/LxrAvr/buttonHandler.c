@@ -371,6 +371,9 @@ uint8_t buttonHandler_getShift() {
 }
 //--------------------------------------------------------
 void buttonHandler_handleModeButtons(uint8_t mode) {
+   uint8_t nextSelectButtonMode;
+   uint8_t wasPatgenMode = (buttonHandler_stateMemory.selectButtonMode == SELECT_MODE_PAT_GEN);
+
    buttonHandler_heldVoiceButtons = 0;// this is here for individ. pattern switch - if the mode
    buttonHandler_muteTag=0;           // is changed, clear any held buttons
 
@@ -384,12 +387,30 @@ void buttonHandler_handleModeButtons(uint8_t mode) {
    
    if (buttonHandler_getShift()) 
    {
+      nextSelectButtonMode = (uint8_t) ((mode + 4) & 0x07);
+   } 
+   else {
+      nextSelectButtonMode = (uint8_t) (mode & 0x07);
+   }
+
+   if(wasPatgenMode && (nextSelectButtonMode != SELECT_MODE_PAT_GEN))
+   {
+   /* Once PAT_GEN mode was active, leaving it must commit/discard the current
+      Euclid-page temp-backup visit even if holding shift has temporarily
+      overlaid SEQ_PAGE on top of EUKLID_PAGE. Keying this off the active mode
+      instead of the instantaneous page avoids missing the commit signal during
+      the shift-held overlay. */
+      avrComms_sendData(SEQ_CC, SEQ_EUKLID_RESET, SEQ_EUKLID_RESET_END_VISIT);
+   }
+
+   if (buttonHandler_getShift()) 
+   {
    	//set the new mode
-      buttonHandler_stateMemory.selectButtonMode = (uint8_t) ((mode + 4) & 0x07);
+      buttonHandler_stateMemory.selectButtonMode = nextSelectButtonMode;
    } 
    else {
    	//set the new mode
-      buttonHandler_stateMemory.selectButtonMode = (uint8_t) (mode & 0x07);
+      buttonHandler_stateMemory.selectButtonMode = nextSelectButtonMode;
    }
 
    led_clearAllBlinkLeds();
@@ -440,7 +461,21 @@ void buttonHandler_handleModeButtons(uint8_t mode) {
          break;
          
       case SELECT_MODE_PAT_GEN:
-         menu_enterPatgenMode();
+         if(wasPatgenMode)
+         {
+         /* Re-selecting PERF while shift is held and PAT_GEN mode was already
+            active is the real rollback gesture. By the time this button press
+            is handled, pressing shift may already have overlaid SEQ_PAGE on
+            top of the Euclid editor, so testing the current page is not
+            reliable here. The stable signal is that PAT_GEN mode was already
+            active before this button press, which means the user is re-pressing
+            SHIFT+PERF rather than entering the page for the first time. */
+            avrComms_sendData(SEQ_CC, SEQ_EUKLID_RESET, SEQ_EUKLID_RESET_RESTORE_VISIT);
+         }
+         else
+         {
+            menu_enterPatgenMode();
+         }
          break;
    
       default:

@@ -119,6 +119,10 @@ char filename[GEN_BUF_LEN];
 char preset_currentName[8];
 char preset_currentSaveMenuName[8];
 
+/* These arrays remain AVR-side file-read staging buffers. They still seed the
+   live menu arrays during file import, but they no longer define SHIFT+PLAY
+   reload semantics. STM temporary preset storage is now the authoritative
+   reload image. */
 uint8_t parameter_values_fileLoadSnapshot[END_OF_SOUND_PARAMETERS];
 uint8_t parameters2_fileLoadSnapshot[END_OF_SOUND_PARAMETERS];
 static uint8_t preset_savedParameterValues[END_OF_SOUND_PARAMETERS];
@@ -126,6 +130,7 @@ static uint8_t preset_savedParameters2[END_OF_SOUND_PARAMETERS];
 static volatile uint8_t preset_backgroundSwapDone = 0;
 static uint8_t preset_backgroundSwapExpectedType = 0;
 static uint8_t preset_backgroundTempPlaybackActive = 0;
+static uint8_t preset_backgroundTempPresetPlaybackActive = 0;
 
 static uint8_t voice1presetMask[VOICE_PARAM_LENGTH]={1,8,9,20,      37,43,49,50,   62,70,74,78,  82,83,88,94,   102,108,115,121,     128,134,137,143,    149,155,161,167,    173,179,185,191,    197,203,209,215}; 
 static uint8_t voice2presetMask[VOICE_PARAM_LENGTH]={2,10,11,21,    38,44,51,52,   63,71,75,79,  84,85,89,95,   103,109,116,122,     129,135,138,144,    150,156,162,168,    174,180,186,192,    198,204,210,216}; 
@@ -139,6 +144,7 @@ static void preset_dumpEndpointsToStm(uint8_t endpointMode);
 static uint8_t preset_shouldPreserveMenuEndpointsDuringFileLoad(void);
 static void preset_saveMenuEndpointsDuringFileLoad(void);
 static void preset_restoreMenuEndpointsDuringFileLoad(void);
+static void preset_normalizeImportedKitParams(uint8_t *para);
 
 static uint16_t preset_backgroundSwapNow(void)
 {
@@ -189,6 +195,11 @@ static uint8_t preset_backgroundSwapNeeded(uint8_t fileType)
    return 0;
 }
 
+static void preset_clearBackgroundTempPresetPlaybackActive(void)
+{
+   preset_backgroundTempPresetPlaybackActive = 0;
+}
+
 void preset_backgroundSwapDoneFromStm(uint8_t fileType)
 {
    if(fileType == preset_backgroundSwapExpectedType)
@@ -196,6 +207,14 @@ void preset_backgroundSwapDoneFromStm(uint8_t fileType)
       preset_backgroundSwapDone = 1;
       if(preset_fileTypeCanBackgroundSwap(fileType))
          preset_backgroundTempPlaybackActive = 1;
+      if((fileType == WTYPE_PERFORMANCE) || (fileType == WTYPE_ALL))
+      {
+         /* This flag tracks the narrower case where playback is still sourcing
+            preset parameters from STM temporary storage after a protected
+            .prf/.all background load. Pattern-only temp playback does not set
+            it, because SHIFT+PLAY must stay available there. */
+         preset_backgroundTempPresetPlaybackActive = 1;
+      }
    }
 }
 
@@ -204,10 +223,18 @@ uint8_t preset_isBackgroundTempPlaybackActive(void)
    return preset_backgroundTempPlaybackActive;
 }
 
+uint8_t preset_isBackgroundTempPresetPlaybackActive(void)
+{
+   return preset_backgroundTempPresetPlaybackActive;
+}
+
 void preset_notePlayedPatternChanged(uint8_t playedPattern)
 {
    if(playedPattern != SEQ_TMP_PATTERN)
+   {
       preset_backgroundTempPlaybackActive = 0;
+      preset_backgroundTempPresetPlaybackActive = 0;
+   }
 }
 
 static void preset_performBackgroundSwapWait(uint8_t fileType)
@@ -237,7 +264,7 @@ static void preset_performBackgroundSwapWait(uint8_t fileType)
 //----------------------------------------------------
 static uint8_t preset_shouldPreserveMenuEndpointsDuringFileLoad(void)
 {
-   return menu_playedPattern == SEQ_TMP_PATTERN;
+   return preset_backgroundTempPresetPlaybackActive;
 }
 
 //----------------------------------------------------
@@ -252,6 +279,21 @@ static void preset_restoreMenuEndpointsDuringFileLoad(void)
 {
    memcpy(parameter_values, preset_savedParameterValues, END_OF_SOUND_PARAMETERS);
    memcpy(parameters2, preset_savedParameters2, END_OF_SOUND_PARAMETERS);
+}
+
+//----------------------------------------------------
+static void preset_normalizeImportedKitParams(uint8_t *para)
+{
+   if(!para)
+      return;
+
+   /* PAR_VOICE_DECIMATION_ALL has a long tail of bad zero-valued file content.
+      Clamp it at the file-import boundary so every load path (.snd, morph,
+      .prf, and .all) rewrites the broken on-disk value to 127 before it can
+      propagate into snapshots, live menu state, STM endpoint dumps, or future
+      re-saves. */
+   if(para[PAR_VOICE_DECIMATION_ALL] == 0)
+      para[PAR_VOICE_DECIMATION_ALL] = 127;
 }
 
 
@@ -539,6 +581,8 @@ void preset_readKitToTemp(uint8_t isMorph)
    // set to 0 for any that were not read from the file
    if(END_OF_KIT_PARAMETERS-bytesRead)
       memset(para+bytesRead,0,END_OF_KIT_PARAMETERS-bytesRead);
+
+   preset_normalizeImportedKitParams(para);
    	
  //special case mod targets. normalize.
    const uint8_t nmt=getNumModTargets();
@@ -838,6 +882,7 @@ uint8_t preset_loadDrumset(uint8_t presetNr, uint8_t voiceArray, uint8_t isMorph
    preset_workingPreset=presetNr;
    preset_workingType=WTYPE_KIT;
    preset_workingVoiceArray = voiceArray;
+   preset_clearBackgroundTempPresetPlaybackActive();
 
    preset_makeFileName(filename,presetNr,FEXT_SOUND);
    
@@ -2378,7 +2423,17 @@ uint8_t preset_loadAll(uint8_t presetNr, uint8_t voiceArray)
    
    preset_workingVersion = version;
    if(preset_backgroundSwapNeeded(preset_workingType))
+   {
       preset_performBackgroundSwapWait(preset_workingType);
+   }
+   else
+   {
+      /* When a parameter-bearing load proceeds without the protected
+         background-swap prelude, temp storage is about to be refreshed
+         immediately with the new preset. Clear the protected-temp flag now so
+         AVR does not keep preserving the old temp menu image. */
+      preset_clearBackgroundTempPresetPlaybackActive();
+   }
 
    lcd_clear();
    lcd_home();
@@ -2582,7 +2637,13 @@ uint8_t preset_loadPerf(uint8_t presetNr, uint8_t voiceArray)
    
    preset_workingVersion = version;
    if(preset_backgroundSwapNeeded(preset_workingType))
+   {
       preset_performBackgroundSwapWait(preset_workingType);
+   }
+   else
+   {
+      preset_clearBackgroundTempPresetPlaybackActive();
+   }
 
    lcd_clear();
    lcd_home();

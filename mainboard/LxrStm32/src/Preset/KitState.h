@@ -38,7 +38,10 @@ enum
    PRESET_MORPH_IMAGE_TMP = 1,
    PRESET_MORPH_IMAGE_COUNT = 2,
    PRESET_VOICE_SOURCE_NORMAL = 1,
-   PRESET_VOICE_SOURCE_TMP = 3
+   PRESET_VOICE_SOURCE_TMP = 3,
+   PRESET_KIT_ENDPOINT_BOTH = 0,
+   PRESET_KIT_ENDPOINT_FRONT_ONLY = 1,
+   PRESET_KIT_ENDPOINT_MORPH_ONLY = 2
 };
 
 /* Automation target groups travel with each kit image so restore and live-edit
@@ -119,6 +122,14 @@ void preset_setTmpKitActive(uint8_t active);
    they need a fresh temporary image without teaching the parser or sequencer
    how the kit struct is laid out. */
 void preset_captureTmpKitState(void);
+/* File loads and PATCH_RESET need a storage copy primitive that can move only
+   the kit/front endpoint, only the morph endpoint, or both, without forcing
+   every caller to open-code the PresetKitState layout. This keeps the temp
+   snapshot semantics centralized in Preset instead of scattering memcpy rules
+   through the parser and sequencer. */
+void preset_copyKitEndpoints(PresetKitState *dst,
+                             const PresetKitState *src,
+                             uint8_t endpointMode);
 
 /* Maps a voice index to the morph-image slot that should receive its per-voice
    endpoint writes. This exists so the parameter router can choose temp vs

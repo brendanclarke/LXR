@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
-Date: 2026-06-28
-Status: current AVR<->STM comms reference after Session 031 redid sample import with sorted cached `/samples` and `/loops` iteration, immediate real progress numbers, reliable `SAMPLE_CC` progress/result packets, and AVR-local `Writing Flash` idle display with no upload timeout. Session 029 added a durable external MIDI table and split Global-channel CC2-127 onto a separate Global parser table. Session 028 completed background file loading through temporary Pattern/Preset storage. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading now uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
+Date: 2026-06-29
+Status: current AVR<->STM comms reference after Session 033 restored `SHIFT+PLAY` around STM temporary preset storage, made `PATCH_RESET` an STM-owned temp-to-normal preset reload, multiplexed `SEQ_EUKLID_RESET` / `FRONT_SEQ_EUKLID_RESET` (`0x47`) for `SHIFT+PERF` Euclid visit control, and kept the Session 031 sample-import redo, Session 029 Global MIDI split, and Session 028 background file loading model intact. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
 
 ## Purpose
 
@@ -308,6 +308,45 @@ Morph rule:
   `END_OF_SOUND_PARAMETERS`, so `PAR_MORPH_DRUM1..PAR_MORPH_HIHAT` stay live
   performance/display controls rather than saved kit bytes.
 
+Session 033 load/reload additions:
+
+- ordinary `.snd` kit loads and individual instrument loads now mirror the
+  loaded kit/front endpoint subset into STM temp preset storage immediately;
+- ordinary morph loads mirror only the morph endpoint subset into STM temp
+  preset storage immediately;
+- ordinary `.prf` / `.all` loads mirror both endpoint groups into STM temp
+  preset storage immediately when they are not using protected background
+  playback;
+- protected background `.prf` / `.all` loads still preserve the old audible
+  temp preset image during the load, but once playback returns to normal STM
+  resnapshots temp from the newly loaded normal preset image;
+- imported `PAR_VOICE_DECIMATION_ALL == 0` is clamped to `127` at the AVR
+  file-import boundary before it can propagate into STM storage or future
+  re-saves.
+
+### 4b. Reload And Euclid Temp-Snapshot Control
+
+These controls reuse existing opcodes rather than adding new transport
+messages:
+
+- `PATCH_RESET` (`0xfe`) is now an AVR-to-STM one-byte reload request.
+  STM interprets it as “copy temporary preset endpoints back into normal
+  preset storage and reapply the live normal image.”
+- `PATCH_RESET` must be ignored while protected `.prf` / `.all` temp preset
+  playback is still active. Pattern-only `.pat` temp playback does not imply
+  this block.
+- `SEQ_EUKLID_RESET` / `FRONT_SEQ_EUKLID_RESET` (`0x47`) is now a multiplexed
+  Euclid control opcode with these `data2` meanings:
+  - `0x01`: legacy clear Euclid working caches for file/preset operations
+  - `0x02`: begin one `SHIFT+PERF` Euclid-page visit
+  - `0x03`: end/commit that visit when leaving the page
+  - `0x04`: restore every track touched during that visit from temp back to
+    the shown normal pattern
+
+The Euclid-page visit is the real `SELECT_MODE_PAT_GEN` / `EUKLID_PAGE` path
+entered by holding `SHIFT` and pressing `PERF`. It is not the separate “hold
+SHIFT while already on PERF page” menu flow.
+
 ### 5. Sample Import / Sample ROM Refresh
 
 Sample import is a separate load-page operation from preset/pattern file load.
@@ -431,6 +470,8 @@ Current UI behavior while temp playback is active:
 - inside `SELECT_MODE_PERF`, all eight SELECT LEDs flash;
 - `SHIFT+PERF` is ignored so PAT_GEN cannot be entered while temp playback
   remains active;
+- `SHIFT+PLAY` / `PATCH_RESET` is ignored only while temp preset playback is
+  active for protected `.prf` / `.all` background loads;
 - `NUM_OF_BLINKABLE_LEDS` is currently `8` to support all SELECT LEDs blinking.
 
 ### 7. Callback and Hold Primitives

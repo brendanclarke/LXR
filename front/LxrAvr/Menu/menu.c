@@ -659,6 +659,11 @@ void menu_init()
 
 	memset(parameter_values, 0, sizeof(uint8_t) * NUM_PARAMS);
 
+   /* Global decimation should never boot as 0. The file-import clamp below
+      fixes broken on-disk values, and this startup default ensures the menu
+      and any no-SD / failed-load boot path start from the safe 127 value. */
+   parameter_values[PAR_VOICE_DECIMATION_ALL] = 127;
+
 
 
 	parameter_values[PAR_EUKLID_LENGTH] = 16;
@@ -840,6 +845,14 @@ void menu_enterStepMode()
 //-----------------------------------------------------------------
 void menu_enterPatgenMode()
 {
+   /* `menu_enterPatgenMode()` is used both for the first entry into the
+      Euclid/rotation editor and for later in-page track changes. Only the
+      first entry should begin a new temp-backup visit on the STM. Re-sending
+      BEGIN_VISIT while merely selecting another track on the same page would
+      clear the touched-track mask and leave rollback able to restore only the
+      most recently edited track. */
+   if(menu_activePage != EUKLID_PAGE)
+      avrComms_sendData(SEQ_CC, SEQ_EUKLID_RESET, SEQ_EUKLID_RESET_BEGIN_VISIT);
    avrComms_sendData(SEQ_CC, SEQ_REQUEST_EUKLID_PARAMS,
    				menu_getActiveVoice());
    menu_switchPage(EUKLID_PAGE);
@@ -4225,12 +4238,20 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
 //----------------------------------------------------------------
 void menu_reloadKit()
 {
-   uint8_t i;
-   avrComms_sendByte(PATCH_RESET);
-   for(i=0;i<END_OF_MORPH_PARAMETERS;i++)
+   /* Reload now comes from STM temporary preset storage, not the AVR file-load
+      snapshots. That keeps SHIFT+PLAY aligned with the STM-owned temp/normal
+      storage model and prevents reload from fighting the protected .prf/.all
+      background-load path. */
+   if(preset_isBackgroundTempPresetPlaybackActive())
    {
-      parameter_values[i]=parameter_values_fileLoadSnapshot[i];
-   }  
+      /* While a protected .prf/.all background load is still playing from
+         temporary preset storage, reload must stay disabled. Copying temp back
+         into normal at that point would collapse the protected old sound into
+         the newly loaded normal image. */
+      return;
+   }
+
+   avrComms_sendByte(PATCH_RESET);
 }
 //----------------------------------------------------------------
 uint8_t menu_getActivePage()

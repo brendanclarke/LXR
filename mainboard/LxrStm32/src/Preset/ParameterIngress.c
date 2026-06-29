@@ -27,6 +27,7 @@ static uint8_t preset_paramIngressTarget = PRESET_PARAM_INGRESS_CURRENT_IMAGE;
    can distinguish front-panel selector bytes from morph-endpoint selector
    bytes without inventing a separate code path in the parsers. */
 static uint8_t preset_automationIngressTarget = PRESET_AUTOMATION_INGRESS_NONE;
+static uint8_t preset_endpointIngressSuppressed = 0;
 
 /* Chooses the automation target block that should receive the current write.
    The helper reads `preset_paramIngressTarget` and
@@ -186,6 +187,11 @@ void preset_setAutomationIngressTarget(uint8_t target)
       preset_automationIngressTarget = target;
 }
 
+void preset_setEndpointIngressSuppressed(uint8_t suppressed)
+{
+   preset_endpointIngressSuppressed = (suppressed != 0);
+}
+
 /* Stores a raw morph endpoint byte without touching interpolation. The helper
    uses `voiceMask`, `preset_voiceSourceState`, `preset_tmpKitActive`, and the
    chosen `kit` pointer to decide whether the value belongs in the temp image or
@@ -194,6 +200,13 @@ void preset_storeMorphParameterIngress(uint16_t param, uint8_t value)
 {
    PresetKitState *kit;
    uint8_t voiceMask;
+
+   /* Resnapshot and reload copies are intentionally atomic at the preset
+      storage level. Dropping endpoint writes during the tiny copy window is
+      safer than allowing front and morph endpoint groups to land in different
+      generations of the temp/normal image pair. */
+   if(preset_endpointIngressSuppressed)
+      return;
 
    if(param >= END_OF_SOUND_PARAMETERS)
       return;
@@ -242,6 +255,9 @@ void preset_storeMorphParameterIngress(uint16_t param, uint8_t value)
 void preset_storeParameterIngress(uint16_t param, uint8_t value)
 {
    PresetKitState *kit;
+
+   if(preset_endpointIngressSuppressed)
+      return;
 
    if(param >= END_OF_SOUND_PARAMETERS)
       return;
@@ -304,6 +320,9 @@ void preset_storeLfoDestinationIngress(uint8_t voice, uint16_t destination)
    uint16_t targetParam;
    uint8_t selector;
    uint8_t voiceSelector;
+
+   if(preset_endpointIngressSuppressed)
+      return;
 
    if(!target || voice >= PRESET_SYNTH_VOICES)
       return;
@@ -379,6 +398,9 @@ void preset_storeVelocityDestinationIngress(uint8_t voice, uint16_t destination)
    PresetAutomationTargets *target = preset_getIngressAutomationTarget();
    PresetAutomationTargets *interpolatedTarget =
       preset_getIngressInterpolatedAutomationTarget();
+
+   if(preset_endpointIngressSuppressed)
+      return;
 
    if(!target || voice >= PRESET_SYNTH_VOICES)
       return;
