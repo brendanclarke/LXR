@@ -1,5 +1,5 @@
 # Sonic Potions LXR Drumsynth Firmware
-## -bc- edition, based on v0.37
+## Catalyst Edition Version 1.0
 
 The LXR is a digital drum synthesizer based on a 32-bit Cortex-M4 (STM32F407) audio/control processor and an ATmega644 8-bit front-panel CPU. Originally developed by Julian Schmidt / Sonic Potions.
 
