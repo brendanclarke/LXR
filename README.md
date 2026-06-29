@@ -18,6 +18,10 @@ The mainboard code uses several third-party libraries, all located in the `Libra
 
 Many thanks to Rudeog for bug fixes and features in versions 0.26 and 0.33, to Patrick Dowling and Andrew Shakinovsky for Makefile and code contributions, and to Julian Schmidt for the original LXR design and open-source release.
 
+### Reporting Bugs
+
+If you encounter a bug, have an idea for a feature, or make something unusual with this firmware, please let us know on the (Discord server!)[https://discord.gg/sWjGWuavUX]
+
 ---
 
 ## Building the Firmware
