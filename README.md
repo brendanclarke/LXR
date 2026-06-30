@@ -72,7 +72,7 @@ See `requirements.txt` for MSYS2 paths and toolchain override options if your co
 
 ## Additions to Sonic Potions Firmware v0.37
 
-The following features have been added in the -bc- edition on top of the upstream v0.37 release. For full implementation history see `knowledge_files/log_archive/000_SESSION_INDEX.md`.
+The following features have been added to Catalyst edition, supplementing the v0.37 release feature set. For full implementation history see `knowledge_files/log_archive/000_SESSION_INDEX.md`.
 
 ### General UI
 
