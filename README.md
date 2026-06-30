@@ -3,6 +3,8 @@
 
 The LXR is a digital drum synthesizer based on a 32-bit Cortex-M4 (STM32F407) audio/control processor and an ATmega644 8-bit front-panel CPU. Originally developed by Julian Schmidt / Sonic Potions.
 
+Catalyst edition expands a number of the features of the LXR while keeping the core sound of the instrument the same.  
+
 The `front` folder contains the AVR code. The `mainboard` folder contains the STM32F4 code. The `tools` folder contains the firmware image builder, which combines AVR and Cortex code into a single file usable by the bootloader.
 
 ### Libraries
