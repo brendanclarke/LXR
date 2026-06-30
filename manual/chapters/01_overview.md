@@ -43,7 +43,7 @@ Used to copy and \[clear (alternative SHIFT function)\] sequencer data.
 Function depends on the active mode:
 
 - **Voice mode:** set/reset the 16 main steps in the sequencer.
-- **Performance mode:** buttons 1–7 trigger manual rolls. Buttons 8–16 are unused.
+- **Performance mode:** buttons 1–7 trigger manual rolls. Buttons 9–16 control the looper.
 - **Step Edit mode:** select one of the 16 main steps for editing.
 - **Menu mode:** no function.
 
@@ -126,5 +126,6 @@ Pushing the encoder opens the detail page:
 \oled{\textbf{Filter}}{Resonance \hfill 120}
 
 On the detail page you can see the full parameter name and change its value with the encoder.
-This is useful for fine adjustments where the knob control is too coarse. Push the encoder again
-to return to the normal menu mode.
+This is useful for fine adjustments where the knob control is too coarse. When viewing a drumkit
+parameter in VOICE mode, hold SHIFT in this mode to view and edit the corresponding **morph**
+parameter. Push the encoder again to return to the normal menu mode.
