@@ -19,7 +19,15 @@ impossible to synthesise using the available voice structure.
 
 Any samples loaded will be listed after the stock waveforms: one-shot samples first, then loops, alphabetically by the name of the file they were imported from. 
 
-If the oscillator waveform is modulated, interpolation between waveforms can be switched on in the global settings menu, producing a smoother transition between waves. 
+### Wavetable Interpolation
+
+If the oscillator waveform is modulated, interpolation between waveforms can be switched on in the global settings menu, producing a smoother transition between waves.
+The interpolation effect applies only to the main oscillators of the voices, and is only performed on one oscillator at a time to limit CPU overhead. However, the
+calculation is performed dynamically as needed. That is, one wave-modulated oscillator will always be interpolated, two wave-modulated oscillators will be interpolated
+provided the modulation is *slow enough*, etc.
+
+This is particularly useful when importing a series of progressively-changing single-cycle looped waveforms of the same length in a sequence as part of the 'LOOPS' folder
+ample import. Modulating the waveform with interpolation on when the oscillator is set to play one of the samples produces a smooth timbral change between adjacent samples.  
 
 ## Filter
 
@@ -231,11 +239,16 @@ zero has no effect.}}
 The LFO can be synced to the sequencer clock — at $\frac{1}{4}$ note sync, the LFO cycles exactly
 4 times per bar. When sync is active, the frequency parameter is ignored.
 
-\tip{You can use the LFO as an additional envelope by enabling the retrigger feature. Set the
-retrigger source to the same voice as the modulation destination — the LFO will restart on every
-played note. Additional 'one-shot' LFOs are listed in the LFO waveforms as si1, tr1, etc. to use
-with this. When using one of these waveforms, 'offset' provides an adjustable delay before the
-start of the waveform.}
+### Using The LFO as an Envelope
+
+You can use the LFO as an additional envelope by enabling the retrigger feature and choosing one of
+the special 'one-shot' waveforms. Set the retrigger source to the same voice as the modulation
+destination so the LFO will restart on every played note (this does not need to be the same voice as
+the one the LFO is on). Additional 'one-shot' LFOs are listed in the LFO waveforms as si1, tr1, etc.
+to use with this; all the waveforms with a '1' suffix generate their modulation envelope once when
+triggered and then stop until triggered again, instead of cycling as the other waveforms do. When using
+one of these waveforms, 'offset' provides an adjustable delay before the start of the waveform instead
+of adjusting the waveform phase.
 
 ## Velocity Modulation
 
