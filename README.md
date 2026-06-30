@@ -24,6 +24,11 @@ If you encounter a bug, have an idea for a feature, or make something unusual wi
 
 ---
 
+### User's Manual
+
+I've turned the original PDF of the Sonic Potions LXR Manual into a LaTex document within the project repository (/manual/). The chapters are derived from .md files so they're easy to update with any changes or new features. The new manual has updated information about the features I've added where they are relevanr, and you can get the latest build of the manual in PDF form here:
+https://github.com/brendanclarke/LXR/blob/master/manual/build/LXR_Owners_Manual.pdf
+
 ## Building the Firmware
 
 Build requirements are documented in `requirements.txt`. In brief, you need `arm-none-eabi-gcc`, `avr-gcc` (with avr-libc), `make`, and a host C++ compiler for the FirmwareImageBuilder tool. All are available from your platform's standard package manager or from the Arm and Microchip toolchain download pages.
