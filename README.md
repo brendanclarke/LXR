@@ -26,7 +26,7 @@ If you encounter a bug, have an idea for a feature, or make something unusual wi
 
 ### User's Manual
 
-I've turned the original PDF of the Sonic Potions LXR Manual into a LaTex document within the project repository (/manual/). The chapters are derived from .md files so they're easy to update with any changes or new features. The new manual has updated information about the features I've added where they are relevanr, and you can get the latest build of the manual in PDF form here:
+I've turned the original PDF of the Sonic Potions LXR Manual into a LaTex document within the project repository (/manual/). The chapters are derived from .md files so they're easy to update with any changes or new features. The new manual has updated information about the features I've added where they are relevant, and you can always get the latest build of the manual in PDF form here:
 https://github.com/brendanclarke/LXR/blob/master/manual/build/LXR_Owners_Manual.pdf
 
 ## Building the Firmware
