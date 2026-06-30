@@ -20,6 +20,12 @@ $\frac{1}{16}$th note from a 4/4 bar. A lit LED above the button indicates the s
 
 ### Step Parameter Editing
 
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{front_panel.jpeg}
+  \caption{Front panel reference for using Voice mode.}
+\end{figure}
+
 1. Press and hold the shift button.
 2. The display shows the step parameter page of the selected step.
 3. Use the knobs and encoder to change parameters.
@@ -27,6 +33,12 @@ $\frac{1}{16}$th note from a 4/4 bar. A lit LED above the button indicates the s
 5. Select a different step using the 16 sequencer buttons.
 
 ### Sub Step Editing
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{substep_panel.jpeg}
+  \caption{Substep divisions within single main sequencer step.}
+\end{figure}
 
 Sub steps can be set and removed in voice edit mode:
 
@@ -59,41 +71,42 @@ This mode is designed for playing songs live. You can chain and change patterns 
 trigger manual rolls for each voice, loop the sequencer in smaller sub-divisions, and access
 the morph and global sample rate effects. Voice editing is not available in this mode.
 
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=\linewidth]{performance_mode_panel.jpeg}
-  \caption{LXR front panel in performance mode.}
-\end{figure}
-
 - **Display (1):** performance parameters.
 - **Knobs (2):** change the performance parameters.
 - **Sequencer buttons 1–7 (5):** trigger a manual roll for each corresponding voice.
-- **Sequencer buttons 10-16 (5):** loop the sequencer by 8 to 1/8 step divisions.
-- **Sequencer button 9 (5):** increase the sequencer loop length by 50%.
+- **Sequencer buttons 10-16 (5):** loop the sequencer in length from 1/2 bar to 1/64th note.
+- **Sequencer button 9 (5):** while looping, increase the sequencer loop length by 50%.
 - **Select buttons (7):** change the playing pattern.
 - **Voice buttons (9):** mute/unmute voices without holding shift.
 
 **Re-align pattern:** If tracks become misaligned (due to different pattern timescales, step lengths, or independent track pattern assignments), press the pattern button of the selected and viewed pattern again to realign all tracks to the master clock.
 
 ### Looper
-Sequencer buttons 9–16 provide looper functionality in PERF mode. Button 10 sets the longest loop length (64 sub-steps, or 1/2 bar), halving at each subsequent button down to 16 (1 sub-step, or 1/64th). Holding button 9 in addition 'dots' the loop length, adding 50% to the duration of the last loop button held. Releasing all loop buttons immediately returns the sequencer to the position it would have reached without looping engaged.
+Sequencer buttons 9–16 provide looper functionality in PERF mode. Button 10 sets the longest loop length (64 sub-steps, or 1/2 bar), halving at each subsequent button down to 16 (1 sub-step, or 1/64th note). Holding button 9 in addition 'dots' the loop length, adding 50% to the duration of the last loop button held. Releasing all loop buttons immediately returns the sequencer to the position it would have reached without looping engaged.
 
 ### Basic Performance Menu
 
-[This table is out of date]
 \begin{paramtable}
-rol & Manual roll rate  & Trigger rate for the manual roll function of sequencer buttons 1–7. \\
-mrp & Morph amount      & Ratio between the original sound and the morph target. \\
-srt & Global sample rate & A global sample rate reduction effect. \\
 shu & Shuffle amount    & Sets the amount of global shuffle. \\
+rol & Manual roll rate  & Trigger rate for the manual roll function of sequencer buttons 1–7. \\
+nte & Roll note         & Sets the note (pitch) used for the manual roll function. \\
+vel & Roll velocity     & Sets the velocity used when triggering the manual roll function. \\
+srt & Sample rate       & Global sample rate reduction effect. \\
+mrp & Morph amount      & Ratio between the original drumkit sound and the morph drumkit target. \\
+md1 & Drum 1 Morph      & Morph amount for just the Drum 1 voice. \\
+md2 & Drum 2 Morph      & Morph amount for just the Drum 2 voice. \\
+md3 & Drum 3 Morph      & Morph amount for just the Drum 3 voice. \\
+msn & Snare Morph      & Morph amount for just the Snare voice. \\
+mcy & Cymbal Morph      & Morph amount for just the Cymbal voice. \\
+mhh & HiHat Morph      & Morph amount for just the HiHat voice. \\
 \end{paramtable}
 
 ### Manual Roll
 
-The first 7 sequencer buttons trigger a manual roll for each corresponding voice. The roll rate is
-set with the \param{rol} parameter. Rolls are recorded to the pattern when recording mode is active.
-Rolls can be recorded in three modes: full (pitch and velocity), note only (pitch), or velocity only.
-The roll record mode is set in the SHIFT + REC button menu. 
+The first 7 sequencer buttons trigger a manual roll for each corresponding voice. The roll rate, note, and
+velocity used are set with the \param{rol}, \param{nte}, and \param{vel} parameters. Rolls are recorded to 
+the pattern when recording mode is active. Rolls can be recorded in three modes: full (pitch and velocity),
+note only (pitch), or velocity only. The roll record mode is set in the SHIFT + REC button menu. 
 
 ### Morph
 
@@ -106,8 +119,8 @@ morph is set from the PERF menu, or by Modulation (CC1) on the global MIDI chann
 the individual morph of all voices. 
 
 Single voice morph can be set from the PERF menu, from CC1 on individual voice MIDI channels, from
-step automation on the sequencer, or through velocity or LFO modulation. All morph except for LFO
-modulation will update the parameter shown in the PERF menu. 
+step automation on the sequencer, through velocity automation, and by LFO modulation. All morph except
+for LFO modulation will update the parameter shown in the PERF menu. 
 
 For loading a morph target, see the Load and Save Mode section.
 
@@ -353,7 +366,7 @@ mod & Trigger Gate Mode & Sets gate out on/off when trigger expansion is install
 b2p & Performance Bank Change & When enabled, MIDI Bank Change (CC0) loads a .prf file instead of a .kit.\\
 stg & Shift Toggle & When enabled, SHIFT works as a toggle.\\
 flb & File Background Load & Sets which files load in the background and queue change on next pattern.\\
-itp & Waveform Interpolation & Toggles Interpolating main oscillator waveforms when modulated.\\
+itp & Waveform Interpolation & Toggles interpolating between main oscillator waveforms when modulated.\\
 \end{paramtable}
 
 ### Follow Mode
