@@ -136,7 +136,7 @@ The following features have been added in the -bc- edition on top of the upstrea
 
 **Per-voice morph settable by step automation.** Individual voice morph amounts can be written directly into step automation slots, allowing per-step morph movements on individual voices.
 
-**Reset Patgen/Euklid Changes.** On the Patgen/Euclidean page (SHIFT + PERF), pressing SHIFT + PERF again twice resets the pattern to the state it was in before entering the page. Exiting the page commits all changes to the pattern. There may be residual track pattern offset after a reset if the pattern *length* parameter was altered. 
+**Reset Patgen/Euklid Changes.** On the Patgen/Euclidean page (SHIFT + PERF), pressing SHIFT + PERF again twice resets the pattern to the state it was in before entering the page. Exiting the page commits all changes to the pattern. There may be residual track pattern offset after a reset if the pattern *length* parameter was altered. This can be cleared easily by the 'pattern realign' function in the PERF page (see above, 'General UI').
 
 ---
 
