@@ -223,5 +223,5 @@ out & Output        & Selects the hardware audio output for this voice: one of t
                       channels, or one of the 4 individual mono outputs. \\
 len & Track length  & The length of the sequencer track in $\frac{1}{16}$ steps. \\
 mid & MIDI Channel  & MIDI channel the voice will receive and send note and CC data on. \\
-nte & MIDI Note     & MIDI note the voice sends/receives. Chromatically all on channel if unset.  
+nte & MIDI Note     & MIDI note the voice sends/receives. Chromatically all on channel if unset. \\
 \end{paramtable}

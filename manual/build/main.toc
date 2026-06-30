@@ -46,6 +46,7 @@
 \contentsline {subsection}{\numberline {4.6}Step Parameters}{16}{subsection.4.6}%
 \contentsline {subsubsection}{\numberline {4.6.1}Available Step Parameters}{16}{subsubsection.4.6.1}%
 \contentsline {subsubsection}{\numberline {4.6.2}Step Probability}{16}{subsubsection.4.6.2}%
+\contentsline {subsubsection}{\numberline {4.6.3}Automation-Only Steps}{16}{subsubsection.4.6.3}%
 \contentsline {subsection}{\numberline {4.7}Automation}{16}{subsection.4.7}%
 \contentsline {subsubsection}{\numberline {4.7.1}Choosing the Active Automation Track}{16}{subsubsection.4.7.1}%
 \contentsline {subsubsection}{\numberline {4.7.2}How to Assign Parameter Automations}{16}{subsubsection.4.7.2}%
@@ -53,54 +54,55 @@
 \contentsline {subsection}{\numberline {4.8}Recording Options Menu}{17}{subsection.4.8}%
 \contentsline {subsubsection}{\numberline {4.8.1}Automation Track}{17}{subsubsection.4.8.1}%
 \contentsline {subsubsection}{\numberline {4.8.2}Quantisation}{17}{subsubsection.4.8.2}%
-\contentsline {subsection}{\numberline {4.9}Copy Sequencer Data}{17}{subsection.4.9}%
+\contentsline {subsection}{\numberline {4.9}Copy Sequencer Data}{18}{subsection.4.9}%
 \contentsline {subsection}{\numberline {4.10}Clear Sequencer Data}{18}{subsection.4.10}%
 \contentsline {section}{\numberline {5}Operation Modes}{19}{section.5}%
 \contentsline {subsection}{\numberline {5.1}Voice Edit Mode}{19}{subsection.5.1}%
 \contentsline {subsubsection}{\numberline {5.1.1}Pattern Editing}{19}{subsubsection.5.1.1}%
 \contentsline {subsubsection}{\numberline {5.1.2}Step Parameter Editing}{19}{subsubsection.5.1.2}%
-\contentsline {subsubsection}{\numberline {5.1.3}Sub Step Editing}{19}{subsubsection.5.1.3}%
-\contentsline {subsubsection}{\numberline {5.1.4}Sound Editing}{19}{subsubsection.5.1.4}%
-\contentsline {subsection}{\numberline {5.2}Performance Mode}{20}{subsection.5.2}%
-\contentsline {subsubsection}{\numberline {5.2.1}Looper}{20}{subsubsection.5.2.1}%
+\contentsline {subsubsection}{\numberline {5.1.3}Sub Step Editing}{20}{subsubsection.5.1.3}%
+\contentsline {subsubsection}{\numberline {5.1.4}Sound Editing}{20}{subsubsection.5.1.4}%
+\contentsline {subsection}{\numberline {5.2}Performance Mode}{21}{subsection.5.2}%
+\contentsline {subsubsection}{\numberline {5.2.1}Looper}{21}{subsubsection.5.2.1}%
 \contentsline {subsubsection}{\numberline {5.2.2}Basic Performance Menu}{21}{subsubsection.5.2.2}%
 \contentsline {subsubsection}{\numberline {5.2.3}Manual Roll}{21}{subsubsection.5.2.3}%
-\contentsline {subsubsection}{\numberline {5.2.4}Morph}{21}{subsubsection.5.2.4}%
-\contentsline {subsubsection}{\numberline {5.2.5}Shuffle}{21}{subsubsection.5.2.5}%
-\contentsline {subsubsection}{\numberline {5.2.6}Change Pattern}{21}{subsubsection.5.2.6}%
-\contentsline {subsubsection}{\numberline {5.2.7}Chain Patterns}{21}{subsubsection.5.2.7}%
+\contentsline {subsubsection}{\numberline {5.2.4}Morph}{22}{subsubsection.5.2.4}%
+\contentsline {subsubsection}{\numberline {5.2.5}Shuffle}{22}{subsubsection.5.2.5}%
+\contentsline {subsubsection}{\numberline {5.2.6}Change Pattern}{22}{subsubsection.5.2.6}%
+\contentsline {subsubsection}{\numberline {5.2.7}Chain Patterns}{22}{subsubsection.5.2.7}%
 \contentsline {subsubsection}{\numberline {5.2.8}Follow Mode and Viewed Pattern}{23}{subsubsection.5.2.8}%
-\contentsline {subsection}{\numberline {5.3}Step (Edit) Mode}{23}{subsection.5.3}%
-\contentsline {subsubsection}{\numberline {5.3.1}Setting and Removing Steps}{23}{subsubsection.5.3.1}%
-\contentsline {subsection}{\numberline {5.4}Load and Save Mode}{23}{subsection.5.4}%
-\contentsline {subsubsection}{\numberline {5.4.1}Display Description}{23}{subsubsection.5.4.1}%
+\contentsline {subsection}{\numberline {5.3}Step (Edit) Mode}{24}{subsection.5.3}%
+\contentsline {subsubsection}{\numberline {5.3.1}Setting and Removing Steps}{24}{subsubsection.5.3.1}%
+\contentsline {subsection}{\numberline {5.4}Load and Save Mode}{24}{subsection.5.4}%
+\contentsline {subsubsection}{\numberline {5.4.1}Display Description}{24}{subsubsection.5.4.1}%
 \contentsline {subsubsection}{\numberline {5.4.2}Menu Navigation}{24}{subsubsection.5.4.2}%
 \contentsline {subsubsection}{\numberline {5.4.3}Sound Presets}{24}{subsubsection.5.4.3}%
-\contentsline {subsubsection}{\numberline {5.4.4}Morph Presets}{24}{subsubsection.5.4.4}%
-\contentsline {subsubsection}{\numberline {5.4.5}Pattern Sets}{24}{subsubsection.5.4.5}%
-\contentsline {subsubsection}{\numberline {5.4.6}Performance Files}{24}{subsubsection.5.4.6}%
+\contentsline {subsubsection}{\numberline {5.4.4}Morph Presets}{25}{subsubsection.5.4.4}%
+\contentsline {subsubsection}{\numberline {5.4.5}Pattern Sets}{25}{subsubsection.5.4.5}%
+\contentsline {subsubsection}{\numberline {5.4.6}Performance Files}{25}{subsubsection.5.4.6}%
 \contentsline {subsubsection}{\numberline {5.4.7}All Files}{25}{subsubsection.5.4.7}%
 \contentsline {subsubsection}{\numberline {5.4.8}Background file loading}{25}{subsubsection.5.4.8}%
-\contentsline {subsubsection}{\numberline {5.4.9}Samples}{25}{subsubsection.5.4.9}%
-\contentsline {subsubsection}{\numberline {5.4.10}Settings}{25}{subsubsection.5.4.10}%
-\contentsline {subsection}{\numberline {5.5}Pattern Generator Mode}{25}{subsection.5.5}%
-\contentsline {subsubsection}{\numberline {5.5.1}Accessing the Pattern Generator}{25}{subsubsection.5.5.1}%
-\contentsline {subsubsection}{\numberline {5.5.2}Pattern Generator Menu}{25}{subsubsection.5.5.2}%
+\contentsline {subsubsection}{\numberline {5.4.9}Samples}{26}{subsubsection.5.4.9}%
+\contentsline {subsubsection}{\numberline {5.4.10}Settings}{26}{subsubsection.5.4.10}%
+\contentsline {subsection}{\numberline {5.5}Pattern Generator Mode}{26}{subsection.5.5}%
+\contentsline {subsubsection}{\numberline {5.5.1}Accessing the Pattern Generator}{26}{subsubsection.5.5.1}%
+\contentsline {subsubsection}{\numberline {5.5.2}Pattern Generator Menu}{26}{subsubsection.5.5.2}%
 \contentsline {subsubsection}{\numberline {5.5.3}Generating Patterns}{26}{subsubsection.5.5.3}%
 \contentsline {subsubsection}{\numberline {5.5.4}Resetting a Generated Pattern}{26}{subsubsection.5.5.4}%
-\contentsline {subsection}{\numberline {5.6}Global Settings Menu}{26}{subsection.5.6}%
-\contentsline {subsubsection}{\numberline {5.6.1}Accessing the Settings Menu}{26}{subsubsection.5.6.1}%
+\contentsline {subsection}{\numberline {5.6}Global Settings Menu}{27}{subsection.5.6}%
+\contentsline {subsubsection}{\numberline {5.6.1}Accessing the Settings Menu}{27}{subsubsection.5.6.1}%
 \contentsline {subsubsection}{\numberline {5.6.2}Menu Options}{27}{subsubsection.5.6.2}%
 \contentsline {subsubsection}{\numberline {5.6.3}Follow Mode}{27}{subsubsection.5.6.3}%
-\contentsline {subsubsection}{\numberline {5.6.4}Screensaver}{27}{subsubsection.5.6.4}%
+\contentsline {subsubsection}{\numberline {5.6.4}Screensaver}{28}{subsubsection.5.6.4}%
 \contentsline {subsubsection}{\numberline {5.6.5}Loading and Saving Global Settings}{28}{subsubsection.5.6.5}%
 \contentsline {section}{\numberline {6}Synth Modules}{29}{section.6}%
 \contentsline {subsection}{\numberline {6.1}Oscillator}{29}{subsection.6.1}%
+\contentsline {subsubsection}{\numberline {6.1.1}Wavetable Interpolation}{29}{subsubsection.6.1.1}%
 \contentsline {subsection}{\numberline {6.2}Filter}{29}{subsection.6.2}%
 \contentsline {subsubsection}{\numberline {6.2.1}Frequency}{29}{subsubsection.6.2.1}%
 \contentsline {subsubsection}{\numberline {6.2.2}Resonance}{29}{subsubsection.6.2.2}%
-\contentsline {subsubsection}{\numberline {6.2.3}Drive}{29}{subsubsection.6.2.3}%
-\contentsline {subsubsection}{\numberline {6.2.4}Filter Types}{29}{subsubsection.6.2.4}%
+\contentsline {subsubsection}{\numberline {6.2.3}Drive}{30}{subsubsection.6.2.3}%
+\contentsline {subsubsection}{\numberline {6.2.4}Filter Types}{30}{subsubsection.6.2.4}%
 \contentsline {subsection}{\numberline {6.3}Envelopes}{34}{subsection.6.3}%
 \contentsline {subsubsection}{\numberline {6.3.1}Attack / Decay Times}{35}{subsubsection.6.3.1}%
 \contentsline {subsubsection}{\numberline {6.3.2}Slope}{35}{subsubsection.6.3.2}%
@@ -113,6 +115,7 @@
 \contentsline {subsection}{\numberline {6.6}Distortion}{38}{subsection.6.6}%
 \contentsline {subsection}{\numberline {6.7}LFO}{38}{subsection.6.7}%
 \contentsline {subsubsection}{\numberline {6.7.1}Setting Up Modulations}{39}{subsubsection.6.7.1}%
+\contentsline {subsubsection}{\numberline {6.7.2}Using The LFO as an Envelope}{39}{subsubsection.6.7.2}%
 \contentsline {subsection}{\numberline {6.8}Velocity Modulation}{39}{subsection.6.8}%
 \contentsline {subsection}{\numberline {6.9}Output Routing}{39}{subsection.6.9}%
 \contentsline {section}{\numberline {7}MIDI}{40}{section.7}%

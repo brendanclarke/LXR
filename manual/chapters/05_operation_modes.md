@@ -22,7 +22,7 @@ $\frac{1}{16}$th note from a 4/4 bar. A lit LED above the button indicates the s
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth]{front_panel.jpeg}
+  \includegraphics[width=\linewidth]{front_panel.png}
   \caption{Front panel reference for using Voice mode.}
 \end{figure}
 

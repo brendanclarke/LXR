@@ -184,6 +184,7 @@ of a short attack sample mixed into the voice output.
 wav & Transient wave shape  & Selects the transient sample to play. \\
 vol & Transient volume      & Volume of the transient sample. \\
 frq & Transient frequency   & Frequency of the transient sample. \\
+sca & Pattern Scale         & Step length multiplier applied to the track. \\
 \end{paramtable}
 
 \subsubsection{Filter Page (FIL)}\label{filter-page-fil}
@@ -233,4 +234,6 @@ drv & Drive         & Soft clipping amount. \\
 out & Output        & Selects the hardware audio output for this voice: one of the 2 stereo
                       channels, or one of the 4 individual mono outputs. \\
 len & Track length  & The length of the sequencer track in $\frac{1}{16}$ steps. \\
+mid & MIDI Channel  & MIDI channel the voice will receive and send note and CC data on. \\
+nte & MIDI Note     & MIDI note the voice sends/receives. Chromatically all on channel if unset. \\
 \end{paramtable}

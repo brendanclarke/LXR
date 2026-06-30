@@ -9,11 +9,6 @@ additional features.
 There are 7 sequencer tracks --- one per voice, plus an additional track
 to control the open hihat of voice 6.
 
-{[}\textbf{Brendan: To Review}{]} Pattern scaling per track is
-accessible via a second page under the `click' (transient voicing)
-sub-page. This lets you run a track at a different rhythmic subdivision
-from the rest of the pattern.
-
 \subsubsection{Select Tracks}\label{select-tracks}
 
 The active track is changed with the 7 voice buttons. A lit LED next to
@@ -126,18 +121,20 @@ probability value, the step plays.
 This allows interesting sub-step cluster randomisation — the 1st sub step always plays, the 5th
 plays with 50\% chance, and the 3rd and 7th play with 25\% chance.}
 
+\subsubsection{Automation-Only Steps}\label{automation-only-steps}
+
+If the \textbf{velocity} of a step is set to 0, The envelopes for the
+voice will not be retriggered by that step. However, all other
+parameters of the step will still be processed. This is useful for
+changing the sound parameters of a voice as it decays or automating
+changing to other voices, for example.
+
 \subsection{Automation}\label{automation}
 
 Parameter values can be recorded to the sequencer steps. Each step can
 store 2 parameter changes. They only affect that single step and are
 ignored if the step is inactive. The modulation targets can be different
 on every step.
-
-When a step's velocity is set to 0, it does not retrigger the voice
-envelope but still plays back any automation recorded on that step. This
-can be useful for assigning automation to a different voice than the
-track assignment, or changing the character of a voice as the sound
-decays.
 
 \subsubsection{Choosing the Active Automation
 Track}\label{choosing-the-active-automation-track}
