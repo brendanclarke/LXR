@@ -86,6 +86,8 @@ The following features have been added to Catalyst edition, supplementing the v0
 
 **Encoder acceleration.** The encoder reading algorithm is updated and includes an acceleration implementation. By default this goes up to x4, but can be changed in config.h. **NB:** The firmware only supports 4-phase per detent encoders at the moment. I think this should be the vast majority of the kits out there in existence, but the original LXR had code to handle other cases too. If you have a 1-phase per detent or 2-phase per detent encoder, let me know and I'll port those over to the new implementation as best I can.
 
+**Preview voice when stopped.** If the sequencer is not playing, pressing the voice button of the voice that is already selected triggers the voice. 
+
 ---
 
 ### Sound / Voice Mode
