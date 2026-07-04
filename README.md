@@ -154,8 +154,6 @@ The following features have been added to Catalyst edition, supplementing the v0
 
 **Load a performance file by MIDI bank change.** A global menu option switches Bank MSB (CC0) messages on the global channel from loading .kit files to loading .prf (performance) files, which include the full drum kit, pattern set, BPM, and morph target.
 
-**.prf and .all save morph kit.** The performance and 'all' save types now include morph target parameters, preserving the full morph state across saves and loads.
-
 **Load individual drum voices from kit files.** The Load menu now includes entries to load individual drum voices from .kit files without replacing the full drumkit. The name and number shown for a loaded voice reflect the kit it was derived from, even if the voice was subsequently changed by a MIDI bank change.
 
 **Background file loading.** When loading a file, the currently playing pattern and parameters are held in a temporary slot while the load executes in the background. The loaded sound becomes active when the next new pattern is played. A global menu option controls which file types use background loading. This also affects how .prf files are loaded by MIDI bank change (CC0), if that option is selected. 
