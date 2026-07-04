@@ -59,6 +59,7 @@
 
 #define SEQ_PRESCALER_MASK 	0x03
 #define MIDI_PRESCALER_MASK	0x04
+#define SEQ_AUTOM_OWNER_NONE 0xff
 
 static uint8_t seq_prescaleCounter = 0;
 
@@ -175,6 +176,10 @@ uint8_t seq_transposeOnOff;
 static AutomationNode seq_automationNodes[NUM_TRACKS][2];
 static uint8_t seq_automationPendingRelease[NUM_TRACKS][2];
 static uint8_t seq_voiceMorphAutomationPendingRelease[NUM_TRACKS][2];
+static uint8_t seq_globalDecimAutomationActive;
+static uint8_t seq_globalDecimAutomationOwnerTrack = SEQ_AUTOM_OWNER_NONE;
+static uint8_t seq_globalDecimAutomationOwnerLane = SEQ_AUTOM_OWNER_NONE;
+static uint8_t seq_globalDecimAutomationRestoreValue;
 
 static void seq_sendRealtime(const uint8_t status);
 static void seq_sendProgChg(const uint8_t ptn);
@@ -188,6 +193,10 @@ static void seq_applyAutomationLane(uint8_t track, uint8_t lane, uint8_t param, 
 static void seq_releasePendingAutomationForTrack(uint8_t track);
 static void seq_releaseAllAutomation(void);
 static void seq_releaseLaneIfHoldingDestination(uint8_t track, uint8_t lane, uint8_t oldDest);
+static void seq_applyGlobalDecimationAutomation(uint8_t track, uint8_t lane, uint8_t value);
+static void seq_releaseGlobalDecimationAutomationForOwner(uint8_t track);
+static void seq_releaseGlobalDecimationAutomationIfLane(uint8_t track, uint8_t lane);
+static void seq_releaseGlobalDecimationAutomation(void);
 static inline uint8_t seq_voiceMidiChannel(uint8_t voice)
 {
    return (voice < 8) ? midi_MidiChannels[voice] : 0;
@@ -212,8 +221,17 @@ void seq_init()
    for(i=0;i<NUM_TRACKS;i++) {
       autoNode_init(&seq_automationNodes[i][0]);
       autoNode_init(&seq_automationNodes[i][1]);
+      seq_automationPendingRelease[i][0] = 0;
+      seq_automationPendingRelease[i][1] = 0;
+      seq_voiceMorphAutomationPendingRelease[i][0] = 0;
+      seq_voiceMorphAutomationPendingRelease[i][1] = 0;
       midi_envPosition[i]=0;
    }
+
+   seq_globalDecimAutomationActive = 0;
+   seq_globalDecimAutomationOwnerTrack = SEQ_AUTOM_OWNER_NONE;
+   seq_globalDecimAutomationOwnerLane = SEQ_AUTOM_OWNER_NONE;
+   seq_globalDecimAutomationRestoreValue = 0;
 
    for(i=0;i<256;i++)
    {
@@ -224,6 +242,16 @@ void seq_init()
    memset(seq_transpose_voiceAmount,63,NUM_TRACKS);
    memset(&preset_tmpKitState,0,sizeof(preset_tmpKitState));
    memset(&preset_normalKitState, 0, sizeof(preset_normalKitState));
+   /* The mixer boots global decimation at full rate, and the AVR menu also
+      defaults PAR_VOICE_DECIMATION_ALL to 127. Seed the STM canonical preset
+      images the same way so step automation has a correct release baseline
+      before any file load or menu edit arrives. */
+   preset_tmpKitState.kitEndpointParams[PAR_VOICE_DECIMATION_ALL] = 127;
+   preset_tmpKitState.morphEndpointParams[PAR_VOICE_DECIMATION_ALL] = 127;
+   preset_tmpKitState.interpolatedParams[PAR_VOICE_DECIMATION_ALL] = 127;
+   preset_normalKitState.kitEndpointParams[PAR_VOICE_DECIMATION_ALL] = 127;
+   preset_normalKitState.morphEndpointParams[PAR_VOICE_DECIMATION_ALL] = 127;
+   preset_normalKitState.interpolatedParams[PAR_VOICE_DECIMATION_ALL] = 127;
 
    preset_resetLiveMorphApplyCache();
    memset(preset_vMorphAmount, 0, sizeof(preset_vMorphAmount));
@@ -346,10 +374,69 @@ static uint8_t seq_voiceMorphFromAutomationDestination(uint8_t destination,
    return 1;
 }
 //------------------------------------------------------------------------------
+static void seq_applyGlobalDecimationAutomation(uint8_t track,
+                                                uint8_t lane,
+                                                uint8_t value)
+{
+   if(track >= NUM_TRACKS || lane >= 2)
+      return;
+
+   /* PAR_VOICE_DECIMATION_ALL writes one shared DSP value
+      (mixer_decimation_rate[6]), so it cannot be released by every track/lane
+      that happens to contain the same target. Capture the pre-automation
+      baseline once, then transfer ownership to whichever step last applied the
+      global override. */
+   if(!seq_globalDecimAutomationActive)
+      seq_globalDecimAutomationRestoreValue =
+         preset_getLiveParameterBaseline(PAR_VOICE_DECIMATION_ALL);
+
+   seq_globalDecimAutomationActive = 1;
+   seq_globalDecimAutomationOwnerTrack = track;
+   seq_globalDecimAutomationOwnerLane = lane;
+   preset_applySingleParameterValue(PAR_VOICE_DECIMATION_ALL, value);
+}
+//------------------------------------------------------------------------------
+static void seq_releaseGlobalDecimationAutomation(void)
+{
+   if(!seq_globalDecimAutomationActive)
+      return;
+
+   /* Release global SampleRt to the value that was live before the first
+      currently-held global decimation step automation fired. The stored owner
+      is cleared afterwards so stale non-owning tracks cannot release it. */
+   preset_applySingleParameterValue(PAR_VOICE_DECIMATION_ALL,
+                                    seq_globalDecimAutomationRestoreValue);
+   seq_globalDecimAutomationActive = 0;
+   seq_globalDecimAutomationOwnerTrack = SEQ_AUTOM_OWNER_NONE;
+   seq_globalDecimAutomationOwnerLane = SEQ_AUTOM_OWNER_NONE;
+}
+//------------------------------------------------------------------------------
+static void seq_releaseGlobalDecimationAutomationForOwner(uint8_t track)
+{
+   if(seq_globalDecimAutomationActive
+      && seq_globalDecimAutomationOwnerTrack == track)
+   {
+      seq_releaseGlobalDecimationAutomation();
+   }
+}
+//------------------------------------------------------------------------------
+static void seq_releaseGlobalDecimationAutomationIfLane(uint8_t track,
+                                                       uint8_t lane)
+{
+   if(seq_globalDecimAutomationActive
+      && seq_globalDecimAutomationOwnerTrack == track
+      && seq_globalDecimAutomationOwnerLane == lane)
+   {
+      seq_releaseGlobalDecimationAutomation();
+   }
+}
+//------------------------------------------------------------------------------
 void seq_releaseAutomationLane(uint8_t track, uint8_t lane)
 {
    if(track >= NUM_TRACKS || lane >= 2)
       return;
+
+   seq_releaseGlobalDecimationAutomationIfLane(track, lane);
 
    if(seq_automationPendingRelease[track][lane]
       || autoNode_getDestination(&seq_automationNodes[track][lane]) != NO_AUTOMATION)
@@ -389,6 +476,8 @@ static void seq_releaseAllAutomation(void)
    uint8_t track;
    uint8_t lane;
 
+   seq_releaseGlobalDecimationAutomation();
+
    for(track=0;track<NUM_TRACKS;track++)
    {
       for(lane=0;lane<2;lane++)
@@ -404,6 +493,12 @@ static void seq_releaseLaneIfHoldingDestination(uint8_t track,
 
    if(track >= NUM_TRACKS || lane >= 2 || !seq_isAutomationDestinationActive(oldDest))
       return;
+
+   if(oldDest == PAR_VOICE_DECIMATION_ALL)
+   {
+      seq_releaseGlobalDecimationAutomationIfLane(track, lane);
+      return;
+   }
 
    if(seq_voiceMorphFromAutomationDestination(oldDest, &synthVoice))
    {
@@ -428,6 +523,25 @@ static void seq_applyAutomationLane(uint8_t track,
 
    if(track >= NUM_TRACKS || lane >= 2)
       return;
+
+   if(param == PAR_VOICE_DECIMATION_ALL)
+   {
+      /* Global decimation has a single shared mixer slot instead of one value
+         per voice. Keep it out of the generic AutomationNode release path so
+         only the track/lane that last applied it can restore the captured
+         pre-automation value. */
+      autoNode_setDestination(&seq_automationNodes[track][lane], 0);
+      seq_automationPendingRelease[track][lane] = 0;
+      if(seq_voiceMorphAutomationPendingRelease[track][lane])
+      {
+         uint8_t pendingMorphVoice =
+            (uint8_t)(seq_voiceMorphAutomationPendingRelease[track][lane] - 1);
+         preset_releaseVoiceMorphAutomationValue(pendingMorphVoice);
+         seq_voiceMorphAutomationPendingRelease[track][lane] = 0;
+      }
+      seq_applyGlobalDecimationAutomation(track, lane, value);
+      return;
+   }
 
    if(seq_voiceMorphFromAutomationDestination(param, &synthVoice))
    {
@@ -928,6 +1042,7 @@ static void seq_nextStep()
             override as soon as this track reaches its next active step, before
             probability, mute, roll, or note-trigger decisions can skip the
             normal trigger path. */
+         seq_releaseGlobalDecimationAutomationForOwner(i);
          seq_releasePendingAutomationForTrack(i);
       }
 

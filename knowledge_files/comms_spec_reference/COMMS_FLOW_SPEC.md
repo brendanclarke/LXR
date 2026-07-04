@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
-Date: 2026-06-29
-Status: current AVR<->STM comms reference after Session 033 restored `SHIFT+PLAY` around STM temporary preset storage, made `PATCH_RESET` an STM-owned temp-to-normal preset reload, multiplexed `SEQ_EUKLID_RESET` / `FRONT_SEQ_EUKLID_RESET` (`0x47`) for `SHIFT+PERF` Euclid visit control, and kept the Session 031 sample-import redo, Session 029 Global MIDI split, and Session 028 background file loading model intact. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
+Date: 2026-07-04
+Status: current AVR<->STM comms reference after Session 034 made step automation a one-step Preset-baseline override, special-cased global decimation step automation ownership, and extended the `PAR_VOICE_DECIMATION_ALL` `0 -> 127` guard into STM canonical Preset storage. Session 033 restored `SHIFT+PLAY` around STM temporary preset storage, made `PATCH_RESET` an STM-owned temp-to-normal preset reload, multiplexed `SEQ_EUKLID_RESET` / `FRONT_SEQ_EUKLID_RESET` (`0x47`) for `SHIFT+PERF` Euclid visit control, and kept the Session 031 sample-import redo, Session 029 Global MIDI split, and Session 028 background file loading model intact. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
 
 ## Purpose
 
@@ -160,6 +160,8 @@ Important rule:
 - Step automation destination storage also uses raw AVR/menu parameter indices. Front-panel live recording and manual step-destination editing write raw ids to `Step.param1Nr` / `Step.param2Nr`; automation playback converts raw low destinations to `MIDI_CC data1 = destination + 1` immediately before calling `frontParser_applyParameterCommand()`.
 - External DIN/USB MIDI automation recording starts from the MIDI-domain/apply-domain id. Those call sites must use `seq_recordAutomationMidiDestination()` so low MIDI-domain destinations are converted back to raw step storage.
 - STM-to-AVR step-parameter replies send raw stored destinations unchanged. This is different from `frontPanelSending_sendParameterEcho()`, which still subtracts one for low parameters because its MIDI parser callers pass apply-domain ids.
+- Step automation is a Sequencer one-step override. Release baselines come from STM `/Preset/` via `PresetKitState.interpolatedParams[]`, not from AVR/front-panel original-value mirrors. Ordinary automated parameters release on the next active step for the track, and manual/recorded target changes release the old held destination immediately.
+- `PAR_VOICE_DECIMATION_ALL` is a shared global SampleRt parameter, so step automation bypasses generic per-track `AutomationNode` ownership. The last track/lane that writes global decimation owns release back to the retained pre-automation value.
 - PERF individual voice morph amount edits are not ordinary `CC_2` parameter ingress. They use `VOICE_MORPH` low/high packets and land in the direct full-range Preset voice morph setter.
 - MIDI CC1 morph remains a 7-bit input path; its resulting full-range global/voice morph amount may be reported back to AVR for display sync.
 
@@ -323,6 +325,16 @@ Session 033 load/reload additions:
 - imported `PAR_VOICE_DECIMATION_ALL == 0` is clamped to `127` at the AVR
   file-import boundary before it can propagate into STM storage or future
   re-saves.
+
+Session 034 storage-baseline additions:
+
+- STM `/Preset/` also treats stored `PAR_VOICE_DECIMATION_ALL == 0` as `127`
+  when endpoint bytes are stored or used to rebuild `interpolatedParams[]`;
+- STM startup and endpoint-restore zeroing seed global decimation endpoint and
+  interpolated slots to `127`, matching the mixer and AVR menu default;
+- live/menu edits of shared parameters update `interpolatedParams[]`
+  immediately, so step automation release reads the menu value the user just
+  set.
 
 ### 4b. Reload And Euclid Temp-Snapshot Control
 

@@ -69,6 +69,13 @@ static void preset_refreshInterpolatedParamsFromEndpoints(PresetKitState *kit)
    for(param=0; param<END_OF_SOUND_PARAMETERS; param++)
    {
       uint8_t voiceMask = preset_voiceMaskForParameter(param);
+      uint8_t kitValue =
+         preset_normalizeStoredParameterValue(param, kit->kitEndpointParams[param]);
+      uint8_t morphValue =
+         preset_normalizeStoredParameterValue(param, kit->morphEndpointParams[param]);
+
+      kit->kitEndpointParams[param] = kitValue;
+      kit->morphEndpointParams[param] = morphValue;
 
       /* Temporary preset storage now doubles as the canonical “last loaded
          preset” image. Rebuild the interpolated cache from endpoint bytes here
@@ -78,18 +85,18 @@ static void preset_refreshInterpolatedParamsFromEndpoints(PresetKitState *kit)
          || preset_isMorphAmountParam(param)
          || !voiceMask)
       {
-         kit->interpolatedParams[param] = kit->kitEndpointParams[param];
+         kit->interpolatedParams[param] = kitValue;
       }
       else
       {
          uint8_t synthVoice = preset_firstVoiceForMask(voiceMask);
 
          if(synthVoice >= PRESET_SYNTH_VOICES)
-            kit->interpolatedParams[param] = kit->kitEndpointParams[param];
+            kit->interpolatedParams[param] = kitValue;
          else
             kit->interpolatedParams[param] =
-               preset_interpolateMorphValue(kit->kitEndpointParams[param],
-                                            kit->morphEndpointParams[param],
+               preset_interpolateMorphValue(kitValue,
+                                            morphValue,
                                             kit->voiceMorphAmount[synthVoice]);
       }
    }

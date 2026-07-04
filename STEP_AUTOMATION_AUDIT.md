@@ -320,3 +320,326 @@ Build verification from this implementation pass:
 
 - `make -C mainboard/LxrStm32 -j4 stm32` passes. The build still reports the existing STM warning noise in mixer, oscillator, modulation node, sequencer init bounds, TriggerOut memset, main `_exit`, MIDI parser fallthrough, and linker RWX segment.
 - `make firmware` passes and rebuilds `firmware image/FIRMWARE.BIN` with the updated STM binary.
+
+## Addendum: Global Decimation Automation
+
+User-requested behavior for `PAR_VOICE_DECIMATION_ALL` / `SampleRt`:
+
+- retain the global decimation value that was active before step automation;
+- remember whichever track most recently set global decimation from step automation;
+- release back to the retained pre-automation value when that owning track fires another active step.
+
+### Current Implementation Shape
+
+The front-panel menu sends all decimation parameters through the same path:
+
+```c
+avrComms_sendData(SEQ_CC, SEQ_SET_ACTIVE_TRACK,
+                  ((uint8_t)(paramNr - PAR_VOICE_DECIMATION1)));
+avrComms_sendData(VOICE_CC, VOICE_DECIMATION, value);
+```
+
+For `PAR_VOICE_DECIMATION_ALL`, that active-track value is `6`, and the STM
+apply path writes mixer slot `msg.data1 - VOICE_DECIMATION1`:
+
+```c
+case VOICE_DECIMATION_ALL:
+   mixer_decimation_rate[msg.data1 - VOICE_DECIMATION1] =
+      valueShaperI2F(msg.data2, -0.7f);
+   break;
+```
+
+`mixer_decimation_rate[6]` is the global multiplier used by all voices:
+
+```c
+mixer_decimation_cnt[voiceNr] +=
+   mixer_decimation_rate[voiceNr] * mixer_decimation_rate[6];
+```
+
+Step automation reaches this same raw destination through the Session 027 raw
+`PAR_*` convention. `PAR_VOICE_DECIMATION_ALL` is also listed as automation
+target selector index 1 in `preset_modTargetParams[]`.
+
+### Potential Problems
+
+1. The current generic one-step release is lane/track-local, but global
+   decimation is one shared runtime parameter.
+
+   If track 1 automates global decimation, then track 3 automates it before
+   track 1 reaches its next active step, track 1's generic pending release could
+   restore the global value even though track 3 is now the last writer. That
+   violates the desired "whatever track last set it" ownership rule.
+
+2. The pre-automation value needs to be captured once per active global
+   automation hold, not recomputed at release.
+
+   `preset_getLiveParameterBaseline(PAR_VOICE_DECIMATION_ALL)` is the right
+   source for the value before automation starts, but after automation is active
+   we should not overwrite that retained value with the automated value or with
+   another track's automated value. If a second track takes ownership, it should
+   update the owner track, not the retained pre-automation value.
+
+3. The generic `AutomationNode` per-track state is the wrong owner for this
+   destination.
+
+   `AutomationNode` can still convert/apply ordinary destinations, but
+   `PAR_VOICE_DECIMATION_ALL` should bypass generic per-track pending release
+   and go through one Sequencer-owned global-decimation automation state.
+
+4. Clear/target-change boundaries need to respect last-writer ownership.
+
+   If a non-owning track clears or changes a lane that used to automate global
+   decimation, it should not release the current global override. If the owning
+   track/lane is changed or cleared, it should release to the retained
+   pre-automation value.
+
+### Proposed Special Case
+
+Add Sequencer runtime state:
+
+```c
+#define SEQ_AUTOM_OWNER_NONE 0xff
+
+static uint8_t seq_globalDecimAutomationActive;
+static uint8_t seq_globalDecimAutomationOwnerTrack;
+static uint8_t seq_globalDecimAutomationOwnerLane;
+static uint8_t seq_globalDecimAutomationRestoreValue;
+```
+
+This state is runtime-only. No additional persistent `/Preset/` storage is
+needed because the retained pre-automation value is the current Preset baseline
+at the moment the first global-decimation step automation override begins.
+
+Add helpers:
+
+```c
+static void seq_applyGlobalDecimationAutomation(uint8_t track,
+                                                uint8_t lane,
+                                                uint8_t value);
+static void seq_releaseGlobalDecimationAutomationForOwner(uint8_t track);
+static void seq_releaseGlobalDecimationAutomationIfLane(uint8_t track,
+                                                        uint8_t lane);
+static void seq_releaseGlobalDecimationAutomation(void);
+```
+
+`seq_applyGlobalDecimationAutomation(track, lane, value)`:
+
+1. If `seq_globalDecimAutomationActive == 0`, set
+   `seq_globalDecimAutomationRestoreValue =
+   preset_getLiveParameterBaseline(PAR_VOICE_DECIMATION_ALL)`.
+2. Set active = 1.
+3. Set owner track/lane to the track/lane that just applied automation.
+4. Apply `value` to `PAR_VOICE_DECIMATION_ALL` through
+   `preset_applySingleParameterValue(PAR_VOICE_DECIMATION_ALL, value)`.
+
+If another track applies global decimation while already active, only the owner
+track/lane and live value are updated. The retained restore value is left alone.
+
+`seq_releaseGlobalDecimationAutomationForOwner(track)`:
+
+1. If active and owner track equals `track`, apply
+   `seq_globalDecimAutomationRestoreValue` to `PAR_VOICE_DECIMATION_ALL`.
+2. Clear active and owner fields.
+
+Call this from the same active-step release point that currently calls
+`seq_releasePendingAutomationForTrack(i)`, before generic lane release. This
+ensures only the track that most recently set the global override can release
+it.
+
+`seq_releaseGlobalDecimationAutomationIfLane(track, lane)`:
+
+1. If active and owner track/lane match, release.
+2. Otherwise do nothing.
+
+Use this from manual target-change, live-record overwrite, and clear-lane paths.
+That keeps non-owning lanes from releasing a global override they no longer own.
+
+`seq_releaseGlobalDecimationAutomation()`:
+
+1. If active, apply restore value and clear state.
+2. Use this on stop and pattern change before or alongside
+   `seq_releaseAllAutomation()`.
+
+### Integration Points
+
+1. In `seq_applyAutomationLane()`, before the voice-morph special case:
+
+```c
+if(param == PAR_VOICE_DECIMATION_ALL)
+{
+   autoNode_setDestination(&seq_automationNodes[track][lane], 0);
+   seq_automationPendingRelease[track][lane] = 0;
+   seq_voiceMorphAutomationPendingRelease[track][lane] = 0;
+   seq_applyGlobalDecimationAutomation(track, lane, value);
+   return;
+}
+```
+
+This prevents the generic per-track `AutomationNode` from owning global
+decimation.
+
+2. In the active-step release point in `seq_nextStep()`:
+
+```c
+seq_releaseGlobalDecimationAutomationForOwner(i);
+seq_releasePendingAutomationForTrack(i);
+```
+
+The order matters less once global decimation bypasses generic lanes, but this
+documents the ownership rule: global release is track-owner based.
+
+3. In `seq_releaseLaneIfHoldingDestination()`:
+
+```c
+if(oldDest == PAR_VOICE_DECIMATION_ALL)
+{
+   seq_releaseGlobalDecimationAutomationIfLane(track, lane);
+   return;
+}
+```
+
+4. In `seq_releaseAutomationLane()`:
+
+```c
+seq_releaseGlobalDecimationAutomationIfLane(track, lane);
+```
+
+This covers clear-lane calls and any explicit lane release.
+
+5. In `seq_releaseAllAutomation()`:
+
+```c
+seq_releaseGlobalDecimationAutomation();
+```
+
+Then proceed with normal per-track lane releases.
+
+### Verification Additions
+
+1. Put global `SampleRt` step automation on track 1. Let it fire. Confirm it
+   releases to the pre-automation value when track 1's next active step fires.
+2. Put global `SampleRt` automation on track 1 and track 3 with different
+   values. Let track 1 fire, then track 3 fire, then track 1 fire again. Track
+   1 must not release the value after track 3 has become owner. The value should
+   release only when track 3 reaches its next active step.
+3. While global decimation is held by track 3/lane 1, clear or change a
+   non-owning track/lane that also contains global decimation automation. It
+   should not release the held global value.
+4. While global decimation is held by the owning track/lane, change that lane's
+   automation target or clear the lane. It should release immediately to the
+   retained pre-automation value.
+5. Confirm stop and pattern change release any held global decimation value.
+
+### Implementation Notes: Global Decimation Automation
+
+Implemented in [sequencer.c](/Users/bc/LXR01/LXR-current/LXR/mainboard/LxrStm32/src/Sequencer/sequencer.c:176).
+
+The special case now keeps four sequencer-runtime fields:
+
+```c
+static uint8_t seq_globalDecimAutomationActive;
+static uint8_t seq_globalDecimAutomationOwnerTrack = SEQ_AUTOM_OWNER_NONE;
+static uint8_t seq_globalDecimAutomationOwnerLane = SEQ_AUTOM_OWNER_NONE;
+static uint8_t seq_globalDecimAutomationRestoreValue;
+```
+
+`PAR_VOICE_DECIMATION_ALL` no longer enters the generic
+`AutomationNode` ownership path. `seq_applyAutomationLane()` detects that raw
+destination, clears any ordinary automation node state for the lane, releases a
+pending voice-morph override if that lane was holding one, and calls
+`seq_applyGlobalDecimationAutomation()`.
+
+The helper captures
+`preset_getLiveParameterBaseline(PAR_VOICE_DECIMATION_ALL)` only when no global
+decimation automation is already active. If another track applies global
+decimation while it is active, ownership moves to the new track/lane and the
+live value changes, but the restore value remains the original pre-automation
+value. This matches the intended "last track owns release, first automation
+captures restore" behavior.
+
+The active-step release point now calls
+`seq_releaseGlobalDecimationAutomationForOwner(i)` before the normal per-lane
+release. Only the most recent owner track can release the shared global value
+on a later active step; a different track firing cannot accidentally release a
+global SampleRt override that it no longer owns.
+
+Manual target changes, live-record target overwrites, and lane clears now flow
+through `seq_releaseGlobalDecimationAutomationIfLane(track, lane)` when the old
+target is `PAR_VOICE_DECIMATION_ALL`. This makes an owning lane release
+immediately, while non-owning lanes that merely contain the same target leave
+the current shared override alone.
+
+`seq_releaseAllAutomation()` releases any active global decimation override
+before iterating the ordinary track/lane releases. Stop and pattern-change
+cleanup therefore restore global SampleRt even if there is no later owning
+track step.
+
+One deliberate implementation detail: when a lane applies global decimation,
+the code does not call `seq_releaseAutomationLane()` wholesale. That helper
+also releases global decimation when the lane is the current owner, which would
+allow a repeat global automation hit from the same lane to restore and then
+recapture the automated value as its new baseline. Instead the global branch
+only clears ordinary `AutomationNode` state and explicitly releases a pending
+voice-morph override.
+
+Build verification from the global decimation implementation pass:
+
+- `make -C mainboard/LxrStm32 -j4 stm32` passes. The compiler still reports the
+  existing sequencer init bounds warnings and the linker RWX segment warning.
+- `make firmware` passes and rebuilds `firmware image/FIRMWARE.BIN` from the
+  updated STM binary.
+
+### Follow-up: Global Decimation Restore Baseline
+
+Hardware test showed the special-case owner/release behavior working, but the
+released value could still be `0` instead of the value set from the menu. That
+pointed away from Sequencer ownership and into `/Preset/` baseline storage:
+`seq_applyGlobalDecimationAutomation()` captures
+`preset_getLiveParameterBaseline(PAR_VOICE_DECIMATION_ALL)`, and that baseline
+comes from `PresetKitState.interpolatedParams[]`.
+
+Remaining ways `PAR_VOICE_DECIMATION_ALL == 0` could be retained:
+
+- STM `seq_init()` zeroed both `preset_tmpKitState` and
+  `preset_normalKitState`. The live mixer and AVR menu default global
+  decimation to full rate, but the STM canonical preset images did not.
+- `FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN` zeroed normal-kit endpoint arrays before
+  file/restore traffic. If an older or partial file did not send global
+  decimation, the endpoint image kept the zero.
+- `preset_storeParameterIngress()` live/current-image writes updated
+  `kitEndpointParams[]` and the live shared-parameter cache, but did not update
+  `interpolatedParams[]` for shared parameters. Since global decimation is a
+  shared parameter, a menu edit could apply live audio while leaving the release
+  baseline stale.
+- Normal endpoint restore writes could store a raw zero into
+  `kitEndpointParams[]`, and shared params are not rebuilt by the per-voice
+  morph scanner.
+
+Implemented follow-up:
+
+- Added `preset_normalizeStoredParameterValue()` in
+  [ParameterArray.c](/Users/bc/LXR01/LXR-current/LXR/mainboard/LxrStm32/src/Preset/ParameterArray.c:1045).
+  For canonical stored endpoints, `PAR_VOICE_DECIMATION_ALL` value `0` is
+  interpreted as `127`. This helper is intentionally on stored values, not on
+  the live step-automation apply path.
+- `preset_refreshInterpolatedParamsFromEndpoints()` now normalizes endpoint
+  bytes before using them to rebuild `interpolatedParams[]`.
+- `preset_storeParameterIngress()` now updates `interpolatedParams[]` for
+  shared/current-image writes, so a menu edit to global SampleRt immediately
+  becomes the baseline that step automation restores to.
+- Normal endpoint restore ingress normalizes stored values and updates
+  `interpolatedParams[]` for shared parameters as they arrive.
+- `FRONT_SEQ_TMP_KIT_ENDPOINT_BEGIN` seeds the global-decimation endpoint and
+  interpolated slots to `127` after zeroing endpoint arrays, so missing fields
+  cannot retain the zero default.
+- `seq_init()` seeds both STM Preset images' global-decimation endpoint and
+  interpolated slots to `127`, matching the mixer and AVR menu startup default.
+
+Build verification from the restore-baseline follow-up:
+
+- `git diff --check` passes.
+- `make -C mainboard/LxrStm32 -j4 stm32` passes. It still reports the existing
+  mixer/Oscillator/modulationNode/sequencer-init/TriggerOut/main/MIDI/linker
+  warning set.
+- `make firmware` passes and rebuilds `firmware image/FIRMWARE.BIN` with the
+  updated STM binary.

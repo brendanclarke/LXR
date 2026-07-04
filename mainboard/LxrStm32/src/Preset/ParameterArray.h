@@ -467,6 +467,7 @@ uint8_t preset_voiceSelectorForAutomationTargetDestination(uint16_t destination,
 uint8_t preset_isAutomationTargetSelectorParam(uint16_t param);
 uint8_t preset_isMorphAmountParam(uint16_t param);
 uint8_t preset_morphVoiceForParam(uint16_t param);
+uint8_t preset_normalizeStoredParameterValue(uint16_t param, uint8_t value);
 
 typedef union
 {

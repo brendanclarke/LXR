@@ -1042,6 +1042,19 @@ uint8_t preset_isMorphAmountParam(uint16_t param)
    return param >= PAR_MORPH_DRUM1 && param <= PAR_MORPH_HIHAT;
 }
 
+/* Normalizes values that are stored as canonical preset endpoints. Older files
+   and zero-cleared endpoint buffers can contain PAR_VOICE_DECIMATION_ALL == 0,
+   but the global SampleRt default is full rate. Keep this at the Preset
+   storage boundary so step automation can still apply a live value of 0 while
+   release baselines and file-derived endpoints interpret stored 0 as 127. */
+uint8_t preset_normalizeStoredParameterValue(uint16_t param, uint8_t value)
+{
+   if(param == PAR_VOICE_DECIMATION_ALL && value == 0)
+      return 127;
+
+   return value;
+}
+
 uint8_t preset_morphVoiceForParam(uint16_t param)
 {
    if(param >= PAR_MORPH_DRUM1 && param <= PAR_MORPH_HIHAT)

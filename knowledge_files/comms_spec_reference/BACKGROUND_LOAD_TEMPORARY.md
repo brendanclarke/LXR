@@ -1,7 +1,7 @@
 # TEMPORARY / PATTERN / PARAMETER LOAD SPEC
 
-Date: 2026-06-29
-Status: current storage and switching spec after Session 033 restored `SHIFT+PLAY` around STM temporary preset storage and added Euclid-page one-visit temp track backups on the `SHIFT+PERF` page, while keeping the Session 028 background-load model intact. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`. Session 024 commented out the stale PRF/cache opcode surface without changing the live non-cache file-load path, Session 025 made the legacy macro slots zero-on-load plus inert on the apply/replay side, Session 026 connected per-voice morph display/control values to the active kit image via dedicated voice-morph traffic, Session 027 made step automation destinations raw AVR/menu `PAR_*` ids in pattern storage, Session 028 finished the `0x6d/0x6e` background-swap handshake so `.pat`, `.prf`, and `.all` loads can write normal storage while playback continues from temp, and Session 033 made temp preset storage the authoritative reload image for `PATCH_RESET`.
+Date: 2026-07-04
+Status: current storage and switching spec after Session 034 made step automation release through STM `/Preset/` baselines, added last-writer ownership for global decimation automation, and extended the `PAR_VOICE_DECIMATION_ALL` `0 -> 127` guard into STM canonical endpoint/interpolated storage. Session 033 restored `SHIFT+PLAY` around STM temporary preset storage and added Euclid-page one-visit temp track backups on the `SHIFT+PERF` page, while keeping the Session 028 background-load model intact. `PresetLoadCache` and the active `presetLoad_*` cache API are gone; file loads route directly to normal Preset/Pattern storage; normal/temp Preset and Pattern switching remains the only supported staging model. Internal CC/CC2-shaped parameter application is owned by STM front-panel receive/protocol code, not `MIDI/MidiParser.c`. Session 024 commented out the stale PRF/cache opcode surface without changing the live non-cache file-load path, Session 025 made the legacy macro slots zero-on-load plus inert on the apply/replay side, Session 026 connected per-voice morph display/control values to the active kit image via dedicated voice-morph traffic, Session 027 made step automation destinations raw AVR/menu `PAR_*` ids in pattern storage, Session 028 finished the `0x6d/0x6e` background-swap handshake so `.pat`, `.prf`, and `.all` loads can write normal storage while playback continues from temp, and Session 033 made temp preset storage the authoritative reload image for `PATCH_RESET`.
 
 Naming note: STM-side front-panel ownership stays under `mainboard/LxrStm32/src/uARTFrontSYX/` with `frontPanel*` names. AVR-side comms now live under `front/LxrAvr/avrComms/` with `avrComms*` names. Older AVR `frontPanel*` references are historical only.
 
@@ -51,6 +51,13 @@ Session 033 note: `PAR_VOICE_DECIMATION_ALL` must never survive file import as
 `0`. AVR now clamps imported `0` to `127` before the value can propagate into
 normal storage, temp storage, or re-saved files, and startup seeds the menu
 copy to `127`.
+
+Session 034 note: STM `/Preset/` also protects global decimation storage.
+Endpoint-restore zeroing and STM startup seed `PAR_VOICE_DECIMATION_ALL` to
+`127`, stored endpoint value `0` is normalized to `127` when endpoint images
+are rebuilt, and live/menu shared-parameter writes update
+`interpolatedParams[]` immediately so step automation releases to the current
+menu value.
 
 ## Purpose
 
@@ -461,5 +468,6 @@ second staging owner.
 - Do not use `END_OF_SOUND_PARAMETERS` for file-backed kit bytes if the loop is
   meant to exclude non-file-backed live morph amount controls; use
   `END_OF_KIT_PARAMETERS`.
-- Do not let imported `PAR_VOICE_DECIMATION_ALL == 0` survive past the AVR
-  file-import boundary.
+- Do not let imported or STM-stored `PAR_VOICE_DECIMATION_ALL == 0` survive as
+  the canonical Preset baseline; AVR file import and STM endpoint/interpolated
+  storage both normalize it to `127`.

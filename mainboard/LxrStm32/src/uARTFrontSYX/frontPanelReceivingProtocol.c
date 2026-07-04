@@ -2322,6 +2322,12 @@ static void frontParser_handleSeqCC()
          if(endpointMode != FRONT_SEQ_TMP_KIT_ENDPOINT_MORPH_ONLY)
          {
             memset(preset_normalKitState.kitEndpointParams, 0, END_OF_SOUND_PARAMETERS);
+            /* File/restore endpoint refresh starts from a zeroed image, but
+               global SampleRt's canonical default is 127. Seed it here so an
+               older or partial file that never sends this parameter cannot
+               leave the STM baseline at the broken zero default. */
+            preset_normalKitState.kitEndpointParams[PAR_VOICE_DECIMATION_ALL] = 127;
+            preset_normalKitState.interpolatedParams[PAR_VOICE_DECIMATION_ALL] = 127;
             memset(&preset_normalKitState.frontPanelAutomationTargets,
                    0,
                    sizeof(preset_normalKitState.frontPanelAutomationTargets));
@@ -2330,6 +2336,7 @@ static void frontParser_handleSeqCC()
          if(endpointMode != FRONT_SEQ_TMP_KIT_ENDPOINT_FRONT_ONLY)
          {
             memset(preset_normalKitState.morphEndpointParams, 0, END_OF_SOUND_PARAMETERS);
+            preset_normalKitState.morphEndpointParams[PAR_VOICE_DECIMATION_ALL] = 127;
             memset(&preset_normalKitState.morphParameterEndpointAutomationTargets,
                    0,
                    sizeof(preset_normalKitState.morphParameterEndpointAutomationTargets));

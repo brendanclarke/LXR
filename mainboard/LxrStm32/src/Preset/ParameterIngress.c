@@ -255,6 +255,7 @@ void preset_storeMorphParameterIngress(uint16_t param, uint8_t value)
 void preset_storeParameterIngress(uint16_t param, uint8_t value)
 {
    PresetKitState *kit;
+   uint8_t storedValue = value;
 
    if(preset_endpointIngressSuppressed)
       return;
@@ -293,15 +294,32 @@ void preset_storeParameterIngress(uint16_t param, uint8_t value)
          kit = &preset_tmpKitState;
       }
 
-      kit->kitEndpointParams[param] = value;
-      preset_updateLiveSharedParameterCache(param, value);
+      kit->kitEndpointParams[param] = storedValue;
+      /* Shared parameters do not pass through the per-voice morph scanner.
+         Keep their interpolated/cache image current at the menu/live-edit
+         boundary so step automation release reads the value the user just set,
+         not the stale endpoint image from the last file load. */
+      if(!voiceMask
+         || preset_isAutomationTargetSelectorParam(param)
+         || preset_isMorphAmountParam(param))
+      {
+         kit->interpolatedParams[param] = storedValue;
+      }
+      preset_updateLiveSharedParameterCache(param, storedValue);
       return;
    }
 
-   preset_normalKitState.kitEndpointParams[param] = value;
+   storedValue = preset_normalizeStoredParameterValue(param, value);
+   preset_normalKitState.kitEndpointParams[param] = storedValue;
+   if(!preset_voiceMaskForParameter(param)
+      || preset_isAutomationTargetSelectorParam(param)
+      || preset_isMorphAmountParam(param))
+   {
+      preset_normalKitState.interpolatedParams[param] = storedValue;
+   }
    preset_updateFrontAndInterpolatedAutomationTargets(&preset_normalKitState,
                                                       param,
-                                                      value);
+                                                      storedValue);
 }
 
 /* Stores an LFO destination selector and the resolved destination value into

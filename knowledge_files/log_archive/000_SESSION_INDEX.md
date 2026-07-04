@@ -42,6 +42,7 @@
 | 031 | 2026-06-28 | local repo, sample import redo and display | Cleanly rewrote sample import logic after reverting experiments, added deterministic sorting and 128-frame PCM blocks, and updated LCD to show 'Writing Flash' |
 | 032 | 2026-06-28 | local repo, oscillator interpolation complete | Finalized oscillator waveform interpolation wire-up, added single dynamically assigned fractional blend slot, and fixed standard state writeback for sample/phase tracking |
 | 033 | 2026-06-29 | local branch `dev-realign-reload`, commit `43f5006` plus uncommitted Euclid rollback WIP | Restored `SHIFT+PLAY` from STM temporary preset storage, clamped global decimation imports/startup to `127`, and added `SHIFT+PERF` Euclid-page per-visit temp-track rollback |
+| 034 | 2026-07-04 | local branch `master`, step automation/global decimation WIP | Made global SHIFT toggle use effective button state, made step automation release as a one-step Preset-baseline override, and special-cased global decimation ownership/baselines |
 
 ---
 
@@ -178,6 +179,10 @@ Session 032 finalized the implementation of oscillator waveform interpolation, a
 ### 033 — Kit Reload Restore + Euclid Temp-Track Rollback (2026-06-29)
 Session 033 had two durable outcomes. First, the committed `43f5006` pass restored `SHIFT+PLAY` around STM temporary preset storage: ordinary `.snd`, instrument, morph, `.prf`, and `.all` loads now mirror the appropriate endpoint subset into temp, protected `.prf` / `.all` background loads keep the old audible temp image only until playback returns to normal, `PATCH_RESET` now restores normal preset endpoints from STM temp, and `PAR_VOICE_DECIMATION_ALL` is clamped from imported `0` to `127` while startup now seeds that parameter to `127`. Second, after several discarded pattern-realign attempts and a user hard reset, the surviving local WIP redefined `SHIFT+PERF` Euclid editing around one-visit temp backups: the first edit to each touched track copies that normal track into `seq_tmpPattern`, leaving the page commits, and re-pressing `SHIFT+PERF` restores all touched tracks plus their cached Euclid UI values.
 - **Find here**: `PATCH_RESET` temp-to-normal reload semantics, endpoint-subset temp mirroring and post-background-load resnapshot rules, decimation-all `0 -> 127` guard, real `SHIFT+PERF` entry path via `SELECT_MODE_PAT_GEN`, `SEQ_EUKLID_RESET` visit-control multiplexing, multi-track rollback guard against repeated `BEGIN_VISIT`
+
+### 034 — Shift Toggle + Step Automation Reset + Global Decimation Baseline (2026-07-04)
+Session 034 fixed the global shift-toggle semantics so `buttonHandler_getShift()` reports the effective latched state and non-toggler UI paths no longer read raw SHIFT state. It also made step automation a true one-step override using STM `/Preset/` baselines: ordinary parameter and voice-morph automation release on the next active step or immediate lane target change/clear/stop/pattern boundary. Finally, global decimation step automation was special-cased as shared state with last-owner release, and STM canonical Preset storage now normalizes/initializes `PAR_VOICE_DECIMATION_ALL` so release returns to the current menu baseline instead of zero.
+- **Find here**: global shift-toggle effective-state rule, one-step automation release lifetime, Preset-baseline automation release, voice-morph step automation release, global decimation last-owner release, STM stored decimation `0 -> 127` baseline guard
 ---
 
 ## Key Cross-Session Facts (quick lookup)
@@ -249,8 +254,11 @@ Session 033 had two durable outcomes. First, the committed `43f5006` pass restor
 | STM sample progress/result packets use priority-wait transport because they are sparse user-facing status triples and must not be dropped | 031 |
 | Future oscillator waveform interpolation must use `PAR_OSC_WAVE_INTERPOLATION` and apply literally across the full waveform parameter domain, including imported samples/loops/noise/base waves | 031 |
 | `PATCH_RESET` / `SHIFT+PLAY` now means STM-side temp-to-normal preset endpoint restore and must be ignored while protected `.prf` / `.all` temp preset playback is still active | 033 |
-| Imported `PAR_VOICE_DECIMATION_ALL` must never stay `0`; clamp file reads to `127` and boot the menu copy at `127` | 033 |
+| `PAR_VOICE_DECIMATION_ALL` must never stay canonical stored `0`; AVR file import and STM Preset endpoint/interpolated storage normalize it to `127`, while live automation values are not normalized | 034 |
 | `SHIFT+PERF` Euclid edits use `seq_tmpPattern` as a one-visit per-track backup; `SEQ_EUKLID_RESET 0x02/0x03/0x04` begins, ends, and restores that visit | 033 |
+| Global SHIFT toggle is an effective button-level override; non-toggler code should use `buttonHandler_getShift()`, not raw DIN state or `shiftState` | 034 |
+| Step automation is a one-step override: release from STM `/Preset/` baselines on the next active step, lane target change/clear, stop, or pattern change | 034 |
+| `PAR_VOICE_DECIMATION_ALL` step automation is shared global state; keep it on the dedicated last-owner release path and normalize stored/canonical zero to `127` | 034 |
 
 
 ---
