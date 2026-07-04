@@ -46,6 +46,8 @@ typedef struct AutomationStruct
 } AutomationNode;
 //-------------------------------------------------------------
 void autoNode_init(AutomationNode* node);
+uint16_t autoNode_getDestination(const AutomationNode* node);
+void autoNode_release(AutomationNode* node);
 void autoNode_setDestination(AutomationNode* node, uint16_t dest);
 void autoNode_updateValue(AutomationNode* node, uint8_t val);
 

@@ -423,6 +423,49 @@ void preset_storeMacroDestinationIngress(uint8_t destinationNr, uint16_t destina
    (void)destination;
 }
 
+/* Reads the current canonical live baseline for a raw parameter. This mirrors
+   the current-image selection policy used by live parameter ingress: voice
+   parameters follow their normal/temp voice source, while shared parameters
+   follow the active current-image kit. Step automation release should return
+   to this interpolated value rather than to any AVR/front-panel mirror. */
+uint8_t preset_getLiveParameterBaseline(uint16_t param)
+{
+   PresetKitState *kit;
+
+   if(param >= END_OF_SOUND_PARAMETERS)
+      return 0;
+
+   {
+      uint8_t voiceMask = preset_voiceMaskForParameter(param);
+
+      kit = &preset_normalKitState;
+
+      if(voiceMask)
+      {
+         uint8_t synthVoice;
+         uint8_t useTmp = 0;
+
+         for(synthVoice=0;synthVoice<PRESET_SYNTH_VOICES;synthVoice++)
+         {
+            if((voiceMask & (uint8_t)(1 << synthVoice))
+               && preset_voiceSourceState[synthVoice] == PRESET_VOICE_SOURCE_TMP)
+            {
+               useTmp = 1;
+               break;
+            }
+         }
+
+         kit = useTmp ? &preset_tmpKitState : &preset_normalKitState;
+      }
+      else if(preset_isTmpKitActive())
+      {
+         kit = &preset_tmpKitState;
+      }
+   }
+
+   return kit->interpolatedParams[param];
+}
+
 /* Applies a single parameter value to the DSP. */
 void preset_applySingleParameterValue(uint16_t param, uint8_t value)
 {

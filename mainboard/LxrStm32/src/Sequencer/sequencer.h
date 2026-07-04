@@ -536,6 +536,16 @@ void seq_setErasingMode(uint8_t active);
 /* Select which automation lane receives live recordings.
    trackNr: lane selector, usually 0 for param1 and non-zero for param2. */
 void seq_setActiveAutomationTrack(uint8_t trackNr);
+/* Store one step automation destination through Sequencer so currently held
+   one-step overrides can be released when a lane target is overwritten. */
+void seq_setStepAutomationDestination(uint8_t pattern,
+                                      uint8_t track,
+                                      uint8_t step,
+                                      uint8_t lane,
+                                      uint8_t dest);
+/* Release a currently held one-step automation override for a track/lane.
+   Clear-menu paths use this before deleting lane data from the active pattern. */
+void seq_releaseAutomationLane(uint8_t track, uint8_t lane);
 /* Record an automation value into the active pattern source.
    voice: track whose active pattern source receives the update.
    dest: raw automation destination parameter.

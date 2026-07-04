@@ -89,6 +89,10 @@ uint8_t preset_getVoiceMorphAmount(uint8_t synthVoice);
 /* Sets the morph amount for a specific voice from an automation value. */
 void preset_setVoiceMorphAutomationValue(uint8_t synthVoice, uint8_t morphValue);
 
+/* Releases a one-step morph automation override back to the stored live base
+   amount for that voice. */
+void preset_releaseVoiceMorphAutomationValue(uint8_t synthVoice);
+
 /* Sets the morph amount for a mask of voices from an automation value. */
 void preset_setVoiceMorphMaskAutomationValue(uint8_t voiceMask, uint8_t morphValue);
 

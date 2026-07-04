@@ -34,6 +34,7 @@
  */
 
 #include "automationNode.h"
+#include "Preset/ParameterIngress.h"
 
 static uint8_t autoNode_makeParameterMessage(uint16_t destination, MidiMsg* msg)
 {
@@ -57,19 +58,31 @@ void autoNode_init(AutomationNode* node)
 	node->destination = NO_AUTOMATION;
 }
 //-------------------------------------------------------------
+uint16_t autoNode_getDestination(const AutomationNode* node)
+{
+	return node->destination;
+}
+//-------------------------------------------------------------
+void autoNode_release(AutomationNode* node)
+{
+	if(node->destination != NO_AUTOMATION)
+	{
+		uint16_t destination = node->destination;
+
+		if(destination != 0 && destination < END_OF_SOUND_PARAMETERS)
+		{
+			uint8_t baseline = preset_getLiveParameterBaseline(destination);
+			preset_applySingleParameterValue(destination, baseline);
+		}
+	}
+
+	node->destination = NO_AUTOMATION;
+}
+//-------------------------------------------------------------
 void autoNode_setDestination(AutomationNode* node, uint16_t dest)
 {
 	//reset lastDest
-	if(node->destination != NO_AUTOMATION)
-	{
-		MidiMsg msg;
-
-		if(autoNode_makeParameterMessage(node->destination, &msg))
-		{
-			msg.data2 = frontParser_originalCcValues[node->destination];
-			frontParser_applyParameterCommand(msg,0);
-		}
-	}
+	autoNode_release(node);
 
 	//set new destination
 	node->destination = (dest == 0) ? NO_AUTOMATION : dest;

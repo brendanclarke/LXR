@@ -173,6 +173,8 @@ uint8_t seq_transposeOnOff;
 
 //for the automation tracks each track needs 2 modNodes
 static AutomationNode seq_automationNodes[NUM_TRACKS][2];
+static uint8_t seq_automationPendingRelease[NUM_TRACKS][2];
+static uint8_t seq_voiceMorphAutomationPendingRelease[NUM_TRACKS][2];
 
 static void seq_sendRealtime(const uint8_t status);
 static void seq_sendProgChg(const uint8_t ptn);
@@ -182,6 +184,10 @@ static void seq_nextStep();
 static uint8_t seq_isNextStepSyncStep();
 static void seq_resetNote(Step *step);
 static void seq_setStepIndexToStart();
+static void seq_applyAutomationLane(uint8_t track, uint8_t lane, uint8_t param, uint8_t value);
+static void seq_releasePendingAutomationForTrack(uint8_t track);
+static void seq_releaseAllAutomation(void);
+static void seq_releaseLaneIfHoldingDestination(uint8_t track, uint8_t lane, uint8_t oldDest);
 static inline uint8_t seq_voiceMidiChannel(uint8_t voice)
 {
    return (voice < 8) ? midi_MidiChannels[voice] : 0;
@@ -325,8 +331,126 @@ void seq_setNextPattern(const uint8_t patNr, uint8_t voice)
    preset_tempPlaybackSwitchState.loadSeqNow = 1;
 }
 //------------------------------------------------------------------------------
+static uint8_t seq_isAutomationDestinationActive(uint8_t destination)
+{
+   return (destination != 0) && (destination != NO_AUTOMATION);
+}
+//------------------------------------------------------------------------------
+static uint8_t seq_voiceMorphFromAutomationDestination(uint8_t destination,
+                                                       uint8_t *synthVoice)
+{
+   if(destination < PAR_MORPH_DRUM1 || destination > PAR_MORPH_HIHAT)
+      return 0;
+
+   *synthVoice = (uint8_t)(destination - PAR_MORPH_DRUM1);
+   return 1;
+}
+//------------------------------------------------------------------------------
+void seq_releaseAutomationLane(uint8_t track, uint8_t lane)
+{
+   if(track >= NUM_TRACKS || lane >= 2)
+      return;
+
+   if(seq_automationPendingRelease[track][lane]
+      || autoNode_getDestination(&seq_automationNodes[track][lane]) != NO_AUTOMATION)
+   {
+      autoNode_release(&seq_automationNodes[track][lane]);
+      seq_automationPendingRelease[track][lane] = 0;
+   }
+
+   if(seq_voiceMorphAutomationPendingRelease[track][lane])
+   {
+      uint8_t synthVoice =
+         (uint8_t)(seq_voiceMorphAutomationPendingRelease[track][lane] - 1);
+      preset_releaseVoiceMorphAutomationValue(synthVoice);
+      seq_voiceMorphAutomationPendingRelease[track][lane] = 0;
+   }
+}
+//------------------------------------------------------------------------------
+static void seq_releasePendingAutomationForTrack(uint8_t track)
+{
+   uint8_t lane;
+
+   if(track >= NUM_TRACKS)
+      return;
+
+   for(lane=0;lane<2;lane++)
+   {
+      if(seq_automationPendingRelease[track][lane]
+         || seq_voiceMorphAutomationPendingRelease[track][lane])
+      {
+         seq_releaseAutomationLane(track, lane);
+      }
+   }
+}
+//------------------------------------------------------------------------------
+static void seq_releaseAllAutomation(void)
+{
+   uint8_t track;
+   uint8_t lane;
+
+   for(track=0;track<NUM_TRACKS;track++)
+   {
+      for(lane=0;lane<2;lane++)
+         seq_releaseAutomationLane(track, lane);
+   }
+}
+//------------------------------------------------------------------------------
+static void seq_releaseLaneIfHoldingDestination(uint8_t track,
+                                                uint8_t lane,
+                                                uint8_t oldDest)
+{
+   uint8_t synthVoice;
+
+   if(track >= NUM_TRACKS || lane >= 2 || !seq_isAutomationDestinationActive(oldDest))
+      return;
+
+   if(seq_voiceMorphFromAutomationDestination(oldDest, &synthVoice))
+   {
+      if(seq_voiceMorphAutomationPendingRelease[track][lane]
+         == (uint8_t)(synthVoice + 1))
+      {
+         seq_releaseAutomationLane(track, lane);
+      }
+      return;
+   }
+
+   if(autoNode_getDestination(&seq_automationNodes[track][lane]) == oldDest)
+      seq_releaseAutomationLane(track, lane);
+}
+//------------------------------------------------------------------------------
+static void seq_applyAutomationLane(uint8_t track,
+                                    uint8_t lane,
+                                    uint8_t param,
+                                    uint8_t value)
+{
+   uint8_t synthVoice;
+
+   if(track >= NUM_TRACKS || lane >= 2)
+      return;
+
+   if(seq_voiceMorphFromAutomationDestination(param, &synthVoice))
+   {
+      /* Voice morph step automation is control state, not a normal DSP
+         parameter byte. Mark it for one-step release separately from the
+         generic automation node. */
+      autoNode_setDestination(&seq_automationNodes[track][lane], 0);
+      seq_automationPendingRelease[track][lane] = 0;
+      seq_setVoiceMorphAutomationValue(synthVoice, value);
+      seq_voiceMorphAutomationPendingRelease[track][lane] =
+         (uint8_t)(synthVoice + 1);
+      return;
+   }
+
+   seq_voiceMorphAutomationPendingRelease[track][lane] = 0;
+   autoNode_setDestination(&seq_automationNodes[track][lane], param);
+   autoNode_updateValue(&seq_automationNodes[track][lane], value);
+   seq_automationPendingRelease[track][lane] =
+      seq_isAutomationDestinationActive(param);
+}
+//------------------------------------------------------------------------------
 static void seq_parseAutomationNodes(uint8_t track, Step* stepData)
-{  
+{
    uint8_t param1 = stepData->param1Nr;
    uint8_t param2 = stepData->param2Nr;
    uint8_t val1 = stepData->param1Val;
@@ -341,35 +465,8 @@ static void seq_parseAutomationNodes(uint8_t track, Step* stepData)
       preset_vMorphFlag = 0;
    }
 
-   if(param1)
-   {
-      if(param1>=PAR_MORPH_DRUM1&&param1<=PAR_MORPH_HIHAT)
-      {
-         /* Voice morph step automation only sets the per-voice morph amount.
-            It is consumed here so the generic automation node does not also
-            treat PAR_MORPH_* as an ordinary DSP parameter target. */
-         seq_setVoiceMorphAutomationValue((uint8_t)(param1-PAR_MORPH_DRUM1), val1);
-         param1 = 0;
-      }
-   }
-   if(param2)
-   {
-      if(param2>=PAR_MORPH_DRUM1&&param2<=PAR_MORPH_HIHAT)
-      {
-         /* See param1 path above: morph automation is control-state only. */
-         seq_setVoiceMorphAutomationValue((uint8_t)(param2-PAR_MORPH_DRUM1), val2);
-         param2 = 0;
-      }
-   }
-
-   {
-      //set new destination
-      autoNode_setDestination(&seq_automationNodes[track][0], param1);
-      autoNode_setDestination(&seq_automationNodes[track][1], param2);
-      //set new mod value
-      autoNode_updateValue(&seq_automationNodes[track][0], val1);
-      autoNode_updateValue(&seq_automationNodes[track][1], val2);
-   }
+   seq_applyAutomationLane(track, 0, param1, val1);
+   seq_applyAutomationLane(track, 1, param2, val2);
 }
 //------------------------------------------------------------------------------
 static Step* seq_liveStepForTrack(uint8_t track, uint8_t step)
@@ -740,6 +837,7 @@ static void seq_nextStep()
          
       	// --AS all notes off here since we are switching patterns
          voiceControl_noteOff(0xFF);
+         seq_releaseAllAutomation();
          
          frontPanelSending_sendPatternChange(seq_activePattern);
          
@@ -821,6 +919,18 @@ static void seq_nextStep()
             seq_loopActiveStepPosition[i] = 0;
          }
       }
+
+      if(activeScaledStep
+         && seq_liveMainStepActive(i, stepAcPtr[i]/8)
+         && seq_liveStepActive(i, stepAcPtr[i]))
+      {
+         /* Step automation is a one-step override. Release the previous
+            override as soon as this track reaches its next active step, before
+            probability, mute, roll, or note-trigger decisions can skip the
+            normal trigger path. */
+         seq_releasePendingAutomationForTrack(i);
+      }
+
       //--------- Tracks @ proper stap positions, process roll -------------------------
       if( !(seq_rollState & (1<<i))&&(seq_rollTriggered & (1<<i)) ) // start new roll command received
       {
@@ -1178,6 +1288,7 @@ void seq_setRunning(uint8_t isRunning)
    
    	//--AS send notes off on all channels that have notes playing and reset our bitmap to reflect that
       voiceControl_noteOff(0xFF);
+      seq_releaseAllAutomation();
    
       trigger_reset(0);
       trigger_allOff();
@@ -1618,12 +1729,20 @@ void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value)
       {*/
       if(seq_activeAutomTrack == 0) {
          Step *step = pat_getStepPtr(seq_perTrackActivePattern[voice], voice, quantizedStep);
-         step->param1Nr = dest;
+         seq_setStepAutomationDestination(seq_perTrackActivePattern[voice],
+                                          voice,
+                                          quantizedStep,
+                                          0,
+                                          dest);
          step->param1Val = value;
       } 
       else {
          Step *step = pat_getStepPtr(seq_perTrackActivePattern[voice], voice, quantizedStep);
-         step->param2Nr = dest;
+         seq_setStepAutomationDestination(seq_perTrackActivePattern[voice],
+                                          voice,
+                                          quantizedStep,
+                                          1,
+                                          dest);
          step->param2Val = value;
       }
       
@@ -1641,14 +1760,22 @@ void seq_recordAutomation(uint8_t voice, uint8_t dest, uint8_t value)
          Step *step = pat_getStepPtr(seq_perTrackActivePattern[voice],
                                            seq_armedArmedAutomationTrack,
                                            seq_armedArmedAutomationStep);
-         step->param1Nr = dest;
+         seq_setStepAutomationDestination(seq_perTrackActivePattern[voice],
+                                          seq_armedArmedAutomationTrack,
+                                          seq_armedArmedAutomationStep,
+                                          0,
+                                          dest);
          step->param1Val = value;
       } 
       else {
          Step *step = pat_getStepPtr(seq_perTrackActivePattern[voice],
                                            seq_armedArmedAutomationTrack,
                                            seq_armedArmedAutomationStep);
-         step->param2Nr = dest;
+         seq_setStepAutomationDestination(seq_perTrackActivePattern[voice],
+                                          seq_armedArmedAutomationTrack,
+                                          seq_armedArmedAutomationStep,
+                                          1,
+                                          dest);
          step->param2Val = value;
       }
    }
@@ -1820,6 +1947,39 @@ static void seq_resetNote(Step *step)
 void seq_setActiveAutomationTrack(uint8_t trackNr)
 {
    seq_activeAutomTrack = trackNr;
+}
+//------------------------------------------------------------------------------
+/* Store one automation destination and release a currently held one-step
+   override if this write replaces the target that is still live for the same
+   active track/lane. */
+void seq_setStepAutomationDestination(uint8_t pattern,
+                                      uint8_t track,
+                                      uint8_t step,
+                                      uint8_t lane,
+                                      uint8_t dest)
+{
+   Step *stepPtr;
+   uint8_t oldDest;
+
+   if(track >= NUM_TRACKS || lane >= 2)
+      return;
+
+   stepPtr = pat_getStepPtr(pattern, track, step);
+
+   if(lane == 0)
+   {
+      oldDest = stepPtr->param1Nr;
+      if(oldDest != dest && pattern == seq_perTrackActivePattern[track])
+         seq_releaseLaneIfHoldingDestination(track, lane, oldDest);
+      stepPtr->param1Nr = dest;
+   }
+   else
+   {
+      oldDest = stepPtr->param2Nr;
+      if(oldDest != dest && pattern == seq_perTrackActivePattern[track])
+         seq_releaseLaneIfHoldingDestination(track, lane, oldDest);
+      stepPtr->param2Nr = dest;
+   }
 }
 //------------------------------------------------------------------------------
 static uint8_t seq_isNextStepSyncStep()

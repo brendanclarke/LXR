@@ -89,6 +89,12 @@ void preset_storeVelocityDestinationIngress(uint8_t voice, uint16_t destination)
    image coherent with the current ingress mode. */
 void preset_storeMacroDestinationIngress(uint8_t destinationNr, uint16_t destination);
 
+/* Reads the STM-owned live baseline for a raw sound parameter. Step automation
+   release uses this instead of the legacy front-panel original-value mirror so
+   temporary kit ownership and morph interpolation stay authoritative in
+   /Preset/. */
+uint8_t preset_getLiveParameterBaseline(uint16_t param);
+
 /* Applies a single parameter value to the DSP, respecting the retrigger-safe
    diagnostic filter and converting the raw index to a MIDI-like status/data
    pair for the parser. */

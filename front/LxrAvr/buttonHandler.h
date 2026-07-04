@@ -16,7 +16,6 @@ extern uint16_t buttonHandler_originalParameter;	//saves parameter number for st
 extern uint8_t buttonHandler_originalValue; 
 extern uint8_t buttonHandler_resetLock;
 extern uint8_t shiftMode;
-extern uint8_t shiftState;
 extern uint8_t buttonHandler_loadingFunction;
 
 #define BUTTON_TIMEOUT (38) //~500[ms]
@@ -118,6 +117,10 @@ void buttonHandler_buttonReleased(uint8_t buttonNr);
 /** return the menu state selected by mode2 button*/
 uint8_t buttonHandler_getMode();
 //--------------------------------------------------------
+/* Return the effective SHIFT state, not the physical switch level. In global
+   toggle mode this stays true after the physical SHIFT button is released, so
+   all menu/button code sees the same "as if held" state that the SHIFT LED
+   shows. */
 uint8_t buttonHandler_getShift();
 //--------------------------------------------------------
 int8_t buttonHandler_getArmedAutomationStep();

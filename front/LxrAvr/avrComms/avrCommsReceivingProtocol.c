@@ -551,7 +551,11 @@ void avrComms_parseData(uint8_t data)
                   case SEQ_TRACK_ROTATION:
                      parameter_values[PAR_TRACK_ROTATION] = avrCommsParser_command.data2;
                      menu_repaint();
-                     if ((buttonHandler_getMode() == SELECT_MODE_PERF)&&shiftState)
+                     /* Rotation LED refresh should follow the effective
+                        shifted view. In global shift-toggle mode the physical
+                        button may be released while the shifted PERF page is
+                        still active. */
+                     if ((buttonHandler_getMode() == SELECT_MODE_PERF)&&buttonHandler_getShift())
                      {  // rotation amount updated while viewing rotation - update the display
                         led_clearAllBlinkLeds();
                         led_setBlinkLed((uint8_t) (LED_STEP1 + parameter_values[PAR_TRACK_ROTATION]), 1);
@@ -953,7 +957,10 @@ void avrComms_parseData(uint8_t data)
                   
                      break;                  
                   case LED_SEQ_SUB_STEP_LOWER:
-                     if ( ( (menu_activePage<=VOICE7_PAGE)&&(shiftState||copyClear_getCopyMode()) ) || (menu_activePage==SEQ_PAGE) || (menu_activePage==EUKLID_PAGE))
+                     /* Substep LED packets are accepted whenever the effective
+                        shifted voice view is active, including latched SHIFT
+                        toggle, or while copy/clear temporarily owns the LEDs. */
+                     if ( ( (menu_activePage<=VOICE7_PAGE)&&(buttonHandler_getShift()||copyClear_getCopyMode()) ) || (menu_activePage==SEQ_PAGE) || (menu_activePage==EUKLID_PAGE))
                      {
                      	//parse sub steps
                         uint8_t i;
@@ -966,7 +973,10 @@ void avrComms_parseData(uint8_t data)
                      break;
                   
                   case LED_SEQ_SUB_STEP_UPPER:
-                     if ( ( (menu_activePage<=VOICE7_PAGE)&&(shiftState||copyClear_getCopyMode()) ) || (menu_activePage==SEQ_PAGE) || (menu_activePage==EUKLID_PAGE))
+                     /* Keep upper substep LED gating identical to the lower
+                        half: use effective SHIFT so toggle mode is a real
+                        held-button override. */
+                     if ( ( (menu_activePage<=VOICE7_PAGE)&&(buttonHandler_getShift()||copyClear_getCopyMode()) ) || (menu_activePage==SEQ_PAGE) || (menu_activePage==EUKLID_PAGE))
                      {
                      	//parse sub steps
                         uint8_t i;

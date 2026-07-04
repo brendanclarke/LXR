@@ -796,7 +796,10 @@ void menu_enterVoiceMode()
    menu_switchPage(menu_getActiveVoice());
 	led_setActiveSelectButton(menu_getSubPage());
 	//menu_resetActiveParameter();
-   if(shiftState)
+   /* Use the effective shift query here rather than the old exported
+      shiftState variable, so re-entering voice mode honors latched global
+      shift-toggle exactly like a physically held SHIFT button. */
+   if(buttonHandler_getShift())
       menu_shiftVoice(1);
 }
 //-----------------------------------------------------------------
@@ -838,7 +841,9 @@ void menu_enterStepMode()
    // set selected substep blinking
    led_setBlinkLed((uint8_t)(LED_PART_SELECT1+(parameter_values[PAR_ACTIVE_STEP]%8)), 1);
    menu_repaint();
-   if(shiftState)
+   /* Same effective-state rule as voice mode: shifted step paint should follow
+      the latch, not the raw physical button level. */
+   if(buttonHandler_getShift())
       menu_shiftStep(1);
    led_setValue(1,LED_MODE3);
 }
@@ -1533,7 +1538,10 @@ void menu_repaintGeneric()
 		//get address from top1-4 from activeParameter (base adress top1 + offset)
 		uint8_t parName = pgm_read_byte(&ap->top1 + activeParameter);
 		uint16_t parNr = pgm_read_word(&ap->bot1 + activeParameter);
-      if (shiftState && parNr < END_OF_SOUND_PARAMETERS)
+      /* The single-parameter editor must display the same normal-vs-morph
+         value that the encoder will edit; both now use buttonHandler_getShift()
+         as the effective latched state. */
+      if (buttonHandler_getShift() && parNr < END_OF_SOUND_PARAMETERS)
          curParmVal = parameters2[parNr];
       else    
 		   curParmVal = parameter_values[parNr];

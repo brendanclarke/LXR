@@ -2038,7 +2038,11 @@ void frontParser_handleMidiMessage(void)
             uint8_t hi = frontParser_command.data1;
             uint8_t lo = frontParser_command.data2;
             uint8_t val = (hi<<7)|lo;
-            pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, seq_selectedStep)->param1Nr = val;
+            seq_setStepAutomationDestination(frontParser_shownPattern,
+                                             frontParser_activeTrack,
+                                             seq_selectedStep,
+                                             0,
+                                             val);
          }
          break;
       case FRONT_SET_P2_DEST: 
@@ -2046,7 +2050,11 @@ void frontParser_handleMidiMessage(void)
             uint8_t hi = frontParser_command.data1;
             uint8_t lo = frontParser_command.data2;
             uint8_t val = (hi<<7)|lo;
-            pat_getStepPtr(frontParser_shownPattern, frontParser_activeTrack, seq_selectedStep)->param2Nr = val;
+            seq_setStepAutomationDestination(frontParser_shownPattern,
+                                             frontParser_activeTrack,
+                                             seq_selectedStep,
+                                             1,
+                                             val);
          }
          break;
       case FRONT_SET_P1_VAL: 
@@ -2556,6 +2564,11 @@ static void frontParser_handleSeqCC()
          {
             const uint8_t voice 		= frontParser_command.data2 >> 4;
             const uint8_t automTrack 	= frontParser_command.data2 &  0x0f;
+            if(voice < NUM_TRACKS
+               && frontParser_shownPattern == seq_perTrackActivePattern[voice])
+            {
+               seq_releaseAutomationLane(voice, automTrack ? 1 : 0);
+            }
             pat_clearAutomation(voice, frontParser_shownPattern, automTrack);
          }
          break;

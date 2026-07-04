@@ -477,6 +477,24 @@ void preset_setVoiceMorphAutomationValue(uint8_t synthVoice, uint8_t morphValue)
    frontPanelSending_sendVoiceMorphRuntimeReport(synthVoice, morphAmount);
 }
 
+/* Releases a voice-morph step automation override back to the stored live base.
+   The base/live split already lives in Preset, so Sequencer does not need any
+   extra persistent morph storage to make step automation temporary. */
+void preset_releaseVoiceMorphAutomationValue(uint8_t synthVoice)
+{
+   PresetKitState *kit;
+   uint8_t morphAmount;
+
+   if(synthVoice >= PRESET_SYNTH_VOICES)
+      return;
+
+   kit = preset_getMorphKitForImage(preset_getMorphImageForVoice(synthVoice));
+   morphAmount = kit->voiceMorphBaseAmount[synthVoice];
+
+   preset_setVoiceMorphLiveAmount(synthVoice, morphAmount);
+   frontPanelSending_sendVoiceMorphRuntimeReport(synthVoice, morphAmount);
+}
+
 /* Sets morph amount for a mask of voices from automation. */
 void preset_setVoiceMorphMaskAutomationValue(uint8_t voiceMask, uint8_t morphValue)
 {

@@ -43,7 +43,12 @@ uint8_t buttonHandler_recDown=0;
 uint8_t buttonHandler_recArmed=0;
 
 uint8_t shiftMode=0;
-uint8_t shiftState=0;
+/* Effective SHIFT state used by the whole AVR UI. This is deliberately not
+   exported: buttonHandler_handleShift() is the only code that should translate
+   raw physical SHIFT button edges into this state, and every other module must
+   ask buttonHandler_getShift() so global shift-toggle behaves exactly like a
+   held SHIFT button. */
+static uint8_t shiftState=0;
 
 uint8_t subStepCopy_mainStep=0;
 
@@ -65,6 +70,7 @@ void buttonHandler_copyStep(uint8_t seqButtonPressed);
 void buttonHandler_enterSeqMode();
 void buttonHandler_leaveSeqMode();
 void buttonHandler_handleShift(uint8_t shift);
+static void buttonHandler_setShiftState(uint8_t nextState);
 
 #define ARM_AUTOMATION		0x40
 #define DISARM_AUTOMATION	0x00
@@ -359,15 +365,12 @@ void buttonHandler_tick()
    }
 }
 //--------------------------------------------------------
-/**returns 1 is the shift button is pressed*/
+/**returns 1 if effective shift is active*/
 uint8_t buttonHandler_getShift() {
-   const uint8_t arrayPos = BUT_SHIFT / 8;
-   const uint8_t bitPos = BUT_SHIFT & 7;
-
-   if (din_inputData[arrayPos] & (1 << bitPos)) {
-      return 0;
-   }
-   return 1;
+   /* This intentionally returns the latched/effective state, not the DIN
+      mirror for BUT_SHIFT. In global toggle mode the physical switch may be
+      released while the UI must still behave exactly as though SHIFT is held. */
+   return shiftState;
 }
 //--------------------------------------------------------
 void buttonHandler_handleModeButtons(uint8_t mode) {
@@ -1473,107 +1476,126 @@ void buttonHandler_buttonPressed(uint8_t buttonNr) {
    }
 }
 //--------------------------------------------------------
-void buttonHandler_handleShift(uint8_t isDown)
+static void buttonHandler_setShiftState(uint8_t nextState)
 {
-   if(isDown)
+   nextState = nextState ? 1 : 0;
+
+   /* Do not repaint/re-enter shifted pages when a duplicate button edge leaves
+      the effective state unchanged. This keeps momentary release in toggle mode
+      from undoing the latch and avoids redundant page churn. */
+   if(nextState == shiftState)
+      return;
+
+   shiftState = nextState;
+
+   if(shiftState)
    {
-      shiftState=!(shiftMode&shiftState);
-      if (shiftState)
+      led_setValue(1, LED_SHIFT);
+      switch(buttonHandler_stateMemory.selectButtonMode)
       {
-         led_setValue(1, LED_SHIFT);
-         switch(buttonHandler_stateMemory.selectButtonMode) 
+         case SELECT_MODE_VOICE:
+         case SELECT_MODE_VOICE2:
+            if ((menu_activePage<=VOICE7_PAGE)&&(editModeActive))
+               menu_repaintAll();
+            else
+               menu_shiftVoice(1); // display step params and substeps while shift held
+            break;
+         case SELECT_MODE_PERF:
+            {
+               menu_shiftPerf(1);
+            }
+            break;
+
+         case SELECT_MODE_PAT_GEN:
+            menu_shiftPatgen(1);
+            break;
+
+         case SELECT_MODE_STEP:
+            menu_shiftStep(1);
+            break;
+         case SELECT_MODE_STEP2:
+            menu_shiftActiveStep(1);
+            break;
+         default:
+            break;
+      }
+
+   //show muted voices if pressed
+      buttonHandler_showMuteLEDs();
+   }
+   else
+   {
+      if(buttonHandler_stateMemory.seqErasing)
+      {
+      // --AS **RECORD if we are in erase mode, exit that mode
+         buttonHandler_stateMemory.seqErasing=0;
+         avrComms_sendData(SEQ_CC, SEQ_ERASE_ON_OFF,
+            buttonHandler_stateMemory.seqErasing);
+      }
+
+      if (copyClear_Mode == MODE_CLEAR)
+      {
+         copyClear_armClearMenu(0);
+         copyClear_Mode = MODE_NONE;
+      }
+      led_setValue(0, LED_SHIFT);
+
+      if (menu_activePage!=RECORDING_PAGE)
+      {
+         switch(buttonHandler_stateMemory.selectButtonMode)
          {
             case SELECT_MODE_VOICE:
             case SELECT_MODE_VOICE2:
                if ((menu_activePage<=VOICE7_PAGE)&&(editModeActive))
                   menu_repaintAll();
                else
-                  menu_shiftVoice(1); // display step params and substeps while shift held
+                  menu_shiftVoice(0);
                break;
             case SELECT_MODE_PERF:
-               {
-                  menu_shiftPerf(1);
-               }
+               menu_shiftPerf(0);
                break;
-            
             case SELECT_MODE_PAT_GEN:
-               menu_shiftPatgen(1);
+               menu_shiftPatgen(0);
                break;
-         
             case SELECT_MODE_STEP:
-               menu_shiftStep(1);
+               menu_shiftStep(0);
                break;
             case SELECT_MODE_STEP2:
-               menu_shiftActiveStep(1);
+               menu_shiftActiveStep(0);
                break;
             default:
                break;
          }
-      
-      //show muted voices if pressed
-         buttonHandler_showMuteLEDs();
+
+         //show active voice if released
+         if (buttonHandler_stateMemory.selectButtonMode != SELECT_MODE_PERF)
+         {
+            led_setActiveVoice(menu_getActiveVoice());
+         }
+         else
+         {
+         // --AS TODO this code is never reached (see return above) ???
+            buttonHandler_showMuteLEDs();
+         }
       }
-   } // end if isDown
-   else
-   { // button release actions
-      shiftState=(shiftMode&shiftState);
-      if (!shiftState)
-      {
-         if(buttonHandler_stateMemory.seqErasing) 
-         {
-         // --AS **RECORD if we are in erase mode, exit that mode
-            buttonHandler_stateMemory.seqErasing=0;
-            avrComms_sendData(SEQ_CC, SEQ_ERASE_ON_OFF,
-               	buttonHandler_stateMemory.seqErasing);
-         }
-         
-         if (copyClear_Mode == MODE_CLEAR) 
-         {
-            copyClear_armClearMenu(0);
-            copyClear_Mode = MODE_NONE;
-         }
-         led_setValue(0, LED_SHIFT);
-         
-         if (menu_activePage!=RECORDING_PAGE)
-         {
-            switch(buttonHandler_stateMemory.selectButtonMode) 
-            {
-               case SELECT_MODE_VOICE:
-               case SELECT_MODE_VOICE2:
-                  if ((menu_activePage<=VOICE7_PAGE)&&(editModeActive))
-                     menu_repaintAll();
-                  else
-                     menu_shiftVoice(0);
-                  break;
-               case SELECT_MODE_PERF:
-                  menu_shiftPerf(0);
-                  break;
-               case SELECT_MODE_PAT_GEN:
-                  menu_shiftPatgen(0);
-                  break;
-               case SELECT_MODE_STEP:
-                  menu_shiftStep(0);
-                  break;
-               case SELECT_MODE_STEP2:
-                  menu_shiftActiveStep(0);
-                  break;
-               default:
-                  break;
-            }
-            
-            //show active voice if released
-            if (buttonHandler_stateMemory.selectButtonMode != SELECT_MODE_PERF) 
-            {
-               led_setActiveVoice(menu_getActiveVoice());
-            } 
-            else 
-            {
-            // --AS TODO this code is never reached (see return above) ???
-               buttonHandler_showMuteLEDs();
-            }
-         }
-      } // if !shiftstate
-   } // end button up actions
+   }
+}
+//--------------------------------------------------------
+void buttonHandler_handleShift(uint8_t isDown)
+{
+   /* This is the only raw SHIFT-button edge translator. Momentary mode maps
+      press/release directly to effective SHIFT. Toggle mode changes the
+      effective state only on the press edge and ignores the release edge, so
+      all later button/menu code can treat buttonHandler_getShift() as a real
+      held-button override. */
+   if(shiftMode)
+   {
+      if(isDown)
+         buttonHandler_setShiftState((uint8_t)!shiftState);
+      return;
+   }
+
+   buttonHandler_setShiftState(isDown);
 }
 //--------------------------------------------------------
 void buttonHandler_buttonReleased(uint8_t buttonNr) {
