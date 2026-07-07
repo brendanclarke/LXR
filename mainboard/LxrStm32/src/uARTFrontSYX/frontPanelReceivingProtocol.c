@@ -116,6 +116,45 @@ static void frontParser_beginEuklidSnapshotVisit(void)
 
 static void frontParser_endEuklidSnapshotVisit(void)
 {
+   uint8_t track;
+
+   /* On a committed page-exit (navigating away to any mode page other than
+      SHIFT+PERF) the pattern edits are already live in normal storage — that
+      happened incrementally as the user adjusted rotation/length/steps.
+      What we must clean up here is the Euclid engine's *rotation cache*:
+      euklid_rotation[] / euklid_subStepRotation[] record the cumulative
+      rotation delta applied so far.  If we leave them at their post-rotation
+      values the next SHIFT+PERF visit will start from the wrong baseline:
+        - euklid_setRotation() computes an incremental delta as
+          (new_value - euklid_rotation[track]), so a stale cached value means
+          the first encoder tick on next entry would mis-rotate the pattern.
+        - The AVR display would show the old (non-zero) rotation value,
+          confusing the user into thinking edits are still pending.
+      The fix: for every track that was touched during this visit, zero its
+      rotation caches via euklid_clearTrackRotation().  The pattern data stays
+      as-is (the rotation is now baked into normal storage), and the cache is
+      reset to the fresh-start state that euklid_setRotation() expects.
+      The mask must be read before being zeroed, so the loop comes first. */
+   for(track = 0; track < NUM_TRACKS; track++)
+   {
+      if(frontParser_euklidSnapshotTrackMask & (uint8_t)(0x01u << track))
+      {
+         /* Zeroes euklid_rotation[track] and euklid_subStepRotation[track]
+            so the next visit computes incremental deltas from 0. */
+         euklid_clearTrackRotation(track);
+      }
+   }
+
+   /* After resetting rotation caches, push updated Euclid params to the AVR
+      for the currently viewed track so its display immediately shows rotation
+      = 0 rather than the stale post-rotation value.  Only send if at least
+      one track was actually edited during this visit — avoids spurious UART
+      traffic when the user enters and leaves the page without touching
+      anything.  Other tracks (not currently viewed) will refresh automatically
+      on the next SEQ_REQUEST_EUKLID_PARAMS when the user selects them. */
+   if(frontParser_euklidSnapshotTrackMask)
+      frontPanelSending_sendEuklidParamsReply(frontParser_activeTrack);
+
    frontParser_euklidSnapshotVisitActive = 0;
    frontParser_euklidSnapshotTrackMask = 0;
    frontParser_euklidSnapshotPattern = 0;

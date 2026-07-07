@@ -1034,16 +1034,33 @@ static void seq_nextStep()
          }
       }
 
-      if(activeScaledStep
-         && seq_liveMainStepActive(i, stepAcPtr[i]/8)
-         && seq_liveStepActive(i, stepAcPtr[i]))
+      /* Hoist the live step pointer once so both the active-step test and
+         the new velocity gate share a single seq_liveStepForTrack() call.
+         This replaces the implicit call hidden inside seq_liveStepActive(). */
       {
-         /* Step automation is a one-step override. Release the previous
-            override as soon as this track reaches its next active step, before
-            probability, mute, roll, or note-trigger decisions can skip the
-            normal trigger path. */
-         seq_releaseGlobalDecimationAutomationForOwner(i);
-         seq_releasePendingAutomationForTrack(i);
+         Step *stepRelease = seq_liveStepForTrack(i, stepAcPtr[i]);
+         if(activeScaledStep
+            && seq_liveMainStepActive(i, stepAcPtr[i]/8)
+            && (stepRelease->volume & STEP_ACTIVE_MASK)
+            && (stepRelease->volume & STEP_VOLUME_MASK) > 0)
+         {
+            /* Step automation is a one-step override.  Release the previous
+               override as soon as this track reaches its next active step
+               with non-zero velocity, before probability, mute, roll, or
+               note-trigger decisions can skip the normal trigger path.
+               The velocity guard (STEP_VOLUME_MASK > 0) is intentional:
+               a step can have STEP_ACTIVE_MASK set with velocity = 0, which
+               is a "ghost step" — a zero-velocity active event used as a
+               ratchet placeholder, a muted accent, or a silent control event.
+               A ghost step is NOT a real drum hit, so it must not release the
+               automation override; the overridden parameter should continue to
+               hold until the next genuine (non-zero velocity) trigger arrives.
+               The unconditional release paths (seq_releaseAllAutomation on
+               stop / pattern-change, and seq_releaseAutomationLane on lane
+               target change/clear) are unaffected — they bypass this block. */
+            seq_releaseGlobalDecimationAutomationForOwner(i);
+            seq_releasePendingAutomationForTrack(i);
+         }
       }
 
       //--------- Tracks @ proper stap positions, process roll -------------------------
