@@ -189,6 +189,21 @@ inline void calcNextSampleBlock()
 	bCurrentSampleValid = SAMPLE_VALID;
 }
 //---------------------------------------------------------
+static inline void serviceAudioRenderDeadline()
+{
+	/* Render only at a DMA-owned buffer deadline. DIN realtime is dispatched
+	   immediately before rendering so DIN or USB external clock can update voice
+	   trigger state for this newly free buffer rather than waiting behind ordinary
+	   MIDI, front-panel parsing, or the next render opportunity. Do not add
+	   unbounded protocol parsing here: this is the audio timing critical path. */
+	if(bCurrentSampleValid != SAMPLE_VALID)
+	{
+		uart_serviceMidiRealtime();
+		usb_serviceMidiRealtime();
+		calcNextSampleBlock();
+	}
+}
+//---------------------------------------------------------
 int main(void)
 {
 	initSpiPins();
@@ -199,6 +214,12 @@ int main(void)
 	//SysTick_Config(RCC_Clocks.HCLK_Frequency / 1000);
 	// looks like it's really being set to .25 ms
 	SysTick_Config(RCC_Clocks.HCLK_Frequency / 4000);
+
+	/* Fix IRQ-group interpretation before configuring audio, DIN MIDI, and USB.
+	   Audio DMA is priority 0/subpriority 0, DIN capture is 0/1, and USB is 1;
+	   this gives bounded DIN capture precedence over USB without preempting DMA. */
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_1);
+	midiParser_initRealtimeTimestamp();
 
 	initAudioJackDiscoverPins();
 
@@ -264,12 +285,8 @@ int main(void)
     while (1)
     {
 
-    	usb_tick();
-    	//generate next sample if no valid sample is present
-    	if(bCurrentSampleValid!= SAMPLE_VALID)
-    	{
-    		calcNextSampleBlock();
-    	}
+		serviceAudioRenderDeadline();
+		usb_tick();
 
 		//process midi on midi port
 		uart_processMidi();
@@ -284,11 +301,7 @@ int main(void)
 			midiParser_parseMidiMessage(msg);
 		}
 
-		//generate next sample if no valid sample is present
-		if(bCurrentSampleValid!= SAMPLE_VALID)
-		{
-			calcNextSampleBlock();
-		}
+		serviceAudioRenderDeadline();
 		//process the sequencer
 		seq_tick();
 

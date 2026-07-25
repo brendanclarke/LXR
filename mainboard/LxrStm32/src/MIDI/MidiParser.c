@@ -168,6 +168,33 @@ static uint8_t parserState = IGNORE;	// state of the parser state machine. Set t
 									// we set it to ignore initially so that any random data we get before
 									// a valid msg header is ignored
 
+/* This CMSIS revision omits the DWT declarations even though STM32F407 has
+   the standard Cortex-M4 DWT block. These architectural addresses are DWT
+   CTRL and CYCCNT; keeping them local prevents a legacy-header gap from
+   leaking into transport interfaces. */
+#define MIDI_DWT_CTRL    (*(volatile uint32_t *)0xE0001000UL)
+#define MIDI_DWT_CYCCNT  (*(volatile uint32_t *)0xE0001004UL)
+#define MIDI_DWT_CYCCNTENA (1UL << 0)
+
+/* The DWT cycle counter timestamps realtime MIDI at IRQ receive boundaries.
+   It is deliberately independent of systick_ticks: SysTick is 250 us
+   resolution and is used by transport tempo logic, while this counter records
+   sub-block queue latency for diagnostics without changing event timing. */
+void midiParser_initRealtimeTimestamp(void)
+{
+   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+   MIDI_DWT_CYCCNT = 0;
+   MIDI_DWT_CTRL |= MIDI_DWT_CYCCNTENA;
+}
+
+/* Read the enabled DWT cycle counter for one realtime transport event. The
+   caller owns storage and wrap-safe latency subtraction; this function has no
+   parser side effects and is safe in the short capture-only IRQ paths. */
+uint32_t midiParser_captureRealtimeTimestamp(void)
+{
+   return MIDI_DWT_CYCCNT;
+}
+
 //-----------------------------------------------------------
 /* Convert a MIDI value to the parser's detune factor. */
 float midiParser_calcDetune(uint8_t value)
@@ -390,6 +417,47 @@ void midiParser_handleStatusByte(unsigned char data)
    }
 }
 //-----------------------------------------------------------
+/* Consume one DIN system-realtime byte in main-loop context. Input is a
+   complete status byte captured by the USART realtime queue; output is the
+   same external-sync transport action and optional DIN/USB forwarding that
+   the legacy raw-byte parser performed. This helper intentionally owns no
+   queue state and performs no timing capture, allowing the UART transport to
+   prioritize arrival without moving sequencer or TX work into an ISR. */
+void midiParser_handleDinRealtime(uint8_t data)
+{
+   switch(data)
+   {
+      case MIDI_START:
+      case MIDI_CONTINUE:
+         if((midiParser_txRxFilter & 0x02) && seq_getExtSync())
+            sync_midiStartStop(1);
+         break;
+
+      case MIDI_STOP:
+         if((midiParser_txRxFilter & 0x02) && seq_getExtSync())
+            sync_midiStartStop(0);
+         break;
+
+      case MIDI_CLOCK:
+         if((midiParser_txRxFilter & 0x02) && seq_getExtSync())
+            seq_sync();
+         break;
+
+      default:
+         break;
+   }
+
+   if(midiParser_routing.value)
+   {
+      MidiMsg rtMsg = {0};
+      rtMsg.status = data;
+      if(midiParser_routing.route.midi2midi)
+         uart_sendMidi(rtMsg);
+      if(midiParser_routing.route.midi2usb)
+         usb_sendMidi(rtMsg);
+   }
+}
+
 // This will build up the midi message and hand it off to
 // parseMidiMessage when it's complete
 /* Byte-stream parser for raw MIDI UART input. */
@@ -398,48 +466,10 @@ void midiParser_parseUartData(unsigned char data)
 
    if(data&0x80) { // High bit is set -  its either a status or a system message.
    // regardless of current state, we blindly start a new message without questioning it
-      if((data&0xf8)==0xf8) // data is system realtime - deal with here to avoid data conflicts
+      if((data&0xf8)==0xf8) // direct callers retain legacy realtime handling
       {
-         switch(data)
-         {      
-            case MIDI_START:
-            case MIDI_CONTINUE:
-               if((midiParser_txRxFilter & 0x02) && seq_getExtSync())
-                  sync_midiStartStop(1);
-               break;
-               
-            case MIDI_STOP:
-               if((midiParser_txRxFilter & 0x02) && seq_getExtSync())
-                  sync_midiStartStop(0);
-               break;
-               
-            case MIDI_CLOCK:
-            // passthru clock and other realtime messages. start/stop are transmitted
-            // by the sequencer, we don't need to duplicate them.
-               if((midiParser_txRxFilter & 0x02) && seq_getExtSync())
-                  seq_sync();
-                  
-            default:
-            
-               if(midiParser_routing.value) {
-                  MidiMsg rtMsg;
-                  rtMsg.status=data;
-                  rtMsg.data1=0x00;
-                  rtMsg.data2=0x00;
-                  if(midiParser_routing.route.midi2midi) {
-                  // route to midi out port
-                     uart_sendMidi(rtMsg);
-                  }
-                  if(midiParser_routing.route.midi2usb) {
-                  // route to usb out port
-                     usb_sendMidi(rtMsg);
-                  }
-               
-               }
-               break;
-         }
-         // route message if needed
-         return; // don't do anything else - leave the parser as it was. there is no followup data.
+         midiParser_handleDinRealtime(data);
+         return; // realtime has no follow-up data and must not alter parser state
       }
       midiMsg_tmp.bits.sysxbyte=0;
       if( (data&0xf0) == 0xf0) { // system message

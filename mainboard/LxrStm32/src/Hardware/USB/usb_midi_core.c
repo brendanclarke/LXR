@@ -41,6 +41,78 @@ MidiMsg usb_MidiMessages[USB_MIDI_INPUT_BUFFER_SIZE];
 uint8_t usb_MidiMessagesRead = 0;
 uint8_t usb_MidiMessagesWrite = 0;
 
+#define USB_MIDI_REALTIME_QUEUE_SIZE 16
+#define USB_MIDI_REALTIME_QUEUE_MASK (USB_MIDI_REALTIME_QUEUE_SIZE - 1)
+
+typedef struct
+{
+  uint32_t timestamp;
+  uint8_t status;
+} UsbMidiRealtimeEvent;
+
+/* USB system-realtime SPSC queue. The USB MIDI OUT callback is its only
+   producer and the audio-deadline main-loop service is its only consumer.
+   Keeping this queue distinct from DIN avoids a multi-producer IRQ race while
+   preserving USB packet arrival order and its receive-boundary timestamp. */
+static volatile UsbMidiRealtimeEvent usbMidiRealtimeQueue[USB_MIDI_REALTIME_QUEUE_SIZE];
+static volatile uint8_t usbMidiRealtimeRead;
+static volatile uint8_t usbMidiRealtimeWrite;
+static volatile uint16_t usbMidiRealtimeOverflowCount;
+static volatile uint32_t usbMidiRealtimeLastDispatchLatencyCycles;
+static volatile uint32_t usbMidiRealtimeMaxDispatchLatencyCycles;
+
+/* Capture one complete USB MIDI realtime status at the OUT callback boundary.
+   Input is the parsed one-byte status from the completed USB packet; output is
+   a timestamped queue entry or an explicit overflow count. No sequencer,
+   routing, or DSP work runs in the USB interrupt context. */
+static void usb_queueMidiRealtime(uint8_t status)
+{
+  const uint8_t nextWrite = (uint8_t)((usbMidiRealtimeWrite + 1)
+                                    & USB_MIDI_REALTIME_QUEUE_MASK);
+
+  if(nextWrite == usbMidiRealtimeRead)
+  {
+    usbMidiRealtimeOverflowCount++;
+    return;
+  }
+
+  usbMidiRealtimeQueue[usbMidiRealtimeWrite].status = status;
+  usbMidiRealtimeQueue[usbMidiRealtimeWrite].timestamp =
+    midiParser_captureRealtimeTimestamp();
+  usbMidiRealtimeWrite = nextWrite;
+}
+
+/* Drain USB realtime events at the audio render deadline. Input is the
+   callback-owned SPSC queue; output is the existing USB MidiMsg parser path,
+   preserving USB routing and global system-message semantics while excluding
+   ordinary USB MIDI bursts from the clock-to-render critical section. */
+void usb_serviceMidiRealtime(void)
+{
+  UsbMidiRealtimeEvent event;
+
+  while(usbMidiRealtimeRead != usbMidiRealtimeWrite)
+  {
+    MidiMsg msg = {0};
+
+    event.status = usbMidiRealtimeQueue[usbMidiRealtimeRead].status;
+    event.timestamp = usbMidiRealtimeQueue[usbMidiRealtimeRead].timestamp;
+    usbMidiRealtimeRead = (uint8_t)((usbMidiRealtimeRead + 1)
+                                   & USB_MIDI_REALTIME_QUEUE_MASK);
+    usbMidiRealtimeLastDispatchLatencyCycles =
+      midiParser_captureRealtimeTimestamp() - event.timestamp;
+    if(usbMidiRealtimeLastDispatchLatencyCycles
+       > usbMidiRealtimeMaxDispatchLatencyCycles)
+    {
+      usbMidiRealtimeMaxDispatchLatencyCycles =
+        usbMidiRealtimeLastDispatchLatencyCycles;
+    }
+
+    msg.status = event.status;
+    msg.bits.source = midiSourceUSB;
+    midiParser_parseMidiMessage(msg);
+  }
+}
+
 /*********************************************
    MIDI Device library callbacks
  *********************************************/
@@ -231,6 +303,15 @@ static uint8_t  usbd_midi_Init (void  *pdev,
 	* @retval : status
 	*/
 	(void)cfgidx;
+
+  /* Reset USB realtime SPSC state before the OUT endpoint can invoke its
+     producer callback. The counters are diagnostic-only and do not alter
+     normal USB MIDI queue behaviour. */
+  usbMidiRealtimeRead = 0;
+  usbMidiRealtimeWrite = 0;
+  usbMidiRealtimeOverflowCount = 0;
+  usbMidiRealtimeLastDispatchLatencyCycles = 0;
+  usbMidiRealtimeMaxDispatchLatencyCycles = 0;
 
   DCD_EP_Open(pdev,
 		  	  MIDI_OUT_EP,
@@ -428,19 +509,29 @@ static uint8_t  usbd_midi_DataOut (void *pdev, uint8_t epnum)
 		}
     	if(length != 0)
     	{
-    		usb_MidiMessages[usb_MidiMessagesWrite].status	= usbData.status;
-    		usb_MidiMessages[usb_MidiMessagesWrite].data1 	= usbData.data1;
-    		usb_MidiMessages[usb_MidiMessagesWrite].data2 	= usbData.data2;
-    		usb_MidiMessages[usb_MidiMessagesWrite].bits.length = length-1; // we don't count the status byte in our length
-    		// --AS todo keep track of sysex mode
-    		// if we are in sysex mode, this will be set, and status will contain the current sysex message byte
-    		// is it possible for there to be more than one sysex message byte received?
-    		usb_MidiMessages[usb_MidiMessagesWrite].bits.sysxbyte = 0;
-    		usb_MidiMessages[usb_MidiMessagesWrite].bits.source = midiSourceUSB;
+			/* Realtime is complete in one USB-MIDI event. Capture it here rather
+			   than queuing it behind channel/SysEx traffic; all other messages keep
+			   the legacy usb_MidiMessages[] path unchanged. */
+			if((usbData.status & 0xf8) == 0xf8)
+			{
+				usb_queueMidiRealtime(usbData.status);
+			}
+			else
+			{
+				usb_MidiMessages[usb_MidiMessagesWrite].status = usbData.status;
+				usb_MidiMessages[usb_MidiMessagesWrite].data1 = usbData.data1;
+				usb_MidiMessages[usb_MidiMessagesWrite].data2 = usbData.data2;
+				usb_MidiMessages[usb_MidiMessagesWrite].bits.length = length-1; // we don't count the status byte in our length
+				// --AS todo keep track of sysex mode
+				// if we are in sysex mode, this will be set, and status will contain the current sysex message byte
+				// is it possible for there to be more than one sysex message byte received?
+				usb_MidiMessages[usb_MidiMessagesWrite].bits.sysxbyte = 0;
+				usb_MidiMessages[usb_MidiMessagesWrite].bits.source = midiSourceUSB;
 
-    		//increment and wrap write pointer
-    		usb_MidiMessagesWrite++;
-    		usb_MidiMessagesWrite &= USB_MIDI_INPUT_BUFFER_MASK;
+				//increment and wrap write pointer
+				usb_MidiMessagesWrite++;
+				usb_MidiMessagesWrite &= USB_MIDI_INPUT_BUFFER_MASK;
+			}
     	}
  }
 

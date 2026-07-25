@@ -48,6 +48,10 @@ void usb_start();
 void usb_tick();
 void usb_sendMidi(MidiMsg msg);
 uint8_t usb_getMidi(MidiMsg* msg);
+/* Drain timestamped USB system-realtime events before an audio render. USB
+   packet receive is the producer and the main loop is the consumer; ordinary
+   USB MIDI remains available through usb_getMidi(). */
+void usb_serviceMidiRealtime(void);
 void usb_flushMidi();
 
 #endif /* USB_MANAGER_H_ */

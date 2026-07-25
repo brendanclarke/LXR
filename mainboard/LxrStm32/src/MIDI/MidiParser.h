@@ -45,6 +45,22 @@
 /* Stream parser entry point. This remains the top-level MIDI byte coordinator
    while channel/global ownership lives in the split helper modules. */
 void midiParser_parseUartData(unsigned char data);
+/* Consume one DIN system-realtime byte in main-loop context. Input is a
+   complete status byte captured by the USART realtime queue; output is the
+   same external-sync transport action and optional DIN/USB forwarding that
+   the legacy raw-byte parser performed. This helper intentionally owns no
+   queue state and performs no timing capture, allowing the UART transport to
+   prioritize arrival without moving sequencer or TX work into an ISR. */
+void midiParser_handleDinRealtime(uint8_t data);
+/* Enable the Cortex-M cycle counter used to timestamp realtime MIDI at each
+   transport's first firmware-visible receive boundary. The counter is a
+   diagnostic/ordering clock only; audio sample-offset scheduling remains out
+   of scope for this interface. */
+void midiParser_initRealtimeTimestamp(void);
+/* Return the current 32-bit DWT cycle count for a realtime transport event.
+   Callers store it with a queue entry and later derive queue-to-dispatch
+   latency by unsigned subtraction, which remains valid across counter wrap. */
+uint32_t midiParser_captureRealtimeTimestamp(void);
 
 void midiParser_parseMidiMessage(MidiMsg msg);
 void midiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue);

@@ -53,6 +53,49 @@
 static Fifo fifo_midiTx;
 static Fifo fifo_midiRx;
 
+#define MIDI_REALTIME_QUEUE_SIZE 16
+#define MIDI_REALTIME_QUEUE_MASK (MIDI_REALTIME_QUEUE_SIZE - 1)
+
+typedef struct
+{
+	uint32_t timestamp;
+	uint8_t status;
+} MidiRealtimeEvent;
+
+/* DIN system-realtime SPSC queue. USART2 RX is its sole producer and the
+   main-loop audio-deadline service is its sole consumer. Realtime status
+   bytes may legally interrupt MIDI running status, so keeping them out of the
+   ordinary byte FIFO cannot alter channel-message assembly. The queue holds
+   timestamped one-byte events in arrival order; overflow is counted rather
+   than discarding or coalescing a clock silently. */
+static volatile MidiRealtimeEvent midiRealtimeQueue[MIDI_REALTIME_QUEUE_SIZE];
+static volatile uint8_t midiRealtimeRead;
+static volatile uint8_t midiRealtimeWrite;
+static volatile uint16_t midiRealtimeOverflowCount;
+static volatile uint32_t midiRealtimeLastDispatchLatencyCycles;
+static volatile uint32_t midiRealtimeMaxDispatchLatencyCycles;
+
+/* Capture one realtime byte without doing sequencer, parser, or TX work in
+   USART interrupt context. Input is a complete MIDI realtime status byte;
+   output is an ordered queue entry, or an explicit overflow count when the
+   bounded queue is full. */
+static void uart_queueMidiRealtime(uint8_t data)
+{
+	const uint8_t nextWrite = (uint8_t)((midiRealtimeWrite + 1)
+	                                 & MIDI_REALTIME_QUEUE_MASK);
+
+	if(nextWrite == midiRealtimeRead)
+	{
+		midiRealtimeOverflowCount++;
+		return;
+	}
+
+	midiRealtimeQueue[midiRealtimeWrite].status = data;
+	midiRealtimeQueue[midiRealtimeWrite].timestamp =
+		midiParser_captureRealtimeTimestamp();
+	midiRealtimeWrite = nextWrite;
+}
+
 static Fifo fifo_frontTx;
 static FifoBig fifo_frontRx; //we use a bigger fifo here because we have lots of data coming in for the preset
 						//todo test if necessary!
@@ -75,8 +118,14 @@ void USART2_IRQHandler(void)
 	{
 		data=(uint8_t)USART_ReceiveData(USART2);
 
-		//put the received data in the RX midi buffer
-		fifo_bufferIn(&fifo_midiRx,data);
+		/* Keep the USART IRQ bounded: classify and enqueue only. Clock transport
+		   is prioritized here so USB/front-panel/main-loop work cannot delay its
+		   capture, but sequencer state and MIDI routing remain main-loop work and
+		   therefore never execute at USART interrupt priority. */
+		if((data & 0xf8) == 0xf8)
+			uart_queueMidiRealtime(data);
+		else
+			fifo_bufferIn(&fifo_midiRx,data);
 	}
 
 	if (USART_GetITStatus(USART2, USART_IT_TXE) != RESET)
@@ -125,11 +174,41 @@ void USART3_IRQHandler(void)
 //-----------------------------------------------------------------------------
 void uart_processMidi()
 {
-	/* Drain the MIDI RX FIFO into the parser. */
+	/* Drain one ordinary MIDI byte into the stream parser. System-realtime
+	   statuses are captured separately at USART RX, so they cannot wait behind
+	   this FIFO or alter channel-message running-status assembly. */
 	uint8_t data;
 	if(fifo_bufferOut(&fifo_midiRx,&data))
 	{
 		midiParser_parseUartData(data);
+	}
+}
+
+//-----------------------------------------------------------------------------
+void uart_serviceMidiRealtime()
+{
+	/* Drain captured DIN realtime events before an audio render. Input is the
+   bounded SPSC queue written by USART2 RX; output is ordered calls to the
+   MIDI realtime dispatcher. This service deliberately excludes ordinary
+   MIDI bytes, preventing parameter/SysEx bursts from extending the
+   clock-to-render critical section. */
+	MidiRealtimeEvent event;
+
+	while(midiRealtimeRead != midiRealtimeWrite)
+	{
+		event.status = midiRealtimeQueue[midiRealtimeRead].status;
+		event.timestamp = midiRealtimeQueue[midiRealtimeRead].timestamp;
+		midiRealtimeRead = (uint8_t)((midiRealtimeRead + 1)
+		                           & MIDI_REALTIME_QUEUE_MASK);
+		midiRealtimeLastDispatchLatencyCycles =
+			midiParser_captureRealtimeTimestamp() - event.timestamp;
+		if(midiRealtimeLastDispatchLatencyCycles
+		   > midiRealtimeMaxDispatchLatencyCycles)
+		{
+			midiRealtimeMaxDispatchLatencyCycles =
+				midiRealtimeLastDispatchLatencyCycles;
+		}
+		midiParser_handleDinRealtime(event.status);
 	}
 }
 
@@ -226,6 +305,13 @@ void initMidiUart()
 	//init the fifo
 	fifo_init(&fifo_midiTx);
 	fifo_init(&fifo_midiRx);
+	/* Reset both SPSC queue indices before USART2 RX is enabled. The overflow
+	   counter is diagnostic-only and does not alter transport behaviour. */
+	midiRealtimeRead = 0;
+	midiRealtimeWrite = 0;
+	midiRealtimeOverflowCount = 0;
+	midiRealtimeLastDispatchLatencyCycles = 0;
+	midiRealtimeMaxDispatchLatencyCycles = 0;
 	/*
 	 * UART2, APB1
 	 *
@@ -281,10 +367,10 @@ void initMidiUart()
 	NVIC_InitTypeDef NVIC_InitStructure;
 	//select NVIC channel to configure
 	NVIC_InitStructure.NVIC_IRQChannel = USART2_IRQn;
-	//set priority to lowest
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x0F;
-	//set subpriority to lowest
-	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0x0F;
+	/* MIDI capture outranks USB but remains below a pending audio DMA IRQ.
+	   The IRQ only timestamps and queues, so this cannot become DSP work. */
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = MIDI_UART_IRQ_PREPRIO;
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = MIDI_UART_IRQ_SUBRIO;
 	//enable IRQ channel
 	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
 	//update NVIC registers

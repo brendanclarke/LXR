@@ -40,12 +40,23 @@
 #define ACK 1
 #define NACK -1
 
+/* Audio DMA remains the first pending IRQ (priority 0/subpriority 0). USART2
+   shares its preemption level but has lower subpriority, so it can preempt USB
+   capture while its bounded timestamp-and-queue ISR cannot preempt audio DMA. */
+#define MIDI_UART_IRQ_PREPRIO 0
+#define MIDI_UART_IRQ_SUBRIO  1
+
 /* Raw MIDI/UART transport ownership. These functions move bytes and service
    the transport FIFOs; protocol composition lives in the parser/send modules. */
 void initMidiUart();
 void uart_sendMidi(MidiMsg msg);
 void uart_sendMidiByte(uint8_t data);
 void uart_processMidi();
+/* Drain DIN system-realtime bytes captured by USART2 RX. This main-loop API
+   dispatches only the bounded realtime queue, preserving ordinary MIDI FIFO
+   work for uart_processMidi() and keeping sequencer/routing work out of the
+   USART ISR. */
+void uart_serviceMidiRealtime();
 
 /* Front-panel transport ownership. These are the lowest-level send/process
    entry points used by the front-panel protocol layer. */
