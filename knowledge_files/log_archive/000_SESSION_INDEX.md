@@ -183,6 +183,10 @@ Session 033 had two durable outcomes. First, the committed `43f5006` pass restor
 ### 034 — Shift Toggle + Step Automation Reset + Global Decimation Baseline (2026-07-04)
 Session 034 fixed the global shift-toggle semantics so `buttonHandler_getShift()` reports the effective latched state and non-toggler UI paths no longer read raw SHIFT state. It also made step automation a true one-step override using STM `/Preset/` baselines: ordinary parameter and voice-morph automation release on the next active step or immediate lane target change/clear/stop/pattern boundary. Finally, global decimation step automation was special-cased as shared state with last-owner release, and STM canonical Preset storage now normalizes/initializes `PAR_VOICE_DECIMATION_ALL` so release returns to the current menu baseline instead of zero.
 - **Find here**: global shift-toggle effective-state rule, one-step automation release lifetime, Preset-baseline automation release, voice-morph step automation release, global decimation last-owner release, STM stored decimation `0 -> 127` baseline guard
+
+### 035 — Timestamped DIN/USB MIDI Realtime Dispatch (2026-07-25)
+Session 035 separated system-realtime MIDI from ordinary DIN and USB traffic, captures each realtime event with a DWT cycle timestamp, and dispatches it immediately before a DMA-freed audio block is rendered. DIN USART2 is now audio-adjacent priority (below audio DMA, above USB); USB realtime is captured at its MIDI OUT callback boundary in an independent SPSC queue. The initial queue-only timing test showed little audible/waveform change, confirming that this reduces cooperative-loop jitter but cannot cancel fixed serial, ping-pong, I2S/DAC, or USB host-frame delay. No predictive or sample-offset compensation was added.
+- **Find here**: DWT timestamp setup and wrap-safe queue-latency diagnostics, DIN and USB realtime queue ownership, MIDI running-status preservation, audio-deadline dispatch ordering, IRQ priority grouping, USB host-frame limitation, unchanged ordinary MIDI/front-panel behavior
 ---
 
 ## Key Cross-Session Facts (quick lookup)
@@ -230,6 +234,7 @@ Session 034 fixed the global shift-toggle semantics so `buttonHandler_getShift()
 | PERF voice morph controls use full `0..255` dedicated `VOICE_MORPH` traffic; do not route these edits through generic `CC_2` or the 7-bit automation setter | 026 |
 | Global morph overrides all six per-voice morph values and must keep the six PERF voice morph display slots synchronized with the global amount | 026 |
 | MIDI CC1 morph paths remain 7-bit inputs internally but now report the resulting full `0..255` global/voice morph display values back to AVR | 026 |
+| External DIN and USB system-realtime statuses are captured into independent timestamped SPSC queues and dispatched immediately before audio block render; timestamps diagnose firmware queue latency only and do not compensate fixed transport/audio latency | 035 |
 | Velocity target "Individual Voice Morph" is trigger-time only: keep `TYPE_UINT8_VMORPH` out of generic velocity modulation nodes and apply the computed current morph amount from `voiceControl_noteOn()` | 026 |
 | LFO-to-voice-morph remains an async morph-drain overlay from current target voice morph value to morph endpoint; do not rewrite it as a menu/base-value writer | 026 |
 | Step automation destinations in `Step.param1Nr` / `param2Nr` are raw AVR/menu `PAR_*` ids; low `+1` conversion belongs at automation playback/application boundaries, and external MIDI recording must use `seq_recordAutomationMidiDestination()` | 027 |

@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
-Date: 2026-07-04
-Status: current AVR<->STM comms reference after Session 034 made step automation a one-step Preset-baseline override, special-cased global decimation step automation ownership, and extended the `PAR_VOICE_DECIMATION_ALL` `0 -> 127` guard into STM canonical Preset storage. Session 033 restored `SHIFT+PLAY` around STM temporary preset storage, made `PATCH_RESET` an STM-owned temp-to-normal preset reload, multiplexed `SEQ_EUKLID_RESET` / `FRONT_SEQ_EUKLID_RESET` (`0x47`) for `SHIFT+PERF` Euclid visit control, and kept the Session 031 sample-import redo, Session 029 Global MIDI split, and Session 028 background file loading model intact. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
+Date: 2026-07-25
+Status: current AVR<->STM comms reference after Session 035 separated external DIN/USB system-realtime MIDI from ordinary input, timestamped it at the receive boundary, and dispatched it at the audio render deadline. Session 034 made step automation a one-step Preset-baseline override, special-cased global decimation step automation ownership, and extended the `PAR_VOICE_DECIMATION_ALL` `0 -> 127` guard into STM canonical Preset storage. Session 033 restored `SHIFT+PLAY` around STM temporary preset storage, made `PATCH_RESET` an STM-owned temp-to-normal preset reload, multiplexed `SEQ_EUKLID_RESET` / `FRONT_SEQ_EUKLID_RESET` (`0x47`) for `SHIFT+PERF` Euclid visit control, and kept the Session 031 sample-import redo, Session 029 Global MIDI split, and Session 028 background file loading model intact. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
 
 ## Purpose
 
@@ -88,6 +88,32 @@ CC2-127 route only through `GlobalMidiParser.c` and its separate CC/NRPN table;
 non-global CC messages continue to use the existing channel parser. This
 pre-emption rule is specific to CC routing; note and program-change routing keep
 their existing behavior.
+
+#### Session 035 realtime timing exception
+
+System-realtime statuses `0xf8..0xff` are the deliberate exception to ordinary
+external MIDI delivery. DIN `USART2_IRQHandler` classifies them at RXNE and USB
+`usbd_midi_DataOut()` classifies completed MIDI OUT packets at its callback
+boundary. Each source captures a DWT cycle timestamp and writes the status plus
+timestamp to its own 16-event single-producer/single-consumer queue. This keeps
+the ISR/callback capture-only and avoids a multi-producer queue race.
+
+`serviceAudioRenderDeadline()` drains the DIN queue first and then the USB queue
+immediately before `calcNextSampleBlock()`. DIN uses
+`midiParser_handleDinRealtime()`; USB reconstructs a source-tagged `MidiMsg` and
+uses the normal MIDI parser, so existing clock/start/continue/stop filters,
+external-sync semantics, and USB routing remain unchanged. Realtime bytes no
+longer wait behind ordinary `uart_processMidi()` FIFO work or `usb_getMidi()`
+packet work; ordinary MIDI and all AVR front-panel transport retain their old
+paths.
+
+The interrupt configuration uses `NVIC_PriorityGroup_1`: audio DMA is `0/0`,
+DIN USART2 is `0/1`, and USB is `1/3`. Thus capture does not run DSP or
+sequencer/routing work in an interrupt, DIN can pre-empt USB, and neither path
+pre-empts an already running audio-DMA handler. Queue timestamp latency is a
+diagnostic only, measured with wrap-safe unsigned subtraction at dispatch. It
+does not provide sample-offset scheduling or cancel serial transfer, USB host
+frame/bulk, ping-pong buffer, I2S, or DAC latency.
 
 `mainboard/LxrStm32/src/MIDI/MidiOutputControl.c/.h` is the current MIDI
 voice/output-control file. Existing `voiceControl_*` functions retain their

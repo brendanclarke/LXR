@@ -1,7 +1,7 @@
 # MIDI Table
 
-Date: 2026-06-21
-Status: current after Session 029. This is the durable MIDI reference for external DIN/USB MIDI input parsing on STM32.
+Date: 2026-07-25
+Status: current after Session 035. This is the durable MIDI reference for external DIN/USB MIDI input parsing and realtime dispatch timing on STM32.
 
 ## Ownership And Routing
 
@@ -9,7 +9,8 @@ External MIDI byte parsing starts in `mainboard/LxrStm32/src/MIDI/MidiParser.c`.
 
 Important ownership boundaries:
 
-- `MidiParser.c` owns byte-stream parsing, routing/filtering, system message dispatch, note/program-change routing, and the high-level CC router.
+- `MidiParser.c` owns byte-stream parsing, routing/filtering, system message dispatch, note/program-change routing, the high-level CC router, and the DWT timestamp helper used by realtime capture.
+- `uARTFrontSYX/Uart.c` and `Hardware/USB/usb_midi_core.c` each own one source-specific, 16-event SPSC realtime capture queue. `main.c` drains DIN then USB at the audio render deadline before rendering the next block.
 - `ChannelMidiParser.c` owns the existing per-voice/channel CC implementation, plus the preserved CC0 bank-change and CC1 morph behavior.
 - `GlobalMidiParser.c` owns system clock/MTC handling and, after Session 029, the separate Global-channel CC/NRPN table for CC2-127.
 - `frontPanelReceivingProtocol.c` owns the internal `MIDI_CC` / `MIDI_CC2` parameter apply ladder through `frontParser_applyParameterCommand()`. The new Global CC/NRPN parser translates into this existing internal apply path rather than duplicating DSP apply code.
@@ -24,6 +25,15 @@ Global-channel CC pre-emption:
 ## Non-CC Messages
 
 ### System Messages
+
+For system-realtime statuses `0xf8..0xff`, DIN classifies at USART2 RXNE and
+USB classifies at the completed MIDI OUT callback. Both capture a DWT cycle
+timestamp into their own 16-event queue. `serviceAudioRenderDeadline()` drains
+DIN first, then USB, immediately before `calcNextSampleBlock()`; the queue is
+therefore a bounded main-context timing path, not an ISR execution path. The
+existing filter and external-sync behavior below is unchanged. Timestamps are
+diagnostics, not sample-offset compensation, and fixed serial/USB-host,
+ping-pong, I2S, and DAC latency remains.
 
 | Message | Current behavior |
 |---|---|
