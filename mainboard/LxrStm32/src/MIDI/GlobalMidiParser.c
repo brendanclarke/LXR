@@ -8,6 +8,7 @@
 
 #include "ChannelMidiParser.h"
 #include "MidiParser.h"
+#include "Preset/ParameterArray.h"
 #include "Preset/ParameterIngress.h"
 #include "clockSync.h"
 #include "globals.h"
@@ -32,228 +33,233 @@ static uint8_t midiParser_mtcIsRunning = 0;
 static uint16_t globalMidiParser_activeNrpnNumber = 0;
 static uint8_t globalMidiParser_nrpnSelected = 0;
 
-#define GLOBAL_MIDI_UNMAPPED I_DUNNO
+#define GLOBAL_MIDI_RAW_UNMAPPED PAR_NONE
 
-static const uint16_t globalMidiParser_ccToLxrParam[128] = {
-   [2] = OSC_WAVE_DRUM1,
-   [3] = OSC_WAVE_DRUM2,
-   [4] = OSC_WAVE_DRUM3,
-   [5] = OSC_WAVE_SNARE,
-   [7] = CYM_WAVE1,
-   [8] = WAVE1_HH,
-   [9] = F_OSC1_COARSE,
-   [10] = F_OSC1_FINE,
-   [11] = F_OSC2_COARSE,
-   [12] = F_OSC2_FINE,
-   [13] = F_OSC3_COARSE,
-   [14] = F_OSC3_FINE,
-   [15] = F_OSC4_COARSE,
-   [16] = F_OSC4_FINE,
-   [17] = F_OSC5_COARSE,
-   [18] = F_OSC5_FINE,
-   [19] = F_OSC6_COARSE,
-   [20] = F_OSC6_FINE,
-   [21] = MOD_WAVE_DRUM1,
-   [22] = MOD_WAVE_DRUM2,
-   [23] = MOD_WAVE_DRUM3,
-   [24] = CYM_WAVE2,
-   [25] = CYM_WAVE3,
-   [26] = WAVE2_HH,
-   [27] = WAVE3_HH,
-   [28] = SNARE_NOISE_F,
-   [29] = SNARE_MIX,
-   [30] = CYM_MOD_OSC_F1,
-   [31] = CYM_MOD_OSC_F2,
-   [32] = CYM_MOD_OSC_GAIN1,
-   [33] = CYM_MOD_OSC_GAIN2,
-   [34] = MOD_OSC_F1,
-   [35] = MOD_OSC_F2,
-   [36] = MOD_OSC_GAIN1,
-   [37] = MOD_OSC_GAIN2,
-   [38] = FILTER_FREQ_DRUM1,
-   [39] = FILTER_FREQ_DRUM2,
-   [40] = FILTER_FREQ_DRUM3,
-   [41] = SNARE_FILTER_F,
-   [42] = CYM_FIL_FREQ,
-   [43] = HAT_FILTER_F,
-   [44] = RESO_DRUM1,
-   [45] = RESO_DRUM2,
-   [46] = RESO_DRUM3,
-   [47] = SNARE_RESO,
-   [48] = CYM_RESO,
-   [49] = HAT_RESO,
-   [50] = VELOA1,
-   [51] = VELOD1,
-   [52] = VELOA2,
-   [53] = VELOD2,
-   [54] = VELOA3,
-   [55] = VELOD3,
-   [56] = VELOA4,
-   [57] = VELOD4,
-   [58] = VELOA5,
-   [59] = VELOD5,
-   [60] = VELOA6,
-   [61] = VELOD6,
-   [62] = VELOD6_OPEN,
-   [63] = VOL_SLOPE1,
-   [64] = VOL_SLOPE2,
-   [65] = VOL_SLOPE3,
-   [66] = EG_SNARE1_SLOPE,
-   [67] = CYM_SLOPE,
-   [68] = VOL_SLOPE6,
-   [69] = REPEAT1,
-   [70] = CYM_REPEAT,
-   [71] = PITCHD1,
-   [72] = PITCHD2,
-   [73] = PITCHD3,
-   [74] = PITCHD4,
-   [75] = MODAMNT1,
-   [76] = MODAMNT2,
-   [77] = MODAMNT3,
-   [78] = MODAMNT4,
-   [79] = PITCH_SLOPE1,
-   [80] = PITCH_SLOPE2,
-   [81] = PITCH_SLOPE3,
-   [82] = PITCH_SLOPE4,
-   [83] = FMAMNT1,
-   [84] = FMDTN1,
-   [85] = FMAMNT2,
-   [86] = FMDTN2,
-   [87] = FMAMNT3,
-   [88] = FMDTN3,
-   [89] = VOL1,
-   [90] = VOL2,
-   [91] = VOL3,
-   [92] = VOL4,
-   [93] = VOL5,
-   [94] = VOL6,
-   [95] = PAN1,
-   [96] = PAN2,
-   [97] = PAN3,
-   [100] = PAN4,
-   [101] = PAN5,
-   [102] = PAN6,
-   [103] = OSC1_DIST,
-   [104] = OSC2_DIST,
-   [105] = OSC3_DIST,
-   [106] = SNARE_DISTORTION,
-   [107] = CYMBAL_DISTORTION,
-   [108] = HAT_DISTORTION,
-   [109] = VOICE_DECIMATION1,
-   [110] = VOICE_DECIMATION2,
-   [111] = VOICE_DECIMATION3,
-   [112] = VOICE_DECIMATION4,
-   [113] = VOICE_DECIMATION5,
-   [114] = VOICE_DECIMATION6,
-   [115] = VOICE_DECIMATION_ALL,
-   [116] = FREQ_LFO1,
-   [117] = FREQ_LFO2,
-   [118] = FREQ_LFO3,
-   [119] = FREQ_LFO4,
-   [120] = FREQ_LFO5,
-   [121] = FREQ_LFO6,
-   [122] = AMOUNT_LFO1,
-   [123] = AMOUNT_LFO2,
-   [124] = AMOUNT_LFO3,
-   [125] = AMOUNT_LFO4,
-   [126] = AMOUNT_LFO5,
-   [127] = AMOUNT_LFO6,
+/* Table indices are fixed legacy external Global CC numbers. Values are raw
+   AVR/Preset PAR_* ids, never MidiMessages.h low apply ids: Preset storage,
+   AVR PARAM_CC packets, and pattern automation all use this raw domain. */
+static const uint16_t globalMidiParser_ccToRawParam[128] = {
+   [2] = PAR_OSC_WAVE_DRUM1,
+   [3] = PAR_OSC_WAVE_DRUM2,
+   [4] = PAR_OSC_WAVE_DRUM3,
+   [5] = PAR_OSC_WAVE_SNARE,
+   [7] = PAR_WAVE1_CYM,
+   [8] = PAR_WAVE1_HH,
+   [9] = PAR_COARSE1,
+   [10] = PAR_FINE1,
+   [11] = PAR_COARSE2,
+   [12] = PAR_FINE2,
+   [13] = PAR_COARSE3,
+   [14] = PAR_FINE3,
+   [15] = PAR_COARSE4,
+   [16] = PAR_FINE4,
+   [17] = PAR_COARSE5,
+   [18] = PAR_FINE5,
+   [19] = PAR_COARSE6,
+   [20] = PAR_FINE6,
+   [21] = PAR_MOD_WAVE_DRUM1,
+   [22] = PAR_MOD_WAVE_DRUM2,
+   [23] = PAR_MOD_WAVE_DRUM3,
+   [24] = PAR_WAVE2_CYM,
+   [25] = PAR_WAVE3_CYM,
+   [26] = PAR_WAVE2_HH,
+   [27] = PAR_WAVE3_HH,
+   [28] = PAR_NOISE_FREQ1,
+   [29] = PAR_MIX1,
+   [30] = PAR_MOD_OSC_F1_CYM,
+   [31] = PAR_MOD_OSC_F2_CYM,
+   [32] = PAR_MOD_OSC_GAIN1_CYM,
+   [33] = PAR_MOD_OSC_GAIN2_CYM,
+   [34] = PAR_MOD_OSC_F1,
+   [35] = PAR_MOD_OSC_F2,
+   [36] = PAR_MOD_OSC_GAIN1,
+   [37] = PAR_MOD_OSC_GAIN2,
+   [38] = PAR_FILTER_FREQ_1,
+   [39] = PAR_FILTER_FREQ_2,
+   [40] = PAR_FILTER_FREQ_3,
+   [41] = PAR_FILTER_FREQ_4,
+   [42] = PAR_FILTER_FREQ_5,
+   [43] = PAR_FILTER_FREQ_6,
+   [44] = PAR_RESO_1,
+   [45] = PAR_RESO_2,
+   [46] = PAR_RESO_3,
+   [47] = PAR_RESO_4,
+   [48] = PAR_RESO_5,
+   [49] = PAR_RESO_6,
+   [50] = PAR_VELOA1,
+   [51] = PAR_VELOD1,
+   [52] = PAR_VELOA2,
+   [53] = PAR_VELOD2,
+   [54] = PAR_VELOA3,
+   [55] = PAR_VELOD3,
+   [56] = PAR_VELOA4,
+   [57] = PAR_VELOD4,
+   [58] = PAR_VELOA5,
+   [59] = PAR_VELOD5,
+   [60] = PAR_VELOA6,
+   [61] = PAR_VELOD6_CLOSED,
+   [62] = PAR_VELOD6_OPEN,
+   [63] = PAR_VOL_SLOPE1,
+   [64] = PAR_VOL_SLOPE2,
+   [65] = PAR_VOL_SLOPE3,
+   [66] = PAR_VOL_SLOPE4,
+   [67] = PAR_VOL_SLOPE5,
+   [68] = PAR_VOL_SLOPE6,
+   [69] = PAR_REPEAT4,
+   [70] = PAR_REPEAT5,
+   [71] = PAR_MOD_EG1,
+   [72] = PAR_MOD_EG2,
+   [73] = PAR_MOD_EG3,
+   [74] = PAR_MOD_EG4,
+   [75] = PAR_MODAMNT1,
+   [76] = PAR_MODAMNT2,
+   [77] = PAR_MODAMNT3,
+   [78] = PAR_MODAMNT4,
+   [79] = PAR_PITCH_SLOPE1,
+   [80] = PAR_PITCH_SLOPE2,
+   [81] = PAR_PITCH_SLOPE3,
+   [82] = PAR_PITCH_SLOPE4,
+   [83] = PAR_FMAMNT1,
+   [84] = PAR_FM_FREQ1,
+   [85] = PAR_FMAMNT2,
+   [86] = PAR_FM_FREQ2,
+   [87] = PAR_FMAMNT3,
+   [88] = PAR_FM_FREQ3,
+   [89] = PAR_VOL1,
+   [90] = PAR_VOL2,
+   [91] = PAR_VOL3,
+   [92] = PAR_VOL4,
+   [93] = PAR_VOL5,
+   [94] = PAR_VOL6,
+   [95] = PAR_PAN1,
+   [96] = PAR_PAN2,
+   [97] = PAR_PAN3,
+   [100] = PAR_PAN4,
+   [101] = PAR_PAN5,
+   [102] = PAR_PAN6,
+   [103] = PAR_DRIVE1,
+   [104] = PAR_DRIVE2,
+   [105] = PAR_DRIVE3,
+   [106] = PAR_SNARE_DISTORTION,
+   [107] = PAR_CYMBAL_DISTORTION,
+   [108] = PAR_HAT_DISTORTION,
+   [109] = PAR_VOICE_DECIMATION1,
+   [110] = PAR_VOICE_DECIMATION2,
+   [111] = PAR_VOICE_DECIMATION3,
+   [112] = PAR_VOICE_DECIMATION4,
+   [113] = PAR_VOICE_DECIMATION5,
+   [114] = PAR_VOICE_DECIMATION6,
+   [115] = PAR_VOICE_DECIMATION_ALL,
+   [116] = PAR_FREQ_LFO1,
+   [117] = PAR_FREQ_LFO2,
+   [118] = PAR_FREQ_LFO3,
+   [119] = PAR_FREQ_LFO4,
+   [120] = PAR_FREQ_LFO5,
+   [121] = PAR_FREQ_LFO6,
+   [122] = PAR_AMOUNT_LFO1,
+   [123] = PAR_AMOUNT_LFO2,
+   [124] = PAR_AMOUNT_LFO3,
+   [125] = PAR_AMOUNT_LFO4,
+   [126] = PAR_AMOUNT_LFO5,
+   [127] = PAR_AMOUNT_LFO6,
 };
 
-static const uint16_t globalMidiParser_nrpnToLxrParam[] = {
-   128 + CC2_FILTER_DRIVE_1,
-   128 + CC2_FILTER_DRIVE_2,
-   128 + CC2_FILTER_DRIVE_3,
-   128 + CC2_FILTER_DRIVE_4,
-   128 + CC2_FILTER_DRIVE_5,
-   128 + CC2_FILTER_DRIVE_6,
-   128 + CC2_MIX_MOD_1,
-   128 + CC2_MIX_MOD_2,
-   128 + CC2_MIX_MOD_3,
-   128 + CC2_VOLUME_MOD_ON_OFF1,
-   128 + CC2_VOLUME_MOD_ON_OFF2,
-   128 + CC2_VOLUME_MOD_ON_OFF3,
-   128 + CC2_VOLUME_MOD_ON_OFF4,
-   128 + CC2_VOLUME_MOD_ON_OFF5,
-   128 + CC2_VOLUME_MOD_ON_OFF6,
-   128 + CC2_VELO_MOD_AMT_1,
-   128 + CC2_VELO_MOD_AMT_2,
-   128 + CC2_VELO_MOD_AMT_3,
-   128 + CC2_VELO_MOD_AMT_4,
-   128 + CC2_VELO_MOD_AMT_5,
-   128 + CC2_VELO_MOD_AMT_6,
-   128 + CC2_VEL_DEST_1,
-   128 + CC2_VEL_DEST_2,
-   128 + CC2_VEL_DEST_3,
-   128 + CC2_VEL_DEST_4,
-   128 + CC2_VEL_DEST_5,
-   128 + CC2_VEL_DEST_6,
-   128 + CC2_WAVE_LFO1,
-   128 + CC2_WAVE_LFO2,
-   128 + CC2_WAVE_LFO3,
-   128 + CC2_WAVE_LFO4,
-   128 + CC2_WAVE_LFO5,
-   128 + CC2_WAVE_LFO6,
-   128 + CC2_VOICE_LFO1,
-   128 + CC2_VOICE_LFO2,
-   128 + CC2_VOICE_LFO3,
-   128 + CC2_VOICE_LFO4,
-   128 + CC2_VOICE_LFO5,
-   128 + CC2_VOICE_LFO6,
-   128 + CC2_TARGET_LFO1,
-   128 + CC2_TARGET_LFO2,
-   128 + CC2_TARGET_LFO3,
-   128 + CC2_TARGET_LFO4,
-   128 + CC2_TARGET_LFO5,
-   128 + CC2_TARGET_LFO6,
-   128 + CC2_RETRIGGER_LFO1,
-   128 + CC2_RETRIGGER_LFO2,
-   128 + CC2_RETRIGGER_LFO3,
-   128 + CC2_RETRIGGER_LFO4,
-   128 + CC2_RETRIGGER_LFO5,
-   128 + CC2_RETRIGGER_LFO6,
-   128 + CC2_SYNC_LFO1,
-   128 + CC2_SYNC_LFO2,
-   128 + CC2_SYNC_LFO3,
-   128 + CC2_SYNC_LFO4,
-   128 + CC2_SYNC_LFO5,
-   128 + CC2_SYNC_LFO6,
-   128 + CC2_OFFSET_LFO1,
-   128 + CC2_OFFSET_LFO2,
-   128 + CC2_OFFSET_LFO3,
-   128 + CC2_OFFSET_LFO4,
-   128 + CC2_OFFSET_LFO5,
-   128 + CC2_OFFSET_LFO6,
-   128 + CC2_FILTER_TYPE_1,
-   128 + CC2_FILTER_TYPE_2,
-   128 + CC2_FILTER_TYPE_3,
-   128 + CC2_FILTER_TYPE_4,
-   128 + CC2_FILTER_TYPE_5,
-   128 + CC2_FILTER_TYPE_6,
-   128 + CC2_TRANS1_VOL,
-   128 + CC2_TRANS2_VOL,
-   128 + CC2_TRANS3_VOL,
-   128 + CC2_TRANS4_VOL,
-   128 + CC2_TRANS5_VOL,
-   128 + CC2_TRANS6_VOL,
-   128 + CC2_TRANS1_WAVE,
-   128 + CC2_TRANS2_WAVE,
-   128 + CC2_TRANS3_WAVE,
-   128 + CC2_TRANS4_WAVE,
-   128 + CC2_TRANS5_WAVE,
-   128 + CC2_TRANS6_WAVE,
-   128 + CC2_TRANS1_FREQ,
-   128 + CC2_TRANS2_FREQ,
-   128 + CC2_TRANS3_FREQ,
-   128 + CC2_TRANS4_FREQ,
-   128 + CC2_TRANS5_FREQ,
-   128 + CC2_TRANS6_FREQ,
-   128 + CC2_AUDIO_OUT1,
-   128 + CC2_AUDIO_OUT2,
-   128 + CC2_AUDIO_OUT3,
-   128 + CC2_AUDIO_OUT4,
-   128 + CC2_AUDIO_OUT5,
-   128 + CC2_AUDIO_OUT6,
+/* NRPN values are already canonical high raw ids: this range begins at 128,
+   so unlike low parameters it must not receive the MIDI apply +1 conversion. */
+static const uint16_t globalMidiParser_nrpnToRawParam[] = {
+   PAR_FILTER_DRIVE_1,
+   PAR_FILTER_DRIVE_2,
+   PAR_FILTER_DRIVE_3,
+   PAR_FILTER_DRIVE_4,
+   PAR_FILTER_DRIVE_5,
+   PAR_FILTER_DRIVE_6,
+   PAR_MIX_MOD_1,
+   PAR_MIX_MOD_2,
+   PAR_MIX_MOD_3,
+   PAR_VOLUME_MOD_ON_OFF1,
+   PAR_VOLUME_MOD_ON_OFF2,
+   PAR_VOLUME_MOD_ON_OFF3,
+   PAR_VOLUME_MOD_ON_OFF4,
+   PAR_VOLUME_MOD_ON_OFF5,
+   PAR_VOLUME_MOD_ON_OFF6,
+   PAR_VELO_MOD_AMT_1,
+   PAR_VELO_MOD_AMT_2,
+   PAR_VELO_MOD_AMT_3,
+   PAR_VELO_MOD_AMT_4,
+   PAR_VELO_MOD_AMT_5,
+   PAR_VELO_MOD_AMT_6,
+   PAR_VEL_DEST_1,
+   PAR_VEL_DEST_2,
+   PAR_VEL_DEST_3,
+   PAR_VEL_DEST_4,
+   PAR_VEL_DEST_5,
+   PAR_VEL_DEST_6,
+   PAR_WAVE_LFO1,
+   PAR_WAVE_LFO2,
+   PAR_WAVE_LFO3,
+   PAR_WAVE_LFO4,
+   PAR_WAVE_LFO5,
+   PAR_WAVE_LFO6,
+   PAR_VOICE_LFO1,
+   PAR_VOICE_LFO2,
+   PAR_VOICE_LFO3,
+   PAR_VOICE_LFO4,
+   PAR_VOICE_LFO5,
+   PAR_VOICE_LFO6,
+   PAR_TARGET_LFO1,
+   PAR_TARGET_LFO2,
+   PAR_TARGET_LFO3,
+   PAR_TARGET_LFO4,
+   PAR_TARGET_LFO5,
+   PAR_TARGET_LFO6,
+   PAR_RETRIGGER_LFO1,
+   PAR_RETRIGGER_LFO2,
+   PAR_RETRIGGER_LFO3,
+   PAR_RETRIGGER_LFO4,
+   PAR_RETRIGGER_LFO5,
+   PAR_RETRIGGER_LFO6,
+   PAR_SYNC_LFO1,
+   PAR_SYNC_LFO2,
+   PAR_SYNC_LFO3,
+   PAR_SYNC_LFO4,
+   PAR_SYNC_LFO5,
+   PAR_SYNC_LFO6,
+   PAR_OFFSET_LFO1,
+   PAR_OFFSET_LFO2,
+   PAR_OFFSET_LFO3,
+   PAR_OFFSET_LFO4,
+   PAR_OFFSET_LFO5,
+   PAR_OFFSET_LFO6,
+   PAR_FILTER_TYPE_1,
+   PAR_FILTER_TYPE_2,
+   PAR_FILTER_TYPE_3,
+   PAR_FILTER_TYPE_4,
+   PAR_FILTER_TYPE_5,
+   PAR_FILTER_TYPE_6,
+   PAR_TRANS1_VOL,
+   PAR_TRANS2_VOL,
+   PAR_TRANS3_VOL,
+   PAR_TRANS4_VOL,
+   PAR_TRANS5_VOL,
+   PAR_TRANS6_VOL,
+   PAR_TRANS1_WAVE,
+   PAR_TRANS2_WAVE,
+   PAR_TRANS3_WAVE,
+   PAR_TRANS4_WAVE,
+   PAR_TRANS5_WAVE,
+   PAR_TRANS6_WAVE,
+   PAR_TRANS1_FREQ,
+   PAR_TRANS2_FREQ,
+   PAR_TRANS3_FREQ,
+   PAR_TRANS4_FREQ,
+   PAR_TRANS5_FREQ,
+   PAR_TRANS6_FREQ,
+   PAR_AUDIO_OUT1,
+   PAR_AUDIO_OUT2,
+   PAR_AUDIO_OUT3,
+   PAR_AUDIO_OUT4,
+   PAR_AUDIO_OUT5,
+   PAR_AUDIO_OUT6,
 };
 
 static uint8_t globalMidiParser_isGlobalChannel(MidiMsg msg)
@@ -262,25 +268,58 @@ static uint8_t globalMidiParser_isGlobalChannel(MidiMsg msg)
    return (chanonly == midiParser_voiceMidiChannel(7));
 }
 
-static void globalMidiParser_applyInternalParameter(uint16_t lxrParamNr,
-                                                    uint8_t value,
-                                                    uint8_t updateOriginalValue,
-                                                    enum MidiSource source)
+/* Converts a raw Global lookup target solely for the legacy live DSP switch.
+   Example: PAR_VOL6 is raw 93, while the switch case VOL6 is MIDI apply 94.
+   Raw AVR/Preset/restore traffic must not use this conversion. */
+static uint16_t globalMidiParser_midiApplyParamFromRaw(uint16_t rawParam)
+{
+   if(rawParam == GLOBAL_MIDI_RAW_UNMAPPED
+      || rawParam == PAR_RESERVED4
+      || rawParam >= END_OF_SOUND_PARAMETERS)
+      return GLOBAL_MIDI_RAW_UNMAPPED;
+
+   if(rawParam < PAR_RESERVED4)
+      return rawParam + 1;
+
+   if(rawParam >= PAR_FILTER_DRIVE_1)
+      return rawParam;
+
+   return GLOBAL_MIDI_RAW_UNMAPPED;
+}
+
+/* Global MIDI lookup tables yield raw Preset ids. Store that raw id first,
+   then apply its MIDI-shaped equivalent to the live DSP switch. Keeping these
+   operations separate prevents updateOriginalValue from storing a low MIDI
+   apply id as though it were an AVR/Preset raw parameter id. */
+static void globalMidiParser_applyRawParameter(uint16_t rawParam,
+                                               uint8_t value,
+                                               uint8_t updateOriginalValue,
+                                               enum MidiSource source)
 {
    MidiMsg internalMsg = {0};
+   const uint16_t midiApplyParam =
+      globalMidiParser_midiApplyParamFromRaw(rawParam);
 
-   if(lxrParamNr == GLOBAL_MIDI_UNMAPPED || lxrParamNr >= END_OF_SOUND_PARAMETERS)
+   if(midiApplyParam == GLOBAL_MIDI_RAW_UNMAPPED)
       return;
 
-   if(lxrParamNr < 128)
+   if(updateOriginalValue)
+   {
+      /* Preset owns the canonical raw parameter image used by morph, reload,
+         automation release, and AVR protocol traffic. */
+      preset_storeParameterIngress(rawParam, value);
+      frontParser_originalCcValues[midiApplyParam] = value;
+   }
+
+   if(midiApplyParam < 128)
    {
       internalMsg.status = MIDI_CC;
-      internalMsg.data1 = (uint8_t)lxrParamNr;
+      internalMsg.data1 = (uint8_t)midiApplyParam;
    }
    else
    {
       internalMsg.status = MIDI_CC2;
-      internalMsg.data1 = (uint8_t)(lxrParamNr - 128);
+      internalMsg.data1 = (uint8_t)(midiApplyParam - 128);
    }
 
    internalMsg.data2 = value;
@@ -288,14 +327,17 @@ static void globalMidiParser_applyInternalParameter(uint16_t lxrParamNr,
    internalMsg.bits.sysxbyte = 0;
    internalMsg.bits.length = 2;
 
-   frontParser_applyParameterCommand(internalMsg, updateOriginalValue);
+   /* Storage above is deliberately raw-domain. Zero keeps this legacy DSP
+      helper from repeating its updateOriginalValue storage path with the MIDI
+      apply id carried in internalMsg.data1. */
+   frontParser_applyParameterCommand(internalMsg, 0);
 
    if((midiParser_txRxFilter & 0x04) && updateOriginalValue)
    {
       if(seq_recordActive)
-         seq_recordAutomationMidiDestination(frontParser_activeTrack, lxrParamNr, value);
+         seq_recordAutomationMidiDestination(frontParser_activeTrack, midiApplyParam, value);
       else
-         channelMidiParser_sendParameterEcho(lxrParamNr, value);
+         channelMidiParser_sendParameterEcho(midiApplyParam, value);
    }
 }
 
@@ -319,11 +361,11 @@ static uint8_t globalMidiParser_handleNrpnControl(MidiMsg msg,
       case NRPN_DATA_ENTRY_COARSE:
          if(globalMidiParser_nrpnSelected
             && globalMidiParser_activeNrpnNumber
-                  < (sizeof(globalMidiParser_nrpnToLxrParam)
-                     / sizeof(globalMidiParser_nrpnToLxrParam[0])))
+                  < (sizeof(globalMidiParser_nrpnToRawParam)
+                     / sizeof(globalMidiParser_nrpnToRawParam[0])))
          {
-            globalMidiParser_applyInternalParameter(
-               globalMidiParser_nrpnToLxrParam[globalMidiParser_activeNrpnNumber],
+            globalMidiParser_applyRawParameter(
+               globalMidiParser_nrpnToRawParam[globalMidiParser_activeNrpnNumber],
                msg.data2,
                updateOriginalValue,
                msg.bits.source);
@@ -452,7 +494,7 @@ void midiParser_checkMtc(void)
 }
 void globalMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
 {
-   uint16_t lxrParamNr;
+   uint16_t rawParam;
 
    if(!globalMidiParser_isGlobalChannel(msg))
       return;
@@ -463,9 +505,11 @@ void globalMidiParser_MIDIccHandler(MidiMsg msg, uint8_t updateOriginalValue)
    if(globalMidiParser_handleNrpnControl(msg, updateOriginalValue))
       return;
 
-   lxrParamNr = globalMidiParser_ccToLxrParam[msg.data1 & 0x7f];
-   globalMidiParser_applyInternalParameter(lxrParamNr,
-                                           msg.data2,
-                                           updateOriginalValue,
-                                           msg.bits.source);
+   /* The index is the fixed external legacy CC number; the table result is a
+      raw Preset id that the typed helper converts only for live DSP apply. */
+   rawParam = globalMidiParser_ccToRawParam[msg.data1 & 0x7f];
+   globalMidiParser_applyRawParameter(rawParam,
+                                      msg.data2,
+                                      updateOriginalValue,
+                                      msg.bits.source);
 }
