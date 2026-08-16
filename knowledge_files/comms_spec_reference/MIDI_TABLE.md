@@ -22,6 +22,16 @@ Global-channel CC pre-emption:
 - Global CC2-127 run only through the new `GlobalMidiParser.c` table and do not also run through the voice-channel parser.
 - Non-global CC messages continue to use the existing `ChannelMidiParser.c` implementation.
 
+### Global Parameter-ID Domains
+
+The Global CC and NRPN numbers in this document are fixed external legacy
+assignments. Internally, `GlobalMidiParser.c` lookup tables use canonical raw
+`PAR_*` IDs, which are the IDs used by Preset storage, AVR parameter packets,
+and pattern automation. For low parameters only, the Global parser converts
+that raw ID to the separate legacy MIDI apply ID immediately before calling the
+live DSP switch. No raw Preset/AVR/automation ID is incremented; this is an
+implementation boundary, not a change to any published CC or NRPN assignment.
+
 ## Non-CC Messages
 
 ### System Messages
