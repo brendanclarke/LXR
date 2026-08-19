@@ -108,6 +108,7 @@ INCLUDES += -I"./src/Sequencer"
 ARCHFLAGS = -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
 
 CFLAGS += $(DEFINES) $(INCLUDES)
+CFLAGS += -std=gnu99
 CFLAGS += $(ARCHFLAGS)
 CFLAGS += -O$(ARM_OPTIMIZE) -ffunction-sections -fdata-sections -ffast-math -freciprocal-math -fsingle-precision-constant -fmessage-length=0
 CFLAGS += -Wall -Wextra -c 
