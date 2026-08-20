@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
-Date: 2026-07-25
-Status: current AVR<->STM comms reference after Session 035 separated external DIN/USB system-realtime MIDI from ordinary input, timestamped it at the receive boundary, and dispatched it at the audio render deadline. Session 034 made step automation a one-step Preset-baseline override, special-cased global decimation step automation ownership, and extended the `PAR_VOICE_DECIMATION_ALL` `0 -> 127` guard into STM canonical Preset storage. Session 033 restored `SHIFT+PLAY` around STM temporary preset storage, made `PATCH_RESET` an STM-owned temp-to-normal preset reload, multiplexed `SEQ_EUKLID_RESET` / `FRONT_SEQ_EUKLID_RESET` (`0x47`) for `SHIFT+PERF` Euclid visit control, and kept the Session 031 sample-import redo, Session 029 Global MIDI split, and Session 028 background file loading model intact. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
+Date: 2026-08-20
+Status: current AVR<->STM comms reference after Session 036 fixed a defect in the `SEQ_CHANGE_PAT` shown-pattern resync (see new `### 4c` section below): the `PATTERN_SETTINGS_PAGE` branch now flushes `SEQ_SET_SHOWN_PATTERN` to the STM via `menu_setShownPattern()` instead of silently stashing the update locally with no later flush. Session 035 separated external DIN/USB system-realtime MIDI from ordinary input, timestamped it at the receive boundary, and dispatched it at the audio render deadline. Session 034 made step automation a one-step Preset-baseline override, special-cased global decimation step automation ownership, and extended the `PAR_VOICE_DECIMATION_ALL` `0 -> 127` guard into STM canonical Preset storage. Session 033 restored `SHIFT+PLAY` around STM temporary preset storage, made `PATCH_RESET` an STM-owned temp-to-normal preset reload, multiplexed `SEQ_EUKLID_RESET` / `FRONT_SEQ_EUKLID_RESET` (`0x47`) for `SHIFT+PERF` Euclid visit control, and kept the Session 031 sample-import redo, Session 029 Global MIDI split, and Session 028 background file loading model intact. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
 
 ## Purpose
 
@@ -384,6 +384,72 @@ messages:
 The Euclid-page visit is the real `SELECT_MODE_PAT_GEN` / `EUKLID_PAGE` path
 entered by holding `SHIFT` and pressing `PERF`. It is not the separate “hold
 SHIFT while already on PERF page” menu flow.
+
+### 4c. Shown-Pattern Display Sync (`SEQ_CHANGE_PAT` / `SEQ_SET_SHOWN_PATTERN`)
+
+This is the mechanism that keeps the AVR's idea of "which pattern is shown
+and being edited" (`menu_shownPattern` on AVR, `frontParser_shownPattern` on
+STM) aligned with the pattern actually driving playback. It governs where
+step-parameter edit opcodes land: `FRONT_SEQ_PROB`, `FRONT_SEQ_VOLUME`,
+`FRONT_SEQ_NOTE`, `FRONT_SET_P1_VAL`, and `FRONT_SET_P2_VAL` all resolve
+against `frontParser_shownPattern`, not against `seq_perTrackActivePattern[]`
+(the per-track table playback and Save both actually use). If the two ever
+disagree, an edit is accepted by the menu, looks correct on the display, and
+never affects anything audible or saved. Session 036's investigation
+(`PROBABILITY_INVESTIGATION.md`, root) traces this in full; this section is
+the durable protocol-level summary.
+
+Flow, on every `SEQ_CHANGE_PAT` ACK (`avrCommsReceivingProtocol.c`):
+
+```
+STM active pattern changes (sequencer.c, any reason, including a
+   temp/normal boundary crossing) -> unconditional SEQ_CHANGE_PAT ACK
+   carrying seq_activePattern (frontPanelSending_sendPatternChange)
+-> AVR computes tempBoundaryAck = did old/new played pattern cross the
+   SEQ_TMP_PATTERN boundary (independent of PAR_FOLLOW, by design -- this
+   is meant to force a resync at the boundary even with Follow off)
+-> if(PAR_FOLLOW || tempBoundaryAck):
+     if menu_activePage != PATTERN_SETTINGS_PAGE:
+        menu_setShownPattern(patMsg)  -- updates menu_shownPattern AND
+        sends SEQ_SET_SHOWN_PATTERN to STM, plus repaints the normal
+        sequencer step LEDs (led_clearSequencerLeds / avrComms_updatePatternLeds)
+     else:
+        menu_setShownPattern(patMsg)  -- same state-sync call, but the LED
+        repaint above is deliberately skipped so PATTERN_SETTINGS_PAGE's
+        repurposed rotation-indicator LED display is not disturbed
+-> STM's FRONT_SEQ_SET_SHOWN_PATTERN handler sets frontParser_shownPattern,
+   and (only if the incoming value matches what STM already had, and no
+   temp-boundary ack is pending) triggers seq_realign() -- this is the
+   "press the same pattern button again to realign" feature; the pending
+   temp-boundary-ack check exists specifically to suppress a spurious
+   realign on a genuine boundary-crossing echo.
+```
+
+`PATTERN_SETTINGS_PAGE` (hold `SHIFT` while already on the PERF page,
+`menu_shiftPerf()`) is **not** the Euclid page from `### 4b` above — see that
+section's own warning. It repurposes the step LEDs to show the active
+track's rotation value, which is why the LED-repaint calls are skipped for
+it; the state-sync call is not skipped, and must never be, regardless of
+which front-panel page is active.
+
+**Session 036 defect and fix**: prior to Session 036, the
+`PATTERN_SETTINGS_PAGE` branch assigned `menu_shownPattern` directly instead
+of calling `menu_setShownPattern()`, so it updated the AVR's own display but
+never sent `SEQ_SET_SHOWN_PATTERN` to the STM at all. The removed code's
+comment claimed the update was deferred "for shift button release handler,"
+but no such flush existed anywhere (`menu_shiftPerf(0)` just switches the
+page back without touching `menu_shownPattern`/`SEQ_SET_SHOWN_PATTERN`).
+This let `frontParser_shownPattern` on the STM get stuck on a stale pattern
+-- including `SEQ_TMP_PATTERN` during a background-load temp/normal boundary
+crossing -- with no bounded-time recovery, silently swallowing any step edit
+made while stuck. The fix keeps the `if`/`else` LED-skip split intact (so
+`PATTERN_SETTINGS_PAGE`'s LED display still isn't disturbed) but makes both
+branches call `menu_setShownPattern(patMsg)`, so the state sync always
+happens regardless of which page is active. See
+`front/LxrAvr/avrComms/avrCommsReceivingProtocol.c` (`case SEQ_CHANGE_PAT`)
+for the current code and its adjacent explanatory comment, and
+`PROBABILITY_INVESTIGATION.md` Parts 5-7 for the full investigation, risk
+assessment, and build verification.
 
 ### 5. Sample Import / Sample ROM Refresh
 

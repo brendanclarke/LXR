@@ -43,6 +43,8 @@
 | 032 | 2026-06-28 | local repo, oscillator interpolation complete | Finalized oscillator waveform interpolation wire-up, added single dynamically assigned fractional blend slot, and fixed standard state writeback for sample/phase tracking |
 | 033 | 2026-06-29 | local branch `dev-realign-reload`, commit `43f5006` plus uncommitted Euclid rollback WIP | Restored `SHIFT+PLAY` from STM temporary preset storage, clamped global decimation imports/startup to `127`, and added `SHIFT+PERF` Euclid-page per-visit temp-track rollback |
 | 034 | 2026-07-04 | local branch `master`, step automation/global decimation WIP | Made global SHIFT toggle use effective button state, made step automation release as a one-step Preset-baseline override, and special-cased global decimation ownership/baselines |
+| 035 | 2026-07-25 | local branch `master`, build-verified (hardware timing capture pending) | Separated DIN/USB system-realtime MIDI into timestamped SPSC queues dispatched immediately before the audio render deadline, with explicit IRQ priority grouping and DWT queue-latency diagnostics |
+| 036 | 2026-08-20 | local branch `master`, build-verified (hardware not yet tested) | Investigated a step-probability bug report via file forensics and full data-path trace, then fixed a confirmed defect where the `PATTERN_SETTINGS_PAGE` page (hold SHIFT while already on PERF) could silently drop the AVR-to-STM shown-pattern resync, stranding step edits (probability/volume/note) on a stale or temp pattern that never reaches any saved pattern |
 
 ---
 
