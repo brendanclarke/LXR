@@ -314,31 +314,231 @@ Pre-existing/unrelated file at session start:
   during the session; not touched intentionally, not part of this session's
   work).
 
+## Post-Closeout Addendum (same session)
+
+After this session's closeout above, the user reviewed the attached files
+directly and reported that `P075.ALL` genuinely *does* show a non-default
+probability on Clap/Cym, pattern 1, step 12 (`PRB 25`) that has no audible
+effect — contradicting this log's and `PROBABILITY_INVESTIGATION.md`'s
+original Part 1 conclusion that no pattern in the file had any probability
+set at all. That conclusion was wrong: Part 1's forensic scan only printed
+steps flagged `STEP_ACTIVE_MASK`-active, so it never surfaced a `prob` byte
+stored on an inactive step. Re-scanning without that filter found exactly
+four non-default `prob` values in the entire file (32, 28, 27, and the
+reported 25), all in track 4 (Clap/Cym) pattern 0, all on `STEP_ACTIVE_MASK`-
+inactive steps.
+
+This led to a second, independently verified root cause, written up as
+`PROBABILITY_INVESTIGATION.md` Part 8: the front panel's normal step-edit
+addressing (`buttonHandler_selectActiveStep()`, `buttonHandler_setRemoveStep()`,
+and the `SELECT_MODE_PAT_GEN` step-select variant, all `buttonHandler.c`)
+always computes the raw sub-step index as `mainStepIndex*8` — row 0 of that
+main step's 8-slot sub-step group — with no awareness of sub-step rotation.
+This track has a baked-in `+1` sub-step rotation (`PAR_EUKLID_SUBSTEP_ROTATION`
+/ `euklid_rotatePattern()`, `EuklidGenerator.c`), which is a real, documented
+feature that physically moves a track's live note within each 8-slot group
+without moving the main-step on/off bitmask (`euklid_rotatePattern()`'s own
+logic explicitly skips rotating that bitmask for a pure sub-step rotation).
+`euklid_copySubStep()` was checked and correctly copies `prob` along with
+note/volume/active-flag during that rotation — it is not a rotation-copy
+bug. The mismatch is purely in the front panel always addressing row 0
+regardless of where rotation has since moved the live note.
+
+This is a **different, separate defect** from the one this session already
+fixed (`PATTERN_SETTINGS_PAGE`/`SEQ_CHANGE_PAT`, above) and is a much more
+direct, deterministic match for the original report: it requires no
+Follow/background-load/temp-boundary timing, reproduces on every load
+because the rotation is physically baked into saved data, and does not
+reproduce on a freshly built pattern (zero rotation by default). It has
+**not** been fixed in this session — it was presented to the user as an
+open question (dynamic active-row resolution vs. a UX indicator, since both
+are defensible and the fix touches a widely-used editing path) rather than
+implemented unilaterally. `PROBABILITY_INVESTIGATION.md` Part 8 has the full
+trace, evidence table, and code citations. `MEMORY.md`'s Session 036 status
+paragraph and Sequencer/PATGEN Reminders section were both updated with this
+correction.
+
+The `PATTERN_SETTINGS_PAGE` fix already applied and build-verified earlier
+in this session remains correct and worth keeping — it closes a real,
+independently-confirmed gap — it just is not confirmed to be what produced
+Song 75's specific symptom.
+
+## Second Post-Closeout Addendum: Two Rotation Bugs, Investigated And Fixed
+
+After the Part 8 correction above, the user reported two further, separate
+bugs specifically in pattern rotation (not step-probability) and asked for
+them to be investigated and fixed in the same session. Both were found,
+confirmed, and fixed. Full user-facing summary: `PROBABILITY_INVESTIGATION.md`
+Part 9. Technical detail here.
+
+### Bug 1: voice retriggers on every rotation change while the sequencer is stopped
+
+**Root cause.** `PAR_EUKLID_ROTATION` and `PAR_EUKLID_SUBSTEP_ROTATION`'s AVR
+setter handlers (`menu.c`, `menu_parseGlobalParam()`'s parameter switch) each
+resent `avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());`
+before their real opcode, on *every* encoder nudge — a defensive
+"make sure STM has the right active track" idiom shared by several other
+parameter handlers in the same file (`PAR_EUKLID_LENGTH`, `PAR_EUKLID_STEPS`,
+`PAR_POS_X`, `PAR_POS_Y`, `PAR_FLUX`, `PAR_SOM_FREQ`, `PAR_TRACK_LENGTH`,
+`PAR_TRACK_SCALE`). On STM, `FRONT_SEQ_SET_ACTIVE_TRACK`
+(`frontPanelReceivingProtocol.c`) contains:
+
+```c
+case FRONT_SEQ_SET_ACTIVE_TRACK:
+   if ( (frontParser_activeTrack==frontParser_command.data2)&&(!seq_isRunning()) )
+      seq_triggerVoice(frontParser_activeTrack, seq_rollVelocity, seq_rollNote);
+   frontParser_activeTrack = frontParser_command.data2;
+   ...
+```
+
+This is the documented "press the already-selected voice button to preview
+it while stopped" feature (README). Since the redundant resend always names
+the track already being edited on the Euclid page, and the sequencer is
+commonly stopped while dialing in a pattern, every rotation nudge satisfied
+both conditions and fired the preview trigger — audibly retriggering the
+voice on every single encoder click.
+
+**Fix.** Removed the redundant `SEQ_SET_ACTIVE_TRACK` resend from exactly the
+two reported handlers, `PAR_EUKLID_ROTATION` and `PAR_EUKLID_SUBSTEP_ROTATION`
+(`menu.c`). Verified safe by tracing the only path into either parameter:
+`PAR_EUKLID_ROTATION`/`SUBSTEP_ROTATION` are editable only via the encoder
+while `SELECT_MODE_PAT_GEN` (the Euclid page, `EUKLID_PAGE`) is active, and
+the *only* way to select which track's Euclid parameters are being edited is
+pressing a VOICE button, which independently sends `SEQ_SET_ACTIVE_TRACK`
+exactly once (`buttonHandler.c`, "select active voice" branch, which also
+calls `menu_enterPatgenMode()`) before any rotation opcode can be sent.
+`frontParser_activeTrack` on STM is therefore already correct by the time
+either handler runs; the resend was pure redundancy with an unwanted side
+effect. The genuine voice-button preview gesture (`buttonHandler.c:1295`,
+`:1335`) is a separate code path and was not touched.
+
+**Not fixed, same session:** the other 8 parameter handlers sharing the
+identical redundant-resend idiom (`PAR_EUKLID_LENGTH`, `PAR_EUKLID_STEPS`,
+`PAR_POS_X`, `PAR_POS_Y`, `PAR_FLUX`, `PAR_SOM_FREQ`, `PAR_TRACK_LENGTH`,
+`PAR_TRACK_SCALE`) likely share the same stopped-sequencer retrigger bug.
+Only rotation was reported, so only rotation was fixed. Flagged for a
+follow-up decision.
+
+### Bug 2: sub-step rotation sometimes offsets the main steps
+
+**Root cause, verified mathematically.** `euklid_rotatePattern()`
+(`EuklidGenerator.c:304-378`) computes a signed sub-step delta and folds any
+`|delta| > 7` into a whole main-step rotation:
+
+```c
+if (subSteps>7)
+{
+   mainSteps=(int)(mainSteps+subSteps/8);
+   subSteps=subSteps%8;
+}
+else if (subSteps<-7) { ... }
+...
+if (!subSteps)
+{
+   pat_setMainSteps(patternNr, trackNr, 0x00);   // rotates the main-step bitmask
+   for (i=0;i<length;i++) { ... }
+}
+```
+
+This carry-into-mainstep logic is *correct* for a genuine multi-main-step
+rotation request. The bug: `PAR_EUKLID_SUBSTEP_ROTATION`'s dial range was
+`DTYPE_0B15` (0-15), so an ordinary dial movement whose delta happened to
+exceed +-7 (e.g. jumping from 0 straight to 8, or any other multiple-of-8
+net delta) triggered this fold and rotated the main-step on/off bitmask as
+an unintended side effect of what the user intended as a pure sub-step edit.
+This only fires when the delta happens to cross the threshold, matching the
+report's "sometimes."
+
+**Fix — matches the user's own proposed approach ("limit substep rotation to
+0-7"), verified sufficient before implementing.** Traced the boundary case
+algebraically: clamping the *value itself* to 0-7 bounds every possible
+single-edit delta between two in-range values to exactly [-7, 7] inclusive,
+which never reaches the `subSteps>7` / `subSteps<-7` thresholds -- confirmed
+for the exact boundary deltas of +7 and -7 (the -7 case still normalizes to
+a nonzero final `subSteps`, so the `if(!subSteps)` mainstep-bitmask rotation
+never fires). This closes the mechanism completely, not just empirically.
+
+**Implementation constraint discovered:** `PAR_EUKLID_ROTATION` (main-step
+rotation, which legitimately needs the full 0-15 range) shares the exact
+same `DTYPE_0B15` dtype as `PAR_EUKLID_SUBSTEP_ROTATION`, and `menu.h`'s
+`Datatypes` enum is already at its documented hard ceiling of exactly 16
+entries (0-15; the dtype is packed into the low 4 bits of a byte everywhere
+it's read, e.g. `parameter_dtypes[parNr] & 0x0F`, and the enum itself carries
+an explicit comment: *"we can only have 16 on this list the way things are
+laid out"*). Adding a dedicated `DTYPE_0B7` was therefore not possible
+without a larger encoding change. Implemented instead as a
+`paramNr == PAR_EUKLID_SUBSTEP_ROTATION` special case inside the existing
+`DTYPE_0B15` branch, at all three places that branch is handled in `menu.c`:
+`menu_encoderChangeParameter()`, `menu_encoderChangeShiftParameter()`, and
+`getDtypeValue()` (the pot/knob absolute-value path, not currently reachable
+for this parameter but guarded defensively for consistency). Each site has
+its own comment; the full WHY is written once at the first site and the
+other two point back to it to avoid tripling the same explanation.
+`PAR_EUKLID_ROTATION`'s real 0-15 ceiling is untouched at all three sites.
+
+**Advice on whether 0-7 is expected to fully resolve this (asked directly by
+the user): yes.** The fix was verified algebraically against the exact
+normalization logic before implementation, not just applied speculatively.
+Two adjacent, non-blocking items worth hardware-testing awareness, not
+further code changes:
+1. A track/song already rotated past 7 using the old unclamped 0-15 range
+   will show its rotation value silently clamp down to 7 on its next edit
+   (the displayed/edited value clamps; already-rotated pattern data is
+   untouched until then). Expected fix behavior, not a new bug.
+2. The clamp lives entirely in the AVR UI layer, the only current way to
+   set this parameter. If sub-step rotation is ever exposed through MIDI
+   NRPN or automation later, it would bypass this clamp; the same `& 0x07`
+   mask could additionally be applied on the STM side in
+   `FRONT_SEQ_EUKLID_SUBSTEP_ROTATION` (`frontPanelReceivingProtocol.c`)
+   for defense-in-depth. Not implemented this session since no such
+   alternate path exists today.
+
+### Verification (both bugs)
+
+- `make -C front/LxrAvr avr -j4` -- clean, zero warnings from the changed
+  code (`menu.c`).
+- `make firmware` -- succeeded, `firmware image/FIRMWARE.BIN` rebuilt again.
+- `git diff --stat` -- confirms only `front/LxrAvr/Menu/menu.c` and the
+  firmware image changed for this addendum; no STM32 source touched.
+- **Not hardware-tested.** Recommended check: exercise both main-step and
+  sub-step rotation across their full ranges, sequencer stopped and running,
+  on a freshly built track and on a track loaded from a song with
+  pre-existing rotation, confirming (a) no voice retrigger while stopped,
+  (b) main-step LEDs never move during a pure sub-step rotation, (c) correct
+  behavior at the 0/7 wrap boundary.
+
 ## End Of Session Block
 
 ```
 DATE: 2026-08-20
 SESSION GOAL: Investigate a reported step-probability bug (Song 75, Clap/Cym track ignores probability after load) via file forensics and full AVR/STM data-path tracing, document findings, and fix any confirmed defect found along the way.
-COMPLETED: Wrote a 7-part investigation (PROBABILITY_INVESTIGATION.md) that ruled out transport, RNG/trigger logic, and Save-side stripping; confirmed step edits can land on a pattern other than the one actually playing via two structural mechanisms (per-track pattern following, temp-pattern scratch storage); found and fixed a standalone defect in avrCommsReceivingProtocol.c's SEQ_CHANGE_PAT ACK handler where the PATTERN_SETTINGS_PAGE branch (hold SHIFT while already on the PERF page -- not the separate EUKLID_PAGE Euclid generator page) silently dropped the AVR-to-STM shown-pattern resync instead of flushing it later as a stale comment claimed; verified the fix builds cleanly end to end.
-VERIFIED ON HARDWARE: no. Build-verified only (make -C front/LxrAvr avr -j4 and make firmware both succeeded with no new warnings/errors). Hardware verification checklist is written into PROBABILITY_INVESTIGATION.md Part 7 and this log's Verification section.
+COMPLETED: Wrote a 7-part investigation (PROBABILITY_INVESTIGATION.md) that ruled out transport, RNG/trigger logic, and Save-side stripping; confirmed step edits can land on a pattern other than the one actually playing via two structural mechanisms (per-track pattern following, temp-pattern scratch storage); found and fixed a standalone defect in avrCommsReceivingProtocol.c's SEQ_CHANGE_PAT ACK handler where the PATTERN_SETTINGS_PAGE branch (hold SHIFT while already on the PERF page -- not the separate EUKLID_PAGE Euclid generator page) silently dropped the AVR-to-STM shown-pattern resync instead of flushing it later as a stale comment claimed; verified the fix builds cleanly end to end. POST-CLOSEOUT ADDENDUM 1: the user then found the original Part 1 forensic scan had a filtering bug (active-steps-only) that hid real, non-default probability values in the file; re-scanning found the actual root cause (Part 8) -- fixed row-0 sub-step addressing in buttonHandler.c ignoring sub-step rotation -- which is a separate, more direct match for the original report and was NOT fixed this session, only documented, pending a UX decision. POST-CLOSEOUT ADDENDUM 2: the user then reported two further, separate pattern-rotation bugs and asked for fixes -- (1) every rotation encoder nudge retriggered the voice while stopped, caused by a redundant SEQ_SET_ACTIVE_TRACK resend before the rotation opcode coinciding with the "preview already-selected voice" gesture on STM; fixed by removing the redundant resend from the two Euclid rotation handlers only. (2) sub-step rotation could non-deterministically rotate the main-step bitmask too, caused by the sub-step rotation dial allowing 0-15 while euklid_rotatePattern() folds any delta >7 into a main-step rotation; fixed by clamping the parameter to 0-7 (the user's own proposed fix, verified algebraically sufficient before implementing) via a paramNr special case, since the dtype enum has no free slot for a dedicated 0-7 range. Both fixes build-verified.
+VERIFIED ON HARDWARE: no. Build-verified only (make -C front/LxrAvr avr -j4 and make firmware both succeeded with no new warnings/errors, for all three fixes applied this session). Hardware verification checklists are written into PROBABILITY_INVESTIGATION.md Parts 7 and 9, and this log's Verification sections.
 
 CHANGES THIS SESSION:
 - `front/LxrAvr/avrComms/avrCommsReceivingProtocol.c`: SEQ_CHANGE_PAT ACK handler's PATTERN_SETTINGS_PAGE branch now calls menu_setShownPattern(patMsg) instead of assigning menu_shownPattern directly, so the STM's frontParser_shownPattern stays in sync even while that page is displayed; added a full explanatory comment block at the change site.
-- `firmware image/FIRMWARE.BIN`: rebuilt with the fix.
-- `PROBABILITY_INVESTIGATION.md`: new root document, full 7-part investigation and fix record.
-- `knowledge_files/log_archive/000_SESSION_INDEX.md`: added the missing terse Session 035 row and the new Session 036 row.
-- `knowledge_files/log_archive/036_SESSION_HANDOFF_LOG.md`: this handoff log.
-- `MEMORY.md`: session closeout notes.
+- `front/LxrAvr/Menu/menu.c`: (a) PAR_EUKLID_ROTATION and PAR_EUKLID_SUBSTEP_ROTATION handlers no longer resend a redundant SEQ_SET_ACTIVE_TRACK before their opcode, fixing the stopped-sequencer voice retrigger. (b) PAR_EUKLID_SUBSTEP_ROTATION is now clamped to 0-7 (instead of the shared DTYPE_0B15 dtype's normal 0-15) at all three value-clamp sites, fixing sub-step rotation from sometimes rotating the main-step bitmask. Both have full explanatory comment blocks at each change site.
+- `firmware image/FIRMWARE.BIN`: rebuilt with all three fixes.
+- `PROBABILITY_INVESTIGATION.md`: new root document; grew to 9 parts covering the original investigation, the Part 8 correction, and the Part 9 rotation-bug fixes.
+- `knowledge_files/log_archive/000_SESSION_INDEX.md`: added the missing terse Session 035 row and the Session 036 row (updated again to reflect the full scope of this session).
+- `knowledge_files/log_archive/036_SESSION_HANDOFF_LOG.md`: this handoff log, including two post-closeout addenda.
+- `MEMORY.md`: session closeout notes, updated across the session as findings evolved.
 
-KNOWN ISSUES INTRODUCED: None confirmed. One narrow interaction to watch on hardware: a redundant same-pattern pattern-change ACK arriving while on PATTERN_SETTINGS_PAGE can now reach the STM and could trigger a harmless seq_realign() that previously silently no-opped there (see PROBABILITY_INVESTIGATION.md Part 6).
-KNOWN ISSUES RESOLVED: Step-parameter edits (probability, volume, note, and the two automation-value opcodes) made while the front panel was on the PATTERN_SETTINGS_PAGE rotation-display page around a pattern-change ACK (including background-load temp/normal boundary crossings) no longer get silently stranded on a stale or temp pattern that is invisible to both playback and Save.
+KNOWN ISSUES INTRODUCED: None confirmed. One narrow interaction to watch on hardware from the PATTERN_SETTINGS_PAGE fix: a redundant same-pattern pattern-change ACK arriving while on that page can now reach the STM and could trigger a harmless seq_realign() that previously silently no-opped there (see PROBABILITY_INVESTIGATION.md Part 6).
+KNOWN ISSUES RESOLVED: (1) Step-parameter edits made while the front panel was on the PATTERN_SETTINGS_PAGE rotation-display page around a pattern-change ACK no longer get silently stranded on a stale or temp pattern. (2) Rotation encoder nudges (PAR_EUKLID_ROTATION, PAR_EUKLID_SUBSTEP_ROTATION) no longer retrigger the voice while the sequencer is stopped. (3) Sub-step rotation no longer has a chance of rotating the main-step on/off bitmask as an unintended side effect.
+KNOWN ISSUES STILL OPEN (found this session, not yet fixed): The Part 8 root cause of the original probability report -- fixed row-0 sub-step addressing in buttonHandler.c not accounting for sub-step rotation -- is documented but not fixed, pending a design decision. The identical redundant-SEQ_SET_ACTIVE_TRACK-resend pattern behind rotation Bug 1 also exists on PAR_EUKLID_LENGTH, PAR_EUKLID_STEPS, PAR_POS_X, PAR_POS_Y, PAR_FLUX, PAR_SOM_FREQ, PAR_TRACK_LENGTH, and PAR_TRACK_SCALE and was not fixed (only rotation was reported).
 
-NEXT SESSION RECOMMENDED GOAL: Flash the fixed firmware and run the hardware verification checklist -- reproduce the original Song 75 report end to end, confirm the PATTERN_SETTINGS_PAGE LED display is unaffected, and watch for the narrow seq_realign() edge case.
-BLOCKERS: No build blocker. Hardware confirmation of both the original bug's resolution and the absence of LED/realign side effects is required before considering this closed.
+NEXT SESSION RECOMMENDED GOAL: Flash this session's firmware and hardware-test all three fixes (PATTERN_SETTINGS_PAGE shown-pattern sync, rotation retrigger-while-stopped, sub-step rotation main-step offset) per the checklists in PROBABILITY_INVESTIGATION.md Parts 7 and 9. Then get a decision on the Part 8 fix approach (dynamic active-row resolution vs. a UX/LED indicator) and implement it across buttonHandler_selectActiveStep(), buttonHandler_setRemoveStep(), and the SELECT_MODE_PAT_GEN step-select variant -- this is the actual root cause of the original Song-75 report and remains unfixed.
+BLOCKERS: Part 8 needs a design decision before implementation (see PROBABILITY_INVESTIGATION.md Part 8's "Open question"). Hardware confirmation of all three fixes applied this session is required before considering any of them closed. The 8 other parameter handlers sharing rotation Bug 1's redundant-resend pattern are an open question: fix them too, or leave as-is since only rotation was reported.
 
 CRITICAL REMINDERS FOR NEXT SESSION:
 - Do not remove the `if(menu_activePage != PATTERN_SETTINGS_PAGE)` / `else` split in `avrCommsReceivingProtocol.c`'s `SEQ_CHANGE_PAT` handler outright -- the `if` branch's LED refresh calls must stay gated off PATTERN_SETTINGS_PAGE, or its rotation-indicator LED display will be visibly clobbered by ordinary pattern-change traffic.
 - `PATTERN_SETTINGS_PAGE` (hold SHIFT while already on PERF) and `EUKLID_PAGE` (hold SHIFT then press PERF, `menu_enterPatgenMode()`) are two separate pages -- do not conflate them; `MEMORY.md` already warns about this exact mix-up and this session's own draft made it once before catching it.
+- `menu.h`'s `Datatypes` enum is hard-capped at 16 entries (4-bit packed, `parameter_dtypes[...] & 0x0F` everywhere) and is already full. Do not add a new `DTYPE_*` value without first freeing a slot (e.g. `DTYPE_AUTOM_TARGET` is legacy-macro-only and may be reclaimable, but that was not investigated or touched this session) -- use a `paramNr`-based special case within an existing dtype instead, as done for `PAR_EUKLID_SUBSTEP_ROTATION`.
+- `PAR_EUKLID_SUBSTEP_ROTATION` must stay clamped to 0-7 at all three `menu.c` sites (`menu_encoderChangeParameter()`, `menu_encoderChangeShiftParameter()`, `getDtypeValue()`); `PAR_EUKLID_ROTATION` correctly keeps 0-15. If a fourth path to set this parameter is ever added (MIDI, automation), it needs the same clamp or an equivalent STM-side `& 0x07` mask in `FRONT_SEQ_EUKLID_SUBSTEP_ROTATION`.
+- Do not resend `SEQ_SET_ACTIVE_TRACK` redundantly before a parameter opcode when the track hasn't changed and the sequencer might be stopped -- STM's `FRONT_SEQ_SET_ACTIVE_TRACK` treats same-track-while-stopped as an intentional voice-preview gesture and will trigger it.
+- The PATTERN_SETTINGS_PAGE fix is NOT confirmed to be the cause of the original Song-75 report. The actual verified root cause is Part 8 (fixed row-0 sub-step addressing vs. sub-step rotation) -- read PROBABILITY_INVESTIGATION.md Part 8 before assuming this bug is closed.
+- Before trusting any "no probability/data is set anywhere" forensic conclusion again, scan ALL steps for a field, not just STEP_ACTIVE_MASK-active ones -- the Part 1 scan's active-only filter is exactly what hid the real evidence here.
 - `menu_setShownPattern()` is the only sanctioned way to update `menu_shownPattern` and keep the STM's `frontParser_shownPattern` in sync; do not reintroduce a direct local assignment anywhere in this ACK path.
 - Mechanism A (per-track pattern following) and the live-streaming-window variant of Mechanism B (documented in `PROBABILITY_INVESTIGATION.md` Part 3) are still open, lower-priority hardening items, not fixed by this session's change.
 - `PROBABILITY_INVESTIGATION.md` is the durable technical record for this bug; read it before touching `frontParser_shownPattern`, `seq_perTrackActivePattern`, or the `SEQ_CHANGE_PAT`/`SEQ_SET_SHOWN_PATTERN` opcodes again.

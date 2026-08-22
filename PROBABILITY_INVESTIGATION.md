@@ -18,6 +18,8 @@ Short answers, justified in full below:
 
 This is a static-analysis investigation only (no hardware in the loop). It has **not** been confirmed on hardware.
 
+**⚠ Correction (post-fix follow-up):** Part 1's original forensic scan only printed steps flagged `STEP_ACTIVE_MASK`-active, so it never surfaced a `prob` byte stored on an *inactive* step. The user pointed out that the device itself shows a non-default probability (25) on Clap/Cym, pattern 1, step 12 — re-scanning **without** that active-only filter found it, plus three siblings, all in track 4 (Clap/Cym) pattern 0: raw sub-step indices 40, 64, 72, and 88 hold `prob = 32, 28, 27, 25` respectively, and all four are `STEP_ACTIVE_MASK`-*inactive*. **Part 1's "no pattern in the file has any probability set" conclusion was wrong** — probability *is* set, on exactly the steps the user set it on. See **Part 8** for the verified root cause this actually points to, which is a different, more direct defect than the one Session 036 already fixed. Parts 1–7 below are left as originally written for the investigative trail, but Part 1's "swallowed everywhere" framing and everything built on it (Parts 3/5's "invisible on every pattern" reasoning) should be read through Part 8's correction.
+
 ---
 
 ## What "Clap/Cym" maps to
@@ -42,7 +44,7 @@ Parsing every `(track, pattern, step)` triple in `P075.ALL`:
 
 - **Every** track (0–6) × **every** pattern (0–7) has exactly 16 active steps (one per main step — a plain 4/4-style fill).
 - **Every single active step in the entire file has `prob == 127`** (100%), `volume == 100`, `note == 63`. Not just track 4 — all seven tracks, all eight patterns, no exceptions.
-- `note = 63` is exactly `SEQ_DEFAULT_NOTE` (`PatternData.h:23`), `volume = 100` and `prob = 127` are exactly the defaults written by `pat_resetNote()` (`PatternData.c:38-47`) — the helper that initializes a step the first time a main step is turned on. **This means every step in every one of the 8 real saved patterns, on every track, is still sitting at its as-created default.** None of them has ever been captured with a customized note, volume, *or* probability — this is stronger evidence than "probability is 127," and it rules out a narrow "only the prob field got corrupted" theory: whatever happened, it swallowed *any* step-parameter edit, not something specific to the probability field.
+- `note = 63` is exactly `SEQ_DEFAULT_NOTE` (`PatternData.h:23`), `volume = 100` and `prob = 127` are exactly the defaults written by `pat_resetNote()` (`PatternData.c:38-47`) — **correction, verified while investigating `LIVE_REC_DUPLICATE_SUBSTEP_BUG.md`: `pat_resetNote()` is called only from `pat_clearTrack()` (`PatternData.c:322-336`, the whole-track clear that also sets every group's sub-step-0 active by default), not from `pat_setMainStep()` on every step creation as originally stated here — `pat_setMainStep()` only flips the main-step bitmask and has no effect on `Step` payloads.** The values still stand as the as-cleared defaults for this track (nothing since `pat_clearTrack()` touched them), just via that mechanism rather than the one originally described. **This means every step in every one of the 8 real saved patterns, on every track, is still sitting at its as-cleared default.** None of them has ever been captured with a customized note, volume, *or* probability — this is stronger evidence than "probability is 127," and it rules out a narrow "only the prob field got corrupted" theory: whatever happened, it swallowed *any* step-parameter edit, not something specific to the probability field.
 - Track 4 (Clap/Cym) and 5/6 (hi-hats) are rotated one sub-step later than tracks 0–2, consistently across all 8 patterns — looks like an intentional per-track *rotation* setting, unrelated to probability.
 
 **Conclusion of Part 1, confirmed:** correct — none of the 8 saved patterns has any probability set at all, on any track. Whatever the user did in the menu to lower Clap/Cym's probability never reached any of the 8 real, saved pattern slots.
@@ -187,7 +189,7 @@ Traced the complete save round trip:
 3. On STM, `SYSEX_REQUEST_STEP_DATA` → `seq_sendStepInfoToFront()` → `frontPanelSending_sendStepInfo()` (`frontPanelSendingProtocol.c:488-511`) reads `pat_subStepPattern[currentPattern][currentTrack][currentStep]` **directly, by raw index** — no masking beyond the expected 7-bit SysEx split (verified bit-exact against the receive side in Part 2), no default substitution, no conditional skip.
 4. `pat_getStepPtr()` (`PatternData.c:61-67`, shown above) is a bare address calculator. It has no side effects and nothing resets a step's contents as a side effect of being read.
 
-I looked specifically for any "if track is muted / if step inactive / if pattern doesn't match X, report/write default" branch anywhere in this path, and found none. The only place `prob` gets programmatically reset to `127` anywhere in the STM firmware is `pat_resetNote()` (`PatternData.c:38-47`, called only from `pat_setMainStep()` when a step is newly turned on) and `seq_addNote()` (`sequencer.c:1974`, only during live MIDI/front-panel note recording) — neither of which is in the save path, and both of which only run when a step is being *(re)created*, not when it's being queried for a file write.
+I looked specifically for any "if track is muted / if step inactive / if pattern doesn't match X, report/write default" branch anywhere in this path, and found none. The only place `prob` gets programmatically reset to `127` anywhere in the STM firmware is `pat_resetNote()` (`PatternData.c:38-47`, called only from `pat_clearTrack()` — see the Part 1 correction above) and `seq_addNote()` (`sequencer.c:1974`, only during live MIDI/front-panel note recording) — neither of which is in the save path, and both of which only run when a step is being *(re)created*, not when it's being queried for a file write.
 
 **Answer to Question 2: no.** There is no code path in Save that strips, clamps, or defaults a probability value that is genuinely present in `pat_patternSet`. Combined with Part 1's finding that the file's step data is byte-identical to `pat_resetNote()`'s untouched defaults (not just `prob`, but `note` and `volume` too), the far better-supported explanation is that the edit never reached `pat_patternSet` in the first place — i.e., Question 1's answer is the actual root cause, and there's nothing additionally wrong on the Save side.
 
@@ -377,12 +379,99 @@ This fix addresses the Part 5 defect specifically. It does not by itself close M
 
 ---
 
+## Part 8 — The actual, verified root cause (found after the Session 036 fix, from a user correction)
+
+The user pointed out the device shows `PRB 25` on Clap/Cym, pattern 1, step 12, and it has no audible effect. Re-scanning `P075.ALL` **without** the active-steps-only filter used in Part 1 found it, and three siblings — all in track 4 (Clap/Cym), pattern 0, and nowhere else in the file:
+
+| Raw sub-step index | Displayed as | `STEP_ACTIVE_MASK` | `prob` |
+|---|---|---|---|
+| 40 | main step 6, row 1 | inactive | 32 |
+| 64 | main step 9, row 1 | inactive | 28 |
+| 72 | main step 10, row 1 | inactive | 27 |
+| 88 | main step 12, row 1 | inactive | **25** (the one the user pointed at) |
+
+Every one of these main steps (6, 9, 10, 12) *is* toggled on — confirmed by decoding the pattern's main-step bitmask (`pat_mainSteps`, stored separately from step data at the file's mainstep offset: `MAINSTEP_OFFSET + (pattern*NUM_TRACKS+track)*2`, a 16-bit little-endian value, one bit per main step). For track 4 pattern 0 the raw value is `0x1800`, with bits 5, 8, 9, and 11 set — main steps 6, 9, 10, 12 (1-based), exactly matching the four rows above. But the sub-step that is actually flagged `STEP_ACTIVE_MASK` for each of those main steps is **one position later** — 41, 65, 73, 89 — and every one of those retains the untouched default `prob = 127`.
+
+### Why: fixed substep-0 addressing vs. a rotated track
+
+The front panel's normal step-edit path — pressing one of the 16 main-step buttons to view/edit that step's probability, note, or volume — always computes the raw storage index as `mainStepIndex * 8` (row 0 of that step's 8-slot sub-step group), with zero awareness of any rotation applied to the track:
+
+```c
+// buttonHandler.c:747-769, buttonHandler_selectActiveStep()
+static void buttonHandler_selectActiveStep(uint8_t ledNr, uint8_t seqButtonPressed) {
+   ...
+   buttonHandler_selectedStep = (uint8_t) (seqButtonPressed * 8);   // always row 0
+   parameter_values[PAR_ACTIVE_STEP] = buttonHandler_selectedStep;
+   avrComms_sendData(SEQ_CC, SEQ_REQUEST_STEP_PARAMS, (uint8_t) (seqButtonPressed * 8));
+   ...
+}
+```
+
+(`buttonHandler_setRemoveStep()`, `buttonHandler.c:771-795`, and the `SELECT_MODE_PAT_GEN` step-select variant at `buttonHandler.c:591-611`, do the same thing.) This raw index becomes `frontParser_activeStep` on the STM (`frontPanelReceivingProtocol.c:2714-2725`), and every step-parameter edit opcode (`FRONT_SEQ_PROB` included) writes to exactly that raw slot.
+
+Sub-step **rotation** (`PAR_EUKLID_SUBSTEP_ROTATION`, applied via `euklid_setSubStepRotation()` → `euklid_rotatePattern()`, `EuklidGenerator.c:262-378`) is a real, user-reachable feature that physically shifts the *contents* of a track's 128-slot step array by the rotation amount — it copies each `Step` (note, volume, `STEP_ACTIVE_MASK`, and `prob` all together, via `euklid_copySubStep()`, `EuklidGenerator.c:380-391` — this copy is correct and complete; **it is not a rotation-copy bug**) into a shifted position in a temp buffer, then writes the temp buffer back. Critically, when the rotation is a pure sub-step rotation (not a whole-main-step rotation), the function's own logic (`EuklidGenerator.c:347-358`, `if (!subSteps) { ...rotate pat_mainSteps... }`) explicitly **skips rotating the main-step on/off bitmask** — only the raw per-sub-step data moves. This track has a baked-in `+1` sub-step rotation (visible as every main step's live note sitting one raw slot later than row 0, uniformly, across all 16 main steps and all 8 patterns — this is the "one-sub-step rotation difference" Part 1 and the Appendix originally noted and dismissed as "unrelated to probability"; it is in fact the whole mechanism).
+
+Put together: after this track was rotated, "main step 12" still lights up on the grid (its bit in `pat_mainSteps` never moved), and the note that's actually heard for that beat now lives at raw index 89. But pressing the main-step-12 button to edit its probability still hardcodes raw index 88 — the group's row-0 slot, which the rotation vacated. The edit is accepted, displayed, and stored (that part of the pipeline works correctly, per Part 4), but it lands on a slot whose own `STEP_ACTIVE_MASK` is off and which playback never evaluates for that beat. The note that *is* played (raw 89) never receives the edit and stays at default `prob = 127` — audibly, probability appears completely ignored.
+
+### Why this fits the report better than Parts 3–7
+
+- It requires no assumption about Follow, background loading, temp-pattern state, or the `PATTERN_SETTINGS_PAGE` timing window — just a track that has been rotated, which is an ordinary, documented editing action (README: *"Track pattern step timing scale... [lets you] run a track at a different rhythmic subdivision from the rest of the pattern"*).
+- It reproduces on **every load** of this exact song, deterministically — the rotation is physically baked into the saved step data, not live/session state, so reloading the file reproduces the identical mismatch every time.
+- It does not reproduce building a pattern from scratch, because a freshly created pattern has zero rotation by default — row 0 *is* the live note, so editing "step N" correctly targets what's playing.
+- It explains why probability specifically "does nothing" while the note itself is clearly audible: the note/mainstep-bitmask side of a rotated step is exactly where it should be and sounds correctly; only a *subsequent edit* made through the fixed-row-0 addressing path lands on the wrong slot.
+- It is track-specific (only Clap/Cym shows this in the file) without requiring any track-specific temp/pattern-following state, consistent with *"other tracks probability seems to work ok"* — those tracks simply were never rotated.
+
+### Relationship to the Session 036 fix
+
+This is a **different defect** from the one fixed in Session 036 (Part 5). That fix closes a real gap in the `frontParser_shownPattern` sync during `PATTERN_SETTINGS_PAGE`, and remains worth having — but it is very unlikely to be what produced this specific song's symptom, since it requires a Follow/background-load/temp-boundary timing coincidence that this song's own saved settings make less likely on an `.all`/`.prf` load (Part 3). This Part 8 mechanism requires only "the track was rotated at some point before these four steps were probability-edited," which the file data confirms happened.
+
+### Open question: is fixed row-0 addressing itself the bug, or is it a UX gap?
+
+Both are defensible framings and worth deciding on purpose rather than by default:
+
+- **It's a bug**: a user editing "step 12's probability" has every reason to expect it affects the note that's audibly step 12, regardless of any rotation dialed in elsewhere. Silently addressing a different, inactive slot with no indication is a correctness/UX defect.
+- **It's a rotation semantics gap, not strictly a data bug**: rotation is documented as shifting *content*, and the front panel's row-0 shortcut for "the step button's default row" was presumably always understood by the original authors to mean physical row 0 of that group, not "whichever row is currently active." Under this framing the fix is arguably a UX affordance (show/select the active row automatically) rather than a correctness fix to broken addressing.
+
+Either way, a fix needs to touch the same three call sites identified above consistently. Not implemented in this session — presenting for a decision before making an addressing change to a widely-used editing path.
+
+---
+
+## Part 9 — Two follow-up rotation bugs found and fixed (user-reported, same session)
+
+While reviewing Part 8's rotation mechanism, the user separately reported two more bugs in pattern rotation itself. Both were investigated and fixed in this session. Full technical detail is in `knowledge_files/log_archive/036_SESSION_HANDOFF_LOG.md`; summary here for continuity with the rest of this document.
+
+### 9a. Voice retriggers on every rotation change while stopped
+
+**Cause:** `PAR_EUKLID_ROTATION` and `PAR_EUKLID_SUBSTEP_ROTATION`'s AVR handlers (`menu.c`) each resent `SEQ_SET_ACTIVE_TRACK` with the currently-active voice before every single rotation nudge — a defensive "make sure STM has the right track" resend also used by several other Euclid/track parameters. STM's `FRONT_SEQ_SET_ACTIVE_TRACK` handler (`frontPanelReceivingProtocol.c`) treats "requested track == already-active track, sequencer stopped" as the documented *"press the already-selected voice button to preview it"* gesture and calls `seq_triggerVoice()`. Since the rotation dial's redundant resend always names the track already being edited, every nudge fired that gesture.
+
+**Fix:** removed the redundant `SEQ_SET_ACTIVE_TRACK` resend from the `PAR_EUKLID_ROTATION` and `PAR_EUKLID_SUBSTEP_ROTATION` handlers only (`menu.c`). Safe because the only way to reach either parameter is via the Euclid page (`SELECT_MODE_PAT_GEN`), and selecting a track for that page already sends `SEQ_SET_ACTIVE_TRACK` exactly once from the voice-button handler (`buttonHandler.c`) before any rotation opcode can be sent — STM's `frontParser_activeTrack` is already correct. The genuine voice-button preview gesture (`buttonHandler.c`) is untouched.
+
+**Not fixed, flagged as the same pattern:** `PAR_EUKLID_LENGTH`, `PAR_EUKLID_STEPS`, and non-Euclid parameters `PAR_POS_X`, `PAR_POS_Y`, `PAR_FLUX`, `PAR_SOM_FREQ`, `PAR_TRACK_LENGTH`, `PAR_TRACK_SCALE` all do the identical redundant resend (`menu.c`). Only rotation was reported, so only rotation was fixed; the others likely share the same stopped-sequencer retrigger and are candidates for the same fix if wanted.
+
+### 9b. Sub-step rotation sometimes offsets the main steps
+
+**Cause, verified mathematically:** `euklid_rotatePattern()` (`EuklidGenerator.c`) computes the rotation delta between the new and previous sub-step rotation values, and treats any delta with `|delta| > 7` as spilling into a whole main-step rotation (`mainSteps += delta/8`) — correct behavior for a genuine multi-main-step rotation, but `PAR_EUKLID_SUBSTEP_ROTATION`'s dial range was `DTYPE_0B15` (0–15), so an ordinary dial movement (e.g. 0→8, or any adjustment landing a delta at a multiple of 8) could trigger that spillover and rotate the main-step on/off bitmask as an unintended side effect of a sub-step-only edit — non-deterministically, only when the delta happened to exceed the ±7 threshold, matching *"sometimes"*.
+
+**Fix (matches the user's proposed approach, verified sufficient):** clamped `PAR_EUKLID_SUBSTEP_ROTATION` to 0–7 at its three value-clamp sites in `menu.c` (`menu_encoderChangeParameter()`, `menu_encoderChangeShiftParameter()`, `getDtypeValue()`). Capping the value range to 0–7 caps every possible single-edit delta at exactly 7, which never reaches the `>7`/`<-7` thresholds that trigger main-step spillover — mathematically closes the gap for every legal transition, confirmed by tracing the normalization logic for boundary deltas of exactly ±7.
+
+**Implementation note — no new dtype slot:** `PAR_EUKLID_ROTATION` (main-step rotation, which legitimately needs 0–15) shares the same `DTYPE_0B15` dtype, and `menu.h`'s `Datatypes` enum is fully packed at exactly 16 entries (0–15, 4-bit-packed — the file has an explicit comment warning about this ceiling), so a dedicated `DTYPE_0B7` could not be added. The clamp is instead applied as a `paramNr == PAR_EUKLID_SUBSTEP_ROTATION` special case within the existing `DTYPE_0B15` branch at all three sites, leaving `PAR_EUKLID_ROTATION`'s real 0–15 range untouched.
+
+**Advice on whether 0–7 is sufficient (asked directly):** yes — traced as mathematically complete for this mechanism, not just empirically likely. The only two adjacent, non-blocking items to be aware of:
+1. Any track/song already rotated past 7 using the old unclamped 0–15 range will show its rotation value silently snap down to 7 on its *next* edit (the value clamps; the already-rotated pattern data itself is untouched until then). Expected consequence of the fix, not a new bug — worth knowing before testing so it isn't mistaken for a fresh issue.
+2. The clamp lives entirely in the AVR UI layer (the only current way to set this parameter). If sub-step rotation is ever exposed through another path later (MIDI NRPN, automation), it would bypass this clamp. For full defense-in-depth that isn't needed today, the same `& 0x07` mask could additionally be applied on the STM side in `FRONT_SEQ_EUKLID_SUBSTEP_ROTATION` (`frontPanelReceivingProtocol.c`) right after decoding the incoming byte — not implemented in this session, since the parameter has no such alternate path today.
+
+### Verification (both 9a and 9b)
+
+`make -C front/LxrAvr avr -j4` — clean, zero warnings from the changed code. `make firmware` — succeeded, `firmware image/FIRMWARE.BIN` rebuilt. **Not yet hardware-tested** — recommended check: rotate both main-step and sub-step rotation across their full ranges, stopped and running, on a fresh track and on a track loaded from a song with pre-existing rotation, watching for (a) no voice retrigger while stopped, (b) main-step LEDs never move during a pure sub-step rotation, (c) rotation still behaves correctly at the 0/7 wrap boundary.
+
+---
+
 ## Appendix — things checked and ruled out
 
 - `.ALL`/`.PRF` fixed step-data byte offsets (`VERSION_4_*_STEPDATA_OFFSET`) are stale in *name* (file version is 5, constants say "VERSION_4") but were verified byte-exact for this specific file via total-size cross-check. Not the bug here, but worth a defensive review if the `.prf`/`.all` header format changes again.
 - Full AVR↔STM SysEx pack/unpack of the 7-byte step struct, in both load and save directions — verified bit-for-bit symmetric.
 - The RNG-vs-probability trigger comparison in `seq_process()` — logically correct.
-- The one-sub-step rotation difference on tracks 4/5/6 in the attached file — looks like an intentional per-track rotation setting, unrelated to probability.
+- ~~The one-sub-step rotation difference on tracks 4/5/6 in the attached file — looks like an intentional per-track rotation setting, unrelated to probability.~~ **Corrected in Part 8: this rotation is the actual mechanism.** The front panel's fixed row-0 step-edit addressing doesn't account for it, which is why probability edits on a rotated track's steps land on an inactive slot instead of the note that's actually playing.
 - The full Save round trip (`preset_writePatternData` → STM `SYSEX_REQUEST_STEP_DATA` → `frontPanelSending_sendStepInfo`) — no stripping/defaulting logic found anywhere in it (Part 4).
 - Whether `tempBoundaryAck` itself is computed correctly on the AVR side (`avrCommsReceivingProtocol.c:628-630`) — logic is correct and does not depend on `PAR_FOLLOW`; it's the `PATTERN_SETTINGS_PAGE` branch downstream of it that drops the resync (Part 5).
 - Whether any code path other than `menu_shiftPerf(0)` and `menu_switchPage()` could flush the `PATTERN_SETTINGS_PAGE`-deferred `menu_shownPattern` value to the STM — none found.
