@@ -2996,7 +2996,37 @@ static void menu_encoderChangeParameter(int8_t inc)
 			*paramValue = 16;
 		break;
 	case DTYPE_0B15:
-		if(*paramValue>15)
+		/* Session 036 fix (PROBABILITY_INVESTIGATION.md "pattern rotation" follow-up).
+		   WHY: PAR_EUKLID_SUBSTEP_ROTATION shares this dtype with
+		   PAR_EUKLID_ROTATION (only 16 dtype slots exist -- see the
+		   16-entry limit noted on the Datatypes enum in menu.h -- so a
+		   dedicated 0-7 dtype is not available), but its real range
+		   must stay 0-7. euklid_rotatePattern() (EuklidGenerator.c)
+		   treats any |delta| > 7 between successive sub-step rotation
+		   values as spilling into a whole main-step rotation
+		   (mainSteps += delta/8), which silently rotates which grid
+		   button lights up for a note the user only meant to nudge
+		   within its own 8-slot sub-step group.
+		   WHAT: clamp PAR_EUKLID_SUBSTEP_ROTATION to a 0-7 ceiling here
+		   (instead of the shared dtype's normal 0-15) so every
+		   possible single-edit delta stays within +-7, which keeps
+		   euklid_rotatePattern()'s normalization on the sub-step-only
+		   path and never rotates the main-step bitmask as a side
+		   effect. PAR_EUKLID_ROTATION keeps its real 0-15 ceiling.
+		   INPUT: paramNr (which parameter is being edited), *paramValue
+		   (the byte already updated by menu_applyEncoderDeltaToByte()).
+		   OUTPUT: *paramValue clamped in place.
+		   AFFILIATES: the identical clamp in
+		   menu_encoderChangeShiftParameter() and getDtypeValue() below
+		   must be kept in sync with this one; STM-side
+		   euklid_setSubStepRotation()/euklid_rotatePattern()
+		   (EuklidGenerator.c) is what this value ultimately drives. */
+		if(paramNr == PAR_EUKLID_SUBSTEP_ROTATION)
+		{
+			if(*paramValue > 7)
+				*paramValue = 7;
+		}
+		else if(*paramValue>15)
 			*paramValue = 15;
 		break;
 	case DTYPE_MIX_FM://parameter_dtypes[paramNr] & 0x0F
@@ -3218,7 +3248,18 @@ static void menu_encoderChangeShiftParameter(int8_t inc)
 			*paramValue = 16;
 		break;
 	case DTYPE_0B15:
-		if(*paramValue>15)
+		/* Session 036 fix: keep this in sync with the DTYPE_0B15 case in
+		   menu_encoderChangeParameter() above -- PAR_EUKLID_SUBSTEP_ROTATION
+		   must stay clamped to 0-7 (not the shared dtype's normal 0-15) to
+		   keep euklid_rotatePattern()'s sub-step-vs-main-step rotation
+		   normalization from spilling into the main-step bitmask; see the
+		   full explanation there. */
+		if(paramNr == PAR_EUKLID_SUBSTEP_ROTATION)
+		{
+			if(*paramValue > 7)
+				*paramValue = 7;
+		}
+		else if(*paramValue>15)
 			*paramValue = 15;
 		break;
 	case DTYPE_MIX_FM://parameter_dtypes[paramNr] & 0x0F
@@ -3878,21 +3919,49 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 		uint8_t pattern = menu_shownPattern; //max 7
 		uint8_t msg =(uint8_t)( (pattern&0x7) | (rotation<<3));
 
-		//select the track nr
-		avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
-
+		/* Session 036 fix (pattern-rotation retrigger-while-stopped bug).
+		   WHY: this handler used to resend SEQ_SET_ACTIVE_TRACK with
+		   menu_getActiveVoice() -- the track already being edited --
+		   before every single rotation nudge. On STM,
+		   FRONT_SEQ_SET_ACTIVE_TRACK (frontPanelReceivingProtocol.c)
+		   treats "requested track == already-active track, sequencer
+		   stopped" as the documented "press the already-selected voice
+		   button to preview it" gesture and calls seq_triggerVoice().
+		   Turning the rotation encoder is not that gesture, so every
+		   nudge silently retriggered the voice while stopped.
+		   WHAT: stopped sending it here. It is unnecessary: the only way
+		   to reach PAR_EUKLID_ROTATION is via the Euclid page
+		   (SELECT_MODE_PAT_GEN), and selecting a track for that page
+		   already sends SEQ_SET_ACTIVE_TRACK exactly once, from the
+		   voice-button handler (buttonHandler.c, "select active voice"
+		   branch -> menu_enterPatgenMode()), before any rotation opcode
+		   can be sent. STM's frontParser_activeTrack is therefore already
+		   correct by the time this case runs.
+		   INPUT/OUTPUT: unchanged -- still sends SEQ_EUKLID_ROTATION with
+		   the same encoded pattern/rotation byte.
+		   AFFILIATES: buttonHandler.c voice-button "select active voice"
+		   path (still sends SEQ_SET_ACTIVE_TRACK once, unaffected);
+		   frontPanelReceivingProtocol.c FRONT_SEQ_SET_ACTIVE_TRACK and
+		   FRONT_SEQ_EUKLID_ROTATION handlers (unchanged). The identical
+		   redundant-resend pattern still exists on PAR_EUKLID_LENGTH,
+		   PAR_EUKLID_STEPS, and several non-Euclid parameters just above
+		   this block; not touched here since only rotation was reported. */
 		avrComms_sendData(SEQ_CC,SEQ_EUKLID_ROTATION,msg);
 	}
    break;
-   
+
    case PAR_EUKLID_SUBSTEP_ROTATION:	{
 		uint8_t rotation =(uint8_t)(value); // max 15
 		uint8_t pattern = menu_shownPattern; //max 7
 		uint8_t msg =(uint8_t)( (pattern&0x7) | (rotation<<3));
 
-		//select the track nr
-		avrComms_sendData(SEQ_CC,SEQ_SET_ACTIVE_TRACK,menu_getActiveVoice());
-
+		/* Session 036 fix: same reasoning as PAR_EUKLID_ROTATION above --
+		   the redundant SEQ_SET_ACTIVE_TRACK resend before every
+		   sub-step-rotation nudge caused the same stopped-sequencer
+		   voice retrigger, for the same reason. Removed for the same
+		   reason and with the same safety argument (track is already
+		   selected via the Euclid-page voice-button handler before this
+		   case can ever run). */
 		avrComms_sendData(SEQ_CC,SEQ_EUKLID_SUBSTEP_ROTATION,msg);
 	}
 	break;
@@ -4065,6 +4134,15 @@ static uint8_t getDtypeValue(uint8_t value, uint16_t paramNr)
 		return (uint8_t)(1 + 15*frac);
 		break;
 	case DTYPE_0B15:
+		/* Session 036 fix: keep in sync with the DTYPE_0B15 clamp in
+		   menu_encoderChangeParameter() -- PAR_EUKLID_SUBSTEP_ROTATION must
+		   stay 0-7, not the shared dtype's normal 0-15, to avoid
+		   euklid_rotatePattern() spilling a sub-step rotation into the
+		   main-step bitmask. This path (absolute-position pot/knob value
+		   entry) is not currently reachable for this parameter in normal
+		   UI flow, but is guarded defensively for consistency. */
+		if(paramNr == PAR_EUKLID_SUBSTEP_ROTATION)
+			return (uint8_t)(7*frac);
 		return (uint8_t)(15*frac);
 		break;
 		// These are 0 or 1

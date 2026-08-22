@@ -358,6 +358,20 @@ Current behavior:
 This prevents a second background load from copying partially overwritten
 normal storage back into the still-audible temp image.
 
+**Session 036 note**: every `SEQ_CHANGE_PAT` ACK -- including the one that
+reports a temp/normal boundary crossing described above -- also drives a
+second, separate piece of AVR/STM state: which pattern the front panel is
+showing and editing (`menu_shownPattern` / `frontParser_shownPattern`). Step-
+parameter edits (probability, volume, note) resolve against that shown-
+pattern state, not against `preset_backgroundTempPlaybackActive` or
+`seq_perTrackActivePattern[]`. Session 036 found and fixed a defect where
+that resync could be silently dropped while the front panel was on
+`PATTERN_SETTINGS_PAGE`, which could strand edits on `SEQ_TMP_PATTERN`
+(invisible to Save) across a background-load boundary crossing. See
+`knowledge_files/comms_spec_reference/COMMS_FLOW_SPEC.md` `### 4c` for the
+full mechanism and fix, and root `PROBABILITY_INVESTIGATION.md` for the
+investigation that found it.
+
 ### Euclid Page Temp Track Backups
 
 Session 033 also reuses `seq_tmpPattern` as a page-local edit backup on the

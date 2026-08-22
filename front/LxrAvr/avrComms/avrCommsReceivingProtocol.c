@@ -640,20 +640,70 @@ void avrComms_parseData(uint8_t data)
                      preset_notePlayedPatternChanged(patMsg);
                   	
                      if(parameter_values[PAR_FOLLOW] || tempBoundaryAck) {
-                     	
+
                         if( menu_activePage != PATTERN_SETTINGS_PAGE)
                         {
                            menu_setShownPattern(patMsg);
                            led_clearSequencerLeds();
-                        	//query current sequencer step states and light up the corresponding leds 
+                        	//query current sequencer step states and light up the corresponding leds
                            avrComms_updatePatternLeds();
                            avrComms_sendData(SEQ_CC,SEQ_REQUEST_PATTERN_PARAMS,patMsg);
-                        } 
+                        }
                         else {
-                        	//store the pending pattern update for shift button release handler
-                           menu_shownPattern = avrCommsParser_command.data2;
-                        }								
-                     }	
+                        /* Session 036 fix (PROBABILITY_INVESTIGATION.md Part 5/6/7).
+                           WHY: this branch runs while the front panel is on
+                           PATTERN_SETTINGS_PAGE -- the page entered by
+                           holding SHIFT while already on the PERF page
+                           (menu_shiftPerf(), menu.c), which repurposes the
+                           step LEDs to show the active track's rotation
+                           value. This is NOT the separate EUKLID_PAGE /
+                           SELECT_MODE_PAT_GEN Euclid generator page (entered
+                           by holding SHIFT *then* pressing PERF via
+                           menu_enterPatgenMode()); do not conflate the two,
+                           see MEMORY.md's existing note on this exact mix-up.
+                           The old code updated only the LOCAL menu_shownPattern so this
+                           page's repurposed step LEDs stay undisturbed, but it
+                           never told the STM the shown/edit pattern changed.
+                           The comment here used to say the update was "for
+                           shift button release handler" to pick up later, but
+                           no such flush ever existed (menu_shiftPerf(0) at
+                           menu.c never called menu_setShownPattern()), so the
+                           STM's frontParser_shownPattern (uARTFrontSYX/
+                           frontPanelReceivingProtocol.c) could stay pointed at
+                           a stale pattern -- including SEQ_TMP_PATTERN during
+                           a background load -- with no bounded-time recovery.
+                           Any step edit made after that (FRONT_SEQ_PROB /
+                           VOLUME / NOTE / FRONT_SET_P1_VAL / P2_VAL) would
+                           silently land on the wrong pattern, or in the
+                           scratch pat_tmpPattern buffer that Save's
+                           preset_writePatternData() loop never visits, and
+                           would never reach any saved pattern.
+                           WHAT: call menu_setShownPattern(patMsg) instead of
+                           assigning menu_shownPattern directly. That helper
+                           only sets menu_shownPattern and sends
+                           SEQ_SET_SHOWN_PATTERN over UART -- it has no LED
+                           side effects of its own, so this page's rotation-
+                           indicator LEDs (set by menu_shiftPerf(1)) are still
+                           left untouched, exactly as before. This also fixes
+                           a small pre-existing inconsistency: the old code
+                           stored the raw avrCommsParser_command.data2, while
+                           this branch (and the sibling "if" branch above) both
+                           now use the already temp-sentinel-normalized patMsg.
+                           INPUT: patMsg (uint8_t) -- the normalized pattern
+                           index (0-7) or SEQ_TMP_PATTERN that this ACK just
+                           confirmed as the sequencer's active pattern.
+                           OUTPUT: menu_shownPattern updated locally (same as
+                           before) and SEQ_SET_SHOWN_PATTERN sent to the STM,
+                           so frontParser_shownPattern tracks the real active
+                           pattern even while this page is displayed.
+                           AFFILIATES: STM receiver
+                           uARTFrontSYX/frontPanelReceivingProtocol.c
+                           (FRONT_SEQ_SET_SHOWN_PATTERN, PatternData.c
+                           pat_getStepPtr()); see PROBABILITY_INVESTIGATION.md
+                           for the full investigation and risk assessment. */
+                           menu_setShownPattern(patMsg);
+                        }
+                     }
                      if(hadHeldVoiceAck && (parameter_values[PAR_FOLLOW] || tempBoundaryAck) && (menu_activePage != PATTERN_SETTINGS_PAGE))
                      {
                         led_clearSequencerLeds();

@@ -61,7 +61,11 @@ void channelMidiParser_noteOn(uint8_t voice, uint8_t note, uint8_t vel, uint8_t 
 
    if(do_rec)
    {
-      seq_addNote(voice, vel, note);
+      /* This is the MIDI note path, and it is the one caller where vel == 0
+         genuinely means "note released" -- channelMidiParser_noteOff() forces
+         vel = 0 before delegating here. Pass isNoteOff = 1 so a note-off keeps
+         its true, un-quantized position (see seq_addNote() in sequencer.c). */
+      seq_addNote(voice, vel, note, 1);
 
       if(midiParser_voiceMidiChannel(voice))
       {

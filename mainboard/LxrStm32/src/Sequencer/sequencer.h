@@ -525,8 +525,15 @@ void seq_setRollVelocity(uint8_t velocity);
 /* Record a note into the current pattern position.
    trackNr: track to write.
    vel: velocity to store.
-   note: note value to store. */
-void seq_addNote(uint8_t trackNr,uint8_t vel, uint8_t note);
+   note: note value to store.
+   isNoteOff: LIVE_REC_DUPLICATE_SUBSTEP_BUG.md fix -- pass 1 only from the
+   MIDI channel-parser note path, where vel == 0 genuinely means "note
+   released" and the event must keep its true un-quantized position. Every
+   internal trigger (roll hits, loop re-record) passes 0 so that a
+   zero-velocity event is still placed on the quantize grid instead of being
+   mistaken for a note-off and written one sub-step off the beat. See the full
+   rationale above seq_addNote() in sequencer.c. */
+void seq_addNote(uint8_t trackNr,uint8_t vel, uint8_t note, uint8_t isNoteOff);
 /* Enable or disable live recording.
    active: non-zero to arm recording writes into the current source pattern. */
 void seq_setRecordingMode(uint8_t active);

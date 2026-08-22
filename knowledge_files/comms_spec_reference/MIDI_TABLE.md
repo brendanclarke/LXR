@@ -61,6 +61,7 @@ ping-pong, I2S, and DAC latency remains.
 | Global channel | Note-on/off targets the active front-panel track. If that track has no note override, chromatic note mode is used for the active track. If the active track has note override enabled, the parser scans all seven track note overrides and triggers matching tracks. |
 | Voice/track channels | Note-on/off triggers each track whose `midi_MidiChannels[track]` matches the incoming channel. Track note override filters incoming notes when configured. |
 | Recording side effect | When a note is accepted with `do_rec = 1`, the parser records it to the sequencer and echoes MIDI note output for the voice channel. |
+| Note-off recording placement | `channelMidiParser_noteOff()` forces `vel = 0` and delegates to `channelMidiParser_noteOn()`, which calls `seq_addNote(voice, vel, note, 1)`. That trailing `1` is `isNoteOff`, and it is what allows a note-off to keep its **true, un-quantized** position (a zero-velocity "ghost" step marking where the note was released). **This MIDI path is the only caller permitted to pass `isNoteOff = 1`.** Every internal trigger — roll hits, loop re-record — passes `0` and is always written to the quantized slot, even at velocity 0. Placement must never again be inferred from velocity alone; see Session 037. |
 
 ### Program Change
 

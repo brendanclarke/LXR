@@ -1134,7 +1134,7 @@ static void seq_nextStep()
                      note = seq_getTransposedNote(i, note);
                      seq_triggerVoice(i,vol,note);
                      if(seq_loopLength&&seq_recordActive)
-                        seq_addNote(i,vol,note);
+                        seq_addNote(i,vol,note,0);
                      
                   } // end if seq_rndValue
                } // end else if stepactive
@@ -1524,7 +1524,10 @@ void seq_sendStepInfoToFront(uint16_t stepNr)
 //-------------------------------------------------------------------------------
 /* Trigger one roll hit for the requested voice.
    voice: track index to fire.
-   Returns non-zero when the trigger path actually emitted playback. */
+   Returns non-zero when the trigger path actually emitted playback.
+   Every hit this function emits is a real, user-initiated trigger, so every
+   hit records when recording is armed -- see the seq_addNote() note about
+   why roll hits must never be mistaken for MIDI note-offs. */
 uint8_t seq_rollTrig(uint8_t voice)
 {
    uint8_t triggered = 0;
@@ -1532,17 +1535,17 @@ uint8_t seq_rollTrig(uint8_t voice)
 
    uint8_t vol = stepData->volume&0x7f;
    uint8_t note = stepData->note&0x7f;
-      
+
    uint8_t stepActive = seq_liveMainStepActive(voice,(seq_stepIndex[voice]>>3)) &
       		seq_liveStepActive(voice,seq_stepIndex[voice]);
-   
+
    switch(seq_rollMode)
    {
       case ROLL_MODE_TRIG:
          seq_triggerVoice(voice,vol,note);
          if(seq_recordActive)
          {
-            seq_addNote(voice,vol,note);
+            seq_addNote(voice,vol,note,0);
          }
          triggered = 1;
          break;
@@ -1553,7 +1556,7 @@ uint8_t seq_rollTrig(uint8_t voice)
             seq_triggerVoice(voice,vol,note);
             if(seq_recordActive)
             {
-               seq_addNote(voice,vol,note);
+               seq_addNote(voice,vol,note,0);
             }
             triggered = 1;
          }
@@ -1565,7 +1568,7 @@ uint8_t seq_rollTrig(uint8_t voice)
             seq_triggerVoice(voice,vol,note);
             if(seq_recordActive)
             {
-               seq_addNote(voice,vol,note);
+               seq_addNote(voice,vol,note,0);
             }
             triggered = 1;
          }
@@ -1578,7 +1581,7 @@ uint8_t seq_rollTrig(uint8_t voice)
             seq_triggerVoice(voice,vol,note);
             if(seq_recordActive)
             {
-               seq_addNote(voice,vol,note);
+               seq_addNote(voice,vol,note,0);
             }
             triggered = 1;
          }
@@ -1589,13 +1592,13 @@ uint8_t seq_rollTrig(uint8_t voice)
          seq_triggerVoice(voice,vol,note);
          if(seq_recordActive)
          {
-            seq_addNote(voice,vol,note);
+            seq_addNote(voice,vol,note,0);
          }
          triggered = 1;
          break;
       default:
          break;
-   }                  
+   }
    return triggered;
 }
 //-------------------------------------------------------------------------------
@@ -1644,7 +1647,7 @@ uint8_t seq_setRoll(uint8_t voice, uint8_t onOff)// called processing step if ro
       seq_rollPlayedEarly &= ~(1<<voice);
       return triggered;
    }
-   
+
    if(!seq_quantisation) // no quantization, deal with this immediately
    {
       //triggered = seq_rollTrig(voice); // trig the voice
@@ -1653,7 +1656,7 @@ uint8_t seq_setRoll(uint8_t voice, uint8_t onOff)// called processing step if ro
       return triggered;
    }
    else if (!(seq_stepIndex[NUM_TRACKS]%seq_stepsPerQuant)) // quantization is on and at quant position
-   {  
+   {
       seq_rollCounter[voice] = 0;//seq_rollRate; // set counter
       seq_rollState |= (1<<voice);
       return triggered;
@@ -1664,14 +1667,23 @@ uint8_t seq_setRoll(uint8_t voice, uint8_t onOff)// called processing step if ro
       {
          if ( !(seq_rollPlayedEarly & (1<<voice)) ) // if early roll hasn't played already
          {
+/* Early-roll humanization: a roll pressed just after a quantize
+               boundary fires immediately so the performer hears the hit now
+               instead of waiting out the rest of the quantize window.
+               seq_rollPlayedEarly blocks further early hits until release.
+               This hit DOES record, and records correctly: seq_addNote()
+               quantizes back to the boundary that just passed, which is the
+               position the player intended. Suppressing the record here
+               loses notes outright for any tap that lands 1-2 sub-steps
+               late and is released before the next boundary. */
             triggered = seq_rollTrig(voice);
             seq_rollPlayedEarly |= (1<<voice);
-         }   
-            
+         }
+
       }
       return triggered;
    }
-   
+
    return 0;
 }// end func
 //--------------------------------------------------------------------------------
@@ -1680,15 +1692,15 @@ uint8_t seq_checkRollStep(uint8_t voice) // called every step if roll active for
                                          // will: 1. check if roll counter=0, if so...
                                          // 2. switch through different roll modes 3. load
                                          // appropriate note, velo values. 4. trigger voice,
-                                         // add note as appropriate, set triggered. 5. reset                                                
-                                         // roll counter to = roll rate. 
+                                         // add note as appropriate, set triggered. 5. reset
+                                         // roll counter to = roll rate.
                                          // Then, decrement roll counter (always)
                                          // return triggered
 {
    uint8_t triggered = 0;
    if(!seq_rollCounter[voice])
    {
-      triggered = seq_rollTrig(voice);
+      triggered = seq_rollTrig(voice); // on-time/repeat hit
       seq_rollCounter[voice] = seq_rollRate;
    }
    return triggered;
@@ -1927,7 +1939,86 @@ void seq_recordAutomationMidiDestination(uint8_t voice, uint16_t dest, uint8_t v
    seq_recordAutomation(voice, rawDest, value);
 }
 //------------------------------------------------------------------------
-void seq_addNote(uint8_t trackNr,uint8_t vel, uint8_t note)
+/* LIVE_REC_DUPLICATE_SUBSTEP_BUG.md fix -- the isNoteOff parameter.
+
+   WHY THIS EXISTS
+   ---------------
+   This function has always placed a recorded event at one of two different
+   step slots depending on velocity:
+
+       vel != 0  -> quantizedStep    (snapped onto the quantize grid)
+       vel == 0  -> unquantizedStep  (the raw, live playhead position)
+
+   The un-quantized placement is there for MIDI note-offs. A note-off carries
+   velocity 0 by definition (channelMidiParser_noteOff() forces vel = 0 before
+   delegating to channelMidiParser_noteOn()), and marking the moment a held
+   note was released is only meaningful at its true position, so a note-off
+   deliberately bypasses quantization and writes a zero-velocity "ghost" step.
+   Ghost steps are a real, intentional concept in this sequencer -- see the
+   STEP_VOLUME_MASK > 0 guard in seq_process()'s automation-release block.
+
+   THE BUG
+   -------
+   "note-off" was being inferred from `vel == 0` alone, but velocity 0 reaches
+   this function from paths that are not note-offs at all. A roll hit
+   (seq_rollTrig(), driven by the SEQ 0-6 buttons in PERF mode) resolves its
+   record velocity from either seq_rollVelocity (ROLL_MODE_VELOCITY / _BOTH /
+   _ALL) or from the stored volume of the step under the playhead
+   (ROLL_MODE_TRIG / _NOTE). Either source can legitimately be 0 -- the roll
+   velocity parameter can be dialled to 0, and a step's stored volume is 0 for
+   any zero-velocity ghost step. When that happened, an ordinary roll hit was
+   misread as a note-off and written at the raw playhead index instead of the
+   quantized one.
+
+   That raw index is not arbitrary. seq_stepIndex[track] is advanced at the top
+   of seq_process()'s per-track loop, while seq_stepIndex[NUM_TRACKS] -- the
+   master index the quantize-boundary test in seq_setRoll() uses -- is not
+   advanced until the very end of seq_process(). The per-track index therefore
+   runs exactly one sub-step ahead of the master index, so at the roll's
+   on-time trigger seq_stepIndex[track] is precisely mainStep*8 + 1:
+
+       SUB-STEP 1.
+
+   pat_setMainStep() below then switches the main step on, which un-masks
+   sub-step 0 -- active by default in every cleared main step (see
+   pat_clearTrack()). The result is the reported symptom: sub-steps 0 AND 1
+   both fire at the start of the main step when only sub-step 0 should.
+   The condition is also self-sustaining, because the step written this way
+   holds volume 0 | STEP_ACTIVE_MASK, so the next pass reads velocity 0 again.
+
+   WHAT THIS CHANGE DOES
+   ---------------------
+   Makes the un-quantized placement explicit instead of inferred. Only a
+   caller that genuinely represents a MIDI note-on/note-off pair passes
+   isNoteOff = 1; every internal trigger path passes 0 and is therefore always
+   written to the quantized slot, whatever its velocity. A zero-velocity roll
+   now overwrites sub-step 0 on the grid (silent, as intended) rather than
+   creating a second, off-grid sub-step beside it.
+
+   INPUT
+     trackNr   -- track to write.
+     vel       -- velocity to store; 0 is a silent/ghost step, not by itself
+                  an instruction to bypass quantization.
+     note      -- note value to store.
+     isNoteOff -- 1 only from the MIDI channel-parser note path, where vel == 0
+                  really does mean "note released"; 0 from every internal
+                  trigger (roll hits, loop re-record).
+
+   OUTPUT
+     One Step written in targetPattern, plus its main-step bit set. Unchanged
+     for every existing MIDI note-on and note-off; changed only for internal
+     triggers that happen to carry velocity 0.
+
+   AFFILIATES
+     seq_rollTrig() (all five ROLL_MODE_* branches, this file) and the loop
+     re-record call in seq_process() pass 0.
+     channelMidiParser_noteOn() / channelMidiParser_noteOff()
+     (MIDI/ChannelMidiParser.c) pass 1, preserving note-off ghost steps.
+     seq_quantize() (this file) is what the quantized branch routes through.
+     pat_setMainStep() / pat_clearTrack() (Sequencer/Pattern/PatternData.c)
+     own the main-step bit and the default-active sub-step 0 this interacts
+     with. Declaration in sequencer.h. */
+void seq_addNote(uint8_t trackNr,uint8_t vel, uint8_t note, uint8_t isNoteOff)
 {
    uint8_t targetPattern;
    Step *stepPtr;
@@ -1962,7 +2053,9 @@ void seq_addNote(uint8_t trackNr,uint8_t vel, uint8_t note)
       }
    
    	//set the current step in the requested track active
-      if (vel==0)
+   	// A real MIDI note-off keeps its true, un-quantized position; every
+   	// other event is placed on the quantize grid even at velocity 0.
+      if (vel==0 && isNoteOff)
          stepPtr=pat_getStepPtr(targetPattern, trackNr, unquantizedStep);
       else
          stepPtr=pat_getStepPtr(targetPattern, trackNr, quantizedStep);
