@@ -134,6 +134,8 @@ extern uint8_t seq_loadFastMode;
    seq_rollMode selects which roll behavior to use.
    seq_rollNote and seq_rollVelocity provide the override note and velocity
    used by the note/velocity/both roll modes.
+   The requested roll state is the aggregate of manual/front-panel and
+   parser-owned MIDI roll-note holds.
    seq_kitResetFlag and seq_skipFirstRoll hold the current roll-control flags
    used by the front-panel transport and step-quantized roll trigger path. */
 extern uint8_t seq_rollMode;
@@ -499,6 +501,10 @@ void seq_sendMainStepInfoToFront(uint16_t stepNr);
    voice: track index whose roll button changed.
    onOff: non-zero when the button is pressed, zero when released. */
 void seq_rollChange(uint8_t voice, uint8_t onOff);
+/* Record a MIDI-owned roll hold for one voice.
+   MIDI ownership is separate from front-panel roll buttons; either source can
+   keep the aggregate roll request active until both sources release. */
+void seq_rollMidiChange(uint8_t voice, uint8_t onOff);
 /* Apply the current roll state for one voice and report whether it triggered.
    voice: track index whose roll state should be updated.
    onOff: non-zero to enable roll, zero to release it. The return value is

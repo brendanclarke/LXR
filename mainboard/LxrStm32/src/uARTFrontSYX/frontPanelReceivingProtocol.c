@@ -47,6 +47,7 @@
 #include "Preset/MorphEngine.h"
 #include "Preset/ParameterArray.h"
 #include "sequencer.h"
+#include "MidiParser.h"
 #include "PatternData.h"
 #include "Preset/ParameterIngress.h"
 #include "Uart.h"
@@ -2585,8 +2586,14 @@ static void frontParser_handleSeqCC()
             uint8_t channel = (frontParser_command.data2&0x0f)+1;
             
             // --AS if midi channel changed, and a note was playing on old channel, turn it off
-            if(voice < 7 && midi_MidiChannels[voice] != channel)
-               voiceControl_noteOff(voice);
+            if(voice < 8 && midi_MidiChannels[voice] != channel)
+            {
+               /* MIDI channel changes invalidate the parser-owned held-note
+                  map before the old route can lose its matching note-off. */
+               midiParser_clearMidiRollHolds();
+               if(voice < 7)
+                  voiceControl_noteOff(voice);
+            }
                
             midi_MidiChannels[voice] = channel;
             
@@ -2595,7 +2602,14 @@ static void frontParser_handleSeqCC()
          
       case FRONT_SEQ_MIDI_CHAN_OFF:
          {
-            midi_MidiChannels[frontParser_command.data2]=0;
+            if(frontParser_command.data2 < 8)
+            {
+               /* Disabling a MIDI channel removes the route that would
+                  receive release messages, so drop MIDI-owned roll holds. */
+               if(midi_MidiChannels[frontParser_command.data2] != 0)
+                  midiParser_clearMidiRollHolds();
+               midi_MidiChannels[frontParser_command.data2]=0;
+            }
          }
          break;
    
@@ -2740,6 +2754,11 @@ static void frontParser_handleSeqCC()
          //    seq_skipFirstRoll=1;   
          // else
          seq_rollMode = frontParser_command.data2;
+         break;
+      /* Update the external MIDI roll-note offset. Existing MIDI-held rolls
+         are released by MidiParser when the mapping changes. */
+      case FRONT_SEQ_ROLL_NOTE_OFFSET:
+         midiParser_setRollNoteOffset(frontParser_command.data2);
          break;
       case FRONT_SEQ_TRANSPOSE:
          seq_transpose_voiceAmount[frontParser_activeTrack]=frontParser_command.data2;
@@ -2951,7 +2970,17 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_TRACK_NOTE5:
       case FRONT_SEQ_TRACK_NOTE6:
       case FRONT_SEQ_TRACK_NOTE7:
-         midi_NoteOverride[frontParser_command.data1-FRONT_SEQ_TRACK_NOTE1] = frontParser_command.data2;
+         {
+            const uint8_t voice =
+               (uint8_t)(frontParser_command.data1-FRONT_SEQ_TRACK_NOTE1);
+            /* Note overrides define both normal MIDI triggers and shifted roll
+               triggers. Release old MIDI-held rolls before changing them. */
+            if(voice < 7 && midi_NoteOverride[voice] != frontParser_command.data2)
+            {
+               midiParser_clearMidiRollHolds();
+               midi_NoteOverride[voice] = frontParser_command.data2;
+            }
+         }
          break;
       default:
          break;

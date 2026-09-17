@@ -530,6 +530,9 @@ const char longNames[][16] PROGMEM =
    {"RollNote" },  // TEXT_ROLL_NOTE,
    {"RollVelo" },  // TEXT_ROLL_VELOCITY,
    {"RollMode" },  // TEXT_ROLL_MODE
+   /* Long label for the global MIDI roll-note offset.
+      Spelling follows the requested eight-character display string "RolOfset". */
+   {"RolOfset" },  // TEXT_ROLL_NOTE_OFFSET
    {"NoteAmt"},   // TEXT_TRANSPOSE
    {"Sequence"}, // TEXT_TRANSPOSE_ON_OFF,
    {"LoadBgnd"}, // TEXT_FILE_LOAD_BACKGROUND,

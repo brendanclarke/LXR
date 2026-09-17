@@ -1,7 +1,7 @@
 # MIDI Table
 
-Date: 2026-07-25
-Status: current after Session 035. This is the durable MIDI reference for external DIN/USB MIDI input parsing and realtime dispatch timing on STM32.
+Date: 2026-09-17
+Status: current after MIDI roll-trigger implementation. This is the durable MIDI reference for external DIN/USB MIDI input parsing and realtime dispatch timing on STM32.
 
 ## Ownership And Routing
 
@@ -62,6 +62,13 @@ ping-pong, I2S, and DAC latency remains.
 | Voice/track channels | Note-on/off triggers each track whose `midi_MidiChannels[track]` matches the incoming channel. Track note override filters incoming notes when configured. |
 | Recording side effect | When a note is accepted with `do_rec = 1`, the parser records it to the sequencer and echoes MIDI note output for the voice channel. |
 | Note-off recording placement | `channelMidiParser_noteOff()` forces `vel = 0` and delegates to `channelMidiParser_noteOn()`, which calls `seq_addNote(voice, vel, note, 1)`. That trailing `1` is `isNoteOff`, and it is what allows a note-off to keep its **true, un-quantized** position (a zero-velocity "ghost" step marking where the note was released). **This MIDI path is the only caller permitted to pass `isNoteOff = 1`.** Every internal trigger — roll hits, loop re-record — passes `0` and is always written to the quantized slot, even at velocity 0. Placement must never again be inferred from velocity alone; see Session 037. |
+
+MIDI roll notes use the saved global roll-note offset. Raw `0` disables the
+feature and displays as `off`; raw `1..127` is a positive semitone offset above
+the normal trigger note. Shifted roll notes are evaluated only after the normal
+global/voice note routes have had a chance to consume the message. Notes that
+would shift outside MIDI `0..127` do nothing, and NOTE_ON/NOTE_OFF statuses are
+interpreted literally, including NOTE_ON with velocity `0`.
 
 ### Program Change
 
@@ -279,7 +286,7 @@ NRPN sequence:
 2. Send CC98 with the fine/LSB selector.
 3. Send CC6 with the value to apply.
 
-Valid Global NRPN numbers are `0..92`. CC6 before a selector is ignored. Out-of-range selected NRPN numbers are ignored.
+Valid Global NRPN numbers are `0..93`. CC6 before a selector is ignored. Out-of-range selected NRPN numbers are ignored.
 
 | NRPN | Function | Voice/scope | Internal target |
 |---:|---|---|---|
@@ -376,3 +383,4 @@ Valid Global NRPN numbers are `0..92`. CC6 before a selector is ignored. Out-of-
 | 90 | Audio output routing | Snare | `128+CC2_AUDIO_OUT4` |
 | 91 | Audio output routing | Cymbal | `128+CC2_AUDIO_OUT5` |
 | 92 | Audio output routing | Hihat | `128+CC2_AUDIO_OUT6` |
+| 93 | Roll rate | Global performance | `seq_setRollRate(value clamped 0..15)` |

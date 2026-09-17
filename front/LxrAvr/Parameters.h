@@ -435,10 +435,17 @@ enum ParamEnums
 	PAR_MIDI_NOTE6,
 	PAR_MIDI_NOTE7,
 
+	/* Saved global MIDI roll-note offset.
+	   Raw 0 disables MIDI roll notes and displays as "off"; raw 1..127 is a
+	   positive semitone offset above the normal trigger note. This enum is
+	   appended to the global block so older glo.cfg/.ALL files keep their
+	   existing byte layout and simply default the missing value to 0/off. */
+	PAR_ROLL_NOTE_OFFSET,
+
 	// PAR_CACHE_FOR_PERF, // bool, 0=perf load while playing works exactly like 'all', 
 						// 1=kit, pattern, settings cached until pattern change
 
-	NUM_PARAMS                      	 /*310*/
+	NUM_PARAMS
 };
 
 

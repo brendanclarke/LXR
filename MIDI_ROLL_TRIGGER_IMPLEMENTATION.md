@@ -10,6 +10,32 @@ Offset encoding for implementation:
 - Raw `1..127`: active positive semitone offset above the assigned/normal trigger note. There is no negative offset and no centered conversion.
 - If the shifted roll note does not exist in MIDI range, matching does nothing: `baseNote + offset > 127` is not a valid roll trigger, and `incomingNote - offset < 0` has no valid standard trigger note behind it.
 
+## Session Progress (2026-09-17)
+
+- [x] Appended the saved AVR global offset parameter without shifting existing
+  global file bytes; added the MIDI-menu label, `off` display, default, and
+  global-settings page slot.
+- [x] Added matching AVR/STM front-panel opcode `0x6f` and STM-side release
+  handling for offset, MIDI-channel, and note-override remaps.
+- [x] Added STM parser-owned positive-offset matching, literal NOTE_ON/OFF
+  handling, per-voice overlapping hold counts, and deduped voice masks.
+- [x] Added separate manual/MIDI roll ownership in Sequencer so either source
+  can sustain a roll independently.
+- [x] Added Global NRPN 93 for the existing roll-rate control and updated the
+  durable MIDI table.
+- [x] `make -C mainboard/LxrStm32 -j4 stm32` and
+  `make -C front/LxrAvr avr -j4` pass. The checked-in x86_64
+  `tools/bin/FirmwareImageBuilder` cannot run on this arm64 host, so an
+  arm64-native temporary build of that tool successfully regenerated
+  `firmware image/FIRMWARE.BIN`; hardware verification remains to be run.
+
+Implementation note: current chromatic normal MIDI routes accept every note on
+their assigned channel. The parser therefore preserves the requested
+last-consumer rule and only allows shifted roll fallback when normal routing
+does not accept the note (for example, a shifted note-override route). This is
+why `normalConsumed` is tracked from the actual override decision rather than
+merely from whether `ChannelMidiParser` was called.
+
 ## Implementation Phases
 
 1. Add AVR menu/config metadata for the appended global roll-offset parameter.

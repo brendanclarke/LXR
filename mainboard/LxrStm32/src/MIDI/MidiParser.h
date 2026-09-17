@@ -97,6 +97,12 @@ extern uint8_t midi_unused;
 
 void midi_clearCache();
 
+/* MIDI roll-note offset and hold ownership.
+   MidiParser owns these because it is the only layer that knows which incoming
+   note/channel pairs map to shifted roll triggers. */
+void midiParser_setRollNoteOffset(uint8_t rawOffset);
+void midiParser_clearMidiRollHolds(void);
+
 /* Voice MIDI channel table. Element 7 is the global channel. */
 extern uint8_t midi_MidiChannels[8]; // last element is global channel
 extern uint8_t midi_NoteOverride[7];

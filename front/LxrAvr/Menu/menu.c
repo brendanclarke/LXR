@@ -255,6 +255,9 @@ const Name valueNames[NUM_NAMES] PROGMEM =
       {SHORT_ROLL_NOTE, CAT_PATTERN, LONG_ROLL_NOTE},  
       {SHORT_ROLL_VELOCITY, CAT_PATTERN, LONG_ROLL_VELOCITY},  
       {SHORT_ROLL_MODE, CAT_SEQUENCER, LONG_ROLL_MODE}, 
+      /* Global MIDI roll-note offset label. Uses the shared "rol" short text
+         but places this saved note-routing setting in the MIDI category. */
+      {SHORT_ROLL, CAT_MIDI, LONG_ROLL_NOTE_OFFSET},
       
       {SHORT_TRANSPOSE, CAT_TRANSPOSE, LONG_TRANSPOSE},
       {SHORT_TRANSPOSE_ON_OFF, CAT_TRANSPOSE, LONG_TRANSPOSE_ON_OFF},
@@ -589,6 +592,8 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	    /*PAR_MIDI_NOTE5*/		DTYPE_NOTE_NAME,
 	    /*PAR_MIDI_NOTE6*/     DTYPE_NOTE_NAME,
        /*PAR_MIDI_NOTE7*/     DTYPE_NOTE_NAME,
+       /* Roll MIDI trigger offset: 0 is off, 1..127 is a positive shift. */
+       /*PAR_ROLL_NOTE_OFFSET*/ DTYPE_0B127,
          
 
 };
@@ -678,6 +683,9 @@ void menu_init()
    parameter_values[PAR_ROLL_NOTE] = 63;
    parameter_values[PAR_ROLL_VELOCITY] = 100;
    parameter_values[PAR_ROLL_MODE] = 4; //0=trig, 1=nte, 2=vel, 3=bth, 4=all
+   /* MIDI roll notes default off. Missing old-file bytes normalize to the same
+      value, so startup, old-file load, and fresh save agree on 0/off. */
+   parameter_values[PAR_ROLL_NOTE_OFFSET] = 0;
    parameter_values[PAR_TRANSPOSE] = 63;
    parameter_values[PAR_TRANSPOSE_ON_OFF] = 0;
    parameter_values[PAR_ACTIVE_STEP] = 0;
@@ -1644,7 +1652,10 @@ void menu_repaintGeneric()
          case DTYPE_0B16:
 			case DTYPE_0B15:
 			case DTYPE_VOICE_LFO:
-				numtostrpu(&editDisplayBuffer[1][13],(uint8_t)(curParmVal),' ');
+				if(parNr == PAR_ROLL_NOTE_OFFSET && curParmVal == 0)
+					memcpy_P(&editDisplayBuffer[1][13],menuText_off,3);
+				else
+					numtostrpu(&editDisplayBuffer[1][13],(uint8_t)(curParmVal),' ');
 				break;
 			} //switch(parameters_dtypes[parNr] & 0x0F) end
 
@@ -1751,7 +1762,10 @@ void menu_repaintGeneric()
 				case DTYPE_0B15:
 				case DTYPE_VOICE_LFO:
 					// fallthrough for the rest of the unsigned values
-					numtostrpu(valueAsText,curParmVal,' ');
+					if(parNr == PAR_ROLL_NOTE_OFFSET && curParmVal == 0)
+						memcpy_P(valueAsText,menuText_off,3);
+					else
+						numtostrpu(valueAsText,curParmVal,' ');
 					break;
 				} //switch(parameters[parNr].dtype&0x0F) end
 
@@ -4031,6 +4045,12 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
    case PAR_FILE_LOAD_BACKGROUND:
       parameter_values[PAR_FILE_LOAD_BACKGROUND]=value; 
       avrComms_sendData(SEQ_CC, SEQ_LOAD_BACKGROUND,value);
+      break;
+   /* Push the saved MIDI roll-note offset to STM. STM owns note routing and
+      clears MIDI-held rolls when the mapping changes. */
+   case PAR_ROLL_NOTE_OFFSET:
+      parameter_values[PAR_ROLL_NOTE_OFFSET] = value;
+      avrComms_sendData(SEQ_CC, SEQ_ROLL_NOTE_OFFSET, (uint8_t)value);
       break;
    case PAR_MIDI_NOTE1:
    case PAR_MIDI_NOTE2:

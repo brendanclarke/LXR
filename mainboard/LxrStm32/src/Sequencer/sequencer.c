@@ -68,7 +68,12 @@ uint8_t seq_rollRate = 8;				// start with roll rate = 1/16
 uint8_t seq_tempRate = 8;           // change roll on quant step, if avail
 uint8_t seq_rollNote = 63;             // note roll uses - start with Dsharp5
 uint8_t seq_rollVelocity = 100;
-uint8_t seq_rollTriggered = 0;         /**< eacn bit ... user has triggered a roll - process on step*/
+/* Roll requested state is the aggregate of front-panel/manual ownership and
+   parser-owned MIDI note holds. These masks keep one source from releasing
+   the other source's roll. */
+uint8_t seq_rollTriggered = 0;         /**< each bit is a pending aggregate roll request */
+static uint8_t seq_rollManualHeld = 0;
+static uint8_t seq_rollMidiHeld = 0;
 uint8_t seq_rollPlayedEarly = 0;       // roll triggered just after quant - play and note
 uint8_t seq_rollState = 0;					/**< each bit represents a voice. if bit is set, roll is active*/
 uint8_t seq_rollMode = ROLL_MODE_ALL;        //0=trig, 1=nte, 2=vel, 3=bth, 4=all                                      
@@ -1602,24 +1607,56 @@ uint8_t seq_rollTrig(uint8_t voice)
    return triggered;
 }
 //-------------------------------------------------------------------------------
-/* Record a change in roll button state for one voice. */
-void seq_rollChange(uint8_t voice, uint8_t onOff) // a message about changing roll state was received
-                                                  // note it and let the next step deal
+/* Rebuild the roll request bit for one voice from all held sources. The
+   existing processing loop still observes seq_rollTriggered; this helper only
+   decides whether the request remains set after a source changes state. */
+static void seq_rollApplyAggregate(uint8_t voice)
 {
-   if(voice >= 7) 
-   {
+   if(voice >= 7)
       return;
-   }
-   if(onOff) // setting roll on for this voice
+
+   const uint8_t voiceBit = (uint8_t)(1u << voice);
+
+   if((seq_rollManualHeld | seq_rollMidiHeld) & voiceBit)
+      seq_rollTriggered |= voiceBit;
+   else
    {
-      seq_rollTriggered |= (1<<voice);
-   }
-   else 
-   { // onOff is zero, turn roll off for this voice
-      seq_rollTriggered &= ~(1<<voice);
-      if(seq_rollRate != 0xff) // one-shot doesn't need counter
+      seq_rollTriggered &= (uint8_t)~voiceBit;
+      if(seq_rollRate != 0xff)
          seq_rollCounter[voice] = seq_rollRate;
    }
+}
+
+//-------------------------------------------------------------------------------
+/* Front-panel/manual roll source. This updates only the manual-held mask, then
+   lets the shared aggregate logic decide whether MIDI still holds the roll. */
+void seq_rollChange(uint8_t voice, uint8_t onOff)
+{
+   if(voice >= 7)
+      return;
+
+   if(onOff)
+      seq_rollManualHeld |= (uint8_t)(1u << voice);
+   else
+      seq_rollManualHeld &= (uint8_t)~(1u << voice);
+
+   seq_rollApplyAggregate(voice);
+}
+
+//-------------------------------------------------------------------------------
+/* MIDI roll-note source. MIDI note-on/off updates its own ownership mask, so
+   the aggregate roll request remains active while manual ownership remains. */
+void seq_rollMidiChange(uint8_t voice, uint8_t onOff)
+{
+   if(voice >= 7)
+      return;
+
+   if(onOff)
+      seq_rollMidiHeld |= (uint8_t)(1u << voice);
+   else
+      seq_rollMidiHeld &= (uint8_t)~(1u << voice);
+
+   seq_rollApplyAggregate(voice);
 }
 //-------------------------------------------------------------------------------
 /* Apply the current roll state for one voice and report whether it triggered. */

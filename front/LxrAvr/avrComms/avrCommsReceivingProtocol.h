@@ -255,6 +255,9 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SEQ_REPORT_GLOBAL_MORPH_MSB 0x6c	// report the high bit of global morph back to AVR
 #define SEQ_BACKGROUND_SWAP_BEGIN  0x6d	// request STM background-swap prep before file load
 #define SEQ_BACKGROUND_SWAP_DONE   0x6e	// STM background-swap prep complete
+/* Raw global MIDI roll-note offset: 0/off or a positive 1..127 semitone
+   shift above the normal trigger note; STM owns held-roll release on change. */
+#define SEQ_ROLL_NOTE_OFFSET       0x6f	// saved MIDI roll-note offset
 #define SEQ_OSC_WAVE_INTERPOLATION 0x70 // enable/disable waveform interpolation
 
 #define SEQ_TMP_KIT_AUTOMATION_NONE 0x00	// no automation sideband in the temp-kit copy

@@ -33,6 +33,10 @@ static uint8_t midiParser_mtcIsRunning = 0;
 static uint16_t globalMidiParser_activeNrpnNumber = 0;
 static uint8_t globalMidiParser_nrpnSelected = 0;
 
+/* Global NRPN 93 is a performance roll-rate command. It intentionally bypasses
+   the raw sound-parameter table and preserves every existing Global CC map. */
+#define GLOBAL_MIDI_NRPN_ROLL_RATE 93
+#define GLOBAL_MIDI_ROLL_RATE_MAX 15
 #define GLOBAL_MIDI_RAW_UNMAPPED PAR_NONE
 
 /* Table indices are fixed legacy external Global CC numbers. Values are raw
@@ -359,6 +363,17 @@ static uint8_t globalMidiParser_handleNrpnControl(MidiMsg msg,
          return 1;
 
       case NRPN_DATA_ENTRY_COARSE:
+         if(globalMidiParser_nrpnSelected
+            && globalMidiParser_activeNrpnNumber == GLOBAL_MIDI_NRPN_ROLL_RATE)
+         {
+            /* Apply NRPN 93 directly to the existing 0..15 roll-rate control. */
+            uint8_t rate = msg.data2;
+            if(rate > GLOBAL_MIDI_ROLL_RATE_MAX)
+               rate = GLOBAL_MIDI_ROLL_RATE_MAX;
+            seq_setRollRate(rate);
+            return 1;
+         }
+
          if(globalMidiParser_nrpnSelected
             && globalMidiParser_activeNrpnNumber
                   < (sizeof(globalMidiParser_nrpnToRawParam)

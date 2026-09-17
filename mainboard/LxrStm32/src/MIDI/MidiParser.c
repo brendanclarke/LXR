@@ -88,10 +88,102 @@ static inline uint8_t midiParser_voiceNoteOverride(uint8_t voice)
    return (voice < 7) ? midi_NoteOverride[voice] : 0;
 }
 
+/* Parser-owned MIDI roll state. Raw 0 disables shifted roll notes; raw 1..127
+   is the positive semitone offset above the normal trigger note. Hold counters
+   allow overlapping roll-note presses for the same voice. */
+static uint8_t midiParser_rollNoteOffsetRaw = 0;
+static uint8_t midiParser_rollHoldCount[7] = {0};
+
+/* Roll-note helpers. Matching is defined against the normal note that would
+   trigger the voice, then shifted upward by the current positive offset. MIDI
+   note bounds are checked before every shifted comparison. */
+static uint8_t midiParser_rollOffsetEnabled(void)
+{
+   return midiParser_rollNoteOffsetRaw != 0;
+}
+
+static uint8_t midiParser_rollOffsetValue(void)
+{
+   return midiParser_rollNoteOffsetRaw;
+}
+
+static uint8_t midiParser_shiftedNoteInRange(uint8_t baseNote,
+                                             uint8_t offset,
+                                             uint8_t *shiftedNote)
+{
+   if(offset == 0 || baseNote > (uint8_t)(127 - offset))
+      return 0;
+
+   *shiftedNote = (uint8_t)(baseNote + offset);
+   return 1;
+}
+
+static uint8_t midiParser_shiftedBaseInRange(uint8_t incomingNote,
+                                             uint8_t offset,
+                                             uint8_t *baseNote)
+{
+   if(offset == 0 || incomingNote < offset)
+      return 0;
+
+   *baseNote = (uint8_t)(incomingNote - offset);
+   return 1;
+}
+
+static uint8_t midiParser_rollNoteMatches(uint8_t incomingNote,
+                                          uint8_t baseNote)
+{
+   uint8_t shiftedNote;
+
+   return midiParser_shiftedNoteInRange(baseNote,
+                                        midiParser_rollOffsetValue(),
+                                        &shiftedNote)
+      && shiftedNote == incomingNote;
+}
+
+static void midiParser_rollVoiceOn(uint8_t voice)
+{
+   if(voice >= 7)
+      return;
+
+   if(midiParser_rollHoldCount[voice] == 0)
+      seq_rollMidiChange(voice, 1);
+
+   if(midiParser_rollHoldCount[voice] != 0xff)
+      ++midiParser_rollHoldCount[voice];
+}
+
+static void midiParser_rollVoiceOff(uint8_t voice)
+{
+   if(voice >= 7 || midiParser_rollHoldCount[voice] == 0)
+      return;
+
+   --midiParser_rollHoldCount[voice];
+   if(midiParser_rollHoldCount[voice] == 0)
+      seq_rollMidiChange(voice, 0);
+}
+
+static void midiParser_applyRollVoiceMask(uint8_t voiceMask,
+                                          uint8_t isNoteOff)
+{
+   uint8_t voice;
+
+   for(voice = 0; voice < 7; ++voice)
+   {
+      if(voiceMask & (uint8_t)(1u << voice))
+      {
+         if(isNoteOff)
+            midiParser_rollVoiceOff(voice);
+         else
+            midiParser_rollVoiceOn(voice);
+      }
+   }
+}
+
 void midi_clearCache()
 {
    /* Clear the parser-owned live MIDI cache. */
    uint16_t i;
+   midiParser_clearMidiRollHolds();
    for (i=0;i<256;i++)
    {
       midi_midiCacheAvailable[i]=0;
@@ -102,6 +194,36 @@ void midi_clearCache()
       midi_midiLfoCacheAvailable[i]=0;
       midi_midiVeloCache[i]=0;
       midi_midiVeloCacheAvailable[i]=0;
+   }
+}
+
+/* Release every parser-owned MIDI roll hold. Mapping changes and parser-cache
+   resets use this so a later note-off cannot be stranded under old routing. */
+void midiParser_clearMidiRollHolds(void)
+{
+   uint8_t voice;
+
+   for(voice = 0; voice < 7; ++voice)
+   {
+      if(midiParser_rollHoldCount[voice] != 0)
+      {
+         midiParser_rollHoldCount[voice] = 0;
+         seq_rollMidiChange(voice, 0);
+      }
+   }
+}
+
+/* Set the global MIDI roll-note offset. A changed offset invalidates every
+   outstanding shifted-note hold, so MIDI roll ownership is released before
+   the new raw value is installed. */
+void midiParser_setRollNoteOffset(uint8_t rawOffset)
+{
+   rawOffset &= 0x7f;
+
+   if(rawOffset != midiParser_rollNoteOffsetRaw)
+   {
+      midiParser_clearMidiRollHolds();
+      midiParser_rollNoteOffsetRaw = rawOffset;
    }
 }
 
@@ -264,60 +386,141 @@ void midiParser_parseMidiMessage(MidiMsg msg)
       if((msgonly & 0xE0) == 0x80) {
       // note on or note off message (one of these two only)
          if(midiParser_txRxFilter & 0x01) {
-            int8_t v;
-         // --AS if a note message comes in on global channel, then send that note to
-         // the voice that is currently active on the front.
-            if(midiParser_voiceMidiChannel(7)==chanonly) {
-            
-               // -bc- first, check to see if active track is set to 'any' - use chromatic mode if it is
-               if( (msgonly==NOTE_ON/* && msg.data2*/) && !midiParser_voiceNoteOverride(frontParser_activeTrack) ) {
-                  channelMidiParser_noteOn(frontParser_activeTrack, msg.data1, msg.data2, 1);
-               } 
-               // current active track is not set to 'any' - user wants to assign voices to global notes
-               else if (msgonly==NOTE_ON/* && msg.data2*/){
-                  for(v=0;v<7;v++){
-                     if (midiParser_voiceNoteOverride(v)==msg.data1){
-                        channelMidiParser_noteOn(v, msg.data1, msg.data2, 1);
-                     }
-                  }
-               
+            uint8_t normalConsumed = 0;
+            uint8_t rollVoiceMask = 0;
+            const uint8_t isNoteOff = (msgonly == NOTE_OFF);
+            uint8_t v;
+
+            /* Run the existing global and voice note consumers first. A voice
+               override mismatch is not a consumed note: ChannelMidiParser
+               receives the call for legacy behavior but returns without a
+               trigger, allowing a shifted override note to reach roll. */
+            if(midiParser_voiceMidiChannel(7) == chanonly)
+            {
+               const uint8_t activeTrackOverride =
+                  midiParser_voiceNoteOverride(frontParser_activeTrack);
+
+               if(!activeTrackOverride)
+               {
+                  normalConsumed = 1;
+                  if(isNoteOff)
+                     channelMidiParser_noteOff(frontParser_activeTrack,
+                                               msg.data1,
+                                               msg.data2,
+                                               1);
+                  else
+                     channelMidiParser_noteOn(frontParser_activeTrack,
+                                              msg.data1,
+                                              msg.data2,
+                                              1);
                }
-               else if( (msgonly==NOTE_OFF) && !midiParser_voiceNoteOverride(frontParser_activeTrack) ) {
-                  channelMidiParser_noteOff(frontParser_activeTrack, msg.data1, msg.data2, 1);
-               } 
-               // current active track is not set to 'any' - user wants to assign voices to global notes
-               else if (msgonly==NOTE_OFF){
-                  for(v=0;v<7;v++){
-                     if (midiParser_voiceNoteOverride(v)==msg.data1){
-                        channelMidiParser_noteOff(v, msg.data1, msg.data2, 1);
+               else
+               {
+                  for(v = 0; v < 7; ++v)
+                  {
+                     if(midiParser_voiceNoteOverride(v) == msg.data1)
+                     {
+                        normalConsumed = 1;
+                        if(isNoteOff)
+                           channelMidiParser_noteOff(v, msg.data1, msg.data2, 1);
+                        else
+                           channelMidiParser_noteOn(v, msg.data1, msg.data2, 1);
                      }
                   }
-               
                }
             }
-           
-            // additionally, check each voice channel to see if it cares about this message
-            for(v=0;v<7;v++) {
-               if(midiParser_voiceMidiChannel(v)==chanonly) { // if channel match and we haven't sent it already for the voice
-                  if(msgonly==NOTE_ON/* && msg.data2*/) {
-                     if(v==frontParser_activeTrack)
-                        channelMidiParser_noteOn(v, msg.data1, msg.data2, 1);
-                     else
-                        channelMidiParser_noteOn(v, msg.data1, msg.data2, 0);
-                     //Also used in sequencer trigger note function
-                  } 
-                  else if (msgonly==NOTE_OFF)
-                  { 
-                     if(v==frontParser_activeTrack)
+
+            /* Additionally check each assigned voice channel, preserving the
+               existing active-track recording distinction. */
+            for(v = 0; v < 7; ++v)
+            {
+               if(midiParser_voiceMidiChannel(v) == chanonly)
+               {
+                  const uint8_t noteOverride = midiParser_voiceNoteOverride(v);
+
+                  if(noteOverride == 0 || noteOverride == msg.data1)
+                     normalConsumed = 1;
+
+                  if(isNoteOff)
+                  {
+                     if(v == frontParser_activeTrack)
                         channelMidiParser_noteOff(v, msg.data1, msg.data2, 1);
                      else
                         channelMidiParser_noteOff(v, msg.data1, msg.data2, 0);
                   }
-               } // if channel matches
-            } // for each voice
-               
-            
-            
+                  else
+                  {
+                     if(v == frontParser_activeTrack)
+                        channelMidiParser_noteOn(v, msg.data1, msg.data2, 1);
+                     else
+                        channelMidiParser_noteOn(v, msg.data1, msg.data2, 0);
+                  }
+               }
+            }
+
+            /* Last-consumer MIDI roll-note path. Normal note routing wins; only
+               unconsumed literal NOTE_ON/NOTE_OFF messages are tested against
+               the positive-offset roll map. */
+            if(!normalConsumed && midiParser_rollOffsetEnabled())
+            {
+               const uint8_t offset = midiParser_rollOffsetValue();
+               uint8_t baseNote;
+
+               if(midiParser_voiceMidiChannel(7) == chanonly)
+               {
+                  const uint8_t activeTrackOverride =
+                     midiParser_voiceNoteOverride(frontParser_activeTrack);
+
+                  if(!activeTrackOverride)
+                  {
+                     if(frontParser_activeTrack < 7
+                        && midiParser_shiftedBaseInRange(msg.data1,
+                                                         offset,
+                                                         &baseNote))
+                     {
+                        rollVoiceMask |= (uint8_t)(1u << frontParser_activeTrack);
+                     }
+                  }
+                  else
+                  {
+                     for(v = 0; v < 7; ++v)
+                     {
+                        const uint8_t noteOverride =
+                           midiParser_voiceNoteOverride(v);
+                        if(noteOverride
+                           && midiParser_rollNoteMatches(msg.data1,
+                                                         noteOverride))
+                        {
+                           rollVoiceMask |= (uint8_t)(1u << v);
+                        }
+                     }
+                  }
+               }
+
+               for(v = 0; v < 7; ++v)
+               {
+                  const uint8_t noteOverride = midiParser_voiceNoteOverride(v);
+
+                  if(midiParser_voiceMidiChannel(v) != chanonly)
+                     continue;
+
+                  if(!noteOverride)
+                  {
+                     if(midiParser_shiftedBaseInRange(msg.data1,
+                                                      offset,
+                                                      &baseNote))
+                     {
+                        rollVoiceMask |= (uint8_t)(1u << v);
+                     }
+                  }
+                  else if(midiParser_rollNoteMatches(msg.data1, noteOverride))
+                  {
+                     rollVoiceMask |= (uint8_t)(1u << v);
+                  }
+               }
+
+               midiParser_applyRollVoiceMask(rollVoiceMask, isNoteOff);
+            }
          } // check midi filter
          
       } 
