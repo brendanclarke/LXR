@@ -130,7 +130,7 @@ static uint8_t midiParser_shiftedBaseInRange(uint8_t incomingNote,
 }
 
 static uint8_t midiParser_rollNoteMatches(uint8_t incomingNote,
-                                          uint8_t baseNote)
+                                           uint8_t baseNote)
 {
    uint8_t shiftedNote;
 
@@ -138,6 +138,16 @@ static uint8_t midiParser_rollNoteMatches(uint8_t incomingNote,
                                         midiParser_rollOffsetValue(),
                                         &shiftedNote)
       && shiftedNote == incomingNote;
+}
+
+static uint8_t midiParser_chromaticRollCandidate(uint8_t incomingNote)
+{
+   uint8_t baseNote;
+
+   return midiParser_rollOffsetEnabled()
+      && midiParser_shiftedBaseInRange(incomingNote,
+                                       midiParser_rollOffsetValue(),
+                                       &baseNote);
 }
 
 static void midiParser_rollVoiceOn(uint8_t voice)
@@ -402,17 +412,25 @@ void midiParser_parseMidiMessage(MidiMsg msg)
 
                if(!activeTrackOverride)
                {
-                  normalConsumed = 1;
-                  if(isNoteOff)
-                     channelMidiParser_noteOff(frontParser_activeTrack,
-                                               msg.data1,
-                                               msg.data2,
-                                               1);
-                  else
-                     channelMidiParser_noteOn(frontParser_activeTrack,
-                                              msg.data1,
-                                              msg.data2,
-                                              1);
+                  /* In chromatic mode, shifted roll notes must get a real
+                     last-consumer lane. If the incoming note can be shifted
+                     back by the roll offset, leave it unconsumed so the roll
+                     matcher below can claim it; otherwise keep legacy
+                     chromatic note behavior. */
+                  if(!midiParser_chromaticRollCandidate(msg.data1))
+                  {
+                     normalConsumed = 1;
+                     if(isNoteOff)
+                        channelMidiParser_noteOff(frontParser_activeTrack,
+                                                  msg.data1,
+                                                  msg.data2,
+                                                  1);
+                     else
+                        channelMidiParser_noteOn(frontParser_activeTrack,
+                                                 msg.data1,
+                                                 msg.data2,
+                                                 1);
+                  }
                }
                else
                {
@@ -437,9 +455,16 @@ void midiParser_parseMidiMessage(MidiMsg msg)
                if(midiParser_voiceMidiChannel(v) == chanonly)
                {
                   const uint8_t noteOverride = midiParser_voiceNoteOverride(v);
+                  const uint8_t chromaticRollCandidate =
+                     (noteOverride == 0)
+                        && midiParser_chromaticRollCandidate(msg.data1);
 
-                  if(noteOverride == 0 || noteOverride == msg.data1)
+                  if((noteOverride == 0 && !chromaticRollCandidate)
+                     || noteOverride == msg.data1)
                      normalConsumed = 1;
+
+                  if(chromaticRollCandidate)
+                     continue;
 
                   if(isNoteOff)
                   {

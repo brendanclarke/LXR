@@ -1187,3 +1187,58 @@ No prototype changes are required if consumption is tracked at `MidiParser.c` ro
 
 - Confirm there is enough `.ALL` global padding after incrementing `NUM_PARAMS`; current line 2293 formula should remain positive.
 - Confirm whether an existing dtype already supports `0=off` display plus `1..127` numeric values. Current research suggests no generic dtype does; if that holds, add only the scoped `PAR_ROLL_NOTE_OFFSET == 0` display exception and keep `DTYPE_0B127`.
+
+## Implementation Assessment 2026-09-17
+
+Review status: implementation was inspected in the current tree against this schedule. The feature is substantially landed: AVR menu/config plumbing exists, the protocol opcode is mirrored at `0x6f`, STM stores a positive-only offset, MIDI-owned roll holds are source-separated from manual rolls, offset/channel/note mapping changes clear MIDI-owned holds, and Global NRPN 93 calls the existing roll-rate setter without changing the Global CC table.
+
+Build status: not verified locally. `make -C mainboard/LxrStm32 -j4 stm32` and `make -C front/LxrAvr avr -j4` both failed before build start because `make` is not available in this PowerShell environment.
+
+### Confirmed Matches
+
+- `front/LxrAvr/Parameters.h`: `PAR_ROLL_NOTE_OFFSET` is appended after `PAR_MIDI_NOTE7`, preserving older global byte layout.
+- `front/LxrAvr/Menu/menu.c`: `PAR_ROLL_NOTE_OFFSET` uses `DTYPE_0B127`, defaults to `0`, sends `SEQ_ROLL_NOTE_OFFSET`, and has scoped display exceptions so value `0` shows `off`.
+- `front/LxrAvr/Menu/menuPages.h`: the setting is on the global MIDI/settings page.
+- `front/LxrAvr/avrComms/avrCommsReceivingProtocol.h` and `mainboard/LxrStm32/src/uARTFrontSYX/frontPanelReceivingProtocol.h`: `SEQ_ROLL_NOTE_OFFSET` / `FRONT_SEQ_ROLL_NOTE_OFFSET` use `0x6f`.
+- `mainboard/LxrStm32/src/MIDI/MidiParser.c`: raw `0` disables roll notes; raw `1..127` is treated as a positive offset, with upper/lower MIDI note bounds checked.
+- `mainboard/LxrStm32/src/Sequencer/sequencer.c`: manual and MIDI roll ownership are separated via source masks and aggregated back into the existing roll engine.
+- `mainboard/LxrStm32/src/MIDI/GlobalMidiParser.c`: Global NRPN 93 clamps CC6 data to `0..15` and calls `seq_setRollRate()`.
+- `knowledge_files/comms_spec_reference/MIDI_TABLE.md`: documents positive-only roll offset and NRPN 93.
+
+### Finding
+
+Potential behavioral gap: shifted chromatic roll notes appear unreachable on override-off global/voice paths.
+
+Evidence:
+
+- In `mainboard/LxrStm32/src/MIDI/MidiParser.c`, the note router marks `normalConsumed = 1` for global active-track chromatic mode whenever the active track has no note override.
+- The voice-channel loop also marks `normalConsumed = 1` whenever a matching voice channel has no note override.
+- The roll path runs only under `if(!normalConsumed && midiParser_rollOffsetEnabled())`.
+
+Impact:
+
+For `midi_NoteOverride[voice] == 0` chromatic mode, the existing normal note path accepts any incoming note on the assigned channel. That means shifted roll notes on that assigned channel are consumed by the normal path before the last-consumer roll path can evaluate them. As written, roll triggering works for shifted explicit note overrides, but likely does not work for the planned shifted chromatic cases such as “standard C1-C2, offset 24, roll from C3-C4” unless some other range constraint exists outside this parser.
+
+Decision needed:
+
+- If strict last-consumer semantics means “any override-off chromatic note always remains a normal note,” then the implementation is consistent but the chromatic-roll verification cases in this schedule should be removed or reworded.
+- If the intended product behavior is shifted chromatic roll ranges, the parser needs a notion of the normal chromatic note range before marking `normalConsumed`; otherwise there is no unconsumed shifted chromatic space for roll to occupy.
+
+### Residual Risks
+
+- MIDI roll hold counts are per voice, not per note number. This supports overlapping holds for a voice, but a mismatched note-off for the same shifted voice can decrement the count. This is probably acceptable for the current plan but should be tested with controllers that emit unusual note-off ordering.
+- NRPN 93 updates STM roll rate directly. It does not appear to echo/update AVR `PAR_ROLL` display or persisted global/performance state. That matches the live-control implementation direction in this schedule, but it is worth confirming if visible menu synchronization is desired later.
+- Inbound MIDI All Notes Off is not handled as a MIDI roll clear point because the current inbound parser does not appear to have an explicit CC123 all-notes-off consumer. Offset/channel/note-map changes and parser cache clear do release MIDI-owned rolls.
+
+### Follow-Up Fix 2026-09-17
+
+The shifted chromatic roll gap identified above has been fixed in `mainboard/LxrStm32/src/MIDI/MidiParser.c`.
+
+Change summary:
+
+- Added `midiParser_chromaticRollCandidate()` to detect incoming notes that can be shifted back by the positive roll offset into a valid base note.
+- Updated the global override-off chromatic path so shifted roll candidates are not sent through the normal `channelMidiParser_noteOn()` / `noteOff()` path first.
+- Updated the voice-channel override-off chromatic loop so shifted roll candidates are skipped by normal routing and left for the existing last-consumer roll mask.
+- Exact note overrides still set `normalConsumed`, so standard assigned notes continue to win and do not fall through to roll.
+
+Build status after fix: still not locally verified because `make` is unavailable in this environment.
