@@ -24,10 +24,10 @@ Offset encoding for implementation:
 - [x] Added Global NRPN 93 for the existing roll-rate control and updated the
   durable MIDI table.
 - [x] `make -C mainboard/LxrStm32 -j4 stm32` and
-  `make -C front/LxrAvr avr -j4` pass. The checked-in x86_64
-  `tools/bin/FirmwareImageBuilder` cannot run on this arm64 host, so an
-  arm64-native temporary build of that tool successfully regenerated
-  `firmware image/FIRMWARE.BIN`; hardware verification remains to be run.
+  `make -C front/LxrAvr avr -j4` pass. The top-level Makefile now builds and
+  selects a host-specific image builder through `make builder` (for example
+  `FirmwareImageBuilder_Darwin_arm64`), and `make firmware` packages through
+  it; hardware verification remains to be run.
 
 Implementation note: current chromatic normal MIDI routes accept every note on
 their assigned channel. The parser therefore preserves the requested

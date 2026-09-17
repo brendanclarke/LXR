@@ -38,7 +38,7 @@ exe: $(EXE)
 
 $(EXE): $(SRCDIR)/FirmwareImageBuilder.cpp
 	$(ECHO) "Compiling $@..."
-	$(AT)$(CXX) $(CFLAGS) $(SRCDIR)/FirmwareImageBuilder.cpp -o $@
+	$(AT)$(CXX) $(CFLAGS) $(SRCDIR)/FirmwareImageBuilder.cpp -o "$@"
 
 .PHONY: clean
 clean:
