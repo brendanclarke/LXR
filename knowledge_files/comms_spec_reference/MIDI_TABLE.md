@@ -1,7 +1,7 @@
 # MIDI Table
 
-Date: 2026-09-17
-Status: current after MIDI roll-trigger implementation. This is the durable MIDI reference for external DIN/USB MIDI input parsing and realtime dispatch timing on STM32.
+Date: 2026-09-26
+Status: current after the Session 038 stuck-MIDI-roll fix (NOTE_ON velocity 0 is a note-off; per-key MIDI roll ownership; stop release; stopped-transport MIDI rolls), on top of the 2026-09-17 MIDI roll-trigger implementation. This is the durable MIDI reference for external DIN/USB MIDI input parsing and realtime dispatch timing on STM32.
 
 ## Ownership And Routing
 
@@ -9,7 +9,7 @@ External MIDI byte parsing starts in `mainboard/LxrStm32/src/MIDI/MidiParser.c`.
 
 Important ownership boundaries:
 
-- `MidiParser.c` owns byte-stream parsing, routing/filtering, system message dispatch, note/program-change routing, the high-level CC router, and the DWT timestamp helper used by realtime capture.
+- `MidiParser.c` owns byte-stream parsing, routing/filtering, system message dispatch, note/program-change routing, the high-level CC router, the DWT timestamp helper used by realtime capture, the saved MIDI roll-note offset, and the MIDI roll held-key table (`(channel, note)` -> claimed voice mask, Session 038). The sequencer owns only the per-voice MIDI ownership bit (`seq_rollMidiHeld`, via `seq_rollMidiChange()`), which stays separate from manual front-panel roll ownership.
 - `uARTFrontSYX/Uart.c` and `Hardware/USB/usb_midi_core.c` each own one source-specific, 16-event SPSC realtime capture queue. `main.c` drains DIN then USB at the audio render deadline before rendering the next block.
 - `ChannelMidiParser.c` owns the existing per-voice/channel CC implementation, plus the preserved CC0 bank-change and CC1 morph behavior.
 - `GlobalMidiParser.c` owns system clock/MTC handling and, after Session 029, the separate Global-channel CC/NRPN table for CC2-127.
@@ -50,7 +50,7 @@ ping-pong, I2S, and DAC latency remains.
 | MIDI clock `0xf8` | If RX clock filter is enabled and external sync is enabled, call `seq_sync()`. |
 | MIDI start `0xfa` | If RX clock filter is enabled and external sync is enabled, call `sync_midiStartStop(1)`. |
 | MIDI continue `0xfb` | Same as start. |
-| MIDI stop `0xfc` | If RX clock filter is enabled and external sync is enabled, call `sync_midiStartStop(0)`. |
+| MIDI stop `0xfc` | If RX clock filter is enabled and external sync is enabled, call `sync_midiStartStop(0)`. Like every `seq_setRunning(0)`, this also releases all MIDI roll holds (Session 038). |
 | MTC quarter frame `0xf1` | Global MTC start detection starts sequencer only after a complete zero-position frame set; `midiParser_checkMtc()` stops if MTC goes stale. |
 | SysEx payload | Routed/passed through as transport data where configured; this parser does not interpret arbitrary SysEx payloads. |
 
@@ -60,15 +60,36 @@ ping-pong, I2S, and DAC latency remains.
 |---|---|
 | Global channel | Note-on/off targets the active front-panel track. If that track has no note override, chromatic note mode is used for the active track. If the active track has note override enabled, the parser scans all seven track note overrides and triggers matching tracks. |
 | Voice/track channels | Note-on/off triggers each track whose `midi_MidiChannels[track]` matches the incoming channel. Track note override filters incoming notes when configured. |
+| Note-off classification | A message is a note-off if its status is NOTE_OFF **or** it is NOTE_ON with velocity `0` (MIDI 1.0). Such messages take the `channelMidiParser_noteOff()` route on normal paths and the release branch on the roll path. For normal notes this is behaviourally identical to the old NOTE_ON route. (Session 038) |
 | Recording side effect | When a note is accepted with `do_rec = 1`, the parser records it to the sequencer and echoes MIDI note output for the voice channel. |
 | Note-off recording placement | `channelMidiParser_noteOff()` forces `vel = 0` and delegates to `channelMidiParser_noteOn()`, which calls `seq_addNote(voice, vel, note, 1)`. That trailing `1` is `isNoteOff`, and it is what allows a note-off to keep its **true, un-quantized** position (a zero-velocity "ghost" step marking where the note was released). **This MIDI path is the only caller permitted to pass `isNoteOff = 1`.** Every internal trigger — roll hits, loop re-record — passes `0` and is always written to the quantized slot, even at velocity 0. Placement must never again be inferred from velocity alone; see Session 037. |
 
 MIDI roll notes use the saved global roll-note offset. Raw `0` disables the
 feature and displays as `off`; raw `1..127` is a positive semitone offset above
-the normal trigger note. Shifted roll notes are evaluated only after the normal
-global/voice note routes have had a chance to consume the message. Notes that
-would shift outside MIDI `0..127` do nothing, and NOTE_ON/NOTE_OFF statuses are
-interpreted literally, including NOTE_ON with velocity `0`.
+the normal trigger note. With a note override, the normal route is tried first
+and roll notes are evaluated only if it did not consume the message. On
+chromatic-mode tracks (no note override), the offset acts as a keyboard split:
+notes below it play normally, notes at or above it are roll notes only. Nothing
+rolls while the offset is `off`. Notes that would shift outside MIDI `0..127`
+do nothing.
+
+A NOTE_ON with velocity `0` is a note-off (MIDI 1.0) on every note route,
+including the roll path (Session 038; the earlier "literal status" rule is
+withdrawn). Each held roll key (channel + note) claims the voices it matched at
+note-on, and its note-off releases exactly those voices. A voice keeps rolling
+while any held key claims it. A repeated note-on for a held key is not counted
+twice; unmatched note-offs are ignored; at most 16 roll keys can be held at
+once.
+
+All MIDI roll holds are released on sequencer stop (every stop request),
+roll-offset change, MIDI channel change or off, track note-override change, RX
+note-filter disable, and parser cache clear. While the sequencer is stopped, a
+roll key still starts a roll immediately. It repeats at the current tempo and
+roll rate, using roll velocity and roll note regardless of roll mode; a one-shot
+rate fires once per press. If the key is still held at start, the roll
+continues on the normal quantized roll engine, with a single first hit at the
+first quantize boundary. Front-panel (manual) rolls remain silent while
+stopped.
 
 ### Program Change
 

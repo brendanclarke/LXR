@@ -97,9 +97,34 @@ extern uint8_t midi_unused;
 
 void midi_clearCache();
 
-/* MIDI roll-note offset and hold ownership.
-   MidiParser owns these because it is the only layer that knows which incoming
-   note/channel pairs map to shifted roll triggers. */
+/* MIDI ROLL-NOTE OFFSET AND HOLD OWNERSHIP
+   MidiParser owns these because it is the only layer that knows which
+   incoming note/channel pairs map to shifted roll triggers.
+
+   Hold model (Session 038): each pressed roll key (MIDI channel + note) is
+   stored with the voices it claimed. Its note-off, which may be NOTE_OFF or
+   NOTE_ON velocity 0, releases exactly those voices. A voice stays
+   MIDI-held while any held key claims it. MIDI ownership is reported to the
+   sequencer through seq_rollMidiChange() and is kept separate from manual
+   front-panel roll ownership.
+
+   midiParser_setRollNoteOffset()
+     INPUT:  rawOffset. 0 = off, 1..127 = positive semitone offset (masked to
+             7 bits).
+     OUTPUT: the stored offset. If the value changed, every MIDI roll hold is
+             released first.
+     ACCESSOR: FRONT_SEQ_ROLL_NOTE_OFFSET
+               (uARTFrontSYX/frontPanelReceivingProtocol.c).
+
+   midiParser_clearMidiRollHolds()
+     WHAT: releases every MIDI roll hold and empties the held-key table.
+           Later note-offs for cleared keys are ignored, and a fresh press of
+           any key starts a new roll.
+     ACCESSORS: offset change, MIDI channel change or off, track note
+                override change (frontPanelReceivingProtocol.c);
+                midi_clearCache() and the RX note-filter disable
+                (MidiParser.c); sequencer stop, seq_setRunning(0)
+                (Sequencer/sequencer.c). */
 void midiParser_setRollNoteOffset(uint8_t rawOffset);
 void midiParser_clearMidiRollHolds(void);
 

@@ -135,7 +135,10 @@ extern uint8_t seq_loadFastMode;
    seq_rollNote and seq_rollVelocity provide the override note and velocity
    used by the note/velocity/both roll modes.
    The requested roll state is the aggregate of manual/front-panel and
-   parser-owned MIDI roll-note holds.
+   parser-owned MIDI roll-note holds. MIDI holds are keyed per MIDI key in
+   MidiParser.c and are released on note-off (including NOTE_ON velocity 0)
+   and on sequencer stop. While stopped, MIDI-held rolls play on a private
+   stopped roll clock using seq_rollVelocity / seq_rollNote (Session 038).
    seq_kitResetFlag and seq_skipFirstRoll hold the current roll-control flags
    used by the front-panel transport and step-quantized roll trigger path. */
 extern uint8_t seq_rollMode;
@@ -360,7 +363,9 @@ static inline void seq_storeMacroDestinationIngress(uint8_t destinationNr, uint1
 
 /* Initialize the sequencer runtime, transport, and live playback caches. */
 void seq_init();
-/* Advance the sequencer one timing quantum and process due playback. */
+/* Advance the sequencer one timing quantum and process due playback.
+   While stopped, also services the MIDI-only stopped roll clock
+   (Session 038); transport timing is not affected by that service. */
 void seq_tick();
 
 /* Forward morph interpolation work into the Preset-owned engine. */
@@ -479,7 +484,11 @@ void seq_setExtSync(uint8_t isExt);
 void seq_setNextPattern(const uint8_t patNr, uint8_t voice);
 /* Start or stop the sequencer transport.
    isRunning: non-zero starts playback, zero stops playback and resets the
-   transport state to its stopped baseline. */
+   transport state to its stopped baseline.
+   Stop also releases every MIDI-held roll (midiParser_clearMidiRollHolds()),
+   and does so on every stop request, so it doubles as a MIDI-roll panic.
+   Start hands any MIDI roll pressed during the stop to the normal quantized
+   roll engine. Manual roll behaviour is unchanged (Session 038). */
 void seq_setRunning(uint8_t isRunning);
 /* Read whether the transport is currently running.
    Returns non-zero while the transport is active. */
@@ -502,8 +511,15 @@ void seq_sendMainStepInfoToFront(uint16_t stepNr);
    onOff: non-zero when the button is pressed, zero when released. */
 void seq_rollChange(uint8_t voice, uint8_t onOff);
 /* Record a MIDI-owned roll hold for one voice.
-   MIDI ownership is separate from front-panel roll buttons; either source can
-   keep the aggregate roll request active until both sources release. */
+   voice: track index 0..6. onOff: non-zero = held by MIDI, zero = released.
+   MIDI ownership is separate from front-panel roll buttons; either source
+   keeps the aggregate roll request active until both release. Called only by
+   MidiParser's held-key synchroniser: on every roll-key press (re-assert,
+   which re-fires one-shot rolls and, while stopped, re-arms an immediate
+   hit), on a voice's final release, and on every hold clear, including
+   sequencer stop. While the transport is stopped, MIDI-held voices are
+   played by a private stopped roll clock serviced from seq_tick().
+   See sequencer.c seq_tickStoppedRolls() (Session 038). */
 void seq_rollMidiChange(uint8_t voice, uint8_t onOff);
 /* Apply the current roll state for one voice and report whether it triggered.
    voice: track index whose roll state should be updated.

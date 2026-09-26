@@ -88,11 +88,46 @@ static inline uint8_t midiParser_voiceNoteOverride(uint8_t voice)
    return (voice < 7) ? midi_NoteOverride[voice] : 0;
 }
 
-/* Parser-owned MIDI roll state. Raw 0 disables shifted roll notes; raw 1..127
-   is the positive semitone offset above the normal trigger note. Hold counters
-   allow overlapping roll-note presses for the same voice. */
+/* PARSER-OWNED MIDI ROLL STATE
+   midiParser_rollNoteOffsetRaw:
+     raw 0 disables shifted roll notes; raw 1..127 is the positive semitone
+     offset above the normal trigger note. Set only through
+     midiParser_setRollNoteOffset() (FRONT_SEQ_ROLL_NOTE_OFFSET).
+
+   HELD-KEY TABLE (Session 038; replaces the per-voice hold counters)
+   WHAT: one slot per physically held MIDI roll key, identified by
+         (chan, note), storing the voices that key claimed at note-on.
+         midiParser_rollHeldVoiceMask caches the union of all slot masks,
+         which equals the sequencer's seq_rollMidiHeld mask.
+   WHY:  per-voice counters could not tell which press a release belonged
+         to. A NOTE_ON velocity 0 release was counted as a press, releases
+         recomputed their voices from the current routing, and duplicate
+         presses needed duplicate releases. Each of these could leave a roll
+         stuck. Keying on the MIDI key makes release exact and idempotent.
+   SIZE: MIDI_ROLL_MAX_HELD_KEYS = 16 simultaneous roll keys (3 bytes each).
+         If the table is full, a new press is ignored rather than starting a
+         roll with no release path.
+   ENCODING: chan 1..16 matches the parser's chanonly; chan 0 marks a free
+             slot. Zero-initialised storage therefore starts with every slot
+             free.
+   ACCESSORS: midiParser_rollFindHeldKey(), midiParser_rollFindFreeKeySlot(),
+              midiParser_rollHeldKeysUnion(), midiParser_rollSyncVoices(),
+              midiParser_rollKeyOn(), midiParser_rollKeyOff(),
+              midiParser_clearMidiRollHolds() (all in this file).
+   AFFILIATES: seq_rollMidiChange() / seq_rollMidiHeld
+               (Sequencer/sequencer.c). */
+#define MIDI_ROLL_MAX_HELD_KEYS 16
+
+typedef struct
+{
+   uint8_t chan;       /* 1..16 = held on that MIDI channel; 0 = free slot */
+   uint8_t note;       /* incoming (shifted) roll note number, 0..127      */
+   uint8_t voiceMask;  /* voices 0..6 claimed by this key at note-on        */
+} MidiRollHeldKey;
+
 static uint8_t midiParser_rollNoteOffsetRaw = 0;
-static uint8_t midiParser_rollHoldCount[7] = {0};
+static MidiRollHeldKey midiParser_rollHeldKeys[MIDI_ROLL_MAX_HELD_KEYS];
+static uint8_t midiParser_rollHeldVoiceMask = 0;
 
 /* Roll-note helpers. Matching is defined against the normal note that would
    trigger the voice, then shifted upward by the current positive offset. MIDI
@@ -150,43 +185,178 @@ static uint8_t midiParser_chromaticRollCandidate(uint8_t incomingNote)
                                        &baseNote);
 }
 
-static void midiParser_rollVoiceOn(uint8_t voice)
+/* FIND A HELD ROLL KEY
+   WHAT: linear search of the held-key table for an occupied slot whose
+         (chan, note) matches.
+   WHY:  releases and duplicate presses are resolved by MIDI key identity,
+         not by voice (Session 038).
+   INPUT:  chan 1..16 (the parser's chanonly), note 0..127.
+   OUTPUT: slot index 0..MIDI_ROLL_MAX_HELD_KEYS-1, or -1 if not held.
+   ACCESSORS: midiParser_rollKeyOn(), midiParser_rollKeyOff().
+   AFFILIATES: midiParser_rollHeldKeys[] (this file). */
+static int8_t midiParser_rollFindHeldKey(uint8_t chan, uint8_t note)
 {
-   if(voice >= 7)
-      return;
+   int8_t slot;
 
-   if(midiParser_rollHoldCount[voice] == 0)
-      seq_rollMidiChange(voice, 1);
-
-   if(midiParser_rollHoldCount[voice] != 0xff)
-      ++midiParser_rollHoldCount[voice];
+   for(slot = 0; slot < MIDI_ROLL_MAX_HELD_KEYS; ++slot)
+   {
+      if(midiParser_rollHeldKeys[slot].chan == chan
+         && midiParser_rollHeldKeys[slot].note == note)
+         return slot;
+   }
+   return -1;
 }
 
-static void midiParser_rollVoiceOff(uint8_t voice)
+/* FIND A FREE HELD-KEY SLOT
+   WHAT: returns the first slot whose chan is 0 (free).
+   WHY:  a new roll key needs storage for the voices it claims. The caller
+         treats a full table as "do not start the roll", because a roll that
+         cannot be recorded here would have no release path.
+   INPUT:  none.
+   OUTPUT: free slot index, or -1 if all MIDI_ROLL_MAX_HELD_KEYS are in use.
+   ACCESSORS: midiParser_rollKeyOn().
+   AFFILIATES: midiParser_rollHeldKeys[] (this file). */
+static int8_t midiParser_rollFindFreeKeySlot(void)
 {
-   if(voice >= 7 || midiParser_rollHoldCount[voice] == 0)
-      return;
+   int8_t slot;
 
-   --midiParser_rollHoldCount[voice];
-   if(midiParser_rollHoldCount[voice] == 0)
-      seq_rollMidiChange(voice, 0);
+   for(slot = 0; slot < MIDI_ROLL_MAX_HELD_KEYS; ++slot)
+   {
+      if(midiParser_rollHeldKeys[slot].chan == 0)
+         return slot;
+   }
+   return -1;
 }
 
-static void midiParser_applyRollVoiceMask(uint8_t voiceMask,
-                                          uint8_t isNoteOff)
+/* UNION OF ALL HELD-KEY VOICE MASKS
+   WHAT: ORs the voiceMask of every occupied slot.
+   WHY:  a voice is MIDI-held while *any* held key claims it. This is the
+         single source of truth for the sequencer's MIDI ownership bit.
+   INPUT:  none.
+   OUTPUT: bit v set means voice v is claimed by at least one held key.
+   ACCESSORS: midiParser_rollSyncVoices().
+   AFFILIATES: midiParser_rollHeldKeys[] (this file). */
+static uint8_t midiParser_rollHeldKeysUnion(void)
 {
+   uint8_t slot;
+   uint8_t mask = 0;
+
+   for(slot = 0; slot < MIDI_ROLL_MAX_HELD_KEYS; ++slot)
+   {
+      if(midiParser_rollHeldKeys[slot].chan != 0)
+         mask |= midiParser_rollHeldKeys[slot].voiceMask;
+   }
+   return mask;
+}
+
+/* SYNCHRONISE SEQUENCER MIDI OWNERSHIP WITH THE HELD-KEY TABLE
+   WHAT: recomputes the union of claimed voices. Voices that left the union
+         are released with seq_rollMidiChange(v, 0). Voices in assertMask
+         that are still in the union are (re)asserted with
+         seq_rollMidiChange(v, 1).
+   WHY:  it replaces the per-voice 0->1 / 1->0 counter transitions. The
+         deliberate re-assert on every press (not only on 0->1) is what lets
+         a new key press re-fire a voice that is already MIDI-held:
+           - running, one-shot rate: seq_setRoll() clears seq_rollTriggered
+             after its single hit, so re-asserting re-arms it;
+           - stopped: seq_rollMidiChange() re-arms the stopped roll clock
+             for an immediate hit (Session 038, D4).
+         For a running continuous roll, re-asserting a bit that is already
+         set is a no-op in seq_rollApplyAggregate().
+   INPUT:  assertMask, the voices claimed by the press being processed
+           (0 for a release or a clear).
+   OUTPUT: midiParser_rollHeldVoiceMask updated; seq_rollMidiChange() calls
+           for released and asserted voices.
+   ACCESSORS: midiParser_rollKeyOn(), midiParser_rollKeyOff(),
+              midiParser_clearMidiRollHolds().
+   AFFILIATES: seq_rollMidiChange() / seq_rollApplyAggregate()
+               (Sequencer/sequencer.c). */
+static void midiParser_rollSyncVoices(uint8_t assertMask)
+{
+   const uint8_t newMask = midiParser_rollHeldKeysUnion();
+   const uint8_t releaseMask =
+      (uint8_t)(midiParser_rollHeldVoiceMask & (uint8_t)~newMask);
    uint8_t voice;
+
+   midiParser_rollHeldVoiceMask = newMask;
 
    for(voice = 0; voice < 7; ++voice)
    {
-      if(voiceMask & (uint8_t)(1u << voice))
-      {
-         if(isNoteOff)
-            midiParser_rollVoiceOff(voice);
-         else
-            midiParser_rollVoiceOn(voice);
-      }
+      const uint8_t voiceBit = (uint8_t)(1u << voice);
+
+      if(releaseMask & voiceBit)
+         seq_rollMidiChange(voice, 0);
+      else if(assertMask & newMask & voiceBit)
+         seq_rollMidiChange(voice, 1);
    }
+}
+
+/* CLAIM VOICES FOR A PRESSED ROLL KEY
+   WHAT: records (chan, note) as held with its claimed voiceMask, then
+         synchronises sequencer ownership, asserting the captured mask.
+   WHY:  the note-off for this key must later release exactly these voices,
+         whatever the routing looks like by then. A repeated note-on for a
+         key that is already held does not take a second slot, so one
+         note-off always suffices; it only reasserts the original mask.
+   INPUT:  chan 1..16, note 0..127, voiceMask (bits 0..6) produced by the
+           last-consumer matcher in midiParser_parseMidiMessage().
+   OUTPUT: table slot occupied for a new key, or unchanged for a duplicate;
+           seq_rollMidiChange(v, 1) reasserts each captured voice. With an
+           empty mask, or a full table for a new key, nothing happens and no
+           roll starts.
+   ACCESSORS: midiParser_parseMidiMessage() note-on branch.
+   AFFILIATES: midiParser_rollFindHeldKey(), midiParser_rollFindFreeKeySlot(),
+               midiParser_rollSyncVoices() (this file). */
+static void midiParser_rollKeyOn(uint8_t chan, uint8_t note, uint8_t voiceMask)
+{
+   int8_t slot;
+
+   voiceMask &= 0x7f;
+   if(!voiceMask)
+      return;
+
+   slot = midiParser_rollFindHeldKey(chan, note);
+   if(slot < 0)
+   {
+      slot = midiParser_rollFindFreeKeySlot();
+      if(slot < 0)
+         return;
+
+      midiParser_rollHeldKeys[slot].chan = chan;
+      midiParser_rollHeldKeys[slot].note = note;
+      midiParser_rollHeldKeys[slot].voiceMask = 0;
+   }
+
+   if(midiParser_rollHeldKeys[slot].voiceMask == 0)
+      midiParser_rollHeldKeys[slot].voiceMask = voiceMask;
+
+   midiParser_rollSyncVoices(midiParser_rollHeldKeys[slot].voiceMask);
+}
+
+/* RELEASE A ROLL KEY
+   WHAT: frees the slot for (chan, note) if it is held, then synchronises
+         sequencer ownership. Only voices that no other held key still
+         claims are released.
+   WHY:  a release must undo exactly what its own press claimed (Session 038).
+         An unmatched note-off (never held, or cleared by a stop or a mapping
+         change) is ignored instead of decrementing some other press's hold.
+   INPUT:  chan 1..16, note 0..127.
+   OUTPUT: slot freed; seq_rollMidiChange(v, 0) for each voice that became
+           unheld. No effect for an unknown key.
+   ACCESSORS: midiParser_parseMidiMessage() note-off branch, which includes
+              NOTE_ON velocity 0.
+   AFFILIATES: midiParser_rollFindHeldKey(), midiParser_rollSyncVoices()
+               (this file). */
+static void midiParser_rollKeyOff(uint8_t chan, uint8_t note)
+{
+   const int8_t slot = midiParser_rollFindHeldKey(chan, note);
+
+   if(slot < 0)
+      return;
+
+   midiParser_rollHeldKeys[slot].chan = 0;
+   midiParser_rollHeldKeys[slot].voiceMask = 0;
+   midiParser_rollSyncVoices(0);
 }
 
 void midi_clearCache()
@@ -207,20 +377,40 @@ void midi_clearCache()
    }
 }
 
-/* Release every parser-owned MIDI roll hold. Mapping changes and parser-cache
-   resets use this so a later note-off cannot be stranded under old routing. */
+/* RELEASE EVERY MIDI ROLL HOLD
+   WHAT: empties the held-key table, then releases every voice that MIDI was
+         holding, through seq_rollMidiChange(voice, 0).
+   WHY:  some events invalidate the mapping between a held key and its
+         eventual note-off, or are defined as "all MIDI rolls stop". A
+         cleared key's later note-off finds no entry and is ignored, so it
+         can neither strand nor wrongly release a roll. Clearing the parser
+         table (not only the sequencer mask) is also what makes a key
+         re-triggerable after a stop: a stale entry would make the next
+         press of that key look like a duplicate.
+   INPUT:  none.
+   OUTPUT: midiParser_rollHeldKeys[] all free; midiParser_rollHeldVoiceMask
+           = 0; seq_rollMidiHeld cleared bit by bit via seq_rollMidiChange().
+           Manual (front-panel) roll ownership is untouched.
+   ACCESSORS (all existing unless marked):
+     - midi_clearCache() (this file; reached from seq_init())
+     - midiParser_setRollNoteOffset() (this file; offset change)
+     - midi_setFilter() (this file; RX note filter disabled) [S038 new]
+     - FRONT_SEQ_MIDI_CHAN / FRONT_SEQ_MIDI_CHAN_OFF / FRONT_SEQ_TRACK_NOTE1..7
+       (uARTFrontSYX/frontPanelReceivingProtocol.c)
+     - seq_setRunning(0) (Sequencer/sequencer.c; sequencer stop) [S038 new]
+   AFFILIATES: midiParser_rollSyncVoices() (this file), seq_rollMidiChange()
+               (Sequencer/sequencer.c). Declared in MidiParser.h. */
 void midiParser_clearMidiRollHolds(void)
 {
-   uint8_t voice;
+   uint8_t slot;
 
-   for(voice = 0; voice < 7; ++voice)
+   for(slot = 0; slot < MIDI_ROLL_MAX_HELD_KEYS; ++slot)
    {
-      if(midiParser_rollHoldCount[voice] != 0)
-      {
-         midiParser_rollHoldCount[voice] = 0;
-         seq_rollMidiChange(voice, 0);
-      }
+      midiParser_rollHeldKeys[slot].chan = 0;
+      midiParser_rollHeldKeys[slot].voiceMask = 0;
    }
+
+   midiParser_rollSyncVoices(0);
 }
 
 /* Set the global MIDI roll-note offset. A changed offset invalidates every
@@ -398,7 +588,30 @@ void midiParser_parseMidiMessage(MidiMsg msg)
          if(midiParser_txRxFilter & 0x01) {
             uint8_t normalConsumed = 0;
             uint8_t rollVoiceMask = 0;
-            const uint8_t isNoteOff = (msgonly == NOTE_OFF);
+            /* NOTE-OFF CLASSIFICATION (MIDI 1.0: NOTE_ON velocity 0 == NOTE_OFF)
+               WHAT: a message is a note-off if its status is NOTE_OFF, or if
+                     its status is NOTE_ON and its velocity (data2) is 0.
+               WHY:  many senders transmit releases as NOTE_ON velocity 0 so
+                     that running status stays unbroken (the Octatrack is the
+                     Session 038 reproduction). The MIDI roll feature
+                     originally read statuses literally, so every such release
+                     was counted as a second press and the roll stuck. That
+                     "literal status" design decision is withdrawn (Session
+                     038, D1). Do NOT reintroduce literal-status handling.
+                     For normal notes this changes nothing observable:
+                     channelMidiParser_noteOff() forces vel = 0 and delegates
+                     to channelMidiParser_noteOn(), which already treats
+                     vel == 0 as "no trigger, record as note-off, echo vel 0".
+               INPUT:  msgonly (status high nibble), msg.data2 (velocity).
+               OUTPUT: isNoteOff selects noteOff() on the normal routes and
+                       the release branch on the MIDI roll path.
+               ACCESSORS: read only inside this note block.
+               AFFILIATES: channelMidiParser_noteOn/Off()
+                           (MIDI/ChannelMidiParser.c); seq_addNote()'s
+                           isNoteOff contract (Sequencer/sequencer.c) is
+                           unaffected, since both routes already pass 1. */
+            const uint8_t isNoteOff = (msgonly == NOTE_OFF)
+                                   || (msgonly == NOTE_ON && msg.data2 == 0);
             uint8_t v;
 
             /* Run the existing global and voice note consumers first. A voice
@@ -483,10 +696,40 @@ void midiParser_parseMidiMessage(MidiMsg msg)
                }
             }
 
-            /* Last-consumer MIDI roll-note path. Normal note routing wins; only
-               unconsumed literal NOTE_ON/NOTE_OFF messages are tested against
-               the positive-offset roll map. */
-            if(!normalConsumed && midiParser_rollOffsetEnabled())
+            /* MIDI ROLL-NOTE PATH (release first, then last-consumer claim)
+               WHAT: a note-off (including NOTE_ON velocity 0, see isNoteOff
+                     above) releases the held roll key (chanonly, note) if one
+                     exists, and does nothing else on the roll path. A note-on
+                     that no normal route consumed is matched against the
+                     positive-offset roll map. The resulting voice mask is
+                     claimed by that key in the held-key table.
+               WHY:  Session 038 stuck-roll bug. Releases used to recompute a
+                     voice mask from the *current* routing and decrement
+                     per-voice counters, so any sender using NOTE_ON velocity 0
+                     as note-off (e.g. the Octatrack) added a second hold
+                     instead of releasing. A routing drift between press and
+                     release (such as an active-track change on the global
+                     chromatic route) also released the wrong voice. A release
+                     is now a lookup of what the press claimed, and it is
+                     deliberately not gated by normalConsumed, the offset
+                     state, or routing: any accepted roll key must always be
+                     releasable.
+               INPUT:  chanonly (1..16), msg.data1 (incoming note), isNoteOff,
+                       normalConsumed, and the offset/channel/override tables
+                       read by the unchanged mask builder below.
+               OUTPUT: held-key table updated; seq_rollMidiChange() called for
+                       each voice whose MIDI hold state changes (or, on a
+                       press, is re-asserted).
+               ACCESSORS: the only caller of midiParser_rollKeyOn() and
+                          midiParser_rollKeyOff().
+               AFFILIATES: midiParser_rollKeyOn/Off(),
+                           midiParser_rollSyncVoices() (this file);
+                           seq_rollMidiChange() (Sequencer/sequencer.c). */
+            if(isNoteOff)
+            {
+               midiParser_rollKeyOff(chanonly, msg.data1);
+            }
+            else if(!normalConsumed && midiParser_rollOffsetEnabled())
             {
                const uint8_t offset = midiParser_rollOffsetValue();
                uint8_t baseNote;
@@ -544,7 +787,9 @@ void midiParser_parseMidiMessage(MidiMsg msg)
                   }
                }
 
-               midiParser_applyRollVoiceMask(rollVoiceMask, isNoteOff);
+               /* Claim the computed voices for this key. An empty mask (no
+                  voice maps to this shifted note) claims nothing. */
+               midiParser_rollKeyOn(chanonly, msg.data1, rollVoiceMask);
             }
          } // check midi filter
          
@@ -834,6 +1079,27 @@ void midi_setFilter(uint8_t is_tx, uint8_t value)
    if(is_tx) // set the high nibble to value
       midiParser_txRxFilter = (value << 4) | (midiParser_txRxFilter & 0x0F);
    else // set the low nibble to value
+   {
+      /* MIDI ROLL HOLD RELEASE ON RX NOTE-FILTER DISABLE
+         WHAT: when the RX nibble changes so that bit 0 (receive notes) goes
+               from enabled to disabled, every parser-owned MIDI roll hold is
+               released before the new filter value is installed.
+         WHY:  midiParser_parseMidiMessage() only enters its note block while
+               (midiParser_txRxFilter & 0x01) is set. A roll key held at the
+               moment note reception is switched off would never see its
+               note-off, so its roll would stick until the next stop or
+               mapping change. Releasing here keeps the rule "every accepted
+               roll key has a guaranteed release path".
+         INPUT:  value, the new RX nibble (low 4 bits significant).
+         OUTPUT: midiParser_txRxFilter updated. MIDI-owned rolls released
+                 through midiParser_clearMidiRollHolds() when bit 0 turns off.
+         ACCESSORS: called from the front-panel MIDI filter setting path.
+         AFFILIATES: midiParser_clearMidiRollHolds() (this file),
+                     seq_rollMidiChange() (Sequencer/sequencer.c). */
+      if((midiParser_txRxFilter & 0x01) && !(value & 0x01))
+         midiParser_clearMidiRollHolds();
+
       midiParser_txRxFilter = (value & 0x0F) | (midiParser_txRxFilter & 0xF0);
+   }
 
 }

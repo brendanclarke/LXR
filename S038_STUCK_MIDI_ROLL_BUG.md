@@ -2,7 +2,9 @@
 
 **Date**: 2026-09-26
 **Branch**: `dev-roll-midi` (MIDI roll feature: commits `52d4ca4`, `9c9c67f`, `9576ae5`)
-**Status**: root cause identified by code reading; **no code changed yet**. Waiting for the user to approve the plan, and in particular the reversal of one design decision (see §4.1).
+**Status**: implementation landed in the STM32 parser/sequencer; host-harness
+and STM32 build verification pass. Hardware verification remains pending.
+The implementation record is `S038_STUCK_ROLL_IMPLEMENTATION.md`.
 
 ---
 
@@ -141,9 +143,12 @@ The table costs about 49 bytes of RAM. A lookup is a linear scan of 16 entries p
 - The Global CC table and NRPN 93.
 - AVR-side code. No AVR change is needed.
 
-### 4.4 Optional, needs a user decision
+### 4.4 Settled in Session 038
 
-- **Release MIDI roll holds on sequencer stop / MIDI Stop.** Today a held roll whose sequencer is stopped simply pauses (roll processing runs inside `seq_process()`) and resumes on restart. Once note-offs are handled correctly this should not matter, and most senders flush note-offs on stop. Recommendation: **don't add it** unless hardware testing shows a need.
+- **Release MIDI roll holds on sequencer stop / MIDI Stop.** Implemented as a
+  stop-time parser-table clear. A MIDI roll pressed while stopped re-triggers
+  immediately on a private tempo/rate clock, and a held stopped roll hands
+  over to the normal quantized engine when playback starts (D3/D4).
 - **An All-Notes-Off hook.** It is not available cleanly. On voice channels, CC120 is already *track mute*, and on the global channel CC123 is *Drum 2 LFO amount*. Do not add one.
 
 ---
@@ -197,6 +202,89 @@ The build is expected to be clean apart from the pre-existing warnings documente
 
 ## 7. Open Questions for the User
 
-1. **Approve reversing Settled Decision #4?** Should a velocity-0 note-on be treated as a note-off? This is required to fix the Octatrack case.
+1. **Settled:** a velocity-0 note-on is treated as a note-off, as required by
+   MIDI 1.0 and the Octatrack reproduction.
 2. Can you confirm, with a MIDI monitor or from the OT's MIDI settings, that the OT sends `9n kk 00` for note-offs? This is diagnostic only. The fix goes ahead either way.
-3. Should MIDI-held rolls be released on sequencer or MIDI Stop (§4.4)? Recommendation: no.
+3. **Settled:** MIDI-held rolls are cleared on every sequencer stop request;
+   stopped-transport re-triggering and start handoff are implemented (§4.4).
+
+---
+
+## 8. Implementation Assessment (2026-09-26)
+
+**Reviewer scope**: the uncommitted working tree on `dev-roll-midi` (on top of `43ab929`). I reviewed the four code files against `S038_STUCK_ROLL_IMPLEMENTATION.md`, rebuilt the STM32 target, independently re-ran the host harness, and checked the documentation edits.
+
+**Verdict**: **Ready for hardware testing.** I found no defects in the change. One pre-existing timing quirk becomes more noticeable because of D4 (§8.4), and one pre-existing routing consequence is worth knowing before testing (§8.5).
+
+### 8.1 Code vs. schedule
+
+| Schedule item | File | Result |
+|---|---|---|
+| C1/C2 held-key table, `MIDI_ROLL_MAX_HELD_KEYS = 16` | `MidiParser.c` | Matches. |
+| C3 find/free/union/sync/keyOn/keyOff helpers | `MidiParser.c` | Matches, with **one deliberate deviation** (below). |
+| C4 `midiParser_clearMidiRollHolds()` | `MidiParser.c` | Matches. |
+| C5 `isNoteOff` includes NOTE_ON velocity 0 | `MidiParser.c` | Matches. |
+| C6 release first, no gate; claim only when unconsumed | `MidiParser.c` | Matches. The mask builder is untouched. |
+| C7 clear on RX note-filter disable | `MidiParser.c` | Matches. |
+| H1 API contract comment | `MidiParser.h` | Matches. |
+| S1–S6 stopped clock, prototype, `seq_tick` hook, stop/start, re-arm | `sequencer.c` | Match. |
+| SH1–SH4 header comments | `sequencer.h` | Match. |
+
+**The deviation, which is accepted:** for a duplicate note-on of a key that is already held, `midiParser_rollKeyOn()` keeps the **original** captured mask and re-asserts it. The schedule would have ORed in the newly computed mask. The implemented behaviour is better: if routing drifts between repeats (for example an active-track change on the global chromatic route), the re-press can't grow the key's claim, and the single release still frees exactly what was originally claimed. The comment block was updated to say so. Harness test T17 below covers it.
+
+Other code outside the plan is unchanged, as intended: `ChannelMidiParser.c`, `GlobalMidiParser.c`, `clockSync.c`, `frontPanelReceivingProtocol.c`, and the AVR side.
+
+### 8.2 Build
+
+- `make -C mainboard/LxrStm32 -j8 stm32`, run after touching `MidiParser.c` and `sequencer.c` to force both to recompile: **success**. The only warnings are the pre-existing `seq_init` loop-bounds, `stringop-overflow` and `seq_lastMasterStep` `memset` warnings (sequencer.c lines 253/266) and the linker RWX notice, all of which are documented in `MEMORY.md`. `MidiParser.c` compiles without warnings.
+- The committed `firmware image/FIRMWARE.BIN` embeds, byte for byte, the `LxrStm32.bin` built from the current source (found at offset 57344 in the image, full 245604-byte match). **The image in the tree is the one to hardware-test.**
+
+### 8.3 Independent host harness
+
+The harness is not committed; it lives in the session scratchpad. It was built from **verbatim `sed` extractions** of the patched sources:
+
+- from `MidiParser.c`: roll state and helpers (lines 91–360), clear and set-offset (403–429), the full note block of `midiParser_parseMidiMessage()` (586–796), and `midi_setFilter()` (1076–1105);
+- from `sequencer.c`: roll variables (67–98), `seq_rollApplyAggregate()` through `seq_tickStoppedRolls()` (1682–1874), the stop fragment (1465–1491), the start fragment (1501–1509), and the `seq_tick` hook (1339–1341).
+
+Stubs covered `channelMidiParser_noteOn/Off`, `seq_triggerVoice` and `systick_ticks`. It was compiled with `cc -std=c99 -Wall -Wextra -Werror`. **Result: 34/34 checks pass.**
+
+| Test | Checks |
+|---|---|
+| T1–T3 | Press then `9n kk 00`, press then `8n kk vv`, duplicate press with a single release: all release. |
+| T4 | Two keys on the same voice: the voice stays held until the last release. |
+| T5, T17 | Global chromatic route with an active-track change mid-hold: the original voice is released and the new track is untouched. A duplicate press after drift re-asserts only the original mask. |
+| T6, T7 | Unmatched note-offs are ignored. The 16-key capacity holds, the 17th key claims nothing, and all 16 release. |
+| T8, T19 | Normal notes below the offset stay normal. A velocity-0 normal note goes to `channelMidiParser_noteOff` and does not roll. An override note stays normal; override + offset rolls and releases. |
+| T9, T18 | Stop releases everything and later note-offs are ignored. A repeated stop while stopped clears stopped rolls (panic). |
+| T10–T12 | Stopped: an immediate hit, then one hit every 8 sub-steps (500 systick units at 120 BPM). One-shot fires once per press, and a second key re-fires it. Release stops the roll. |
+| T13 | Start retires the stopped clock; `seq_rollTriggered` carries the hold into the running engine. |
+| T14, T15 | Manual roll is silent while stopped (unchanged). Manual and MIDI ownership never release each other. |
+| T16 | RX note-filter disable releases holds. |
+
+**The diagnosis is confirmed against the pre-fix code.** The same extraction from `43ab929` gives, for press + `9n 3C 00`: `holdCount = 2`, roll still held. After a second press/release, `holdCount = 4`. A genuine `8n` note-off only brings it to 3. This is exactly the reported "every launched roll sticks until a MIDI channel change".
+
+### 8.4 Finding (pre-existing, low severity): double hit at the downbeat when a roll is held through start
+
+A verbatim extraction of `seq_setRoll()` / `seq_checkRollStep()`, driven by `seq_nextStep()`'s index ordering, simulated a roll held through transport start (rotation 0, `QUANT_16`, rate 1/16). Result: **hits at per-track sub-steps 0, 1, 9, 17, …**
+
+- `seq_setStepIndexToStart()` leaves the master index at `-1`. In `seq_setRoll()`, `seq_stepIndex[NUM_TRACKS] % seq_stepsPerQuant` evaluates to `-1` (both operands promote to `int`), and `-1 < (8/2 - 1)` is true. So on the very first step the early-roll branch fires, even though the playhead is *before* the boundary, not just after it.
+- One step later the master index is 0, a boundary, so the quantized entry fires again. That gives two hits one sub-step apart (about 15.6 ms at 120 BPM), an audible flam on the first beat.
+- This is **not introduced by S038**. A front-panel roll held through start behaves identically. D4 makes it more likely to be heard, because holding a MIDI roll key through start is now a supported gesture.
+- (The later hits at `8k+1` are the known Session 037 per-track/master one-sub-step skew in the roll engine, and are not addressed here.)
+- **Fix applied (2026-09-26, user-approved):** `seq_setRoll()`'s early-window test now reads the master index as `uint8_t`, `((uint8_t)seq_stepIndex[NUM_TRACKS]) % seq_stepsPerQuant`, so `-1` reads as `255 % 8 = 7` (late in the window, so no early hit). For in-play values 0..127 the cast is an identity, so the Session 037 early-roll humanization is unchanged. The change carries a full comment block at the call site. Verified with a verbatim `seq_setRoll()` / `seq_checkRollStep()` simulation: a roll held through start now hits at 1, 9, 17, … (it was 0, 1, 9, 17). The same result holds under `QUANT_8`. Mid-play presses still fire the early hit only 1–2 sub-steps after a boundary. The STM target was rebuilt (only the known warnings; `LxrStm32.bin` 245604 → 245628 bytes) and `FIRMWARE.BIN` repackaged, with the STM binary embedding confirmed.
+
+### 8.5 Note for hardware testing (pre-existing design, from `9c9c67f`)
+
+On a **chromatic** route (voice channel with note override off, or the global channel with the active track in chromatic mode), *every* incoming note at or above the roll offset is treated as a roll note. Normal chromatic notes are therefore limited to `0 .. offset-1`. With a small offset, an Octatrack track sending ordinary notes (for example C4 = 60) to a chromatic LXR channel will roll instead of playing. This is how shifted chromatic roll was designed, not an S038 regression, but it explains "notes roll unexpectedly" if it shows up. Use note overrides, or an offset above the notes in use.
+
+### 8.6 Minor observations (no action)
+
+- Stopped roll hits go through `seq_triggerVoice()`, so, like running rolls and the stopped voice preview, they echo a MIDI note-on whose velocity is the **step volume under the playhead**, not the roll velocity, and they parse that step's automation. This is pre-existing behaviour, already listed as a risk in the schedule (§8).
+- The stopped clock falls back to silence if `seq_tempo == 0`. This is a harmless guard, since the tempo is never 0 in practice.
+- The documentation edits (`MIDI_TABLE.md`, `MIDI_ROLL_TRIGGER.md`, `MIDI_ROLL_TRIGGER_IMPLEMENTATION.md`, `MEMORY.md`, this document's status and §4.4/§7) are consistent with the code as reviewed.
+
+### 8.7 Remaining before closeout
+
+1. **Hardware test** with the tree's `FIRMWARE.BIN`: the §5.3 list plus the stopped-transport cases in `S038_STUCK_ROLL_IMPLEMENTATION.md` §7.3.
+2. ~~The user decides on §8.4.~~ Done: the unsigned early-window fix is applied (§8.4).
+3. Commit. Nothing is committed yet: code, docs, `FIRMWARE.BIN`, and the untracked `knowledge_files/log_archive/038_SESSION_HANDOFF_LOG.md`.

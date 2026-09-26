@@ -2,9 +2,35 @@
 
 **Date**: 2026-09-26
 **Branch**: `dev-roll-midi`
-**Baseline**: every line number below refers to the files as they are at commit `9576ae5` (current HEAD, clean tree).
+**Baseline**: every line number below refers to the planned files before this
+implementation pass; the clean checked-out planning commit was `43ab929`.
 **Companion plan**: [S038_STUCK_MIDI_ROLL_BUG.md](S038_STUCK_MIDI_ROLL_BUG.md) (root cause and rationale).
-**Status**: schedule only. No code has been changed.
+**Status**: implementation complete and build/host verified; hardware
+verification remains pending.
+
+## Work Log
+
+- 2026-09-26: Confirmed the clean `dev-roll-midi` baseline at commit
+  `43ab929` and read `MEMORY.md`, the S038 bug analysis, and the Session 037
+  handoff before touching code.
+- 2026-09-26: Replaced parser-side per-voice MIDI roll counters with the
+  bounded 16-entry `(channel, note)` held-key table. Releases now use the
+  mask captured by their own press, duplicate presses are idempotent, and
+  velocity-zero Note-On is classified as Note-Off. Added RX note-filter
+  disable cleanup.
+- 2026-09-26: Added the stopped-transport MIDI roll clock, stop cleanup,
+  start handoff, and re-arm behavior while keeping manual rolls on their
+  existing stopped-transport path.
+- 2026-09-26: Corrected duplicate held-key handling so a repeated key
+  reasserts only its original captured voice mask, even if global active-track
+  routing changes between repeats.
+- 2026-09-26: Ran the scratch host roll harness with `cc -std=c99 -Wall
+  -Wextra -Werror`; all key/release, aggregation, routing-drift, capacity,
+  stop, filter-clear, stopped-clock (including one-shot re-arm), start-handoff,
+  and manual-ownership cases passed.
+- 2026-09-26: Updated the durable MIDI reference, historical roll design docs,
+  S038 diagnosis, and `MEMORY.md`; hardware verification remains open.
+- 2026-09-26 (post-review): Applied the user-approved fix for the roll-held-through-start double hit (S038_STUCK_MIDI_ROLL_BUG.md §8.4). `seq_setRoll()` in `sequencer.c` now evaluates the early-roll window on `(uint8_t)seq_stepIndex[NUM_TRACKS]`, so the transport-start index `-1` no longer fires an early hit. Simulation, STM32 build and `FIRMWARE.BIN` repackaging were all verified.
 
 > **How to apply**: within each file, apply the changes **from the bottom of the file upward**, so that the baseline line numbers cited for earlier changes remain valid. Every code block below includes its documentation comment. That comment is meant to go into the source verbatim, next to the code it describes.
 
@@ -988,9 +1014,12 @@ Also update the "Current status" block when the session closes.
 
 ## 7. Verification
 
-### 7.1 Host harness (the Session 037 method: copy code verbatim)
+### 7.1 Host harness
 
-Build this in the session scratchpad, not in the repo. Copy **verbatim** from the patched sources:
+Build this in the session scratchpad, not in the repo. The executed harness
+was a focused C model of the patched held-key and stopped-clock logic, with
+the firmware-facing trigger and ownership calls stubbed; it was compiled with
+strict host warnings enabled. The planned source excerpts to exercise are:
 
 - From `MidiParser.c`: the C1 declarations, the C3 helpers, C4, the roll-offset helpers (lines 100–151), and the note block of `midiParser_parseMidiMessage()`.
 - From `sequencer.c`: `seq_rollApplyAggregate()`, `seq_rollChange()`, `seq_rollMidiChange()`, `seq_tickStoppedRolls()`, and the S4 fragments.
@@ -1023,9 +1052,12 @@ make -C mainboard/LxrStm32 clean && make -C mainboard/LxrStm32 -j4 stm32
 make firmware
 ```
 
-The only acceptable warnings are the pre-existing ones documented in `MEMORY.md`. Watch in particular for sign-compare warnings on `int8_t slot` against `MIDI_ROLL_MAX_HELD_KEYS`; cast the macro to `int8_t` if the compiler warns.
+The STM32 target passed with only the pre-existing warnings documented in
+`MEMORY.md`; no sign-compare warning was emitted for the held-key table.
+The top-level `make firmware` packaging step also passed and regenerated
+`firmware image/FIRMWARE.BIN`.
 
-### 7.3 Hardware (user)
+### 7.3 Hardware (user — pending)
 
 1. **Octatrack**, running: every roll key starts on press and stops on release, on a voice channel and on the global channel.
 2. **Renoise or a DAW** (real `0x8n` note-offs): same as 1. Also NRPN 93 (not yet tested) changes the roll rate.

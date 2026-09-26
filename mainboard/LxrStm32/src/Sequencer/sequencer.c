@@ -74,6 +74,24 @@ uint8_t seq_rollVelocity = 100;
 uint8_t seq_rollTriggered = 0;         /**< each bit is a pending aggregate roll request */
 static uint8_t seq_rollManualHeld = 0;
 static uint8_t seq_rollMidiHeld = 0;
+/* STOPPED-TRANSPORT MIDI ROLL CLOCK STATE (Session 038, D4)
+   WHAT: private state of seq_tickStoppedRolls().
+     seq_rollStoppedActive    bit v = voice v is rolling on the stopped clock
+     seq_rollStoppedCounter[] sub-steps until the voice's next stopped hit;
+                              0xff = one-shot already fired (parked)
+     seq_rollStoppedLastTick  systick_ticks value at the previous service
+     seq_rollStoppedPhase     accumulated systick time toward the next
+                              sub-step (float, so tempo division stays exact)
+   WHY:  kept separate from seq_rollState / seq_rollCounter / seq_deltaT /
+         seq_lastTick, so that stopped-transport rolls can never disturb the
+         running roll engine, transport start alignment, or external sync.
+   ACCESSORS: seq_tickStoppedRolls() (all four); seq_rollMidiChange() (re-arm
+              bit); seq_setRunning() (reset on stop and start).
+   AFFILIATES: seq_rollMidiHeld (the only source of stopped rolls). */
+static uint8_t  seq_rollStoppedActive = 0;
+static uint8_t  seq_rollStoppedCounter[NUM_TRACKS];
+static uint32_t seq_rollStoppedLastTick = 0;
+static float    seq_rollStoppedPhase = 0.f;
 uint8_t seq_rollPlayedEarly = 0;       // roll triggered just after quant - play and note
 uint8_t seq_rollState = 0;					/**< each bit represents a voice. if bit is set, roll is active*/
 uint8_t seq_rollMode = ROLL_MODE_ALL;        //0=trig, 1=nte, 2=vel, 3=bth, 4=all                                      
@@ -190,6 +208,8 @@ static void seq_sendRealtime(const uint8_t status);
 static void seq_sendProgChg(const uint8_t ptn);
 static void seq_eraseStepAndSubSteps(const uint8_t voice, const uint8_t mainStep);
 static void seq_nextStep();
+/* Stopped-transport MIDI roll clock; defined after seq_rollMidiChange(). */
+static void seq_tickStoppedRolls(void);
 
 static uint8_t seq_isNextStepSyncStep();
 static void seq_resetNote(Step *step);
@@ -1307,6 +1327,18 @@ void seq_resetDeltaAndTick()
 /* Advance the sequencer when enough time has elapsed for the next step. */
 void seq_tick()
 {
+   /* STOPPED MIDI ROLL SERVICE (Session 038, D4)
+      WHAT: while the transport is stopped, advances the MIDI-only stopped
+            roll clock. It has its own timing state and returns immediately
+            when MIDI holds nothing.
+      WHY:  seq_nextStep() returns immediately while stopped, so the normal
+            roll engine cannot play MIDI rolls pressed during a stop. The
+            transport timing below is left untouched so start alignment and
+            external sync behave exactly as before.
+      AFFILIATES: seq_tickStoppedRolls(). */
+   if(!seq_running)
+      seq_tickStoppedRolls();
+
    if(seq_deltaT == -1)
    {
       seq_deltaT = 32000;
@@ -1429,6 +1461,34 @@ void seq_setRunning(uint8_t isRunning)
    
       trigger_reset(0);
       trigger_allOff();
+
+      /* MIDI ROLL RELEASE ON STOP (Session 038, D3)
+         WHAT: releases every MIDI-held roll, resets the stopped roll clock,
+               and drops any roll-active or early-roll state that no source
+               still requests.
+         WHY:  a stop ends all MIDI-owned rolls. Clearing the parser's
+               held-key table, and not only seq_rollMidiHeld, is what makes
+               each key re-triggerable while stopped: the next press of a
+               cleared key is a fresh press, not a duplicate. The sender's
+               own note-offs arriving after the stop are then ignored as
+               unknown keys. Masking seq_rollState / seq_rollPlayedEarly with
+               the surviving request mask means a MIDI roll pressed during
+               the stop later restarts through the quantized seq_setRoll()
+               entry, not from a stale counter. Manual rolls still requested
+               keep their state, exactly as before this change.
+               This runs on every stop request, including a repeated stop
+               while already stopped, so a stop also works as a MIDI-roll
+               panic.
+         INPUT:  none (reads seq_rollTriggered after the clear).
+         OUTPUT: parser table empty, seq_rollMidiHeld = 0,
+                 seq_rollStoppedActive = 0, seq_rollState and
+                 seq_rollPlayedEarly reduced to still-requested voices.
+         AFFILIATES: midiParser_clearMidiRollHolds() (MIDI/MidiParser.c),
+                     seq_rollMidiChange(), seq_tickStoppedRolls(). */
+      midiParser_clearMidiRollHolds();
+      seq_rollStoppedActive = 0;
+      seq_rollState &= seq_rollTriggered;
+      seq_rollPlayedEarly &= seq_rollTriggered;
    
    
    	// --AS if mtc was doing it's thing, tell it to stop it.
@@ -1438,6 +1498,15 @@ void seq_setRunning(uint8_t isRunning)
       seq_prescaleCounter = 0;
       seq_sendRealtime(MIDI_START);
       trigger_reset(1);
+      /* STOPPED -> RUNNING MIDI ROLL HANDOVER (Session 038, D4)
+         WHAT: retires the stopped roll clock at transport start.
+         WHY:  a MIDI roll still held at start keeps its seq_rollTriggered
+               request, and seq_nextStep() takes it over through the normal
+               quantized seq_setRoll(voice, 1) entry, as with a manual roll
+               held through start. Clearing the stopped state also ensures
+               the next stop begins a fresh, immediately-firing stopped roll.
+         AFFILIATES: seq_tickStoppedRolls(), seq_nextStep() roll section. */
+      seq_rollStoppedActive = 0;
    }
 
    // set start points back to default (happens on start and stop. needs to happen on start
@@ -1644,19 +1713,164 @@ void seq_rollChange(uint8_t voice, uint8_t onOff)
 }
 
 //-------------------------------------------------------------------------------
-/* MIDI roll-note source. MIDI note-on/off updates its own ownership mask, so
-   the aggregate roll request remains active while manual ownership remains. */
+/* MIDI ROLL-NOTE SOURCE
+   WHAT: sets or clears this voice's MIDI ownership bit and rebuilds the
+         aggregate roll request (seq_rollTriggered) from manual and MIDI
+         ownership. While the transport is stopped, a press also clears the
+         voice's seq_rollStoppedActive bit, so seq_tickStoppedRolls() fires
+         it immediately. A new key press therefore re-triggers a voice even
+         if another key already holds it.
+   WHY:  manual and MIDI sources must not release each other's roll
+         (MIDI roll feature). The stopped re-arm implements "MIDI rolls are
+         re-triggerable while stopped" (Session 038, D4).
+   INPUT:  voice 0..6; onOff non-zero = held by MIDI, zero = released.
+   OUTPUT: seq_rollMidiHeld, seq_rollTriggered (via seq_rollApplyAggregate),
+           and seq_rollStoppedActive (on a stopped press).
+   ACCESSORS: midiParser_rollSyncVoices() only (MIDI/MidiParser.c). Called on
+              every press (re-assert), on each voice's final release, and on
+              every clear, including sequencer stop.
+   AFFILIATES: seq_rollChange() (manual source), seq_rollApplyAggregate(),
+               seq_tickStoppedRolls(), seq_setRoll() (running engine entry). */
 void seq_rollMidiChange(uint8_t voice, uint8_t onOff)
 {
    if(voice >= 7)
       return;
 
+   const uint8_t voiceBit = (uint8_t)(1u << voice);
+
    if(onOff)
-      seq_rollMidiHeld |= (uint8_t)(1u << voice);
+   {
+      seq_rollMidiHeld |= voiceBit;
+      if(!seq_running)
+         seq_rollStoppedActive &= (uint8_t)~voiceBit;
+   }
    else
-      seq_rollMidiHeld &= (uint8_t)~(1u << voice);
+      seq_rollMidiHeld &= (uint8_t)~voiceBit;
 
    seq_rollApplyAggregate(voice);
+}
+
+//-------------------------------------------------------------------------------
+/* STOPPED-TRANSPORT MIDI ROLL CLOCK (Session 038, D4)
+   WHAT: while the sequencer is stopped, plays rolls for every voice MIDI
+         currently holds (seq_rollMidiHeld):
+           - a newly held (or re-armed) voice fires immediately;
+           - further hits repeat every seq_tempRate sub-steps, timed from
+             systick_ticks at the current tempo (the same sub-step length
+             seq_nextStep() uses: 3 internal 96ppq ticks, SEQ_PRESCALER_MASK);
+           - one-shot rate (0xff) fires once per press, then parks;
+           - a voice that MIDI stops holding is dropped at once.
+         Hits use the front-panel stopped-preview voicing,
+         seq_triggerVoice(voice, seq_rollVelocity, seq_rollNote). The same
+         call is made by FRONT_SEQ_SET_ACTIVE_TRACK when stopped. This keeps
+         hihat choke, the note-off-before-note-on sequence, track locking,
+         trigger-out and MIDI echo behaviour identical to other stopped hits.
+   WHY:  the normal roll engine lives in seq_nextStep(), which returns
+         immediately while stopped, so a MIDI roll pressed while stopped
+         would be silent until start. The user asked for MIDI rolls to stay
+         re-triggerable with the sequencer stopped. This clock is completely
+         separate from the transport timing (seq_deltaT, seq_lastTick,
+         seq_prescaleCounter, seq_stepIndex, seq_rollState, seq_rollCounter),
+         so it cannot disturb start alignment or external sync.
+   SCOPE: MIDI ownership only. Manual front-panel roll buttons keep their
+          existing behaviour (silent while stopped).
+   MODE NOTE: seq_rollMode is deliberately not consulted. TRIG, NOTE, VEL
+              and BOTH read the step under the playhead, which is frozen
+              while stopped, so the stopped roll always uses roll velocity
+              and roll note.
+   RATE NOTE: seq_tempRate (the latest requested rate) is used, because the
+              quantized seq_tempRate -> seq_rollRate latch in seq_nextStep()
+              does not run while stopped.
+   INPUT:  seq_rollMidiHeld, seq_tempRate, seq_tempo, seq_rollVelocity,
+           seq_rollNote, systick_ticks.
+   OUTPUT: voice triggers through seq_triggerVoice(); updates
+           seq_rollStoppedActive, seq_rollStoppedCounter[],
+           seq_rollStoppedLastTick, seq_rollStoppedPhase.
+   ACCESSORS: seq_tick(), only while !seq_running. Re-armed by
+              seq_rollMidiChange(); reset by seq_setRunning().
+   AFFILIATES: midiParser_rollKeyOn/Off() (MIDI/MidiParser.c, the source of
+               seq_rollMidiHeld), seq_triggerVoice(), seq_calcDeltaT()
+               (timing convention), seq_setRollRate() (rate table). */
+static void seq_tickStoppedRolls(void)
+{
+   uint8_t i;
+   uint8_t armMask;
+   uint8_t subStepDue = 0;
+
+   seq_rollStoppedActive &= seq_rollMidiHeld;
+   if(!seq_rollMidiHeld || !seq_tempo)
+      return;
+
+   armMask = (uint8_t)(seq_rollMidiHeld & (uint8_t)~seq_rollStoppedActive);
+   if(armMask)
+   {
+      /* Anchor the stopped clock on the first voice armed from idle, so the
+         repeat grid starts at the first hit rather than at some stale time. */
+      if(!seq_rollStoppedActive)
+      {
+         seq_rollStoppedLastTick = systick_ticks;
+         seq_rollStoppedPhase = 0.f;
+      }
+
+      for(i = 0; i < NUM_TRACKS; i++)
+      {
+         if(armMask & (uint8_t)(1u << i))
+         {
+            seq_triggerVoice(i, seq_rollVelocity, seq_rollNote);
+            seq_rollStoppedCounter[i] = seq_tempRate; /* 0xff parks one-shot */
+         }
+      }
+      seq_rollStoppedActive |= armMask;
+   }
+
+   {
+      /* Sub-step length in systick units, derived exactly as in
+         seq_calcDeltaT() (96ppq tick length, times SEQ_PRESCALER_MASK = 3
+         ticks per sequencer sub-step), without shuffle. */
+      const float subStepTicks =
+         ((1000.f * 60.f) / (float)seq_tempo) / 96.f * 4.f
+         * (float)SEQ_PRESCALER_MASK;
+      const uint32_t now = systick_ticks;
+
+      seq_rollStoppedPhase += (float)(uint32_t)(now - seq_rollStoppedLastTick);
+      seq_rollStoppedLastTick = now;
+
+      if(seq_rollStoppedPhase >= subStepTicks)
+      {
+         seq_rollStoppedPhase -= subStepTicks;
+         /* Never burst to catch up after a main-loop stall. */
+         if(seq_rollStoppedPhase >= subStepTicks)
+            seq_rollStoppedPhase = 0.f;
+         subStepDue = 1;
+      }
+   }
+
+   if(!subStepDue)
+      return;
+
+   for(i = 0; i < NUM_TRACKS; i++)
+   {
+      if(!(seq_rollStoppedActive & (uint8_t)(1u << i)))
+         continue;
+
+      if(seq_rollStoppedCounter[i] == 0xff)
+      {
+         /* One-shot has fired. If the rate has since been changed to a
+            repeating value, resume repeating from here. */
+         if(seq_tempRate != 0xff)
+            seq_rollStoppedCounter[i] = seq_tempRate;
+         continue;
+      }
+
+      if(seq_rollStoppedCounter[i] > 0)
+         seq_rollStoppedCounter[i]--;
+
+      if(seq_rollStoppedCounter[i] == 0)
+      {
+         seq_triggerVoice(i, seq_rollVelocity, seq_rollNote);
+         seq_rollStoppedCounter[i] = seq_tempRate;
+      }
+   }
 }
 //-------------------------------------------------------------------------------
 /* Apply the current roll state for one voice and report whether it triggered. */
@@ -1700,7 +1914,25 @@ uint8_t seq_setRoll(uint8_t voice, uint8_t onOff)// called processing step if ro
    }
    else if (!seq_skipFirstRoll)
    {
-      if ( (seq_stepIndex[NUM_TRACKS]%seq_stepsPerQuant)<(seq_stepsPerQuant/2 - 1) )
+      /* EARLY-WINDOW TEST ON THE UNSIGNED MASTER INDEX (Session 038)
+         WHAT: the position within the quantize window is taken from the
+               master index read as uint8_t, so the transport-start value -1
+               reads as 255 (late in the window) instead of -1.
+         WHY:  seq_setStepIndexToStart() leaves seq_stepIndex[NUM_TRACKS] at
+               -1 (rotation 0) for the first seq_nextStep() after start, or
+               after a pattern change that resets the playhead. As a signed
+               int, -1 % seq_stepsPerQuant is -1, which passed the "just after
+               a boundary" test, so a roll held through start fired an early
+               hit here and fired again one sub-step later from the quantized
+               entry at the boundary: an audible flam on the downbeat. The
+               playhead is *before* the boundary at -1, so no early hit is
+               due. For every in-play value (0..127) the cast changes nothing,
+               so the early-roll humanization below is unaffected.
+         INPUT:  seq_stepIndex[NUM_TRACKS], seq_stepsPerQuant.
+         OUTPUT: whether the early-roll branch may fire on this step.
+         AFFILIATES: seq_setStepIndexToStart(), seq_setRunning(),
+                     seq_nextStep() roll section (this file). */
+      if ( (((uint8_t)seq_stepIndex[NUM_TRACKS])%seq_stepsPerQuant)<(seq_stepsPerQuant/2 - 1) )
       {
          if ( !(seq_rollPlayedEarly & (1<<voice)) ) // if early roll hasn't played already
          {

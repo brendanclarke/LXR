@@ -2,7 +2,11 @@
 
 ## Scope
 
-This schedule implements `MIDI_ROLL_TRIGGER.md` without changing existing Global CC assignments, without adding a new AVR menu datatype, and without treating note-on velocity `0` as note-off. It adds a saved global roll-note offset, routes that offset to STM, adds Global NRPN 93 for roll rate, and makes MIDI roll notes a last-consumer note path that sustains until literal note-off.
+> Historical implementation record: the original literal-status/per-voice
+> hold design in the planning sections below is superseded by Session 038.
+> The current correction is recorded in `S038_STUCK_ROLL_IMPLEMENTATION.md`.
+
+This schedule implements `MIDI_ROLL_TRIGGER.md` without changing existing Global CC assignments, without adding a new AVR menu datatype, and without treating note-on velocity `0` as note-off (**withdrawn in Session 038**). It adds a saved global roll-note offset, routes that offset to STM, adds Global NRPN 93 for roll rate, and makes MIDI roll notes a last-consumer note path that sustains until note-off.
 
 Offset encoding for implementation:
 
@@ -17,8 +21,9 @@ Offset encoding for implementation:
   global-settings page slot.
 - [x] Added matching AVR/STM front-panel opcode `0x6f` and STM-side release
   handling for offset, MIDI-channel, and note-override remaps.
-- [x] Added STM parser-owned positive-offset matching, literal NOTE_ON/OFF
-  handling, per-voice overlapping hold counts, and deduped voice masks.
+- [x] Added STM parser-owned positive-offset matching, NOTE_ON/OFF handling,
+  per-key held-roll ownership, and deduped voice masks. The original literal
+  status and per-voice counter design was corrected by Session 038.
 - [x] Added separate manual/MIDI roll ownership in Sequencer so either source
   can sustain a roll independently.
 - [x] Added Global NRPN 93 for the existing roll-rate control and updated the
@@ -886,7 +891,8 @@ Adjacent comment-block text:
    then shifted upward by the current positive offset. If the shifted note would
    exceed 127, or an incoming note minus the offset would be below 0, no valid
    trigger exists and the roll path does nothing. Note-on and note-off status
-   are interpreted literally by the caller. */
+   are classified with MIDI 1.0 NOTE_ON-velocity-0 equivalence by the caller;
+   Session 038 stores ownership per `(channel, note)`. */
 ```
 
 Add exported functions after `midi_clearCache()` around lines 91-106, or near other parser configuration setters.
@@ -939,7 +945,7 @@ Replace the current note-routing block with a structured version that preserves 
 3. Whenever an existing normal route would call `channelMidiParser_noteOn()` or `channelMidiParser_noteOff()`, set `normalConsumed = 1`.
 4. Run existing voice-channel loop second, preserving the current `do_rec` rules for active vs inactive tracks.
 5. Whenever an existing voice-channel route would call a channel note function, set `normalConsumed = 1`.
-6. Only after both existing paths have run, and only if `!normalConsumed`, roll offset is enabled, and the message is literal `NOTE_ON` or `NOTE_OFF`, build/apply `rollVoiceMask`.
+6. Only after both existing paths have run, and only if `!normalConsumed`, roll offset is enabled, and the message is a roll-eligible note-on, build/apply `rollVoiceMask`; note-off lookup is unconditional within the note block.
 7. Roll mask rules:
    - Global channel, active track note override off: subtract the positive offset from `incomingNote`; if that base note is in `0..127`, add `frontParser_activeTrack`.
    - Global channel, overrides on: scan `0..6`, compare `midi_NoteOverride[v] + offset`.
@@ -956,7 +962,7 @@ Inputs:
 
 - `msg.status`
 - `msg.data1` incoming note
-- `msg.data2` velocity, used only by existing normal path for roll matching ignored except literal status
+- `msg.data2` velocity, used to classify NOTE_ON velocity 0 as note-off under MIDI 1.0
 - `midi_MidiChannels[]`
 - `midi_NoteOverride[]`
 - `frontParser_activeTrack`
@@ -973,13 +979,15 @@ Adjacent comment-block text:
 /* Last-consumer MIDI roll-note path.
    The normal global and voice note routes run first and mark the message
    consumed when they would hand it to ChannelMidiParser. Only unconsumed
-   literal NOTE_ON/NOTE_OFF messages are tested against the positive-offset
-   roll map, and out-of-range shifted notes are ignored. */
+   NOTE_ON/NOTE_OFF messages are tested against the positive-offset roll map,
+   and out-of-range shifted notes are ignored. NOTE_ON velocity 0 is a
+   note-off under MIDI 1.0 (Session 038). */
 ```
 
 Important preservation notes:
 
-- Do not reinterpret `NOTE_ON` with velocity `0` as note-off.
+- ~~Do not reinterpret `NOTE_ON` with velocity `0` as note-off.~~ Withdrawn in
+  Session 038.
 - Do not change `ChannelMidiParser.c` prototypes just to return "accepted"; consumption is defined at the existing `MidiParser.c` routing decision points.
 - Do not add voice-channel CC handling for roll rate.
 - Do not add a separate pre-pass parser before normal note routing.
@@ -1110,8 +1118,8 @@ MIDI roll notes use the saved global roll-offset setting. Raw 0 disables the
 feature and displays as off; raw 1..127 is a positive semitone offset above the
 normal trigger note. Shifted roll notes are evaluated only after the normal
 global/voice note routes have had a chance to consume the message. If the
-shifted note is outside MIDI note range, the roll path does nothing. Note-on
-and note-off statuses are interpreted literally.
+shifted note is outside MIDI note range, the roll path does nothing. NOTE_ON
+velocity 0 is a note-off, per MIDI 1.0 (Session 038); see `MIDI_TABLE.md`.
 ```
 
 Why this must exist:
@@ -1162,7 +1170,8 @@ No prototype changes are required if consumption is tracked at `MidiParser.c` ro
    - Global and voice channels both assigned: either assigned path can roll the voice, but one incoming message dedupes per voice.
    - Standard consumed note does not fall through to roll.
    - Neither global nor voice channel assigned: no roll trigger.
-   - Literal note-on velocity `0` on a shifted roll note starts roll; literal note-off releases it.
+   - NOTE_ON velocity `0` on a shifted roll note releases the held key
+     (Session 038).
    - Multiple note-ons for the same voice require matching note-offs/countdown to zero before release.
    - Manual roll held plus MIDI note-off: manual roll remains active.
    - MIDI roll held plus manual release: MIDI roll remains active.
@@ -1226,9 +1235,22 @@ Decision needed:
 
 ### Residual Risks
 
-- MIDI roll hold counts are per voice, not per note number. This supports overlapping holds for a voice, but a mismatched note-off for the same shifted voice can decrement the count. This is probably acceptable for the current plan but should be tested with controllers that emit unusual note-off ordering.
+- MIDI roll holds are keyed per MIDI channel + note in a bounded 16-entry table.
+  Each release frees exactly the voice mask captured at its own press;
+  duplicate presses are idempotent and unmatched releases are ignored.
+  This resolves the former per-voice-count and mismatched-note-off risk in
+  Session 038.
 - NRPN 93 updates STM roll rate directly. It does not appear to echo/update AVR `PAR_ROLL` display or persisted global/performance state. That matches the live-control implementation direction in this schedule, but it is worth confirming if visible menu synchronization is desired later.
 - Inbound MIDI All Notes Off is not handled as a MIDI roll clear point because the current inbound parser does not appear to have an explicit CC123 all-notes-off consumer. Offset/channel/note-map changes and parser cache clear do release MIDI-owned rolls.
+
+## Session 038 Correction
+
+The original literal-status/per-voice-counter design was corrected after the
+Octatrack stuck-roll report. NOTE_ON velocity 0 is now a note-off, and MIDI
+roll ownership is stored per `(channel, note)` so releases use the mask claimed
+by their own press. See `S038_STUCK_MIDI_ROLL_BUG.md` for the diagnosis and
+`S038_STUCK_ROLL_IMPLEMENTATION.md` for the implementation and verification
+record.
 
 ### Follow-Up Fix 2026-09-17
 

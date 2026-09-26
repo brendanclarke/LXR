@@ -91,9 +91,15 @@ Recommended matching rules:
 - Because the offset is positive-only, shifted notes above `127` should not match.
 - If subtracting the offset from an incoming roll note would produce a base note below `0`, or if an assigned note plus offset would be above `127`, that trigger does not exist and the roll path does nothing.
 
-Note-on and note-off status should be read literally: note-on is note-on, note-off is note-off. Do not reinterpret note-on with velocity `0` as note-off for this feature.
+Note-on and note-off status should be read according to MIDI 1.0: a NOTE_ON
+with velocity `0` is a note-off, including for this feature. This supersedes the
+literal-status rule in Session 038; see `S038_STUCK_MIDI_ROLL_BUG.md`.
 
 ### 3. Sustain Roll Until Note-Off
+
+> The per-voice counter recommendations below are historical design notes.
+> Session 038 replaced them with a bounded per-key `(channel, note)` held-key
+> table and a captured release mask; see `S038_STUCK_ROLL_IMPLEMENTATION.md`.
 
 Do not call `seq_rollChange()` directly from note-on/off without source tracking. The current roll state is shared with manual front-panel roll buttons, so a MIDI note-off could cancel a manually held roll.
 
@@ -107,7 +113,8 @@ Recommended implementation:
 - Add a new internal/exported `seq_rollMidiChange(voice, onOff)` for MIDI.
 - Roll stays active while either manual or MIDI source remains held.
 
-For MIDI holds, maintain at least a per-voice held count or bit state in `MidiParser.c`.
+For MIDI holds, maintain ownership in `MidiParser.c` so the release can be
+matched to the original MIDI key and its claimed voice mask.
 
 Preferred robust-enough option:
 
@@ -119,6 +126,9 @@ Preferred robust-enough option:
 - Clear MIDI roll holds on roll-offset changes, all-notes-off, channel reassignment, and full parser reset if those paths are touched.
 
 Riskier but simpler option: no hold count, just note-on = on and note-off = off. This is vulnerable to overlapping held roll notes for the same voice.
+
+> Session 038: replaced by a per-key (channel + note) held-key table; see
+> `S038_STUCK_ROLL_IMPLEMENTATION.md`.
 
 ### 4. Roll Rate MIDI Assignment
 
@@ -175,7 +185,7 @@ Decision:
 - A standard note that is consumed by normal triggering must not also start roll.
 - Neither global nor voice channel assigned: no roll trigger.
 - Note-on starts roll; matching note-off stops it.
-- Note-on with velocity 0 is still treated as note-on for the roll trigger path.
+- Note-on with velocity 0 releases a held roll key (Session 038).
 - Manual roll button held while MIDI roll note-off arrives: manual roll stays active.
 - MIDI roll note held while manual roll button released: MIDI roll stays active.
 - Multiple roll note-ons for same voice do not stop until all corresponding note-offs are received.
@@ -192,7 +202,9 @@ Decision:
 - Global parameter insertion can corrupt old config/all-file reads if inserted in the middle. Append only.
 - The AVR menu dtype system is full; avoid new dtype work. If no existing `0=off, 1..127=numeric` dtype fits, use `DTYPE_0B127` and a parameter-specific `off` display exception.
 - Existing Global CC table has no safe non-NRPN CC gap. Reusing old Global CC16 would be a regression against Session 029 and is explicitly out of scope.
-- Some controllers send note-on velocity `0` as note-off, but this feature should read statuses literally. Those controllers may need to send real note-off to release MIDI rolls.
+- Some controllers send note-on velocity `0` as note-off. Session 038 showed
+  that treating this literally caused the stuck-roll bug; the parser now uses
+  the MIDI 1.0 equivalence and releases the held key.
 - Source ownership matters. A naive MIDI note-off could stop a manual roll.
 - Hihat has two track channels mapped to one synth voice area but two sequencer tracks. Roll matching should stay track-oriented, not synth-voice-oriented.
 - Roll state currently quantizes starts via existing roll behavior. MIDI-held rolls will inherit early-roll and quantization rules, which is probably desired but should be tested.
@@ -204,7 +216,8 @@ Decision:
 1. Roll offset is positive-only: `0` means off, `1..127` means that many semitones above the assigned note.
 2. Disabled should display as `off`; avoid a new dtype unless an existing one cannot be reused and a tiny parameter-specific display exception is insufficient.
 3. Roll is the last consumer. If normal note trigger or any other earlier consumer takes the note, it must not fall through to roll.
-4. Note-on and note-off statuses are literal. Do not treat note-on velocity `0` as note-off for this feature.
+4. ~~Note-on and note-off statuses are literal.~~ **Withdrawn in Session 038**:
+   NOTE_ON velocity `0` is note-off. See `S038_STUCK_MIDI_ROLL_BUG.md`.
 5. Roll rate uses Global NRPN 93.
 6. Do not alter current Global MIDI CC mappings. Do not use voice-channel CCs for roll rate.
 7. Any note on any assigned global or voice channel that would otherwise trigger the voice is eligible for roll when received with the configured offset.
