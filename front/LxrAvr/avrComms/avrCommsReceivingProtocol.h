@@ -86,6 +86,16 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define PARAM_RESTORE_BEGIN   0xc7	// begin a parameter restore burst
 #define PARAM_RESTORE_READY   0xc8	// ready/ack marker for parameter restore
 #define PARAM_RESTORE_ACK     0xc9	// acknowledge a parameter restore request
+/* MENU-ORIGINATED SOUND-PARAMETER EDITS, AVR -> STM  (Session 039 P3)
+   WHAT: same payload as MIDI_CC (raw id 0..127) / CC_2 (raw id - 128); sent
+         only by menu encoder/knob edits via menu_sendSoundParameter().
+   WHY:  lets the STM transmit menu changes as MIDI CC/NRPN (txf C) while
+         loads, the armed-step revert and restores keep MIDI_CC/CC_2 and are
+         never transmitted.
+   AFFILIATES: STM FRONT_CC_MENU / FRONT_CC_2_MENU (frontPanelReceivingProtocol.h,
+               same values). */
+#define MIDI_CC_MENU          0xca	// menu edit, parameter 0..127
+#define CC_2_MENU             0xcb	// menu edit, parameter 128+
 //#define PRF_CACHE_REJECTED    0x00	// PRF cache request rejected
 //#define PRF_CACHE_ACCEPTED    0x01	// PRF cache request accepted
 /* SAMPLE_CC subcommands mirror STM frontPanelReceivingProtocol.h.
@@ -255,7 +265,22 @@ byte3, data2 byte: xbbbbbbb : b=macro mod target value lower 7 bits or top level
 #define SEQ_REPORT_GLOBAL_MORPH_MSB 0x6c	// report the high bit of global morph back to AVR
 #define SEQ_BACKGROUND_SWAP_BEGIN  0x6d	// request STM background-swap prep before file load
 #define SEQ_BACKGROUND_SWAP_DONE   0x6e	// STM background-swap prep complete
+/* Raw global MIDI roll-note offset: 0/off or a positive 1..127 semitone
+   shift above the normal trigger note; STM owns held-roll release on change. */
+#define SEQ_ROLL_NOTE_OFFSET       0x6f	// saved MIDI roll-note offset
 #define SEQ_OSC_WAVE_INTERPOLATION 0x70 // enable/disable waveform interpolation
+/* PERF ROLL DISPLAY REPORTS, STM -> AVR  (Session 039)
+   WHAT: SEQ_CC sub-opcodes carrying a roll value changed by external MIDI
+         (Global NRPN 93/94/95); data2 = rate 0..15 / note 0..127 /
+         velocity 0..127.
+   WHY:  display sync for the PERF page. Distinct from SEQ_ROLL_RATE (0x11),
+         SEQ_ROLL_NOTE (0x40) and SEQ_ROLL_VELOCITY (0x41), which are AVR -> STM.
+   ACCESSORS: avrCommsReceivingProtocol.c SEQ_CC switch.
+   AFFILIATES: STM FRONT_SEQ_REPORT_ROLL_* (frontPanelReceivingProtocol.h,
+               same values). */
+#define SEQ_REPORT_ROLL_RATE       0x71	// STM reports roll rate (0..15)
+#define SEQ_REPORT_ROLL_NOTE       0x72	// STM reports roll note
+#define SEQ_REPORT_ROLL_VELOCITY   0x73	// STM reports roll velocity
 
 #define SEQ_TMP_KIT_AUTOMATION_NONE 0x00	// no automation sideband in the temp-kit copy
 #define SEQ_TMP_KIT_AUTOMATION_FRONT_ENDPOINT 0x01	// temp-kit front-endpoint automation sideband

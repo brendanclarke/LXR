@@ -47,6 +47,8 @@
 #include "Preset/MorphEngine.h"
 #include "Preset/ParameterArray.h"
 #include "sequencer.h"
+#include "MidiParser.h"
+#include "MidiOutputControl.h"	/* menu MIDI TX queue (Session 039 P3) */
 #include "PatternData.h"
 #include "Preset/ParameterIngress.h"
 #include "Uart.h"
@@ -1989,13 +1991,29 @@ void frontParser_handleMidiMessage(void)
          }
          break;
    
-   //MIDI SYNTH MESSAGES
+      /* SOUND PARAMETER 0..127 (plain or menu-originated)
+         WHAT: MIDI_CC and FRONT_CC_MENU (Session 039 P3) share one body. The
+               live message is forced to status MIDI_CC, because
+               frontParser_applyParameterCommand() treats any other status as
+               CC2. A menu edit that was applied live is also queued for MIDI TX.
+         WHY:  identical behaviour for both opcodes; only menu edits may be
+               transmitted. Stored-only values (temp playback) are not sent.
+         INPUT:  data1 = raw id, data2 = value.
+         OUTPUT: store + live apply (+1 apply id) + automation record, or
+                 normal-image store; TX queue.
+         ACCESSORS: AVR avrComms_sendData(MIDI_CC / MIDI_CC_MENU, ...).
+         AFFILIATES: preset_storeParameterIngress(),
+                     frontParser_applyParameterCommand(), seq_recordAutomation(),
+                     outputControl_queueMenuParameterTx(). */
+      case FRONT_CC_MENU:
       case MIDI_CC: //frontParser_command.status
          // this is for parameters below 128
          {
+            const uint8_t isMenuEdit = (uint8_t)(frontParser_command.status == FRONT_CC_MENU);
             uint8_t rawParam = frontParser_command.data1;
             MidiMsg liveMsg = frontParser_command;
 
+            liveMsg.status = MIDI_CC;
             liveMsg.data1 = (uint8_t)((rawParam + 1) & 0x7f);
 
             if(preset_shouldApplyIngressToLive())
@@ -2005,6 +2023,9 @@ void frontParser_handleMidiMessage(void)
 
             //record automation if record is turned on
                seq_recordAutomation(frontParser_activeTrack, rawParam, frontParser_command.data2);
+
+               if(isMenuEdit)
+                  outputControl_queueMenuParameterTx(rawParam, frontParser_command.data2);
             }
             else
             {
@@ -2015,14 +2036,36 @@ void frontParser_handleMidiMessage(void)
          }
          break;
    
-   //CC2 above 127
+      /* SOUND PARAMETER 128+ (plain or menu-originated)
+         WHAT: FRONT_CC_2 and FRONT_CC_2_MENU (Session 039 P3) share one body.
+               The message is normalised to FRONT_CC_2 for the apply path; a
+               menu edit that was applied live is also queued for MIDI TX.
+         WHY:  identical sound/storage/record behaviour for both opcodes; only
+               menu edits may be transmitted (loads/reverts use FRONT_CC_2).
+               Values only stored (temp playback active) are not audible and
+               are not transmitted.
+         INPUT:  data1 = raw id - 128, data2 = value.
+         OUTPUT: live apply + automation record, or normal-image store; TX queue.
+         ACCESSORS: AVR avrComms_sendData(CC_2 / CC_2_MENU, ...).
+         AFFILIATES: frontParser_applyParameterCommand(), seq_recordAutomation(),
+                     outputControl_queueMenuParameterTx(). */
+      case FRONT_CC_2_MENU:
       case FRONT_CC_2: // frontParser_command.status
          {
+            const uint8_t isMenuEdit = (uint8_t)(frontParser_command.status == FRONT_CC_2_MENU);
+            MidiMsg cc2Msg = frontParser_command;
+
+            cc2Msg.status = FRONT_CC_2;
+
             if(preset_shouldApplyIngressToLive())
             {
-               frontParser_applyParameterCommand(frontParser_command,1);
+               frontParser_applyParameterCommand(cc2Msg,1);
                //record automation if record is turned on
                seq_recordAutomation(frontParser_activeTrack, frontParser_command.data1+128, frontParser_command.data2);
+
+               if(isMenuEdit)
+                  outputControl_queueMenuParameterTx((uint16_t)(frontParser_command.data1 + 128),
+                                                     frontParser_command.data2);
             }
             else
             {
@@ -2420,12 +2463,23 @@ static void frontParser_handleSeqCC()
          frontParser_globalMorphLsb = (uint8_t)(frontParser_command.data2 & 0x7f);
          break;
 
+      /* GLOBAL MORPH (PERF MENU) + MENU TX  (Session 039 P3)
+         WHAT: assemble the 8-bit amount, apply it, then queue it for MIDI TX
+               as Global CC1 (user decision 6; converted to amount >> 1 in
+               outputControl_queueMenuPerfTx()).
+         WHY:  SEQ_SET_GLOBAL_MORPH_LSB/MSB are sent only by AVR
+               menu_parseGlobalParam() PAR_MORPH. Global CC1 on receive drives
+               global morph (v*2, 127 -> 255), so a DAW recording plays back.
+         INPUT:  frontParser_globalMorphLsb, data2 bit 0.
+         OUTPUT: global morph applied; queued TX.
+         AFFILIATES: seq_setGlobalMorphAmount(), preset_morphAutomationValueToAmount(). */
       case FRONT_SEQ_SET_GLOBAL_MORPH_MSB:
       {
          uint8_t morphAmount =
             (uint8_t)(frontParser_globalMorphLsb
                | ((frontParser_command.data2 & 0x01) << 7));
          seq_setGlobalMorphAmount(morphAmount);
+         outputControl_queueMenuPerfTx(OUTPUT_MENU_TX_GLOBAL_MORPH, morphAmount);
          break;
       }
 
@@ -2585,8 +2639,14 @@ static void frontParser_handleSeqCC()
             uint8_t channel = (frontParser_command.data2&0x0f)+1;
             
             // --AS if midi channel changed, and a note was playing on old channel, turn it off
-            if(voice < 7 && midi_MidiChannels[voice] != channel)
-               voiceControl_noteOff(voice);
+            if(voice < 8 && midi_MidiChannels[voice] != channel)
+            {
+               /* MIDI channel changes invalidate the parser-owned held-note
+                  map before the old route can lose its matching note-off. */
+               midiParser_clearMidiRollHolds();
+               if(voice < 7)
+                  voiceControl_noteOff(voice);
+            }
                
             midi_MidiChannels[voice] = channel;
             
@@ -2595,7 +2655,14 @@ static void frontParser_handleSeqCC()
          
       case FRONT_SEQ_MIDI_CHAN_OFF:
          {
-            midi_MidiChannels[frontParser_command.data2]=0;
+            if(frontParser_command.data2 < 8)
+            {
+               /* Disabling a MIDI channel removes the route that would
+                  receive release messages, so drop MIDI-owned roll holds. */
+               if(midi_MidiChannels[frontParser_command.data2] != 0)
+                  midiParser_clearMidiRollHolds();
+               midi_MidiChannels[frontParser_command.data2]=0;
+            }
          }
          break;
    
@@ -2724,14 +2791,28 @@ static void frontParser_handleSeqCC()
          }
          break;
    
+      /* PERF ROLL CONTROLS + MENU TX  (Session 039 P3)
+         WHAT: apply the roll setting, then queue it for MIDI TX as Global
+               NRPN 93/94/95 (user decision 6).
+         WHY:  these opcodes are sent only from AVR menu_parseGlobalParam()
+               (encoder/knob edits; the armed-step revert after DISARM sends
+               the restored value, which is harmless). Never from load or boot
+               (menu_sendAllGlobals() starts at PAR_BEGINNING_OF_GLOBALS).
+         INPUT:  data2 - rate 0..15 / note / velocity.
+         OUTPUT: sequencer roll state; queued TX (gate in MidiOutputControl.c).
+         AFFILIATES: outputControl_queueMenuPerfTx(), GlobalMidiParser NRPN
+                     93-95 receive (same numbers). */
       case FRONT_SEQ_ROLL_RATE:
          seq_setRollRate(frontParser_command.data2);
+         outputControl_queueMenuPerfTx(OUTPUT_MENU_TX_ROLL_RATE, frontParser_command.data2);
          break;
       case FRONT_SEQ_ROLL_NOTE:
          seq_setRollNote(frontParser_command.data2);
+         outputControl_queueMenuPerfTx(OUTPUT_MENU_TX_ROLL_NOTE, frontParser_command.data2);
          break;
       case FRONT_SEQ_ROLL_VELOCITY:
          seq_setRollVelocity(frontParser_command.data2);
+         outputControl_queueMenuPerfTx(OUTPUT_MENU_TX_ROLL_VELOCITY, frontParser_command.data2);
          break;
       case FRONT_SEQ_ROLL_MODE:
          // if(frontParser_command.data2==ROLL_MODE_FIRST_ON)
@@ -2740,6 +2821,11 @@ static void frontParser_handleSeqCC()
          //    seq_skipFirstRoll=1;   
          // else
          seq_rollMode = frontParser_command.data2;
+         break;
+      /* Update the external MIDI roll-note offset. Existing MIDI-held rolls
+         are released by MidiParser when the mapping changes. */
+      case FRONT_SEQ_ROLL_NOTE_OFFSET:
+         midiParser_setRollNoteOffset(frontParser_command.data2);
          break;
       case FRONT_SEQ_TRANSPOSE:
          seq_transpose_voiceAmount[frontParser_activeTrack]=frontParser_command.data2;
@@ -2951,7 +3037,17 @@ static void frontParser_handleSeqCC()
       case FRONT_SEQ_TRACK_NOTE5:
       case FRONT_SEQ_TRACK_NOTE6:
       case FRONT_SEQ_TRACK_NOTE7:
-         midi_NoteOverride[frontParser_command.data1-FRONT_SEQ_TRACK_NOTE1] = frontParser_command.data2;
+         {
+            const uint8_t voice =
+               (uint8_t)(frontParser_command.data1-FRONT_SEQ_TRACK_NOTE1);
+            /* Note overrides define both normal MIDI triggers and shifted roll
+               triggers. Release old MIDI-held rolls before changing them. */
+            if(voice < 7 && midi_NoteOverride[voice] != frontParser_command.data2)
+            {
+               midiParser_clearMidiRollHolds();
+               midi_NoteOverride[voice] = frontParser_command.data2;
+            }
+         }
          break;
       default:
          break;

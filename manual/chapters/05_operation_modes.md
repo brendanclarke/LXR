@@ -108,6 +108,14 @@ velocity used are set with the \param{rol}, \param{nte}, and \param{vel} paramet
 the pattern when recording mode is active. Rolls can be recorded in three modes: full (pitch and velocity),
 note only (pitch), or velocity only. The roll record mode is set in the SHIFT + REC button menu. 
 
+Rolls can also be played and adjusted over MIDI:
+
+- **MIDI roll trigger:** with the MIDI roll offset (\param{rol} in the Global Settings menu, described under *MIDI Roll Offset* below)
+  switched on, MIDI notes above each voice's trigger note start and hold a roll on that voice.
+- **Roll parameters by NRPN:** \param{rol}, \param{nte}, and \param{vel} can be set from the
+  global MIDI channel with NRPN 93 (roll rate, values 0–15), NRPN 94 (roll note), and NRPN 95 (roll
+  velocity). The Performance menu display follows the incoming values.
+
 ### Morph
 
 The morph feature transitions from one preset sound to another. Load any preset from the SD card
@@ -350,8 +358,10 @@ twice while in PERF mode.
 bpm & Tempo in BPM    & Internal clock tempo. Set to 0 to sync to incoming MIDI clock. \\
 qnt & Sequencer Quantisation & Sets the quantisation grid for recorded data. \\
 mid & Global MIDI Channel & Sets the channel for global functions (see MIDI Table). \\
-txf & Transmit MIDI Filter & Sets what MIDI commands are transmitted from the LXR. \\
-rxf & Receive MIDI Filter & Sets what MIDI commands are recognized by the LXR. \\
+txf & Transmit MIDI Filter & Sets what MIDI commands are transmitted from the LXR. With C on and a global MIDI channel set, parameter changes made in the menu are sent as the CC or NRPN listed in the MIDI tables, on the global channel. \\
+rxf & Receive MIDI Filter & Sets what MIDI commands are recognized by the LXR. Additional ¢ entries,
+                           reachable only with the encoder, swap CC38 to NRPN 96
+                           (see Receive MIDI Filter below). \\
 mrt & MIDI Routing & Sets how MIDI is transmitted between the DIN jacks and USB. \\
 fet & Parameter fetch & When active, you must `fetch' the displayed value with the knob
                         before it changes — prevents value jumps on page switches. \\
@@ -367,6 +377,9 @@ b2p & Performance Bank Change & When enabled, MIDI Bank Change (CC0) loads a .pr
 stg & Shift Toggle & When enabled, SHIFT works as a toggle.\\
 flb & File Background Load & Sets which files load in the background and queue change on next pattern.\\
 itp & Waveform Interpolation & Toggles interpolating between main oscillator waveforms when modulated.\\
+rol & MIDI Roll Offset & Semitone offset above each voice's MIDI trigger note at which incoming
+                         notes play rolls instead of single hits. \texttt{off} disables MIDI roll
+                         triggering (see MIDI Roll Offset below).\\
 \end{paramtable}
 
 ### Follow Mode
@@ -381,6 +394,37 @@ playing pattern is viewed.
 The display is an OLED. To extend its lifetime and prevent burn-in, a screensaver activates after
 a few minutes of inactivity. Any control touch dismisses it. The screensaver can be disabled in
 the settings menu.
+
+### MIDI Roll Offset
+
+If the \param{rol} offset has a value, that value is applied to incoming MIDI Notes: Notes corresponding to a value above the voice's normal MIDI trigger by \param{rol} start a roll at the current roll settings defined in MODE PERF. 
+
+- If the voice is on the Global Channel, the roll is triggered by the note at \param{rol} above the voice's assigned note, or above the voice default if no note is set.
+- If the voice is assigned its own channel without a fixed note (chromatic mode), the offset works as a keyboard split: notes
+  below it play the voice normally, and notes at or above it play rolls.
+
+### Receive MIDI Filter
+
+The \param{rxf} setting selects which incoming MIDI message types the LXR responds to. Each
+letter enables one type:
+
+| Letter | Message type |
+|:---:|---|
+| N | Notes |
+| R | Realtime: clock, start, stop |
+| C | Controllers: CC and NRPN |
+| ¢ | Controllers, alternate 038 Mapping |
+| P | Program change |
+
+
+A ¢ entry works exactly like 'C', except:
+
+- CC38 on the global MIDI channel is ignored.
+- Voice 1 filter frequency, normally on global CC38, moves to NRPN 96.
+
+Use a ¢ entry with gear that sends a CC38 (data entry LSB) after every NRPN value. Without it, each NRPN sent to the LXR also moves voice 1's filter frequency, usually closing it.
+
+The ¢ entries may only be selected when the parameter is clicked with the encoder and is in single-parameter view. 
 
 ### Loading and Saving Global Settings
 

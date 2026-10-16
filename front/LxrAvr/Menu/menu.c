@@ -255,6 +255,9 @@ const Name valueNames[NUM_NAMES] PROGMEM =
       {SHORT_ROLL_NOTE, CAT_PATTERN, LONG_ROLL_NOTE},  
       {SHORT_ROLL_VELOCITY, CAT_PATTERN, LONG_ROLL_VELOCITY},  
       {SHORT_ROLL_MODE, CAT_SEQUENCER, LONG_ROLL_MODE}, 
+      /* Global MIDI roll-note offset label. Uses the shared "rol" short text
+         but places this saved note-routing setting in the MIDI category. */
+      {SHORT_ROLL, CAT_MIDI, LONG_ROLL_NOTE_OFFSET},
       
       {SHORT_TRANSPOSE, CAT_TRANSPOSE, LONG_TRANSPOSE},
       {SHORT_TRANSPOSE_ON_OFF, CAT_TRANSPOSE, LONG_TRANSPOSE_ON_OFF},
@@ -589,6 +592,8 @@ const enum Datatypes PROGMEM parameter_dtypes[NUM_PARAMS] = {
 	    /*PAR_MIDI_NOTE5*/		DTYPE_NOTE_NAME,
 	    /*PAR_MIDI_NOTE6*/     DTYPE_NOTE_NAME,
        /*PAR_MIDI_NOTE7*/     DTYPE_NOTE_NAME,
+       /* Roll MIDI trigger offset: 0 is off, 1..127 is a positive shift. */
+       /*PAR_ROLL_NOTE_OFFSET*/ DTYPE_0B127,
          
 
 };
@@ -678,6 +683,9 @@ void menu_init()
    parameter_values[PAR_ROLL_NOTE] = 63;
    parameter_values[PAR_ROLL_VELOCITY] = 100;
    parameter_values[PAR_ROLL_MODE] = 4; //0=trig, 1=nte, 2=vel, 3=bth, 4=all
+   /* MIDI roll notes default off. Missing old-file bytes normalize to the same
+      value, so startup, old-file load, and fresh save agree on 0/off. */
+   parameter_values[PAR_ROLL_NOTE_OFFSET] = 0;
    parameter_values[PAR_TRANSPOSE] = 63;
    parameter_values[PAR_TRANSPOSE_ON_OFF] = 0;
    parameter_values[PAR_ACTIVE_STEP] = 0;
@@ -1644,7 +1652,10 @@ void menu_repaintGeneric()
          case DTYPE_0B16:
 			case DTYPE_0B15:
 			case DTYPE_VOICE_LFO:
-				numtostrpu(&editDisplayBuffer[1][13],(uint8_t)(curParmVal),' ');
+				if(parNr == PAR_ROLL_NOTE_OFFSET && curParmVal == 0)
+					memcpy_P(&editDisplayBuffer[1][13],menuText_off,3);
+				else
+					numtostrpu(&editDisplayBuffer[1][13],(uint8_t)(curParmVal),' ');
 				break;
 			} //switch(parameters_dtypes[parNr] & 0x0F) end
 
@@ -1751,7 +1762,10 @@ void menu_repaintGeneric()
 				case DTYPE_0B15:
 				case DTYPE_VOICE_LFO:
 					// fallthrough for the rest of the unsigned values
-					numtostrpu(valueAsText,curParmVal,' ');
+					if(parNr == PAR_ROLL_NOTE_OFFSET && curParmVal == 0)
+						memcpy_P(valueAsText,menuText_off,3);
+					else
+						numtostrpu(valueAsText,curParmVal,' ');
 					break;
 				} //switch(parameters[parNr].dtype&0x0F) end
 
@@ -2794,9 +2808,32 @@ static void menu_applyEncoderDeltaToByte(uint8_t *paramValue, int8_t inc)
    *paramValue = (uint8_t)value;
 }
 
+/* ENCODER DTYPE_MENU ENTRY COUNT
+   WHAT: number of selectable entries for a DTYPE_MENU parameter on the
+         encoder edit path. Normally the menu table's count byte; RxFilter
+         returns MIDI_FILTER_RX_ENTRIES (24) so the ¢ twins (16..23) are
+         reachable (Session 039).
+   WHY:  ¢ entries must be encoder-only. This helper is used ONLY by the
+         encoder paths (menu_normalizeDtypeMenuEncoderValue() and the
+         DTYPE_MENU clamps in menu_encoderChangeParameter() /
+         menu_encoderChangeShiftParameter()); pots use getMaxEntriesForMenu()
+         via getDtypeValue() and stay at 16. Without this override the
+         normaliser would rescale any value >= 16 down and the clamp would
+         cap it at 15. TxFilter shares the table but is not overridden, so it
+         stays 0..15.
+   INPUT:  paramNr - DTYPE_MENU parameter.
+   OUTPUT: entry count (0 if the menu is unknown).
+   ACCESSORS: menu_normalizeDtypeMenuEncoderValue() (2820),
+              menu_encoderChangeParameter() (3058),
+              menu_encoderChangeShiftParameter() (3291).
+   AFFILIATES: getMaxEntriesForMenu(), midiFilterNames[] (MenuText.h). */
 static uint8_t menu_getDtypeMenuEntryCount(uint16_t paramNr)
 {
    const uint8_t menuId = pgm_read_byte(&parameter_dtypes[paramNr]) >> 4;
+
+   if(paramNr == PAR_MIDI_FILT_RX)
+      return MIDI_FILTER_RX_ENTRIES;
+
    return getMaxEntriesForMenu(menuId);
 }
 
@@ -2839,6 +2876,28 @@ static void menu_sendVoiceMorphAmount(uint16_t paramNr, uint8_t value)
       return;
 
    avrComms_sendVoiceMorphValue((uint8_t)(paramNr - PAR_MORPH_DRUM1), value);
+}
+
+//-----------------------------------------------------------------
+/* MENU SOUND-PARAMETER SEND  (Session 039 P3)
+   WHAT: sends a sound-parameter change made with the menu encoder or a knob
+         to the STM as MIDI_CC_MENU (raw id 0..127) or CC_2_MENU (raw id
+         128..END_OF_SOUND_PARAMETERS-1). Ignores non-sound ids.
+   WHY:  the STM applies these exactly like MIDI_CC/CC_2 and, when txf C is on,
+         also transmits them as Global CC/NRPN. Using distinct opcodes keeps
+         load, revert and restore traffic (still MIDI_CC/CC_2) from ever being
+         transmitted. The armed-step and gate checks are on the STM.
+   INPUT:  paramNr - raw id; value - 7-bit parameter value.
+   OUTPUT: one 3-byte packet to the STM (same size as before).
+   ACCESSORS: menu_encoderChangeParameter(), menu_parseKnobValue() (two branches).
+   AFFILIATES: STM FRONT_CC_MENU / FRONT_CC_2_MENU handling
+               (frontPanelReceivingProtocol.c), outputControl_queueMenuParameterTx(). */
+static void menu_sendSoundParameter(uint16_t paramNr, uint8_t value)
+{
+   if(paramNr < 128)
+      avrComms_sendData(MIDI_CC_MENU, (uint8_t)paramNr, value);
+   else if(paramNr < END_OF_SOUND_PARAMETERS)
+      avrComms_sendData(CC_2_MENU, (uint8_t)(paramNr - 128), value);
 }
 
 //-----------------------------------------------------------------
@@ -3064,18 +3123,11 @@ static void menu_encoderChangeParameter(int8_t inc)
    {
       menu_sendVoiceMorphAmount(paramNr, *paramValue);
    }
-	else if(paramNr < 128) // => Sound Parameter
+	else if(paramNr < END_OF_SOUND_PARAMETERS) // => Sound Parameter: menu edit (Session 039 P3)
    {
       if (!isMorphParam)
       {
-		   avrComms_sendData(MIDI_CC,(uint8_t)paramNr,*paramValue);
-      }
-   }
-	else if(paramNr > 127 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
-   {
-      if (!isMorphParam)
-      {
-		   avrComms_sendData(CC_2,(uint8_t)(paramNr-128),*paramValue);
+         menu_sendSoundParameter(paramNr, *paramValue);
       }
    }
 	else // non sound parameters (ie current step data, etc)
@@ -3997,8 +4049,43 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
 	case PAR_MIDI_FILT_TX:
 		avrComms_sendData(SEQ_CC, SEQ_MIDI_FILT_TX, value);
 		break;
+	/* RX FILTER WIRE ENCODING  (Session 039)
+	   WHAT: converts the RxFilter menu index into the byte STM expects:
+	         0..15  -> sent unchanged (RX nibble: N 0x01, R 0x02, C 0x04, P 0x08);
+	         16..23 -> ¢ twin k = value-16: RX bits 0x04|(k&3)|((k&4)<<1)
+	                   (C, CN, CR, CRN, PC, PCN, PCR, all) plus
+	                   MIDI_FILTER_RX_CC38_SWAP;
+	         >= 24  -> corrupt (e.g. global file): repaired to "all" (15) in
+	                   parameter_values and sent as 15.
+	   WHY:  this is the single AVR->STM send point for RxFilter (encoder,
+	         pot, global-file load via menu_sendAllGlobals(), automation
+	         restore in buttonHandler.c), so encoding here covers every path.
+	         Arithmetic instead of a PROGMEM table to save AVR flash (0xE000
+	         bootloader limit).
+	   INPUT:  value - menu index 0..23 (or a corrupt value).
+	   OUTPUT: SEQ_CC / SEQ_MIDI_FILT_RX / encoded byte (7-bit safe, <= 0x1F).
+	   ACCESSORS: menu_encoderChangeParameter(), menu_encoderChangeShiftParameter(),
+	              menu_parseKnobValue(), menu_sendAllGlobals(),
+	              buttonHandler.c original-value restore.
+	   AFFILIATES: STM midi_setFilter() / MIDI_RX_FILTER_CC38_SWAP (MidiParser),
+	               midiFilterNames[] ¢ rows (MenuText.h). */
 	case PAR_MIDI_FILT_RX:
-		avrComms_sendData(SEQ_CC, SEQ_MIDI_FILT_RX, value);
+	{
+		uint8_t wire = value;
+
+		if(value >= MIDI_FILTER_RX_ENTRIES)
+		{
+			wire = 0x0F;
+			parameter_values[PAR_MIDI_FILT_RX] = wire;
+		}
+		else if(value >= MIDI_FILTER_CENT_FIRST)
+		{
+			const uint8_t k = (uint8_t)(value - MIDI_FILTER_CENT_FIRST);
+			wire = (uint8_t)(0x04 | (k & 0x03) | ((k & 0x04) << 1)
+			                 | MIDI_FILTER_RX_CC38_SWAP);
+		}
+		avrComms_sendData(SEQ_CC, SEQ_MIDI_FILT_RX, wire);
+	}
 		break;
 	case PAR_PRESCALER_CLOCK_IN:
 			avrComms_sendData(SEQ_CC, SEQ_TRIGGER_IN_PPQ, value);
@@ -4031,6 +4118,12 @@ void menu_parseGlobalParam(uint16_t paramNr, uint8_t value)
    case PAR_FILE_LOAD_BACKGROUND:
       parameter_values[PAR_FILE_LOAD_BACKGROUND]=value; 
       avrComms_sendData(SEQ_CC, SEQ_LOAD_BACKGROUND,value);
+      break;
+   /* Push the saved MIDI roll-note offset to STM. STM owns note routing and
+      clears MIDI-held rolls when the mapping changes. */
+   case PAR_ROLL_NOTE_OFFSET:
+      parameter_values[PAR_ROLL_NOTE_OFFSET] = value;
+      avrComms_sendData(SEQ_CC, SEQ_ROLL_NOTE_OFFSET, (uint8_t)value);
       break;
    case PAR_MIDI_NOTE1:
    case PAR_MIDI_NOTE2:
@@ -4199,6 +4292,23 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
 	uint16_t paramNr				= pgm_read_word(&menuPages[menu_activePage][activePage].bot1 +
 										potNr + isOn2ndPage);
 
+	/* ¢ RX-FILTER POT LOCK  (Session 039)
+	   WHAT: ignores pot movement on RxFilter while a ¢ entry (value >= 16) is
+	         selected.
+	   WHY:  ¢ entries are encoder-only: they can be selected and left only in
+	         encoder edit mode. Pots already cannot reach them (getDtypeValue()
+	         scales over 16 entries); without this guard a pot nudge would
+	         silently drop the CC38 workaround. The value stays visible in the
+	         4-parameter view.
+	   INPUT:  paramNr, parameter_values[PAR_MIDI_FILT_RX].
+	   OUTPUT: early return (no value change, no STM traffic).
+	   ACCESSORS: this function only.
+	   AFFILIATES: menu_getDtypeMenuEntryCount() (encoder range),
+	               menu_parseGlobalParam() PAR_MIDI_FILT_RX. */
+	if(paramNr == PAR_MIDI_FILT_RX
+	   && parameter_values[PAR_MIDI_FILT_RX] >= MIDI_FILTER_CENT_FIRST)
+		return;
+
 	//parameter fetch. given the value of the pot, and the parameter number
 	// fetch the actual numeric value that the parameter should be set to
 	const uint8_t dtypeValue = getDtypeValue(potValue,paramNr);
@@ -4298,10 +4408,8 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
       }
       else
       {
-         if(paramNr<128) // => Sound Parameter below 128
-   			avrComms_sendData(MIDI_CC,(uint8_t)paramNr,dtypeValue);
-   		else if(paramNr>=128 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
-   			avrComms_sendData(CC_2,(uint8_t)(paramNr-128),dtypeValue);
+         if(paramNr < END_OF_SOUND_PARAMETERS) // => Sound Parameter: menu edit (Session 039 P3)
+            menu_sendSoundParameter(paramNr, dtypeValue);
    		else
    			menu_parseGlobalParam(paramNr,dtypeValue);
       }
@@ -4311,10 +4419,8 @@ void menu_parseKnobValue(uint8_t potNr, uint8_t potValue)
 	default: // all other sound parameters are send as CC or CC2. anything else is handled specially
       if(menu_isVoiceMorphAmountParam(paramNr))
          menu_sendVoiceMorphAmount(paramNr, dtypeValue);
-		else if(paramNr<128) // => Sound Parameter below 128
-			avrComms_sendData(MIDI_CC,(uint8_t)paramNr,dtypeValue);
-		else if(paramNr>=128 && (paramNr < END_OF_SOUND_PARAMETERS)) // => Sound Parameter above 127
-			avrComms_sendData(CC_2,(uint8_t)(paramNr-128),dtypeValue);
+		else if(paramNr < END_OF_SOUND_PARAMETERS) // => Sound Parameter: menu edit (Session 039 P3)
+			menu_sendSoundParameter(paramNr, dtypeValue);
 		else
 			menu_parseGlobalParam(paramNr,dtypeValue);
 		break;

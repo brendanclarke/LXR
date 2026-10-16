@@ -234,6 +234,8 @@ enum NamesEnum
    TEXT_ROLL_NOTE,
    TEXT_ROLL_VELOCITY,
    TEXT_ROLL_MODE,
+   /* Roll MIDI trigger offset label; the short text reuses SHORT_ROLL. */
+   TEXT_ROLL_NOTE_OFFSET,
    TEXT_TRANSPOSE,
    TEXT_TRANSPOSE_ON_OFF,
    TEXT_FILE_LOAD_BACKGROUND,
@@ -497,6 +499,8 @@ enum longNamesEnum
    LONG_ROLL_NOTE,
    LONG_ROLL_VELOCITY,
    LONG_ROLL_MODE,
+   /* Long label for the saved global MIDI roll-note offset. */
+   LONG_ROLL_NOTE_OFFSET,
    LONG_TRANSPOSE,
    LONG_TRANSPOSE_ON_OFF,
    LONG_FILE_LOAD_BACKGROUND,

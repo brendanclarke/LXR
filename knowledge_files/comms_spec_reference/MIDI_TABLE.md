@@ -1,7 +1,7 @@
 # MIDI Table
 
-Date: 2026-07-25
-Status: current after Session 035. This is the durable MIDI reference for external DIN/USB MIDI input parsing and realtime dispatch timing on STM32.
+Date: 2026-10-16
+Status: current after Session 039 (¢ RX-filter CC38 swap and NRPN 96; RPN-null swallow; NRPN 94/95 roll note/velocity with PERF display reports; RX filter C gating all incoming CCs; TX filter C transmitting menu edits as Global CC/NRPN; whole-message DIN/USB MIDI out with the USB IN completion/timeout fix), on top of the Session 038 stuck-MIDI-roll fix (NOTE_ON velocity 0 is a note-off; per-key MIDI roll ownership; stop release; stopped-transport MIDI rolls) and the 2026-09-17 MIDI roll-trigger implementation. This is the durable MIDI reference for external DIN/USB MIDI input parsing, realtime dispatch timing, and menu-originated MIDI transmit on STM32. Full Session 039 rationale: `knowledge_files/log_archive/039_SESSION_HANDOFF_LOG.md`.
 
 ## Ownership And Routing
 
@@ -9,10 +9,12 @@ External MIDI byte parsing starts in `mainboard/LxrStm32/src/MIDI/MidiParser.c`.
 
 Important ownership boundaries:
 
-- `MidiParser.c` owns byte-stream parsing, routing/filtering, system message dispatch, note/program-change routing, the high-level CC router, and the DWT timestamp helper used by realtime capture.
+- `MidiParser.c` owns byte-stream parsing, routing/filtering, system message dispatch, note/program-change routing, the high-level CC router, the DWT timestamp helper used by realtime capture, the saved MIDI roll-note offset, and the MIDI roll held-key table (`(channel, note)` -> claimed voice mask, Session 038). The sequencer owns only the per-voice MIDI ownership bit (`seq_rollMidiHeld`, via `seq_rollMidiChange()`), which stays separate from manual front-panel roll ownership.
 - `uARTFrontSYX/Uart.c` and `Hardware/USB/usb_midi_core.c` each own one source-specific, 16-event SPSC realtime capture queue. `main.c` drains DIN then USB at the audio render deadline before rendering the next block.
 - `ChannelMidiParser.c` owns the existing per-voice/channel CC implementation, plus the preserved CC0 bank-change and CC1 morph behavior.
-- `GlobalMidiParser.c` owns system clock/MTC handling and, after Session 029, the separate Global-channel CC/NRPN table for CC2-127.
+- `GlobalMidiParser.c` owns system clock/MTC handling and, after Session 029, the separate Global-channel CC/NRPN table for CC2-127. Session 039: it also owns the NRPN protocol state (selection, ¢ CC38 swap flag `globalMidiParser_cc38Swap`, RPN-null window), the special NRPNs 93-96 (numbers defined in `GlobalMidiParser.h`), and the TX reverse address table `globalMidiParser_getTxAddress()`.
+- `MidiOutputControl.c` owns MIDI output fan-out (`outputControl_sendMidi()` to USB and DIN) and, since Session 039, the menu MIDI-TX gate, coalescing queue and `outputControl_serviceMenuTx()` (called from the `main.c` loop before `usb_tick()`).
+- `Hardware/USB/usb_manager.c` / `usb_midi_core.c` own USB MIDI out: whole-event bounds check, `usbd_midi_DataIn()` completion flag, 5 ms busy timeout, discard while not `USB_OTG_CONFIGURED` (Session 039). `uARTFrontSYX/Uart.c` owns DIN MIDI out (`uart_sendMidi()` whole-message-or-drop, Session 039).
 - `frontPanelReceivingProtocol.c` owns the internal `MIDI_CC` / `MIDI_CC2` parameter apply ladder through `frontParser_applyParameterCommand()`. The new Global CC/NRPN parser translates into this existing internal apply path rather than duplicating DSP apply code.
 
 Global-channel CC pre-emption:
@@ -21,6 +23,13 @@ Global-channel CC pre-emption:
 - Global CC0 and CC1 are explicit exceptions: they still run through the current `ChannelMidiParser.c` bank/morph behavior.
 - Global CC2-127 run only through the new `GlobalMidiParser.c` table and do not also run through the voice-channel parser.
 - Non-global CC messages continue to use the existing `ChannelMidiParser.c` implementation.
+
+RX filter and routing (Session 039 P2):
+
+- `mrt` routing runs first in `midiParser_parseMidiMessage()` and is never affected by the RX filter. A filtered message is still forwarded if routed.
+- RX letters gate what the LXR responds to: N `0x01` notes (including MIDI rolls), R `0x02` clock/start/stop/continue/MTC, C `0x04` **all** incoming CC traffic (every channel; CC0 bank, CC1 morph, NRPN, both CC tables), P `0x08` program change.
+- C is gated once at the `MIDI_CC` entry. The older `0x04` tests inside the CC ladders are now redundant guards.
+- TX C (`0x40`) transmits menu-originated parameter edits as Global CC/NRPN (Session 039 P3); see `## MIDI Transmit` below. TX N/R/P gate sequencer note-ons, clock/start/stop and pattern program changes; note-offs are never gated.
 
 ### Global Parameter-ID Domains
 
@@ -50,7 +59,7 @@ ping-pong, I2S, and DAC latency remains.
 | MIDI clock `0xf8` | If RX clock filter is enabled and external sync is enabled, call `seq_sync()`. |
 | MIDI start `0xfa` | If RX clock filter is enabled and external sync is enabled, call `sync_midiStartStop(1)`. |
 | MIDI continue `0xfb` | Same as start. |
-| MIDI stop `0xfc` | If RX clock filter is enabled and external sync is enabled, call `sync_midiStartStop(0)`. |
+| MIDI stop `0xfc` | If RX clock filter is enabled and external sync is enabled, call `sync_midiStartStop(0)`. Like every `seq_setRunning(0)`, this also releases all MIDI roll holds (Session 038). |
 | MTC quarter frame `0xf1` | Global MTC start detection starts sequencer only after a complete zero-position frame set; `midiParser_checkMtc()` stops if MTC goes stale. |
 | SysEx payload | Routed/passed through as transport data where configured; this parser does not interpret arbitrary SysEx payloads. |
 
@@ -60,8 +69,36 @@ ping-pong, I2S, and DAC latency remains.
 |---|---|
 | Global channel | Note-on/off targets the active front-panel track. If that track has no note override, chromatic note mode is used for the active track. If the active track has note override enabled, the parser scans all seven track note overrides and triggers matching tracks. |
 | Voice/track channels | Note-on/off triggers each track whose `midi_MidiChannels[track]` matches the incoming channel. Track note override filters incoming notes when configured. |
+| Note-off classification | A message is a note-off if its status is NOTE_OFF **or** it is NOTE_ON with velocity `0` (MIDI 1.0). Such messages take the `channelMidiParser_noteOff()` route on normal paths and the release branch on the roll path. For normal notes this is behaviourally identical to the old NOTE_ON route. (Session 038) |
 | Recording side effect | When a note is accepted with `do_rec = 1`, the parser records it to the sequencer and echoes MIDI note output for the voice channel. |
 | Note-off recording placement | `channelMidiParser_noteOff()` forces `vel = 0` and delegates to `channelMidiParser_noteOn()`, which calls `seq_addNote(voice, vel, note, 1)`. That trailing `1` is `isNoteOff`, and it is what allows a note-off to keep its **true, un-quantized** position (a zero-velocity "ghost" step marking where the note was released). **This MIDI path is the only caller permitted to pass `isNoteOff = 1`.** Every internal trigger — roll hits, loop re-record — passes `0` and is always written to the quantized slot, even at velocity 0. Placement must never again be inferred from velocity alone; see Session 037. |
+
+MIDI roll notes use the saved global roll-note offset. Raw `0` disables the
+feature and displays as `off`; raw `1..127` is a positive semitone offset above
+the normal trigger note. With a note override, the normal route is tried first
+and roll notes are evaluated only if it did not consume the message. On
+chromatic-mode tracks (no note override), the offset acts as a keyboard split:
+notes below it play normally, notes at or above it are roll notes only. Nothing
+rolls while the offset is `off`. Notes that would shift outside MIDI `0..127`
+do nothing.
+
+A NOTE_ON with velocity `0` is a note-off (MIDI 1.0) on every note route,
+including the roll path (Session 038; the earlier "literal status" rule is
+withdrawn). Each held roll key (channel + note) claims the voices it matched at
+note-on, and its note-off releases exactly those voices. A voice keeps rolling
+while any held key claims it. A repeated note-on for a held key is not counted
+twice; unmatched note-offs are ignored; at most 16 roll keys can be held at
+once.
+
+All MIDI roll holds are released on sequencer stop (every stop request),
+roll-offset change, MIDI channel change or off, track note-override change, RX
+note-filter disable, and parser cache clear. While the sequencer is stopped, a
+roll key still starts a roll immediately. It repeats at the current tempo and
+roll rate, using roll velocity and roll note regardless of roll mode; a one-shot
+rate fires once per press. If the key is still held at start, the roll
+continues on the normal quantized roll engine, with a single first hit at the
+first quantize boundary. Front-panel (manual) rolls remain silent while
+stopped.
 
 ### Program Change
 
@@ -180,7 +217,7 @@ This table applies only on the configured Global MIDI channel. CC0 and CC1 are p
 | 35 | Coarse tune mod Osc 2 | Hihat | `MOD_OSC_F2` |
 | 36 | Gain mod Osc 1 | Hihat | `MOD_OSC_GAIN1` |
 | 37 | Gain mod Osc 2 | Hihat | `MOD_OSC_GAIN2` |
-| 38 | Filter frequency | Drum 1 | `FILTER_FREQ_DRUM1` |
+| 38 | Filter frequency (ignored in ¢ RX-filter modes; use NRPN 96) | Drum 1 | `FILTER_FREQ_DRUM1` |
 | 39 | Filter frequency | Drum 2 | `FILTER_FREQ_DRUM2` |
 | 40 | Filter frequency | Drum 3 | `FILTER_FREQ_DRUM3` |
 | 41 | Filter frequency | Snare | `SNARE_FILTER_F` |
@@ -242,8 +279,8 @@ This table applies only on the configured Global MIDI channel. CC0 and CC1 are p
 | 97 | Voice pan | Drum 3 | `PAN3` |
 | 98 | NRPN fine/LSB selector | Global NRPN state | Set active NRPN low 7 bits |
 | 99 | NRPN coarse/MSB selector | Global NRPN state | Set active NRPN high 7 bits |
-| 100 | Voice pan | Snare | `PAN4` |
-| 101 | Voice pan | Cymbal | `PAN5` |
+| 100 | Voice pan | Snare | `PAN4`; value 127 directly after an NRPN data entry is consumed as RPN-null |
+| 101 | Voice pan | Cymbal | `PAN5`; value 127 directly after an NRPN data entry is consumed as RPN-null |
 | 102 | Voice pan | Hihat | `PAN6` |
 | 103 | Distortion | Drum 1 | `OSC1_DIST` |
 | 104 | Distortion | Drum 2 | `OSC2_DIST` |
@@ -279,7 +316,7 @@ NRPN sequence:
 2. Send CC98 with the fine/LSB selector.
 3. Send CC6 with the value to apply.
 
-Valid Global NRPN numbers are `0..92`. CC6 before a selector is ignored. Out-of-range selected NRPN numbers are ignored.
+Valid Global NRPN numbers are 0..95, plus 96 in ¢ RX-filter modes. CC6 before a selector is ignored. Out-of-range selected NRPN numbers are ignored. CC100/CC101 = 127 directly after a data entry deselects the NRPN (RPN null) and is not applied as pan. In ¢ modes CC38 (data-entry LSB) is consumed.
 
 | NRPN | Function | Voice/scope | Internal target |
 |---:|---|---|---|
@@ -376,3 +413,97 @@ Valid Global NRPN numbers are `0..92`. CC6 before a selector is ignored. Out-of-
 | 90 | Audio output routing | Snare | `128+CC2_AUDIO_OUT4` |
 | 91 | Audio output routing | Cymbal | `128+CC2_AUDIO_OUT5` |
 | 92 | Audio output routing | Hihat | `128+CC2_AUDIO_OUT6` |
+| 93 | Roll rate | Global performance | `seq_setRollRate(value clamped 0..15)`; reported to AVR PERF page |
+| 94 | Roll note | Global performance | `seq_setRollNote(value)`; reported to AVR PERF page |
+| 95 | Roll velocity | Global performance | `seq_setRollVelocity(value)`; reported to AVR PERF page |
+| 96 | Filter frequency (¢ RX-filter modes only) | Drum 1 | `PAR_FILTER_FREQ_1` (replaces Global CC38) |
+
+## RX Filter ¢ Modes
+
+Session 039 adds 8 "¢" (cent sign) RX-filter twins to the existing 16 entries. They are encoder-only on the AVR (pots cannot reach them; TX filter is unchanged). Each ¢ entry behaves like the C-entry it shadows plus two differences: Global CC38 is consumed (Elektron data-entry LSB), and NRPN 96 controls Drum 1 filter cutoff (`PAR_FILTER_FREQ_1`).
+
+| Menu value | Name | RX bits | CC38 swap | NRPN 96 |
+|---:|---|---|---|---|
+| 16 | `¢` | `0x04` | yes | yes |
+| 17 | `¢N` | `0x05` | yes | yes |
+| 18 | `¢R` | `0x06` | yes | yes |
+| 19 | `¢RN` | `0x07` | yes | yes |
+| 20 | `P¢` | `0x0C` | yes | yes |
+| 21 | `P¢N` | `0x0D` | yes | yes |
+| 22 | `P¢R` | `0x0E` | yes | yes |
+| 23 | `al¢` | `0x0F` | yes | yes |
+
+Wire encoding (AVR → STM on `SEQ_MIDI_FILT_RX`): values 0..15 are sent unchanged. Values 16..23 encode as `0x04 | (k & 3) | ((k & 4) << 1) | 0x10` where `k = value - 16`. Bit 4 (`0x10`, `MIDI_RX_FILTER_CC38_SWAP`) is stripped by `midi_setFilter()` before the RX nibble is stored and forwarded to `globalMidiParser_setCc38Swap()`.
+
+AVR rules:
+- `midiFilterNames` rows are `[4]`; the count byte stays `{16}`, so pots and TxFilter see 16 entries.
+- `menu_getDtypeMenuEntryCount()` returns 24 for `PAR_MIDI_FILT_RX` (encoder paths only).
+- `menu_parseKnobValue()` ignores the RxFilter pot while the value is ≥ 16.
+- `menu_parseGlobalParam()` is the single encode point; values ≥ 24 are repaired to 15 (`all`).
+- Globals save byte-for-byte; no file-format change.
+
+Glyph: `MENU_CHAR_CENT` is `"\\"` (LCD ROM 0x5C, cent sign on this display per the user; a standard HD44780 A00 ROM has `¥` there, so this is unverified). Fallback: a CGRAM glyph via `lcd_generatechar()` in slot 1 (`"\x01"`; slot 0 cannot be used in strings).
+
+NRPN protocol details (`globalMidiParser_handleNrpnControl()`):
+- CC98/99 select and close the RPN-null window. CC6 opens it only when an NRPN is selected; CC6 with no selection is consumed and ignored.
+- In ¢ mode CC38 is consumed and leaves the window open (Elektron sends CC38 between CC6 and any null).
+- CC100/101 = 127 inside the window clears the selection and is consumed (both null bytes). Any other CC closes the window.
+- Accepted cost: a deliberate Pan 4/5 = 127 sent immediately after an NRPN data entry is dropped.
+
+---
+
+## MIDI Transmit (TX filter C, Session 039 P3)
+
+When `txf` includes **C** (bit 6, `0x40`) and the **Global MIDI channel** is set (1–16, not 0), every parameter change made with the menu encoder or knobs is transmitted on the Global channel as the CC or NRPN that controls that parameter on receive.
+
+### Gate
+
+TX is suppressed when any of these is true:
+
+- TX filter C is off.
+- Global MIDI channel is 0 (off) or > 16.
+- An automation step is armed (`seq_isAutomationStepArmed()`).
+- The parameter has no Global MIDI mapping (returns `GLOBAL_MIDI_TX_NONE`).
+
+### Address derivation
+
+The transmit address is the **inverse of the receive tables** (`globalMidiParser_ccToRawParam[]` and `globalMidiParser_nrpnToRawParam[]`). CCs are preferred over NRPNs when both tables map a parameter (3 bytes instead of 9). The reverse table is built lazily on first use.
+
+### Exclusions (return GLOBAL_MIDI_TX_NONE)
+
+- **18 target selectors:** `PAR_VEL_DEST_1..6`, `PAR_VOICE_LFO1..6`, `PAR_TARGET_LFO1..6` — their receive value domain is unverified against the menu's `modTargets` index.
+- Parameters with no Global mapping: envelope position 1–6, per-voice morph, kit version, reserved slots.
+- CC0/1/6/98/99 never come out of the reverse table because those receive-table slots are `PAR_NONE`.
+
+### ¢ mirror
+
+When the RX filter is a ¢ entry (CC38 swap active), Drum 1 filter cutoff (`PAR_FILTER_FREQ_1`) is sent as **NRPN 96** instead of CC38, matching what a ¢-mode receiver accepts.
+
+### PERF controls
+
+| Control | Address | Value |
+|---|---|---|
+| Roll rate | NRPN 93 | 0..15 (selector) |
+| Roll note | NRPN 94 | 0..127 |
+| Roll velocity | NRPN 95 | 0..127 |
+| Global morph | CC1 | amount >> 1 (inverse of receive: v*2, 127 → 255) |
+
+### NRPN framing
+
+CC99 = 0, CC98 = number, CC6 = value. No CC38 (data-entry LSB), no RPN-null tail.
+
+### CC100/101 = 127 guard
+
+CC100 (Snare pan) and CC101 (Cymbal pan) with value 127 would be taken by an LXR receiver as an RPN-null deselect if it followed an NRPN data entry (P1 rule). Before emitting CC100/101 = 127, TX first emits CC99 = 0, which closes the receiver's null window.
+
+### Coalescing and pacing
+
+A coalescing queue holds one slot per raw sound parameter plus 4 PERF slots. Repeated edits keep only the latest value. `outputControl_serviceMenuTx()` emits at most one message per main-loop pass, round-robin, only when both DIN and USB outputs can take the whole message. This prevents knob sweeps from saturating DIN (31,250 baud) or splitting messages.
+
+### Whole-message DIN/USB
+
+DIN: `uart_sendMidi()` drops the entire message when `fifo_freeSpace()` is insufficient, never splits. This applies to every DIN sender (sequencer notes/clock, routing, menu TX). USB: `usb_sendMidi()` drops the 4-byte event when `usb_midiTxFree() < 4`, never writes past the current ping-pong half. `usb_flushMidi()` starts the next IN transfer only after `usbd_midi_DataIn()` clears `usb_midiTxBusy`, or after `USB_MIDI_TX_TIMEOUT_TICKS` (20 SysTicks = 5 ms). It discards pending bytes while the device is not `USB_OTG_CONFIGURED`. Drop/timeout counters: `uart_midiTxDropCount`, `usb_midiTxDropCount`, `usb_midiTxTimeoutCount` (debugger-visible).
+
+### Not transmitted
+
+Received MIDI (DIN or USB) is never re-transmitted (except by `mrt` routing). Only menu-originated changes trigger TX: sound-parameter edits tagged with AVR opcodes `0xca`/`0xcb`, and the menu-only PERF opcodes `FRONT_SEQ_ROLL_RATE/_NOTE/_VELOCITY` and `FRONT_SEQ_SET_GLOBAL_MORPH_MSB`. Values only stored while temporary playback is active (not applied live) are not transmitted. File loads, voice loads, automation playback, the armed-step revert, LFOs, and preset restores all use the plain opcodes (`MIDI_CC`/`CC_2`) and are never transmitted.

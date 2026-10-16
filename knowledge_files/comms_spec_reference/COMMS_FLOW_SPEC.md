@@ -1,7 +1,7 @@
 # COMMS FLOW SPEC - UART FRONT PANEL
 
-Date: 2026-08-20
-Status: current AVR<->STM comms reference after Session 036 fixed a defect in the `SEQ_CHANGE_PAT` shown-pattern resync (see new `### 4c` section below): the `PATTERN_SETTINGS_PAGE` branch now flushes `SEQ_SET_SHOWN_PATTERN` to the STM via `menu_setShownPattern()` instead of silently stashing the update locally with no later flush. Session 035 separated external DIN/USB system-realtime MIDI from ordinary input, timestamped it at the receive boundary, and dispatched it at the audio render deadline. Session 034 made step automation a one-step Preset-baseline override, special-cased global decimation step automation ownership, and extended the `PAR_VOICE_DECIMATION_ALL` `0 -> 127` guard into STM canonical Preset storage. Session 033 restored `SHIFT+PLAY` around STM temporary preset storage, made `PATCH_RESET` an STM-owned temp-to-normal preset reload, multiplexed `SEQ_EUKLID_RESET` / `FRONT_SEQ_EUKLID_RESET` (`0x47`) for `SHIFT+PERF` Euclid visit control, and kept the Session 031 sample-import redo, Session 029 Global MIDI split, and Session 028 background file loading model intact. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
+Date: 2026-10-16
+Status: current AVR<->STM comms reference after Session 039 (P1: ¢ RX-filter modes with CC38 swap via bit 4 on `SEQ_MIDI_FILT_RX`, NRPN 94/95/96, RPN-null swallow, roll PERF display reports `0x71-0x73`, imported-sample FM, hihat modulator re-arm; P2: RX filter C gates all incoming CCs at the STM parser entry; P3: menu-originated sound-parameter edits use the new AVR->STM statuses `MIDI_CC_MENU`/`FRONT_CC_MENU` `0xca` and `CC_2_MENU`/`FRONT_CC_2_MENU` `0xcb` so TX filter C can transmit them as Global CC/NRPN, plus whole-message DIN/USB MIDI out and a USB IN completion/timeout fix; see `#### Session 039 MIDI filters and menu transmit` and `knowledge_files/log_archive/039_SESSION_HANDOFF_LOG.md`) and Session 038 fixed stuck MIDI rolls (external NOTE_ON velocity 0 is now a note-off; MIDI roll ownership is a per-`(channel, note)` held-key table in `MidiParser.c`; sequencer stop releases all MIDI roll holds; MIDI rolls play on a private clock while stopped; see `### MIDI Boundary` and `MIDI_TABLE.md`). The 2026-09-17 MIDI roll-trigger feature added `SEQ_ROLL_NOTE_OFFSET` / `FRONT_SEQ_ROLL_NOTE_OFFSET` (`0x6f`, a `SEQ_CC` sub-opcode carrying the saved global roll-note offset). Before that, Session 036 fixed a defect in the `SEQ_CHANGE_PAT` shown-pattern resync (see new `### 4c` section below): the `PATTERN_SETTINGS_PAGE` branch now flushes `SEQ_SET_SHOWN_PATTERN` to the STM via `menu_setShownPattern()` instead of silently stashing the update locally with no later flush. Session 035 separated external DIN/USB system-realtime MIDI from ordinary input, timestamped it at the receive boundary, and dispatched it at the audio render deadline. Session 034 made step automation a one-step Preset-baseline override, special-cased global decimation step automation ownership, and extended the `PAR_VOICE_DECIMATION_ALL` `0 -> 127` guard into STM canonical Preset storage. Session 033 restored `SHIFT+PLAY` around STM temporary preset storage, made `PATCH_RESET` an STM-owned temp-to-normal preset reload, multiplexed `SEQ_EUKLID_RESET` / `FRONT_SEQ_EUKLID_RESET` (`0x47`) for `SHIFT+PERF` Euclid visit control, and kept the Session 031 sample-import redo, Session 029 Global MIDI split, and Session 028 background file loading model intact. STM and AVR both have explicit receive/send protocol files, legacy parser/protocol shim headers were removed, the obsolete `PresetLoadCache` model is gone, the internal CC/CC2 parameter apply layer belongs to front-panel receive/protocol ownership rather than `MIDI/MidiParser.c`, the old cache-only opcode helpers are commented out instead of active, `MACRO_CC` is deprecated historical context, individual PERF voice morph uses dedicated full-range `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` traffic rather than generic `CC_2`, step automation destinations are stored as raw AVR/menu `PAR_*` ids, and active background loading uses the `SEQ_BACKGROUND_SWAP_BEGIN` / `SEQ_BACKGROUND_SWAP_DONE` handshake (`0x6d/0x6e`) rather than the retired cache/load-fast model.
 
 ## Purpose
 
@@ -89,6 +89,51 @@ non-global CC messages continue to use the existing channel parser. This
 pre-emption rule is specific to CC routing; note and program-change routing keep
 their existing behavior.
 
+#### Session 038 MIDI roll ownership
+
+MIDI roll notes (the saved global roll-note offset, `PAR_ROLL_NOTE_OFFSET`,
+sent as `SEQ_CC` / `SEQ_ROLL_NOTE_OFFSET` = `FRONT_SEQ_ROLL_NOTE_OFFSET`
+`0x6f`) are an external-MIDI concern owned by `MidiParser.c`. The parser keeps
+a 16-slot held-key table of `(channel, note)` -> claimed voice mask. A note-off
+(NOTE_OFF or NOTE_ON velocity 0) releases exactly the mask its press captured,
+and the release lookup is not gated by routing, offset or `normalConsumed`. The
+parser reports per-voice MIDI ownership to the sequencer only through
+`seq_rollMidiChange()`. Manual front-panel rolls (`SEQ_ROLL_ON_OFF` /
+`FRONT_SEQ_ROLL_ON_OFF`, `0x10`) own a separate `seq_rollChange()` source, and
+neither source can release the other.
+
+Front-panel traffic that invalidates held MIDI roll keys calls
+`midiParser_clearMidiRollHolds()` on STM receive. That traffic is:
+`FRONT_SEQ_MIDI_CHAN` (`0x2d`) when a channel actually changes,
+`FRONT_SEQ_MIDI_CHAN_OFF` (`0x59`), `FRONT_SEQ_TRACK_NOTE1..7` (`0x52..`) when an
+override actually changes, and `FRONT_SEQ_ROLL_NOTE_OFFSET` (`0x6f`) when the
+offset actually changes. Transport stop (`FRONT_SEQ_RUN_STOP` `0x01`, MIDI Stop,
+MTC timeout, sample-import entry: anything reaching `seq_setRunning(0)`) also
+clears them, and so does disabling the RX note filter. No AVR-side change or
+acknowledgement is involved; roll state is never echoed to the AVR.
+
+#### Session 039 MIDI filters and menu transmit
+
+- **RX order** (`midiParser_parseMidiMessage()`):
+  - `mrt` routing forwards first and unfiltered.
+  - SysEx stops there.
+  - System messages are gated by RX R.
+  - Channel messages are gated by their RX letter: N notes, P program change, C control change.
+  - RX C (`0x04`) gates **all** incoming CC/NRPN once at the `MIDI_CC` branch. The older `0x04` tests in the CC ladders are redundant guards.
+- **¢ RX flag:** the AVR RxFilter values 16..23 send the RX nibble `| 0x10` on `SEQ_CC`/`SEQ_MIDI_FILT_RX`. `midi_setFilter()` strips bit 4 into `globalMidiParser_setCc38Swap()`. Swap on means Global CC38 is consumed and NRPN 96 maps to `PAR_FILTER_FREQ_1`.
+- **Menu transmit (TX C `0x40`):**
+  - The AVR sends menu encoder/knob sound-parameter edits as `MIDI_CC_MENU` (`0xca`) / `CC_2_MENU` (`0xcb`) via `menu_sendSoundParameter()`. The payload is identical to `MIDI_CC`/`CC_2`.
+  - STM `frontParser_handleMidiMessage()` shares the `MIDI_CC`/`FRONT_CC_2` case bodies. It normalises the status for `frontParser_applyParameterCommand()` and, only when the value was applied live, calls `outputControl_queueMenuParameterTx()`.
+  - The menu-only PERF opcodes `FRONT_SEQ_ROLL_RATE/_NOTE/_VELOCITY` and `FRONT_SEQ_SET_GLOBAL_MORPH_MSB` call `outputControl_queueMenuPerfTx()`.
+  - Gate: TX C on, Global channel 1..16, `!seq_isAutomationStepArmed()`.
+  - Addresses come from `globalMidiParser_getTxAddress()`, the inverse of the receive tables.
+  - `outputControl_serviceMenuTx()` (main loop, before `usb_tick()`) emits at most one whole message per pass, only when DIN and USB both have room.
+- **Guardrail:** file/voice loads, the armed-step revert (`buttonHandler.c`) and restores must keep the plain `MIDI_CC`/`CC_2` opcodes, or they would be transmitted as MIDI. The shift-encoder path never sends `MIDI_CC`/`CC_2` for sound parameters (they are always morph-endpoint edits).
+- **MIDI out robustness:**
+  - `uart_sendMidi()` is whole-message-or-drop for every DIN sender.
+  - `usb_sendMidi()` is whole-event-or-drop within the current 64-byte ping-pong half.
+  - `usb_flushMidi()` waits for `usbd_midi_DataIn()` (busy flag) with a 5 ms timeout, and discards pending bytes while the device is not `USB_OTG_CONFIGURED`.
+
 #### Session 035 realtime timing exception
 
 System-realtime statuses `0xf8..0xff` are the deliberate exception to ordinary
@@ -118,7 +163,7 @@ frame/bulk, ping-pong buffer, I2S, or DAC latency.
 `mainboard/LxrStm32/src/MIDI/MidiOutputControl.c/.h` is the current MIDI
 voice/output-control file. Existing `voiceControl_*` functions retain their
 names; sequencer-originated MIDI output helpers use the `outputControl_*`
-prefix. `Sequencer` must not own USB/DIN fan-out directly.
+prefix. `Sequencer` must not own USB/DIN fan-out directly. Since Session 039 the same file also owns the menu MIDI-TX gate, coalescing queue (one slot per raw sound parameter plus 4 PERF slots) and `outputControl_serviceMenuTx()`.
 
 ### Outbound Send Contract
 
@@ -154,7 +199,9 @@ use the sending protocol helpers.
 
 `Uart.c/.h` should remain transport-only. The MIDI transport helpers
 `uart_sendMidi()` and `uart_sendMidiByte()` stay outside this split because
-they are not AVR front-panel command traffic.
+they are not AVR front-panel command traffic. Since Session 039 `uart_sendMidi()`
+is whole-message-or-drop (`fifo_freeSpace()`), and `uart_midiTxFree()` exposes
+DIN headroom for paced menu MIDI transmit.
 
 ## Current Message Families
 
@@ -169,6 +216,9 @@ These are the ordinary single-message control paths:
 - `CC_VELO_TARGET`
 - `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` - full-range `0..255` per-voice morph amount traffic, encoded as low/high 7-bit-safe packet pairs
 - `MACRO_CC` - deprecated legacy macro traffic; current firmware ignores it
+- `SEQ_CC` / `SEQ_ROLL_NOTE_OFFSET` (`0x6f`) - saved global MIDI roll-note offset (raw `0` = off, `1..127` = semitone shift); STM releases all MIDI roll holds when the value changes
+- `SEQ_CC` / `SEQ_MIDI_FILT_RX` (`0x31`) - RX filter nibble; bit 4 (`0x10`, Session 039) = ¢ mode (Global CC38 consumed, NRPN 96 = Drum 1 cutoff). STM strips it in `midi_setFilter()` and stores it in `GlobalMidiParser.c`. RX bit 2 (0x04, C) gates all incoming CC/NRPN at the STM MIDI_CC entry (Session 039 P2); routing (mrt) is unaffected.
+- `MIDI_CC_MENU` / `FRONT_CC_MENU` (`0xca`) and `CC_2_MENU` / `FRONT_CC_2_MENU` (`0xcb`) - menu-originated sound-parameter edits; same payload and handling as `MIDI_CC`/`CC_2`, plus STM menu MIDI TX when txf C is on (Session 039 P3). Loads/reverts keep the plain opcodes.
 
 Raw endpoint bytes are routed into `Preset` ingress helpers such as:
 
@@ -217,10 +267,11 @@ These messages push authoritative preset bytes back to the AVR so the menu match
 - `SEQ_REPORT_GLOBAL_MORPH_LSB`
 - `SEQ_REPORT_GLOBAL_MORPH_MSB`
 - `VOICE_MORPH` / `FRONT_SEQ_VOICE_MORPH` per-voice morph reports
+- `SEQ_REPORT_ROLL_RATE` / `_NOTE` / `_VELOCITY` (`0x71-0x73`, STM -> AVR, Session 039)
 
 The boundary restore path is still needed so the AVR menu stays coherent when the audible image changes.
 
-The global morph and per-voice morph reports are display-only:
+The global morph and per-voice morph reports are display-only. Roll reports (`SEQ_REPORT_ROLL_*`) are also display-only: sent on every Global NRPN 93-95 data entry, the AVR writes `parameter_values[PAR_ROLL*]` and repaints without echoing back.
 
 - it updates the AVR view of the selected kit image;
 - global morph reports also synchronize all six individual voice morph display slots because global morph overrides the per-voice current values;
@@ -713,6 +764,12 @@ and do not bring back a cache-as-authority model under the same names.
   is already active.
 - Do not revive raw-ACK waits for sample import; wait by parsing
   `SAMPLE_UPLOAD_RESULT`.
+- Do not treat an external NOTE_ON with velocity 0 as a press anywhere, and
+  never release a MIDI roll by recomputing voices from current routing; release
+  the mask the key captured at press (Session 038).
+- Any new event that invalidates MIDI note routing must call
+  `midiParser_clearMidiRollHolds()` (the parser table), not merely clear the
+  sequencer's `seq_rollMidiHeld` bits.
 - Do not revive sample-upload wall-clock timeouts or `Load timeout`; the AVR
   owns only a display idle spinner while it waits for result.
 - Do not delay sample progress by one file or send synthetic final progress
